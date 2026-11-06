@@ -116,8 +116,8 @@ function nonEmpty(value: unknown): string | null {
  */
 export function toProductDetailDto(row: ProductDetailRow, storeDeliveryRate: number) {
   const images = (row.media ?? [])
-    .map((m) => ({ url: nonEmpty(m?.url), alt: m?.alt || row.title }))
-    .filter((m): m is { url: string; alt: string } => m.url !== null);
+    .map((m) => ({ id: String(m?._id), url: nonEmpty(m?.url), alt: m?.alt || row.title }))
+    .filter((m): m is { id: string; url: string; alt: string } => m.url !== null);
 
   const summary = toProductSummaryDto({ ...row, media: images.length > 0 ? [images[0]] : [] });
   const categorySlugs = summary.categories.map((c) => c.slug);

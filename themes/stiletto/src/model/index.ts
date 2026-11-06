@@ -41,7 +41,7 @@ export interface NormalizedProduct {
   price: string;
   images: string[];
   /** The same images with their alt text, in the seller's order. The first is the primary. */
-  gallery?: { url: string; alt: string }[];
+  gallery?: { id?: string | null; url: string; alt: string }[];
   /** What the product page says about stock. */
   stockLabel?: string;
   stockTone?: "positive" | "negative";

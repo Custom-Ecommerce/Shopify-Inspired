@@ -10,6 +10,8 @@ export interface ProductCardVM {
   image: { url: string; alt: string } | null;
   /** The from price: the cheapest variant's. */
   price: Money;
+  /** True when the price is only where the variants start, so a card says "from". */
+  priceFrom: boolean;
   compareAt: Money | null;
   discountPercent: number;
   stock: { status: StockStatus; label: string };
@@ -26,7 +28,7 @@ export interface ProductCardVM {
   previewLabel: PreviewLabel | null;
 }
 
-const STOCK_LABELS: Record<StockStatus, string> = {
+export const STOCK_LABELS: Record<StockStatus, string> = {
   in_stock: "In stock",
   low_stock: "Only a few left",
   out_of_stock: "Out of stock",
@@ -42,6 +44,7 @@ export function toProductCardVM(dto: StorefrontProductSummary): ProductCardVM {
     title: dto.title,
     image: dto.primaryImage ? { url: dto.primaryImage.url, alt: dto.primaryImage.alt } : null,
     price: toMoney(dto.price),
+    priceFrom: dto.hasVariants,
     compareAt: compareAtAmount === null ? null : toMoney(compareAtAmount),
     discountPercent: discountPercent(dto.price, compareAtAmount),
     stock: { status: dto.stockStatus, label: STOCK_LABELS[dto.stockStatus] },

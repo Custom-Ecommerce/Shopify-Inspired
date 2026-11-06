@@ -20,6 +20,8 @@ export interface CartItem {
   numericPrice: number;
   image: string;
   quantity: number;
+  /** The chosen variant, for a product that has several. */
+  variantTitle?: string;
   size?: string;
   color?: string;
   pack?: string;
@@ -66,6 +68,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         numericPrice: line.unitPrice.amount,
         image: line.image?.url ?? PLACEHOLDER_IMAGE,
         quantity: line.qty,
+        variantTitle: line.variantTitle ?? undefined,
       })),
     [cart.lines],
   );
@@ -89,6 +92,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
             hasVariants: false,
           },
           item.quantity,
+          item.variantTitle
+            ? { id: item.lineId, title: item.variantTitle, price: toMoney(parseNumericPrice(item.price)) }
+            : undefined,
         );
       }
       setIsCartOpen(true);

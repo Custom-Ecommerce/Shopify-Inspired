@@ -171,8 +171,8 @@ test('returns the full detail and it matches the storefront wire schema', async 
     highlights: ['Cotton', 'Machine washable'],
     // The dangling media entry is dropped; an image with no alt falls back to the title.
     images: [
-      { url: 'https://res.cloudinary.com/demo/a.jpg', alt: 'Front' },
-      { url: 'https://res.cloudinary.com/demo/b.jpg', alt: 'Blue shirt' },
+      { id: 'm1', url: 'https://res.cloudinary.com/demo/a.jpg', alt: 'Front' },
+      { id: 'm2', url: 'https://res.cloudinary.com/demo/b.jpg', alt: 'Blue shirt' },
     ],
     seo: { title: 'Buy the blue shirt', description: null, imageUrl: 'https://res.cloudinary.com/demo/seo.jpg' },
     tags: ['summer'],

@@ -112,7 +112,12 @@ export function ProductsTable({ products, trash }: { products: SellerProductSumm
     titleColumn,
     {
       header: "Price",
-      render: (p) => `${p.variantCount > 1 ? "From " : ""}PKR ${p.minPrice.toLocaleString()}`,
+      render: (p) => (
+        <span className="flex flex-col">
+          <span>{`${p.variantCount > 1 ? "From " : ""}PKR ${p.minPrice.toLocaleString()}`}</span>
+          {p.variantCount > 1 ? <span className="text-xs text-muted-foreground">{p.variantCount} variants</span> : null}
+        </span>
+      ),
     },
     { header: "Stock Qty", render: (p) => p.totalStock },
     { header: "Stock", render: (p) => <StatusBadge status={p.stockStatus} /> },

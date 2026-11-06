@@ -8,6 +8,11 @@ export interface StorefrontImage {
 /** Why a shopper would not see a product. Only a seller's preview ever carries one. */
 export type PreviewLabel = "Draft" | "Sample product";
 
+/** A picture of a product's gallery. id is what a variant's imageId names; fixtures may have none. */
+export interface StorefrontGalleryImage extends StorefrontImage {
+  id?: string;
+}
+
 export interface StorefrontProductSummary {
   id: string;
   slug: string;
@@ -65,7 +70,7 @@ export interface StorefrontProductDetail extends StorefrontProductSummary {
   variants: StorefrontProductVariant[];
   description: string | null;
   highlights: string[];
-  images: StorefrontImage[];
+  images: StorefrontGalleryImage[];
   seo: { title: string | null; description: string | null; imageUrl: string | null };
   tags: string[];
   categorySlugs: string[];

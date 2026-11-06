@@ -123,6 +123,32 @@ test('the derived fields are returned: titles, positions, and minPrice', async (
   assert.equal(prepared.minPrice, 1200);
 });
 
+test('every limit and consistency rule is a 422 INVALID_VARIANTS with its own message', async () => {
+  const size = { name: 'Size', values: ['S', 'M'] };
+  const cases: Array<[unknown, RegExp]> = [
+    [{ options: [size], variants: [{ price: 1, optionValues: ['S'] }, { price: 2, optionValues: ['S'] }] }, /same options/],
+    [{ options: [size], variants: [{ price: 1, optionValues: ['XL'] }] }, /not a value of Size/],
+    [{ options: [size], variants: [{ price: 1, optionValues: ['S', 'M'] }] }, /one value for each option/],
+    [{ options: [size], variants: [{ price: 1, optionValues: [] }] }, /one value for each option/],
+    [{ variants: [{ price: 1 }, { price: 2 }] }, /exactly one variant/],
+  ];
+  for (const [input, message] of cases) {
+    const error = await refusal(prepareProductVariants(STORE_A, input));
+    assert.equal(error.status, 422);
+    assert.equal(error.code, 'INVALID_VARIANTS');
+    assert.match(error.message, message);
+  }
+
+  const four = ['A', 'B', 'C', 'D'].map((name) => ({ name, values: ['x'] }));
+  assert.equal((await refusal(prepareProductVariants(STORE_A, { options: four, variants: [{ price: 1, optionValues: ['x', 'x', 'x', 'x'] }] }))).code, 'INVALID_VARIANTS');
+
+  const values = Array.from({ length: 11 }, (_, index) => 'v' + index);
+  const options = [{ name: 'A', values }, { name: 'B', values }];
+  const variants = values.flatMap((a) => values.map((b) => ({ price: 1, optionValues: [a, b] })));
+  assert.equal(variants.length, 121);
+  assert.equal((await refusal(prepareProductVariants(STORE_A, { options, variants }))).code, 'INVALID_VARIANTS');
+});
+
 test('a product with no options gets the Default variant', async () => {
   const prepared = await prepareProductVariants(STORE_A, { variants: [{ price: 999 }] });
   assert.equal(prepared.variants[0].title, 'Default');

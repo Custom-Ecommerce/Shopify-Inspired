@@ -32,7 +32,7 @@ const detail = {
   reviewCount: 12,
   description: 'A shirt.',
   highlights: ['Cotton'],
-  images: [{ url: 'https://res.cloudinary.com/x/a.jpg', alt: 'Blue shirt' }],
+  images: [{ id: '65a0000000000000000000e9', url: 'https://res.cloudinary.com/x/a.jpg', alt: 'Blue shirt' }],
   seo: { title: null, description: null, imageUrl: null },
   tags: ['summer'],
   categorySlugs: ['shirts'],

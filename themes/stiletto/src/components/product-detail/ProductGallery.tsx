@@ -1,15 +1,17 @@
 "use client";
 
-import React, { useState, useRef, MouseEvent } from "react";
+import React, { useEffect, useState, useRef, MouseEvent } from "react";
 import Image from "next/image";
 import { ZoomIn, X } from "lucide-react";
 
 interface ProductGalleryProps {
-  images: { url: string; alt: string }[];
+  images: { id?: string | null; url: string; alt: string }[];
   title: string;
+  /** The image to show when a chosen variant has one. */
+  activeImageId?: string | null;
 }
 
-export function ProductGallery({ images, title }: ProductGalleryProps) {
+export function ProductGallery({ images, title, activeImageId = null }: ProductGalleryProps) {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isZoomActive, setIsZoomActive] = useState(false);
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
@@ -20,6 +22,12 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
     images && images.length > 0 ? images : [{ url: "/placeholder.jpg", alt: title }];
 
   const activeImage = displayImages[activeImageIndex] || displayImages[0]!;
+
+  useEffect(() => {
+    if (activeImageId === null) return;
+    const index = images.findIndex((image) => image.id === activeImageId);
+    if (index >= 0) setActiveImageIndex(index);
+  }, [activeImageId, images]);
 
   // Handle cursor move when Zoom is toggled ON
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {

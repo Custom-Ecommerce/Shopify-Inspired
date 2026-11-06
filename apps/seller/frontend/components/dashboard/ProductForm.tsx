@@ -5,7 +5,9 @@ import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { useStoreHref } from "@/lib/dashboard-context";
 import { discountPercent } from "@/lib/product-pricing";
 import { refusalMessage, runProductAction } from "@/lib/product-actions";
-import { useEffect, useState } from "react";
+import { buildMatrix, rowProblem, usableOptions, variantPayload } from "@/lib/variant-matrix";
+import type { MatrixRow, OptionDraft, RowValues } from "@/lib/variant-matrix";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -17,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Surface } from "@/components/shared/Surface";
 import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
+import { VariantBuilder } from "@/components/dashboard/VariantBuilder";
 
 const MAX_IMAGES = 10;
 const MAX_HIGHLIGHTS = 10;
@@ -83,17 +86,26 @@ function defaultVariantFields(form: FormState) {
   };
 }
 
-/** The update for the Default variant, or null when the seller changed none of it. Stock is never part of it (D-034). */
+/**
+ * The update for the Default variant, or null when the seller changed none of it. Stock is never part of it (D-034). An
+ * image taken out of the gallery is also taken off the variant, because the server refuses a link to anything else.
+ */
 function changedVariant(product: SellerProductDetail, form: FormState) {
   const variant = product.variants[0];
   const fields = defaultVariantFields(form);
+  const lostImage = variant.imageId !== null && !form.images.some((image) => image.id === variant.imageId);
   const unchanged =
+    !lostImage &&
     fields.price === variant.price &&
     fields.compareAtPrice === variant.compareAtPrice &&
     fields.sku === variant.sku &&
     fields.barcode === variant.barcode &&
     fields.trackQuantity === variant.trackQuantity;
-  return unchanged ? null : { id: variant.id, ...fields };
+  return unchanged ? null : { id: variant.id, ...fields, ...(lostImage ? { imageId: null } : {}) };
+}
+
+function savedDrafts(product?: SellerProductDetail): OptionDraft[] {
+  return (product?.options ?? []).map((option, index) => ({ key: `saved-${index}`, name: option.name, values: [...option.values], source: index }));
 }
 
 export function ProductForm({ product }: { product?: SellerProductDetail }) {
@@ -101,10 +113,11 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
   const href = useStoreHref();
   const router = useRouter();
   const isEdit = Boolean(product);
-  /** The variant builder comes later: until then a product with variants shows them read-only and never sends them. */
-  const hasManyVariants = (product?.variants.length ?? 1) > 1;
 
   const [form, setForm] = useState<FormState>(() => initialState(product));
+  const [drafts, setDrafts] = useState<OptionDraft[]>(() => savedDrafts(product));
+  const [rowEdits, setRowEdits] = useState<Record<string, Partial<RowValues>>>({});
+  const [confirmedRemoval, setConfirmedRemoval] = useState("");
   const [slugEdited, setSlugEdited] = useState(isEdit);
   const [categories, setCategories] = useState<CategoryDoc[]>([]);
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
@@ -188,29 +201,67 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
     }));
   }
 
+  const matrix = useMemo(() => buildMatrix(drafts, product?.variants ?? []), [drafts, product]);
+  /** With options the variants table takes over from the single price and stock fields. */
+  const hasOptions = usableOptions(drafts).length > 0;
+  const removalKey = matrix.removed.map((variant) => variant.id).join(",");
+  const removalConfirmed = removalKey === "" || removalKey === confirmedRemoval;
+
+  /** A row's values: what the seller typed, over what is saved. A new row starts from the product's own price. */
+  function rowValues(row: MatrixRow): RowValues {
+    const variant = product?.variants.find((candidate) => candidate.id === row.id);
+    // The Default variant is being given options: what the seller typed in the single fields carries over.
+    const fromForm = !variant || (product?.options.length ?? 0) === 0;
+    const base: RowValues = {
+      price: fromForm ? form.price : String(variant.price),
+      compareAt: !variant ? "" : fromForm ? form.compareAtPrice : variant.compareAtPrice === null ? "" : String(variant.compareAtPrice),
+      sku: !variant ? "" : fromForm ? form.sku : (variant.sku ?? ""),
+      barcode: !variant ? "" : fromForm ? form.barcode : (variant.barcode ?? ""),
+      imageId: variant?.imageId ?? null,
+      trackQuantity: fromForm ? form.trackQuantity : variant.trackQuantity,
+      lowStock: variant?.lowStockThreshold != null ? String(variant.lowStockThreshold) : "",
+      stock: "0",
+    };
+    return { ...base, ...rowEdits[row.key] };
+  }
+
+  function changeRows(keys: readonly string[], change: Partial<RowValues>) {
+    setRowEdits((edits) => ({ ...edits, ...Object.fromEntries(keys.map((key) => [key, { ...edits[key], ...change }])) }));
+  }
+
   const highlights = form.highlights.split("\n").map((line) => line.trim()).filter(Boolean);
   const price = Number(form.price);
   const compareAt = optionalNumber(form.compareAtPrice);
   const percentOff = discountPercent(Math.round(price), compareAt === null ? null : Math.round(compareAt));
 
-  const priceError = !hasManyVariants && form.price !== "" && price < 0 ? "Price cannot be negative." : null;
+  const priceError = !hasOptions && form.price !== "" && price < 0 ? "Price cannot be negative." : null;
   const compareAtError =
-    !hasManyVariants && compareAt !== null && form.price !== "" && compareAt <= price
+    !hasOptions && compareAt !== null && form.price !== "" && compareAt <= price
       ? "The compare-at price must be higher than the price."
       : null;
   const highlightsError = highlights.length > MAX_HIGHLIGHTS ? `At most ${MAX_HIGHLIGHTS} highlights.` : null;
+  const variantProblem = (() => {
+    if (drafts.some((draft) => draft.name.trim() === "" || draft.values.length === 0)) return "Give every option a name and at least one value.";
+    const names = drafts.map((draft) => draft.name.trim().toLowerCase());
+    if (new Set(names).size !== names.length) return "Two options have the same name.";
+    if (matrix.tooMany) return "This product has too many variants.";
+    if (!removalConfirmed) return "Confirm the variants that will be removed.";
+    if (hasOptions && matrix.rows.some((row) => rowProblem(rowValues(row), row.id === null) !== null)) return "Fix the variants marked in the table.";
+    return null;
+  })();
   const isInvalid =
     !form.title.trim() ||
     form.categoryIds.length === 0 ||
-    (!hasManyVariants && form.price === "") ||
+    (!hasOptions && form.price === "") ||
     !!priceError ||
     !!compareAtError ||
-    !!highlightsError;
+    !!highlightsError ||
+    variantProblem !== null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (isInvalid) {
-      toast.error("Title, price, and at least one category are required.");
+      toast.error(variantProblem ?? "Title, price, and at least one category are required.");
       return;
     }
 
@@ -225,10 +276,25 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
       hideWhenOutOfStock: form.hideWhenOutOfStock,
     };
 
+    const gallery = new Set(form.images.map((img) => img.id));
+    // Options and the whole list go together (D-036): a saved variant left out of the list is removed.
+    const variantData = {
+      options: usableOptions(drafts).map((option) => ({ name: option.name.trim(), values: option.values })),
+      variants: matrix.rows.map((row) => variantPayload(row, rowValues(row), gallery)),
+    };
+
     let data: Record<string, unknown>;
-    if (product) {
-      const variant = hasManyVariants ? null : changedVariant(product, form);
+    if (product && hasOptions) {
+      data = { ...shared, slug: form.slug, ...variantData };
+    } else if (product && product.options.length > 0) {
+      // The last option was taken away: one variant stays, as the Default variant.
+      const kept = changedVariant(product, form) ?? { id: product.variants[0].id };
+      data = { ...shared, slug: form.slug, options: [], variants: [{ ...kept, optionValues: [] }] };
+    } else if (product) {
+      const variant = changedVariant(product, form);
       data = { ...shared, slug: form.slug, ...(variant ? { variants: [variant] } : {}) };
+    } else if (hasOptions) {
+      data = { ...shared, ...(form.slug ? { slug: form.slug } : {}), ...variantData };
     } else {
       data = {
         ...shared,
@@ -358,22 +424,22 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
       </Surface>
 
       <Surface variant="clay" level={2} className="p-6 flex flex-col gap-5 rounded-2xl">
-        <h2 className="font-heading text-lg font-semibold">{hasManyVariants ? "Variants" : "Price & Stock"}</h2>
+        <h2 className="font-heading text-lg font-semibold">{hasOptions ? "Variants" : "Price & Stock"}</h2>
 
-        {product && hasManyVariants ? (
-          <div className="flex flex-col gap-2">
-            {product.variants.map((variant) => (
-              <div key={variant.id} className="flex items-center justify-between gap-4 text-sm">
-                <span className="font-medium">{variant.title}</span>
-                <span className="font-mono text-xs text-muted-foreground">{variant.sku ?? "No SKU"}</span>
-                <span>PKR {variant.price.toLocaleString()}</span>
-                <span className="font-mono">{variant.trackQuantity ? variant.stockQuantity : "Not tracked"}</span>
-                <StatusBadge status={variant.availability} />
-              </div>
-            ))}
-            <p className="text-xs text-muted-foreground">Variants cannot be edited here yet. Adjust stock in Inventory.</p>
-          </div>
-        ) : (
+        <VariantBuilder
+          drafts={drafts}
+          onDraftsChange={setDrafts}
+          matrix={matrix}
+          valuesOf={rowValues}
+          onRowsChange={changeRows}
+          images={form.images}
+          stockOf={(id) => product?.variants.find((variant) => variant.id === id) ?? null}
+          inventoryHref={href("/inventory")}
+          removalConfirmed={removalConfirmed}
+          onRemovalConfirmed={(confirmed) => setConfirmedRemoval(confirmed ? removalKey : "")}
+        />
+
+        {hasOptions ? null : (
           <>
             <div className="grid grid-cols-2 gap-4">
               <div>

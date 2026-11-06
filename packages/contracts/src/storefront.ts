@@ -62,6 +62,9 @@ export const storefrontImageSchema = z.object({
   alt: z.string(),
 });
 
+/** A picture of a product's gallery. The id is what a variant's imageId names, so a selector can switch to it. */
+export const storefrontGalleryImageSchema = storefrontImageSchema.extend({ id: z.string().min(1) });
+
 export const storefrontStoreSchema = z.object({
   id: z.string().min(1),
   slug: z.string().min(1),
@@ -209,7 +212,7 @@ export const storefrontProductDetailSchema = storefrontProductSummarySchema.exte
   variants: z.array(storefrontProductVariantSchema).min(1),
   description: nullableText,
   highlights: z.array(z.string()),
-  images: z.array(storefrontImageSchema),
+  images: z.array(storefrontGalleryImageSchema),
   seo: z.object({
     title: nullableText,
     description: nullableText,

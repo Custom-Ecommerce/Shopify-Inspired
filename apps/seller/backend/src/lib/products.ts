@@ -82,6 +82,20 @@ export async function assertStoreMedia(storeId: string, mediaIds: ReadonlyArray<
   }
 }
 
+/**
+ * A variant's picture is one of the product's own gallery images, so a selector can always show it. Runs on the result of
+ * a write: the gallery and the variants it will leave behind, so dropping a linked image is refused as well.
+ */
+export function assertVariantImagesInGallery(mediaIds: readonly unknown[], variants: ReadonlyArray<{ imageId?: unknown }>): void {
+  const gallery = new Set(mediaIds.map((id) => String(id).toLowerCase()));
+  for (const variant of variants) {
+    if (variant.imageId === null || variant.imageId === undefined) continue;
+    if (!gallery.has(String(variant.imageId).toLowerCase())) {
+      throw new ProductRequestError(422, 'PRODUCT_MEDIA_INVALID', "A variant's image must be one of this product's images.");
+    }
+  }
+}
+
 /** The document fields a create request writes, for the policy check: the Default variant's fields are the variants. */
 export function createdFields(body: ProductCreateRequest): string[] {
   const variantFields: readonly string[] = PRODUCT_DEFAULT_VARIANT_FIELDS;
@@ -117,6 +131,7 @@ export interface VariantRow {
 interface CurrentProduct {
   options?: Array<{ name: string; values: string[] }> | null;
   variants: VariantRow[];
+  media?: unknown[] | null;
 }
 
 function variantFields(row: VariantRow): Omit<ProductVariantPatch, 'id'> {

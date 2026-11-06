@@ -737,7 +737,7 @@ test('images: a new order persists, the first is the primary, and a removed imag
 });
 
 test('images: a variant links to an image of this store', async () => {
-  const res = await patch(SIZED_A, { variants: [{ id: VARIANT_S, imageId: MEDIA_A }, { id: VARIANT_M }] });
+  const res = await patch(SIZED_A, { media: [MEDIA_A], variants: [{ id: VARIANT_S, imageId: MEDIA_A }, { id: VARIANT_M }] });
   assert.equal(res.status, 200);
   assert.equal(String(row(SIZED_A).variants[0].imageId), MEDIA_A);
   assert.equal(row(SIZED_A).variants[1].imageId, null);
@@ -750,6 +750,77 @@ test('images: a variant link can be cleared', async () => {
 });
 
 /* ---------------------------------------------- publishing ---------------------------------------------- */
+
+test('variant builder: a first option keeps the Default variant, its id, SKU and stock, on the first combination', async () => {
+  row(PRODUCT_A).variants[0].sku = 'KEEP-ME';
+  row(PRODUCT_A).variants[0].stockQuantity = 7;
+  const res = await patch(PRODUCT_A, {
+    options: [{ name: 'Size', values: ['S', 'M'] }],
+    variants: [
+      { id: VARIANT_A, optionValues: ['S'] },
+      { optionValues: ['M'], price: 1200, stockQuantity: 4 },
+    ],
+  });
+  assert.equal(res.status, 200);
+  const [first, second] = row(PRODUCT_A).variants;
+  assert.equal(String(first._id), VARIANT_A);
+  assert.equal(first.stockQuantity, 7);
+  assert.equal(first.sku, 'KEEP-ME');
+  assert.equal(first.title, 'S');
+  assert.deepEqual(first.optionValues, ['S']);
+  assert.equal(second.stockQuantity, 4);
+  assert.equal(second.title, 'M');
+  assert.deepEqual(row(PRODUCT_A).options, [{ name: 'Size', values: ['S', 'M'] }]);
+});
+
+test('variant builder: re-sending the whole list keeps every stock, and a variant left out is removed', async () => {
+  const res = await patch(SIZED_A, {
+    options: [{ name: 'Size', values: ['S', 'L'] }],
+    variants: [
+      { id: VARIANT_S, optionValues: ['S'], price: 950 },
+      { optionValues: ['L'], price: 1000, stockQuantity: 2 },
+    ],
+  });
+  assert.equal(res.status, 200);
+  const variants = row(SIZED_A).variants;
+  assert.equal(variants.length, 2);
+  assert.equal(String(variants[0]._id), VARIANT_S);
+  assert.equal(variants[0].stockQuantity, 3);
+  assert.equal(variants[0].price, 950);
+  assert.ok(!variants.some((candidate) => String(candidate._id) === VARIANT_M));
+});
+
+test('variant builder: a repeated combination is refused and nothing is written', async () => {
+  const before = writes;
+  const res = await patch(SIZED_A, {
+    variants: [
+      { id: VARIANT_S, optionValues: ['S'] },
+      { id: VARIANT_M, optionValues: ['S'] },
+    ],
+  });
+  assert.equal(res.status, 422);
+  assert.equal(await errorCode(res), 'INVALID_VARIANTS');
+  assert.equal(writes, before);
+});
+
+test("variant image: it must be one of this product's images, on create, on patch, and when the gallery changes", async () => {
+  ownAllMedia();
+  const outside = await patch(PRODUCT_A, { variants: [{ id: VARIANT_A, imageId: MEDIA_A }] });
+  assert.equal(outside.status, 422);
+  assert.equal(await errorCode(outside), 'PRODUCT_MEDIA_INVALID');
+
+  const together = await patch(PRODUCT_A, { media: [MEDIA_A], variants: [{ id: VARIANT_A, imageId: MEDIA_A }] });
+  assert.equal(together.status, 200);
+
+  const dropped = await patch(PRODUCT_A, { media: [] });
+  assert.equal(dropped.status, 422);
+  assert.equal(await errorCode(dropped), 'PRODUCT_MEDIA_INVALID');
+  assert.equal(row(PRODUCT_A).media.length, 1);
+
+  const created = await create({ title: validCreate.title, categories: validCreate.categories, variants: [{ price: 1000, imageId: MEDIA_A }] });
+  assert.equal(created.status, 422);
+  assert.equal(await errorCode(created), 'PRODUCT_MEDIA_INVALID');
+});
 
 const publish = (id: string, call: Call = {}): Promise<Response> => publishPOST(request('POST', '/api/products/' + id + '/publish', call), ctx(id));
 const unpublish = (id: string, call: Call = {}): Promise<Response> => unpublishPOST(request('POST', '/api/products/' + id + '/unpublish', call), ctx(id));

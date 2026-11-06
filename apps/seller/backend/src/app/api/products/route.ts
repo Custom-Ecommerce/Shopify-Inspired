@@ -13,6 +13,7 @@ import {
   ProductRequestError,
   assertStoreCategories,
   assertStoreMedia,
+  assertVariantImagesInGallery,
   createdFields,
   createdVariantInput,
   handleProductError,
@@ -158,6 +159,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     await assertStoreCategories(storeId, data.categories);
     await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)]);
     const { options, variants, minPrice } = await prepareProductVariants(storeId, createdVariantInput(data));
+    assertVariantImagesInGallery(data.media ?? [], variants);
 
     const created = await Product.create({
       store: storeId,

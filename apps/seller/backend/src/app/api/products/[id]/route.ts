@@ -11,6 +11,7 @@ import {
   ProductRequestError,
   assertStoreCategories,
   assertStoreMedia,
+  assertVariantImagesInGallery,
   handleProductError,
   loadSellerProduct,
   preparePatchedVariants,
@@ -69,9 +70,10 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     await requireDatabase();
     const storeId = await resolveOwnedStoreId(request, ctx, null);
 
-    const current = (await Product.findOne({ _id: id, store: storeId, deletedAt: null }).select('options variants').lean()) as unknown as {
+    const current = (await Product.findOne({ _id: id, store: storeId, deletedAt: null }).select('options variants media').lean()) as unknown as {
       options?: Array<{ name: string; values: string[] }> | null;
       variants: VariantRow[];
+      media?: unknown[] | null;
     } | null;
     if (!current) throw productNotFound();
 
@@ -79,6 +81,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)]);
 
     const prepared = data.variants || data.options ? await preparePatchedVariants(storeId, id, current, data) : null;
+    assertVariantImagesInGallery(data.media ?? current.media ?? [], prepared?.variants ?? current.variants);
 
     const updated = await Product.findOneAndUpdate(productPatchFilter(storeId, id, prepared), [{ $set: productPatchSet(data, prepared) }], {
       new: true,
