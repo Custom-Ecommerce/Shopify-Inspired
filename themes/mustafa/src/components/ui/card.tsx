@@ -47,10 +47,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
         "transition-colors duration-[var(--mu-motion-duration-instant)]",
         variantClasses[variant],
         paddingClasses[padding],
-        interactive && [
-          "hover:border-[var(--mu-color-ink-soft)]",
+        interactive && "hover:border-[var(--mu-color-ink-soft)]",
+        interactive &&
           "focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--mu-color-focus)]",
-        ],
         className
       )}
       {...props}

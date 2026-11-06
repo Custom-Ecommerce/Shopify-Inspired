@@ -59,3 +59,18 @@ export const {
   storefrontOrderSchema,
   storefrontOrderLookupResponseSchema,
 } = contracts;
+
+// Product options and variants: the write contract and the title rule.
+export const { productVariantsInputSchema, variantTitle } = contracts;
+
+// Store categories: the seller's CRUD contracts and the public storefront list.
+export const {
+  CATEGORY_ORDER_MAX,
+  CATEGORY_SLUG_MAX,
+  categoryCreateRequestSchema,
+  categoryUpdateRequestSchema,
+  storefrontCategoryListResponseSchema,
+} = contracts;
+
+// Cart quote contracts.
+export const { storefrontCartQuoteRequestSchema, storefrontCartQuoteResponseSchema } = contracts;

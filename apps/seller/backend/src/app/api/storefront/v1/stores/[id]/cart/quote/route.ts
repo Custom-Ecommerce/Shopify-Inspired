@@ -14,11 +14,12 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/storefront/v1/stores/:id/cart/quote
  *
- * Prices a cart from the catalog. Body: { lines: [{ productId, qty }] }. Nothing is saved and no stock moves, so a
+ * Prices a cart from the catalog. Body: { lines: [{ productId, variantId?, qty }] }. Nothing is saved and no stock moves, so a
  * shopper can ask as often as the cart changes.
  *
  *   200 { data }   the priced cart; lines that cannot be bought carry an issue and are left out of the totals
  *   400 INVALID_REQUEST | INVALID_QUANTITY
+ *   422 VARIANT_REQUIRED   a product with several variants and no variantId
  *   404 STORE_NOT_FOUND    403 STORE_NOT_ACTIVE
  *   429 RATE_LIMITED       503 STOREFRONT_UNAVAILABLE
  */

@@ -207,9 +207,8 @@ const row = (n: number, overrides: Record<string, any> = {}) => ({
   _id: '65a00000000000000000f0' + String(10 + n),
   slug: 'shirt-' + n,
   title: 'Shirt ' + n,
-  price: 1000 + n,
-  originalPrice: null,
-  stockStatus: 'in_stock',
+  minPrice: 1000 + n,
+  variants: [{ _id: '65a00000000000000000e0' + String(10 + n), price: 1000 + n, compareAtPrice: null, trackQuantity: true, stockQuantity: 5, position: 0 }],
   categories: [{ _id: CAT_ID, slug: 'shirts', name: 'Shirts' }],
   media: [{ url: 'https://res.cloudinary.com/demo/s' + n + '.jpg', alt: 'Shirt photo' }],
   avgRating: 4.5,
@@ -270,8 +269,8 @@ test('products maps each sort to an index-backed order', async () => {
   storeRow = { status: 'active' };
   const expected: Record<string, any> = {
     newest: { createdAt: -1, _id: -1 },
-    price_asc: { price: 1, _id: 1 },
-    price_desc: { price: -1, _id: -1 },
+    price_asc: { minPrice: 1, _id: 1 },
+    price_desc: { minPrice: -1, _id: -1 },
     rating: { avgRating: -1, reviewCount: -1, _id: -1 },
   };
   for (const [sort, spec] of Object.entries(expected)) {
@@ -306,7 +305,7 @@ test('products filters by category slug, and an unknown category is an empty pag
   storeRow = { status: 'active' };
   categoryRow = { _id: CAT_ID };
   await productsGET(get('/x?category=Shirts'), idCtx(STORE_ID));
-  assert.deepEqual(calls.categoryFindOne, [{ slug: 'shirts' }]);
+  assert.deepEqual(calls.categoryFindOne, [{ store: STORE_ID, slug: 'shirts' }]);
   assert.equal(calls.productFind[0].filter.categories, CAT_ID);
 
   calls.productFind.length = 0;
@@ -319,6 +318,21 @@ test('products filters by category slug, and an unknown category is an empty pag
   assert.equal(body.totalDocs, 0);
   assert.equal(calls.productFind.length, 0);
   assert.equal(calls.productCount.length, 0);
+});
+
+test('the category filter is store-scoped: a slug held only by another store is an empty page', async () => {
+  storeRow = activeStore();
+  const other = { _id: '65a0000000000000000000c9', store: '65a000000000000000000012', slug: 'shirts' };
+  CategoryModel.findOne = (filter: { store: string; slug: string }) => {
+    calls.categoryFindOne.push(filter);
+    return chain(filter.store === other.store && filter.slug === other.slug ? other : null);
+  };
+
+  const res = await productsGET(get('/x?category=shirts'), idCtx(STORE_ID));
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).data, []);
+  assert.equal(calls.categoryFindOne[0].store, STORE_ID);
+  assert.equal(calls.productFind.length, 0);
 });
 
 test('products answers 404 for a malformed or unknown store id, without a product query', async () => {
@@ -364,4 +378,33 @@ test('storefront routes need no session', async () => {
   storeRow = { status: 'active' };
   const res = await productsGET(get('/x'), idCtx(STORE_ID));
   assert.notEqual(res.status, 401);
+});
+
+test('the summary is the from price, the compare-at of the cheapest variant, and availability derived from the variants', async () => {
+  storeRow = { status: 'active' };
+  const variant = (id: string, price: number, stockQuantity: number, position: number, compareAtPrice: number | null = null) => ({
+    _id: id,
+    price,
+    compareAtPrice,
+    trackQuantity: true,
+    stockQuantity,
+    lowStockThreshold: null,
+    position,
+  });
+  const dear = '65a00000000000000000e091';
+  const cheap = '65a00000000000000000e092';
+  productRows = [row(1, { minPrice: 900, variants: [variant(dear, 1500, 4, 0), variant(cheap, 900, 0, 1, 1200)] })];
+
+  const { data } = await (await productsGET(get('/x'), idCtx(STORE_ID))).json();
+  assert.equal(data[0].price, 900);
+  assert.equal(data[0].compareAtPrice, 1200);
+  assert.equal(data[0].stockStatus, 'in_stock', 'one variant in stock is enough');
+  assert.equal(data[0].defaultVariantId, dear, 'the first variant that can be bought');
+  assert.equal(data[0].hasVariants, true);
+  for (const hidden of ['variants', 'sku', 'stockQuantity']) assert.equal(hidden in data[0], false, hidden);
+
+  productRows = [row(1, { minPrice: 900, variants: [variant(dear, 1500, 0, 0), variant(cheap, 900, 0, 1)] })];
+  const sold = await (await productsGET(get('/x'), idCtx(STORE_ID))).json();
+  assert.equal(sold.data[0].stockStatus, 'out_of_stock', 'out of stock only when every variant is');
+  assert.equal(sold.data[0].defaultVariantId, dear);
 });

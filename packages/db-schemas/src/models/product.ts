@@ -1,27 +1,37 @@
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
 
-/** Same option set as @markaz/contracts STOCK_STATUSES. Keep them identical. */
-export const PRODUCT_STOCK_STATUSES = ['in_stock', 'low_stock', 'out_of_stock'] as const;
+export const PRODUCT_MAX_OPTIONS = 3;
+export const PRODUCT_MAX_VARIANTS = 100;
 
 export interface IProductHighlight {
   text: string;
 }
 
-export interface IProductStockHistoryEntry {
-  quantity?: number | null;
-  previousQuantity?: number | null;
-  reason?: string | null;
-  changedAt?: Date | null;
+export interface IProductOption {
+  name: string;
+  values: string[];
+}
+
+/** One sellable version of a product. Price and stock live here, never on the product. */
+export interface IProductVariant {
+  _id: Types.ObjectId;
+  title: string;
+  sku?: string | null;
+  barcode?: string | null;
+  price: number;
+  compareAtPrice?: number | null;
+  trackQuantity: boolean;
+  stockQuantity: number;
+  lowStockThreshold?: number | null;
+  optionValues: string[];
+  imageId?: Types.ObjectId | null;
+  position: number;
 }
 
 /**
- * Collection: products. Store-scoped catalog item. Field for field it follows productSchema in
- * @markaz/contracts, and it carries everything StorefrontProductSummary and StorefrontProductDetail
- * project: the first media entry is the primary image, categories are populated into
- * { id, slug, name }, and price, originalPrice, stockStatus, avgRating and reviewCount pass through.
- *
- * Additions beyond the admin contract: isPublished (the storefront only serves published products),
- * tags and deliveryCharge (the detail projection reads them).
+ * Collection: products. Store-scoped catalog item in the Shopify model: options, and at least one variant. A product
+ * with no options has exactly one variant, the Default. Availability is derived on read from the variants, so atomic
+ * stock updates cannot drift from it. minPrice is the one denormalised value, so a listing can sort and index by price.
  */
 export interface IProduct extends Document {
   store: Types.ObjectId;
@@ -32,16 +42,12 @@ export interface IProduct extends Document {
   description?: string | null;
   highlights: IProductHighlight[];
   tags: string[];
-  price: number;
-  originalPrice?: number | null;
+  options: IProductOption[];
+  variants: IProductVariant[];
+  minPrice: number;
   deliveryCharge?: number | null;
-  stockStatus: (typeof PRODUCT_STOCK_STATUSES)[number];
-  stockQuantity: number;
-  stockHistory: IProductStockHistoryEntry[];
   isFeatured: boolean;
   isPublished: boolean;
-  lowStockThreshold?: number | null;
-  reservedQuantity: number;
   seoTitle?: string | null;
   seoDescription?: string | null;
   seoImage?: Types.ObjectId | null;
@@ -62,15 +68,60 @@ const HighlightSchema = new Schema<IProductHighlight>(
   { _id: false },
 );
 
-const StockHistorySchema = new Schema<IProductStockHistoryEntry>(
+const OptionSchema = new Schema<IProductOption>(
   {
-    quantity: { type: Number, default: null },
-    previousQuantity: { type: Number, default: null },
-    reason: { type: String, default: null },
-    changedAt: { type: Date, default: null },
+    name: { type: String, required: true, trim: true, minlength: 1, maxlength: 40 },
+    values: {
+      type: [{ type: String, trim: true, minlength: 1, maxlength: 60 }],
+      validate: {
+        validator: (value: string[]) => value.length >= 1 && value.length <= 50,
+        message: 'an option has 1 to 50 values',
+      },
+    },
   },
   { _id: false },
 );
+
+const VariantSchema = new Schema<IProductVariant>({
+  title: { type: String, required: true, trim: true },
+  sku: { type: String, trim: true, maxlength: 64, default: null },
+  barcode: { type: String, trim: true, maxlength: 64, default: null },
+  price: { type: Number, required: true, min: 0, validate: wholeNumber },
+  compareAtPrice: {
+    type: Number,
+    min: 0,
+    default: null,
+    validate: [
+      wholeNumber,
+      {
+        validator(this: IProductVariant, value: number | null): boolean {
+          return value === null || value === undefined || value > this.price;
+        },
+        message: 'the compare-at price must be higher than the price',
+      },
+    ],
+  },
+  trackQuantity: { type: Boolean, default: true },
+  stockQuantity: { type: Number, required: true, min: 0, default: 0, validate: wholeNumber },
+  lowStockThreshold: { type: Number, min: 0, default: null, validate: wholeNumber },
+  optionValues: { type: [{ type: String, trim: true }], default: [] },
+  imageId: { type: Schema.Types.ObjectId, ref: 'Media', default: null },
+  position: { type: Number, required: true, min: 0, default: 0, validate: wholeNumber },
+});
+
+/** A last line of defence. The seller backend's write path checks all of this first, with better messages. */
+function variantsMatchOptions(this: IProduct, variants: IProductVariant[]): boolean {
+  const options = this.options ?? [];
+  if (options.length === 0 && variants.length !== 1) return false;
+  const combinations = new Set<string>();
+  for (const variant of variants) {
+    const values = [...variant.optionValues];
+    if (values.length !== options.length) return false;
+    if (!values.every((value, index) => options[index].values.includes(value))) return false;
+    combinations.add(JSON.stringify(values));
+  }
+  return combinations.size === variants.length;
+}
 
 const ProductSchema = new Schema<IProduct>(
   {
@@ -89,16 +140,35 @@ const ProductSchema = new Schema<IProduct>(
     description: { type: String, default: null },
     highlights: { type: [HighlightSchema], default: [] },
     tags: { type: [{ type: String, trim: true }], default: [] },
-    price: { type: Number, required: true, min: 0 },
-    originalPrice: { type: Number, min: 0, default: null },
-    deliveryCharge: { type: Number, min: 0, default: null },
-    stockStatus: { type: String, enum: [...PRODUCT_STOCK_STATUSES], required: true, default: 'in_stock' },
-    stockQuantity: { type: Number, required: true, min: 0, default: 0, validate: wholeNumber },
-    stockHistory: { type: [StockHistorySchema], default: [] },
+    options: {
+      type: [OptionSchema],
+      default: [],
+      validate: {
+        validator: (value: IProductOption[]) => {
+          if (value.length > PRODUCT_MAX_OPTIONS) return false;
+          return new Set(value.map((option) => option.name.toLowerCase())).size === value.length;
+        },
+        message: 'a product has at most 3 options, each with its own name',
+      },
+    },
+    variants: {
+      type: [VariantSchema],
+      default: [],
+      validate: [
+        {
+          validator: (value: IProductVariant[]) => value.length >= 1 && value.length <= PRODUCT_MAX_VARIANTS,
+          message: 'a product has 1 to 100 variants',
+        },
+        {
+          validator: variantsMatchOptions,
+          message: 'the variants do not match the options',
+        },
+      ],
+    },
+    minPrice: { type: Number, required: true, min: 0, default: 0, validate: wholeNumber },
+    deliveryCharge: { type: Number, min: 0, default: null, validate: wholeNumber },
     isFeatured: { type: Boolean, default: false },
     isPublished: { type: Boolean, default: true },
-    lowStockThreshold: { type: Number, min: 0, default: null, validate: wholeNumber },
-    reservedQuantity: { type: Number, min: 0, default: 0, validate: wholeNumber },
     seoTitle: { type: String, default: null },
     seoDescription: { type: String, default: null },
     seoImage: { type: Schema.Types.ObjectId, ref: 'Media', default: null },
@@ -109,13 +179,24 @@ const ProductSchema = new Schema<IProduct>(
   { timestamps: true, collection: 'products' },
 );
 
+// A document written through save() can never disagree with its variants. Writes that bypass save() must set minPrice
+// themselves: the seller backend's product write path does.
+ProductSchema.pre('validate', function setMinPrice(next) {
+  if (this.variants.length > 0) this.minPrice = Math.min(...this.variants.map((variant) => variant.price));
+  next();
+});
+
 // A slug is unique inside a store, not across the platform.
 ProductSchema.index({ store: 1, slug: 1 }, { unique: true });
 // Catalog listing: every storefront query is store + published, then one sort.
 ProductSchema.index({ store: 1, isPublished: 1, createdAt: -1, _id: -1 });
 ProductSchema.index({ store: 1, isPublished: 1, categories: 1, createdAt: -1 });
-ProductSchema.index({ store: 1, isPublished: 1, price: 1, _id: 1 });
+ProductSchema.index({ store: 1, isPublished: 1, minPrice: 1, _id: 1 });
 ProductSchema.index({ store: 1, isPublished: 1, avgRating: -1, reviewCount: -1, _id: -1 });
+// Finds who holds a SKU. This does NOT enforce uniqueness: a unique index over an embedded array cannot, because it
+// says nothing about two entries in one document, and the null SKUs of a document would clash with those of another.
+// Uniqueness is enforced by the write path. See apps/seller/backend/src/lib/product-variants.ts.
+ProductSchema.index({ store: 1, 'variants.sku': 1 }, { partialFilterExpression: { 'variants.sku': { $type: 'string' } } });
 
 export const Product: Model<IProduct> =
   (mongoose.models.Product as Model<IProduct> | undefined) ??

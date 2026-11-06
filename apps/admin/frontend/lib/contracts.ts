@@ -35,25 +35,6 @@ export type {
 } from "@markaz/contracts";
 
 export const { adminLedgerListSchema, adminCommissionRatesSchema, adminSubscriptionPlanListSchema } = contracts;
-export const {
-  adminCategorySchema,
-  adminCategoryListSchema,
-  adminCategoryCreateRequestSchema,
-  adminCategoryUpdateRequestSchema,
-  adminCategoryDeleteResponseSchema,
-  ADMIN_CATEGORY_NAME_MAX,
-  ADMIN_CATEGORY_SLUG_MAX,
-  ADMIN_CATEGORY_DESCRIPTION_MAX,
-  ADMIN_CATEGORY_ORDER_MAX,
-  ADMIN_CATEGORY_SLUG_PATTERN,
-} = contracts;
-export type {
-  AdminCategory,
-  AdminCategoryList,
-  AdminCategoryCreateRequest,
-  AdminCategoryUpdateRequest,
-  AdminCategoryDeleteResponse,
-} from "@markaz/contracts";
 export type {
   AdminLedgerEntry,
   AdminLedgerList,

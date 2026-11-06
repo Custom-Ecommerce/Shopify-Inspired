@@ -1,18 +1,18 @@
-import type { MockFixtures } from "@markaz/storefront-data";
+import { mockProduct } from "@markaz/storefront-data";
+import type { MockFixtures, MockProductInput } from "@markaz/storefront-data";
 
 /**
  * The Stiletto demo catalogue. Generated at patch time from the original project's mock catalogue (amounts are carried
  * over as they are, in rupees) plus two bra and panty sets for the collection that catalogue left empty.
  */
-export const stilettoFixtures: MockFixtures = {
-  products: [
+const products: MockProductInput[] = [
   {
     "id": "prod_stiletto_001",
     "slug": "harper-blazer-in-navy",
     "title": "Harper Blazer In Navy",
     "currency": "PKR",
     "price": 399,
-    "originalPrice": 479,
+    "compareAtPrice": 479,
     "stockStatus": "in_stock",
     "primaryImage": {
       "url": "https://images.unsplash.com/photo-1591369822096-ffd140ec948f?auto=format&fit=crop&w=700&q=80",
@@ -62,7 +62,7 @@ export const stilettoFixtures: MockFixtures = {
     "title": "Classic Check Blazer",
     "currency": "PKR",
     "price": 350,
-    "originalPrice": null,
+    "compareAtPrice": null,
     "stockStatus": "in_stock",
     "primaryImage": {
       "url": "https://images.unsplash.com/photo-1591369822096-ffd140ec948f?auto=format&fit=crop&w=700&q=80",
@@ -108,7 +108,7 @@ export const stilettoFixtures: MockFixtures = {
     "title": "Piper Dress In Noir",
     "currency": "PKR",
     "price": 289,
-    "originalPrice": null,
+    "compareAtPrice": null,
     "stockStatus": "in_stock",
     "primaryImage": {
       "url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=700&q=80",
@@ -154,7 +154,7 @@ export const stilettoFixtures: MockFixtures = {
     "title": "Oversized Leather Jacket",
     "currency": "PKR",
     "price": 450,
-    "originalPrice": null,
+    "compareAtPrice": null,
     "stockStatus": "in_stock",
     "primaryImage": {
       "url": "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=700&q=80",
@@ -200,7 +200,7 @@ export const stilettoFixtures: MockFixtures = {
     "title": "Dakota Maxi Skirt",
     "currency": "PKR",
     "price": 229,
-    "originalPrice": null,
+    "compareAtPrice": null,
     "stockStatus": "in_stock",
     "primaryImage": {
       "url": "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?auto=format&fit=crop&w=700&q=80",
@@ -246,7 +246,7 @@ export const stilettoFixtures: MockFixtures = {
     "title": "Everyday Cotton Bra & Panty Set",
     "currency": "PKR",
     "price": 1499,
-    "originalPrice": null,
+    "compareAtPrice": null,
     "stockStatus": "in_stock",
     "primaryImage": {
       "url": "https://images.unsplash.com/photo-1568663521381-33b7c467fda0?w=900&auto=format&fit=crop&q=70",
@@ -286,7 +286,7 @@ export const stilettoFixtures: MockFixtures = {
     "title": "Seamless Comfort Set",
     "currency": "PKR",
     "price": 1799,
-    "originalPrice": null,
+    "compareAtPrice": null,
     "stockStatus": "in_stock",
     "primaryImage": {
       "url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=900&q=70",
@@ -320,5 +320,6 @@ export const stilettoFixtures: MockFixtures = {
     ],
     "deliveryCharge": 0
   }
-],
-};
+];
+
+export const stilettoFixtures: MockFixtures = { products: products.map(mockProduct) };

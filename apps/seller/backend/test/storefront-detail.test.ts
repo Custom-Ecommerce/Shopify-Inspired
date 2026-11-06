@@ -90,9 +90,23 @@ function product(overrides: Record<string, any> = {}) {
     store: STORE_ID,
     slug: 'blue-shirt',
     title: 'Blue shirt',
-    price: 1500,
-    originalPrice: 1800,
-    stockStatus: 'in_stock',
+    minPrice: 1500,
+    variants: [
+      {
+        _id: '65a0000000000000000000e1',
+        title: 'Default',
+        sku: 'SECRET-SKU',
+        barcode: 'SECRET-BARCODE',
+        price: 1500,
+        compareAtPrice: 1800,
+        trackQuantity: true,
+        stockQuantity: 7,
+        lowStockThreshold: null,
+        optionValues: [],
+        imageId: null,
+        position: 0,
+      },
+    ],
     isPublished: true,
     categories: [{ _id: '65a0000000000000000000c1', slug: 'shirts', name: 'Shirts' }, null],
     media: [
@@ -128,8 +142,22 @@ test('returns the full detail and it matches the storefront wire schema', async 
     title: 'Blue shirt',
     currency: 'PKR',
     price: 1500,
-    originalPrice: 1800,
+    compareAtPrice: 1800,
     stockStatus: 'in_stock',
+    defaultVariantId: '65a0000000000000000000e1',
+    hasVariants: false,
+    options: [],
+    variants: [
+      {
+        id: '65a0000000000000000000e1',
+        title: 'Default',
+        price: 1500,
+        compareAtPrice: 1800,
+        availability: 'in_stock',
+        optionValues: [],
+        imageId: null,
+      },
+    ],
     primaryImage: { url: 'https://res.cloudinary.com/demo/a.jpg', alt: 'Front' },
     categories: [{ id: '65a0000000000000000000c1', slug: 'shirts', name: 'Shirts' }],
     avgRating: 4.5,
@@ -157,7 +185,7 @@ test('the query is store-scoped and published-only, and never selects stock coun
     assert.equal(hidden in rec.projection, false, hidden + ' must not be selected');
   }
   const body = JSON.stringify(await (await get(STORE_ID, 'blue-shirt')).json());
-  for (const hidden of ['stockQuantity', 'reservedQuantity', '"store"']) assert.equal(body.includes(hidden), false, hidden);
+  for (const hidden of ['stockQuantity', 'trackQuantity', 'SECRET-SKU', 'SECRET-BARCODE', '"store"']) assert.equal(body.includes(hidden), false, hidden);
 });
 
 test("a product's own delivery charge wins over the store rate, and 0 means free", async () => {

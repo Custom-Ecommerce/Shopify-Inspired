@@ -23,8 +23,9 @@ function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
 
+/** Whole rupees (D-004): a store's settings are not validated yet, so a decimal is rounded where it is read. */
 function amount(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 }
 
 /** Same defaults as the store DTO: cash on delivery is on unless turned off, card only when enabled. */

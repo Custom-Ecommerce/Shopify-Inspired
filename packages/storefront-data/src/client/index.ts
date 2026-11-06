@@ -3,7 +3,7 @@ export type { UseProductsResult } from "./use-products";
 export { useProduct } from "./use-product";
 export type { UseProductResult } from "./use-product";
 export { useCart } from "./use-cart";
-export type { CartableProductVM, UseCartResult } from "./use-cart";
+export type { CartableProductVM, CartableVariantVM, UseCartResult } from "./use-cart";
 export { useCartQuote } from "./use-cart-quote";
 export type { CartQuoteStatus, UseCartQuoteResult } from "./use-cart-quote";
 export { useCheckout } from "./use-checkout";

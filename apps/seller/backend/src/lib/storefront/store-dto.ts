@@ -20,8 +20,9 @@ function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
+/** Whole rupees (D-004): a store's settings are not validated yet, so a decimal is rounded where it is read. */
 function amount(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 }
 
 const HEX_ID = /^[0-9a-fA-F]{24}$/;

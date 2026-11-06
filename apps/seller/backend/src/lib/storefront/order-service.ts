@@ -8,6 +8,7 @@ import type { ParsedOrderRequest } from '@/lib/storefront/order-request';
 import { computeTotals } from '@/lib/storefront/pricing';
 import { releaseAll, reserveStock, type Reservation } from '@/lib/storefront/stock';
 import type { StoreCommerce } from '@/lib/storefront/store-guard';
+import { canSupply, resolveVariant, type CheckoutVariant } from '@/lib/storefront/variant';
 
 export interface PlaceOrderResult {
   order: OrderRow;
@@ -18,17 +19,32 @@ export interface PlaceOrderResult {
 interface CatalogRow {
   _id: unknown;
   title: string;
-  price: number;
   deliveryCharge?: number | null;
-  stockQuantity?: number | null;
-  reservedQuantity?: number | null;
-  stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock';
+  variants: CheckoutVariant[];
+}
+
+/** One priced order line: what the server read now, never what the client said. */
+interface PricedLine {
+  productId: string;
+  variantId: string;
+  title: string;
+  variantTitle: string;
+  sku: string | null;
+  unitPrice: number;
+  qty: number;
+  deliveryCharge: number | null;
 }
 
 const ORDER_ID_ATTEMPTS = 5;
 
-const outOfStock = (productId: string): StorefrontHttpError =>
-  new StorefrontHttpError(409, 'OUT_OF_STOCK', 'A product in the order is out of stock.', { productId });
+const outOfStock = (productId: string, variantId: string): StorefrontHttpError =>
+  new StorefrontHttpError(409, 'OUT_OF_STOCK', 'A product in the order is out of stock.', { productId, variantId });
+
+const variantRequired = (productId: string): StorefrontHttpError =>
+  new StorefrontHttpError(422, 'VARIANT_REQUIRED', 'Choose a variant of this product.', { productId });
+
+const unknownVariant = (productId: string): StorefrontHttpError =>
+  new StorefrontHttpError(422, 'UNKNOWN_VARIANT', 'A variant in the order is not available.', { productId });
 
 const unknownProduct = (productId: string): StorefrontHttpError =>
   new StorefrontHttpError(422, 'UNKNOWN_PRODUCT', 'A product in the order is not available.', { productId });
@@ -47,8 +63,8 @@ function duplicateOn(err: unknown, field: string): boolean {
 }
 
 async function findByKey(storeId: string, idempotencyKey: string): Promise<OrderRow | null> {
-  const row = await (Order as any).findOne({ store: storeId, idempotencyKey }).lean();
-  return (row as OrderRow | null) ?? null;
+  const row = await Order.findOne({ store: storeId, idempotencyKey }).lean();
+  return (row as unknown as OrderRow | null) ?? null;
 }
 
 /** A retry with the same key and the same content gets the first order. The same key with different content is a client bug. */
@@ -65,29 +81,52 @@ function replay(existing: OrderRow, fingerprint: string): PlaceOrderResult {
 
 /**
  * Reads every product in the request from the catalog (this store, published only) and prices the order from
- * those rows. Checks stock in request order, so the first problem line is the one reported.
+ * the variant each line resolves to. Checks stock in request order, so the first problem line is the one reported.
+ * A line naming the Default variant and one leaving it out are the same variant, so their quantities are added first.
  */
 async function priceOrder(storeId: string, commerce: StoreCommerce, request: ParsedOrderRequest) {
-  const rows = (await (Product as any)
-    .find({ _id: { $in: request.lines.map((l) => l.productId) }, store: storeId, isPublished: true })
-    .select('title price deliveryCharge stockQuantity reservedQuantity stockStatus')
-    .lean()) as CatalogRow[];
+  const rows = (await Product.find({ _id: { $in: request.lines.map((l) => l.productId) }, store: storeId, isPublished: true })
+    .select('title deliveryCharge variants')
+    .lean()) as unknown as CatalogRow[];
   const byId = new Map(rows.map((row) => [String(row._id).toLowerCase(), row]));
 
-  const priced = request.lines.map((line) => {
+  const byVariant = new Map<string, PricedLine & { variant: CheckoutVariant }>();
+  for (const line of request.lines) {
     const row = byId.get(line.productId);
-    if (!row || typeof row.price !== 'number' || !Number.isFinite(row.price) || row.price < 0) {
+    if (!row) throw unknownProduct(line.productId);
+
+    const match = resolveVariant(row.variants, line.variantId);
+    if (match.kind === 'variant_required') throw variantRequired(line.productId);
+    if (match.kind === 'unknown_variant') throw unknownVariant(line.productId);
+
+    const { variant } = match;
+    if (typeof variant.price !== 'number' || !Number.isFinite(variant.price) || variant.price < 0) {
       throw unknownProduct(line.productId);
     }
-    const available = (row.stockQuantity ?? 0) - (row.reservedQuantity ?? 0);
-    if (row.stockStatus === 'out_of_stock' || available < line.qty) throw outOfStock(line.productId);
-    return {
+
+    const variantId = String(variant._id).toLowerCase();
+    const key = line.productId + '|' + variantId;
+    const existing = byVariant.get(key);
+    if (existing) {
+      existing.qty += line.qty;
+      continue;
+    }
+    byVariant.set(key, {
       productId: line.productId,
+      variantId,
       title: row.title,
-      unitPrice: row.price,
+      variantTitle: variant.title,
+      sku: variant.sku ?? null,
+      unitPrice: variant.price,
       qty: line.qty,
       deliveryCharge: typeof row.deliveryCharge === 'number' ? row.deliveryCharge : null,
-    };
+      variant,
+    });
+  }
+
+  const priced = [...byVariant.values()].map(({ variant, ...line }): PricedLine => {
+    if (!canSupply(variant, line.qty)) throw outOfStock(line.productId, line.variantId);
+    return line;
   });
 
   return { lines: priced, totals: computeTotals(priced, commerce) };
@@ -97,7 +136,7 @@ async function priceOrder(storeId: string, commerce: StoreCommerce, request: Par
 async function insertOrder(data: Record<string, unknown>): Promise<OrderRow> {
   for (let attempt = 1; ; attempt += 1) {
     try {
-      return plain(await (Order as any).create({ ...data, orderId: generateOrderId() }));
+      return plain(await Order.create({ ...data, orderId: generateOrderId() }));
     } catch (err) {
       if (duplicateOn(err, 'orderId') && attempt < ORDER_ID_ATTEMPTS) continue;
       throw err;
@@ -125,8 +164,8 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
   const reserved: Reservation[] = [];
   try {
     for (const line of lines) {
-      await reserveStock(storeId, line.productId, line.qty);
-      reserved.push({ productId: line.productId, qty: line.qty });
+      await reserveStock(storeId, line.productId, line.variantId, line.qty);
+      reserved.push({ productId: line.productId, variantId: line.variantId, qty: line.qty });
     }
   } catch (err) {
     await releaseAll(storeId, reserved);
@@ -145,7 +184,15 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       phone: request.customer.phone,
       address: request.customer.address,
       city: request.customer.city,
-      items: lines.map((l) => ({ productId: l.productId, productTitle: l.title, unitPrice: l.unitPrice, quantity: l.qty })),
+      items: lines.map((l) => ({
+        productId: l.productId,
+        variantId: l.variantId,
+        productTitle: l.title,
+        variantTitle: l.variantTitle,
+        sku: l.sku,
+        unitPrice: l.unitPrice,
+        quantity: l.qty,
+      })),
       subtotal: totals.subtotal,
       deliveryCharges: totals.deliveryCharges,
       total: totals.total,

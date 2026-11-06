@@ -33,9 +33,9 @@ export function toStilettoProduct(source: Source, reviews: ReviewItem[] = []): N
   const categories = source.categories ?? [];
   const tags = [...new Set([...(detail?.tags ?? []), ...categories.flatMap((c) => [c.name, c.slug])])];
   const variant: NormalizedVariant = {
-    id: source.id,
+    id: source.defaultVariantId,
     title: "Default",
-    availableForSale: source.stock.status !== "out_of_stock",
+    availableForSale: source.canQuickAdd,
     price: { amount: moneyString(source.price.amount), currencyCode: "PKR" },
     compareAtPrice: source.compareAt ? { amount: moneyString(source.compareAt.amount), currencyCode: "PKR" } : null,
     selectedOptions: [],

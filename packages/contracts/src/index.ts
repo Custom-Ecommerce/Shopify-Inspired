@@ -1,6 +1,7 @@
 export * from './object-id';
 export * from './store';
 export * from './user';
+export * from './money';
 export * from './product';
 export * from './order';
 export * from './store-article';
@@ -31,9 +32,6 @@ export * from './admin-ops';
 
 // AF2: admin console commission ledger, store commission rates, and subscription plans.
 export * from './admin-commerce';
-
-// AF3: admin console catalogue (categories).
-export * from './admin-catalogue';
 
 // AF4: admin console platform settings.
 export * from './admin-settings';

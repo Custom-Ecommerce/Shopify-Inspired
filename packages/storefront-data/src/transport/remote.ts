@@ -140,6 +140,10 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
       return { code: "invalid_quantity", productId };
     case "UNKNOWN_PRODUCT":
       return { code: "unknown_product", productId };
+    case "VARIANT_REQUIRED":
+      return { code: "variant_required", productId };
+    case "UNKNOWN_VARIANT":
+      return { code: "unknown_variant", productId };
     case "OUT_OF_STOCK":
       return { code: "out_of_stock", productId };
     case "PAYMENT_METHOD_UNAVAILABLE":

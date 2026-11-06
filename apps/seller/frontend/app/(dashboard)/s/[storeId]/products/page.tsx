@@ -1,3 +1,4 @@
+import { firstVariant, stockStatusOf } from "@/lib/product-stock";
 import type { Product as PayloadProductDoc } from "@markaz/contracts";
 import type { ListEnvelope as PayloadFindResponse } from "@markaz/api-compat";
 import Link from "next/link";
@@ -41,12 +42,15 @@ export default async function DashboardProductsPage({
     { header: "Title", accessorKey: "title" as const },
     {
       header: "Price",
-      render: (p: PayloadProductDoc) => `PKR ${p.price.toLocaleString()}`,
+      render: (p: PayloadProductDoc) => `PKR ${p.minPrice.toLocaleString()}`,
     },
-    { header: "Stock Qty", accessorKey: "stockQuantity" as const },
+    {
+      header: "Stock Qty",
+      render: (p: PayloadProductDoc) => firstVariant(p)?.stockQuantity ?? 0,
+    },
     {
       header: "Status",
-      render: (p: PayloadProductDoc) => <StatusBadge status={p.stockStatus} />,
+      render: (p: PayloadProductDoc) => <StatusBadge status={stockStatusOf(firstVariant(p))} />,
     },
     {
       header: "Category",

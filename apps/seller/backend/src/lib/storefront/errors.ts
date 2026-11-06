@@ -14,7 +14,9 @@ export type StorefrontErrorCode =
   | 'OUT_OF_STOCK'
   | 'PAYMENT_METHOD_UNAVAILABLE'
   | 'IDEMPOTENCY_CONFLICT'
-  | 'RATE_LIMITED';
+  | 'RATE_LIMITED'
+  | 'VARIANT_REQUIRED'
+  | 'UNKNOWN_VARIANT';
 
 /** Carries the storefront error envelope: { error: { code, message }, ...extra }. */
 export class StorefrontHttpError extends Error {

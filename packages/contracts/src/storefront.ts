@@ -44,10 +44,14 @@ export const STOREFRONT_ERROR_CODES = [
   'PAYMENT_METHOD_UNAVAILABLE',
   'IDEMPOTENCY_CONFLICT',
   'RATE_LIMITED',
+  // Variants.
+  'VARIANT_REQUIRED',
+  'UNKNOWN_VARIANT',
 ] as const;
 export type StorefrontErrorCode = (typeof STOREFRONT_ERROR_CODES)[number];
 
-const price = z.number().nonnegative();
+/** Shoppers only ever see whole rupees (D-004). */
+const price = z.number().int().nonnegative();
 const nullableText = z.string().nullable();
 
 export const storefrontImageSchema = z.object({
@@ -105,14 +109,32 @@ export const storefrontProductSummarySchema = z.object({
   slug: z.string().min(1),
   title: z.string(),
   currency: z.literal('PKR'),
+  /** The from price: the cheapest variant's. */
   price,
-  originalPrice: price.nullable(),
+  /** The compare-at of the cheapest variant, if it has one. */
+  compareAtPrice: price.nullable(),
+  /** Derived from the variants. */
   stockStatus: z.enum(STOCK_STATUSES),
+  /** The first variant that can be bought, or the first variant when none can. */
+  defaultVariantId: z.string().min(1),
+  hasVariants: z.boolean(),
   primaryImage: storefrontImageSchema.nullable(),
   categories: z.array(z.object({ id: z.string().min(1), slug: z.string().min(1), name: z.string() })),
   avgRating: z.number().nonnegative(),
   reviewCount: z.number().int().nonnegative(),
 });
+
+/** A store category as a shopper navigates it. Only categories that hold a published product are listed. */
+export const storefrontCategorySchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  slug: z.string().min(1),
+  order: z.number(),
+  description: z.string().nullable(),
+  bannerUrl: z.string().nullable(),
+});
+
+export const storefrontCategoryListResponseSchema = z.object({ data: z.array(storefrontCategorySchema) });
 
 export const storefrontProductListResponseSchema = z.object({
   data: z.array(storefrontProductSummarySchema),
@@ -159,7 +181,25 @@ export const STOREFRONT_ORDER_STATUSES = [
 ] as const;
 export type StorefrontOrderStatus = (typeof STOREFRONT_ORDER_STATUSES)[number];
 
+export const storefrontProductOptionSchema = z.object({
+  name: z.string(),
+  values: z.array(z.string()),
+});
+
+/** A variant as a shopper sees it. No sku, no barcode, no stock count: availability is all a shopper needs. */
+export const storefrontProductVariantSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  price,
+  compareAtPrice: price.nullable(),
+  availability: z.enum(STOCK_STATUSES),
+  optionValues: z.array(z.string()),
+  imageId: z.string().nullable(),
+});
+
 export const storefrontProductDetailSchema = storefrontProductSummarySchema.extend({
+  options: z.array(storefrontProductOptionSchema),
+  variants: z.array(storefrontProductVariantSchema).min(1),
   description: nullableText,
   highlights: z.array(z.string()),
   images: z.array(storefrontImageSchema),
@@ -189,6 +229,8 @@ export const storefrontCheckoutCustomerSchema = z.object({
  */
 export const storefrontOrderLineRequestSchema = z.object({
   productId: z.string().trim().min(1).max(64),
+  /** May be left out only for a product with exactly one variant. Otherwise the answer is 422 VARIANT_REQUIRED. */
+  variantId: z.string().trim().min(1).max(64).optional(),
   qty: z.number(),
 });
 
@@ -220,7 +262,9 @@ export const storefrontOrderLookupRequestSchema = z.object({
 
 export const storefrontOrderItemSchema = z.object({
   productId: z.string().min(1),
+  variantId: z.string().min(1),
   title: z.string(),
+  variantTitle: z.string(),
   unitPrice: price,
   qty: z.number().int().min(1),
   lineTotal: price,
@@ -242,23 +286,25 @@ export const storefrontCartQuoteRequestSchema = z.object({
   lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
 });
 
-export const storefrontCartQuoteIssueSchema = z.enum(['unknown_product', 'out_of_stock', 'insufficient_stock']);
+export const storefrontCartQuoteIssueSchema = z.enum(['unknown_product', 'unknown_variant', 'out_of_stock', 'insufficient_stock']);
 
 export const storefrontCartQuoteLineSchema = z.object({
   productId: z.string(),
+  variantId: z.string().nullable(),
   title: z.string().nullable(),
-  unitPrice: z.number().nonnegative().nullable(),
+  variantTitle: z.string().nullable(),
+  unitPrice: price.nullable(),
   qty: z.number().int(),
-  lineTotal: z.number().nonnegative().nullable(),
+  lineTotal: price.nullable(),
   issue: storefrontCartQuoteIssueSchema.nullable(),
   availableQty: z.number().int().nonnegative().nullable(),
 });
 
 export const storefrontCartQuoteSchema = z.object({
   lines: z.array(storefrontCartQuoteLineSchema),
-  subtotal: z.number().nonnegative(),
-  deliveryCharges: z.number().nonnegative(),
-  total: z.number().nonnegative(),
+  subtotal: price,
+  deliveryCharges: price,
+  total: price,
   canCheckout: z.boolean(),
 });
 

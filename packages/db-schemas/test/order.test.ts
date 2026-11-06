@@ -10,7 +10,7 @@ function order(overrides: Record<string, unknown> = {}) {
   return new Order({
     store: STORE,
     orderId: 'ORD-ABCD2345',
-    items: [{ productId: 'p1', productTitle: 'Shirt', unitPrice: 1200, quantity: 2 }],
+    items: [{ productId: 'p1', variantId: 'v1', productTitle: 'Shirt', variantTitle: 'Default', unitPrice: 1200, quantity: 2 }],
     ...overrides,
   });
 }

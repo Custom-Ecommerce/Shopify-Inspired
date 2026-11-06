@@ -6,8 +6,9 @@ import { z } from "zod";
  * adds fields does not break existing storefronts. Move these into @markaz/contracts once Track B owns the contract.
  */
 
-const price = z.number().nonnegative();
+const price = z.number().int().nonnegative();
 const nullableText = z.string().nullable();
+const stockStatus = z.enum(["in_stock", "low_stock", "out_of_stock"]);
 
 export const WireImage = z.object({
   url: z.string().min(1),
@@ -20,8 +21,10 @@ export const WireProductSummary = z.object({
   title: z.string(),
   currency: z.literal("PKR"),
   price,
-  originalPrice: price.nullable(),
-  stockStatus: z.enum(["in_stock", "low_stock", "out_of_stock"]),
+  compareAtPrice: price.nullable(),
+  stockStatus,
+  defaultVariantId: z.string().min(1),
+  hasVariants: z.boolean(),
   primaryImage: WireImage.nullable(),
   categories: z.array(
     z.object({
@@ -34,7 +37,24 @@ export const WireProductSummary = z.object({
   reviewCount: z.number().int().nonnegative(),
 });
 
+export const WireProductOption = z.object({
+  name: z.string(),
+  values: z.array(z.string()),
+});
+
+export const WireProductVariant = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  price,
+  compareAtPrice: price.nullable(),
+  availability: stockStatus,
+  optionValues: z.array(z.string()),
+  imageId: z.string().nullable(),
+});
+
 export const WireProductDetail = WireProductSummary.extend({
+  options: z.array(WireProductOption),
+  variants: z.array(WireProductVariant).min(1),
   description: nullableText,
   highlights: z.array(z.string()),
   images: z.array(WireImage),
@@ -74,7 +94,9 @@ const paymentMethod = z.enum(["cod", "card"]);
 
 export const WireOrderItem = z.object({
   productId: z.string().min(1),
+  variantId: z.string().min(1),
   title: z.string(),
+  variantTitle: z.string(),
   unitPrice: price,
   qty: z.number().int().min(1),
   lineTotal: price,
@@ -101,11 +123,13 @@ export const WireOrderLookup = z.object({
   data: WireOrder,
 });
 
-const quoteIssue = z.enum(["unknown_product", "out_of_stock", "insufficient_stock"]);
+const quoteIssue = z.enum(["unknown_product", "unknown_variant", "out_of_stock", "insufficient_stock"]);
 
 export const WireCartQuoteLine = z.object({
   productId: z.string().min(1),
+  variantId: nullableText,
   title: nullableText,
+  variantTitle: nullableText,
   unitPrice: price.nullable(),
   qty: z.number().int().min(1),
   lineTotal: price.nullable(),

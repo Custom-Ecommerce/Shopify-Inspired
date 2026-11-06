@@ -3,8 +3,11 @@ import { objectIdSchema } from './object-id';
 
 export const orderLineSchema = z.object({
   productId: z.string().min(1),
+  variantId: z.string().min(1),
   productTitle: z.string().min(1),
-  unitPrice: z.number().min(0),
+  variantTitle: z.string().min(1),
+  sku: z.string().nullable().optional(),
+  unitPrice: z.number().int().min(0),
   quantity: z.number().int().min(1),
 });
 

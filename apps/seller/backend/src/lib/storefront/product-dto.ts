@@ -1,3 +1,4 @@
+import { productAvailability, variantAvailability } from '@markaz/platform-kit/commerce';
 import { storefrontProductDetailSchema, storefrontProductSummarySchema } from '@/lib/contracts';
 
 interface PopulatedCategory {
@@ -11,36 +12,59 @@ interface PopulatedMedia {
   alt?: string | null;
 }
 
+/** A variant as .lean() returns it. The list reads the priced and stocked fields; the detail reads all of them. */
+interface VariantRow {
+  _id: unknown;
+  title?: string | null;
+  price: number;
+  compareAtPrice?: number | null;
+  trackQuantity: boolean;
+  stockQuantity: number;
+  lowStockThreshold?: number | null;
+  optionValues?: string[] | null;
+  imageId?: unknown;
+  position?: number | null;
+}
+
 /** A product as .lean() returns it after populating categories and the first media entry. */
 export interface ProductRow {
   _id: unknown;
   slug: string;
   title: string;
-  price: number;
-  originalPrice?: number | null;
-  stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock';
+  minPrice: number;
+  variants: VariantRow[];
   categories?: Array<PopulatedCategory | null> | null;
   media?: Array<PopulatedMedia | null> | null;
   avgRating?: number | null;
   reviewCount?: number | null;
 }
 
+const byPosition = (variants: readonly VariantRow[]): VariantRow[] =>
+  [...variants].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
 /**
- * Projects one product to StorefrontProductSummary. A category that was deleted (populates to null) or
- * has no slug is dropped; a missing or unpopulated first media entry means no primary image.
+ * Projects one product to StorefrontProductSummary. The price is the from price, and the compare-at is that of the
+ * cheapest variant. A category that was deleted (populates to null) or has no slug is dropped; a missing or unpopulated
+ * first media entry means no primary image.
  */
 export function toProductSummaryDto(row: ProductRow) {
   const first = row.media?.[0] ?? null;
   const url = first && typeof first.url === 'string' && first.url !== '' ? first.url : null;
+
+  const variants = byPosition(row.variants);
+  const cheapest = variants.find((variant) => variant.price === row.minPrice) ?? null;
+  const defaultVariant = variants.find((variant) => variantAvailability(variant) !== 'out_of_stock') ?? variants[0];
 
   return {
     id: String(row._id),
     slug: row.slug,
     title: row.title,
     currency: 'PKR' as const,
-    price: row.price,
-    originalPrice: row.originalPrice ?? null,
-    stockStatus: row.stockStatus,
+    price: row.minPrice,
+    compareAtPrice: cheapest?.compareAtPrice ?? null,
+    stockStatus: productAvailability(variants.map(variantAvailability)),
+    defaultVariantId: defaultVariant ? String(defaultVariant._id) : '',
+    hasVariants: variants.length > 1,
     primaryImage: url ? { url, alt: first?.alt || row.title } : null,
     categories: (row.categories ?? [])
       .filter((c): c is PopulatedCategory => !!c && typeof c.slug === 'string' && c.slug !== '')
@@ -62,6 +86,7 @@ interface DetailMedia extends PopulatedMedia {
 /** A product as .lean() returns it for the detail page: every media entry and the SEO image populated. */
 export interface ProductDetailRow extends Omit<ProductRow, 'media'> {
   media?: Array<DetailMedia | null> | null;
+  options?: Array<{ name: string; values: string[] }> | null;
   description?: string | null;
   highlights?: Array<{ text?: string | null } | null> | null;
   tags?: Array<string | null> | null;
@@ -76,8 +101,8 @@ function nonEmpty(value: unknown): string | null {
 }
 
 /**
- * Projects one product to StorefrontProductDetail. It never carries stock counts, the store id, or any
- * seller-side field: only what the page shows. deliveryCharge falls back to the store's default rate when
+ * Projects one product to StorefrontProductDetail. It never carries stock counts, SKUs, barcodes, the store id, or
+ * any seller-side field: only what the page shows. deliveryCharge falls back to the store's default rate when
  * the product has no charge of its own, so the page and the order total agree.
  */
 export function toProductDetailDto(row: ProductDetailRow, storeDeliveryRate: number) {
@@ -90,6 +115,16 @@ export function toProductDetailDto(row: ProductDetailRow, storeDeliveryRate: num
 
   return {
     ...summary,
+    options: (row.options ?? []).map((option) => ({ name: option.name, values: [...option.values] })),
+    variants: byPosition(row.variants).map((variant) => ({
+      id: String(variant._id),
+      title: variant.title ?? '',
+      price: variant.price,
+      compareAtPrice: variant.compareAtPrice ?? null,
+      availability: variantAvailability(variant),
+      optionValues: [...(variant.optionValues ?? [])],
+      imageId: variant.imageId ? String(variant.imageId) : null,
+    })),
     primaryImage: images[0] ?? null,
     description: nonEmpty(row.description),
     highlights: (row.highlights ?? []).map((h) => nonEmpty(h?.text)).filter((t): t is string => t !== null),

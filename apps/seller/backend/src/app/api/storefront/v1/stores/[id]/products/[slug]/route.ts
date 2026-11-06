@@ -13,9 +13,9 @@ export const dynamic = 'force-dynamic';
 const DETAIL_PROJECTION = {
   title: 1,
   slug: 1,
-  price: 1,
-  originalPrice: 1,
-  stockStatus: 1,
+  options: 1,
+  variants: 1,
+  minPrice: 1,
   categories: 1,
   media: 1,
   avgRating: 1,
@@ -56,13 +56,12 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     // A slug that cannot be a product never reaches the catalog query.
     if (!STOREFRONT_PRODUCT_SLUG_PATTERN.test(slug)) throw productNotFound();
 
-    const row = (await (Product as any)
-      .findOne({ store: id, slug, isPublished: true })
+    const row = (await Product.findOne({ store: id, slug, isPublished: true })
       .select(DETAIL_PROJECTION)
       .populate({ path: 'categories', select: 'slug name' })
       .populate({ path: 'media', select: 'url alt' })
       .populate({ path: 'seoImage', select: 'url' })
-      .lean()) as ProductDetailRow | null;
+      .lean()) as unknown as ProductDetailRow | null;
     if (!row) throw productNotFound();
 
     const body = storefrontProductDetailResponseSchema.parse({ data: toValidatedProductDetail(row, store.deliveryRate) });

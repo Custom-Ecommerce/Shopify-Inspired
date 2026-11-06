@@ -10,6 +10,6 @@ const db = unwrapCjs(dbNs);
 const sync = unwrapCjs(syncNs);
 
 export const { assertCan, PolicyDeniedError, writeAuditLog, hashPassword, verifyPassword, signSession, verifySession, isLocked, recordFailedAttempt, SESSION_MIN_SECRET_LENGTH } = auth;
-export const { AuditLog, Category, CommissionLedgerModel, PlatformSettingsModel, Store, SubscriptionPlanModel, SyncOutbox, User } = db;
+export const { AuditLog, CommissionLedgerModel, PlatformSettingsModel, Store, SubscriptionPlanModel, SyncOutbox, User } = db;
 export const { enqueueSyncEvent, registerSyncOutboxModel } = sync;
 export type { SyncOutboxModelPort } from '@markaz/sync-core';

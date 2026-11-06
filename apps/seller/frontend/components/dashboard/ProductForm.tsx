@@ -3,7 +3,9 @@
 import type { Product as PayloadProductDoc, Category as PayloadCategoryDoc, StockStatus as PayloadStockStatus } from "@markaz/contracts";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { useStoreHref } from "@/lib/dashboard-context";
+import { firstVariant, stockStatusOf } from "@/lib/product-stock";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { X } from "lucide-react";
@@ -45,16 +47,17 @@ interface FormState {
 }
 
 function initialStateFromProduct(product?: PayloadProductDoc): FormState {
+  const variant = product ? firstVariant(product) : undefined;
   return {
     title: product?.title ?? "",
     slug: product?.slug ?? "",
-    price: product?.price != null ? String(product.price) : "",
-    originalPrice: product?.originalPrice != null ? String(product.originalPrice) : "",
+    price: variant ? String(variant.price) : "",
+    originalPrice: variant?.compareAtPrice != null ? String(variant.compareAtPrice) : "",
     description: product?.description ?? "",
     categoryId:
       (typeof product?.categories?.[0] === "object" ? product.categories[0]?.id : product?.categories?.[0]) ?? "",
-    stockStatus: product?.stockStatus ?? "in_stock",
-    stockQuantity: product?.stockQuantity != null ? String(product.stockQuantity) : "0",
+    stockStatus: variant ? stockStatusOf(variant) : "in_stock",
+    stockQuantity: variant ? String(variant.stockQuantity) : "0",
     isFeatured: product?.isFeatured ?? false,
     highlights: (product?.highlights ?? []).map((h) => h.text),
     images: (product?.media ?? [])
@@ -71,13 +74,18 @@ export function ProductForm({ product }: { product?: PayloadProductDoc }) {
 
   const [form, setForm] = useState<FormState>(() => initialStateFromProduct(product));
   const [categories, setCategories] = useState<PayloadCategoryDoc[]>([]);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     storeFetch("/api/proxy/categories?limit=200&depth=0")
       .then((res) => res.json())
-      .then((data) => setCategories(data?.docs ?? []));
+      .then((data) => {
+        setCategories(data?.docs ?? []);
+        // A failed request has no docs, and must not tell the seller that the store has no categories.
+        setCategoriesLoaded(Array.isArray(data?.docs));
+      });
   }, [storeFetch]);
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -245,6 +253,11 @@ export function ProductForm({ product }: { product?: PayloadProductDoc }) {
                 ))}
               </SelectContent>
             </Select>
+            {categoriesLoaded && categories.length === 0 ? (
+              <Link href={href("/categories")} className="mt-1 inline-block text-xs font-medium underline underline-offset-4">
+                Create a category first
+              </Link>
+            ) : null}
           </div>
           <div>
             <Label className="mb-1">Stock Status</Label>

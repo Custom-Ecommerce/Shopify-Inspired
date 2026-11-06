@@ -15,6 +15,7 @@ import {
 const LABELS: Record<string, string> = {
   "": "Overview",
   products: "Products",
+  categories: "Categories",
   orders: "Orders",
   inventory: "Inventory",
   reviews: "Reviews",

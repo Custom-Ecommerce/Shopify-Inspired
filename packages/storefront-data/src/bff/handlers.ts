@@ -47,6 +47,7 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 const lineSchema = z.object({
   productId: z.string().trim().min(1).max(64),
+  variantId: z.string().trim().min(1).max(64).optional(),
   qty: z.number(),
 });
 
@@ -112,6 +113,20 @@ export function rejectionToEnvelope(rejection: OrderRejection): {
         status: 422,
         code: "UNKNOWN_PRODUCT",
         message: "A product in the order is not available.",
+        extra: withProduct(rejection.productId),
+      };
+    case "variant_required":
+      return {
+        status: 422,
+        code: "VARIANT_REQUIRED",
+        message: "Choose a variant of this product.",
+        extra: withProduct(rejection.productId),
+      };
+    case "unknown_variant":
+      return {
+        status: 422,
+        code: "UNKNOWN_VARIANT",
+        message: "A variant in the order is not available.",
         extra: withProduct(rejection.productId),
       };
     case "out_of_stock":

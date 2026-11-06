@@ -7,6 +7,7 @@ import type {
   StorefrontOrderItem,
   StorefrontProductDetail,
   StorefrontProductSummary,
+  StorefrontProductVariant,
   StorefrontTransport,
   SubmitOrderPayload,
   SubmitOrderResult,
@@ -19,14 +20,38 @@ import { normalizePhoneE164 } from "@markaz/platform-kit/phone";
 // low stock, no reviews, free delivery, very long title) so themes are exercised from day one.
 const NO_SEO = { title: null, description: null, imageUrl: null };
 
-export const DEFAULT_MOCK_PRODUCTS: StorefrontProductDetail[] = [
+/** A product with no options, written the short way: the Default variant is filled in by mockProduct. */
+export type MockProductInput = Omit<StorefrontProductDetail, "defaultVariantId" | "hasVariants" | "options" | "variants">;
+
+export function mockProduct(input: MockProductInput): StorefrontProductDetail {
+  const variantId = input.id + "_default";
+  return {
+    ...input,
+    defaultVariantId: variantId,
+    hasVariants: false,
+    options: [],
+    variants: [
+      {
+        id: variantId,
+        title: "Default",
+        price: input.price,
+        compareAtPrice: input.compareAtPrice,
+        availability: input.stockStatus,
+        optionValues: [],
+        imageId: null,
+      },
+    ],
+  };
+}
+
+const MOCK_PRODUCT_INPUTS: MockProductInput[] = [
   {
     id: "prod_tee_001",
     slug: "classic-cotton-tee",
     title: "Classic Cotton Tee",
     currency: "PKR",
     price: 1299,
-    originalPrice: 1599,
+    compareAtPrice: 1599,
     stockStatus: "in_stock",
     primaryImage: { url: "https://res.cloudinary.com/demo/image/upload/sample.jpg", alt: "Classic cotton tee" },
     categories: [{ id: "cat_apparel", slug: "apparel", name: "Apparel" }],
@@ -49,7 +74,7 @@ export const DEFAULT_MOCK_PRODUCTS: StorefrontProductDetail[] = [
     title: "Embroidered Lawn Kurta",
     currency: "PKR",
     price: 3450,
-    originalPrice: null,
+    compareAtPrice: null,
     stockStatus: "low_stock",
     primaryImage: null,
     categories: [{ id: "cat_apparel", slug: "apparel", name: "Apparel" }],
@@ -69,7 +94,7 @@ export const DEFAULT_MOCK_PRODUCTS: StorefrontProductDetail[] = [
     title: "Wireless Earbuds Pro",
     currency: "PKR",
     price: 4999,
-    originalPrice: 6500,
+    compareAtPrice: 6500,
     stockStatus: "in_stock",
     primaryImage: null,
     categories: [{ id: "cat_electronics", slug: "electronics", name: "Electronics" }],
@@ -89,7 +114,7 @@ export const DEFAULT_MOCK_PRODUCTS: StorefrontProductDetail[] = [
     title: "Premium Bed Sheet Set",
     currency: "PKR",
     price: 2750,
-    originalPrice: null,
+    compareAtPrice: null,
     stockStatus: "out_of_stock",
     primaryImage: null,
     categories: [{ id: "cat_home", slug: "home", name: "Home" }],
@@ -109,7 +134,7 @@ export const DEFAULT_MOCK_PRODUCTS: StorefrontProductDetail[] = [
     title: "Organic Basmati Rice 5kg, Extra Long Aged Grain Pack for Families Who Buy in Bulk Every Month",
     currency: "PKR",
     price: 2100,
-    originalPrice: null,
+    compareAtPrice: null,
     stockStatus: "in_stock",
     primaryImage: null,
     categories: [{ id: "cat_grocery", slug: "grocery", name: "Grocery" }],
@@ -124,6 +149,8 @@ export const DEFAULT_MOCK_PRODUCTS: StorefrontProductDetail[] = [
     deliveryCharge: 200,
   },
 ];
+
+export const DEFAULT_MOCK_PRODUCTS: StorefrontProductDetail[] = MOCK_PRODUCT_INPUTS.map(mockProduct);
 
 export interface MockFixtures {
   products: StorefrontProductDetail[];
@@ -149,8 +176,10 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       title: product.title,
       currency: product.currency,
       price: product.price,
-      originalPrice: product.originalPrice,
+      compareAtPrice: product.compareAtPrice,
       stockStatus: product.stockStatus,
+      defaultVariantId: product.defaultVariantId,
+      hasVariants: product.hasVariants,
       primaryImage: product.primaryImage,
       categories: product.categories,
       avgRating: product.avgRating,
@@ -179,8 +208,15 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
 
   const roundMoney = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 
+  /** The variant a line means, as the seller backend resolves it. Null when the id does not belong to the product. */
+  function variantOf(product: StorefrontProductDetail, variantId: string | undefined): StorefrontProductVariant | null {
+    if (variantId !== undefined) return product.variants.find((variant) => variant.id === variantId) ?? null;
+    if (product.variants.length === 1) return product.variants[0];
+    throw new OrderRejectedError({ code: "variant_required", productId: product.id });
+  }
+
   /**
-   * Mock of POST /cart/quote. Prices come from the fixtures. The fixtures carry a stock status but no counts, so the mock
+   * Mock of POST /cart/quote. Prices come from the fixtures. The fixtures carry availability but no counts, so the mock
    * never reports insufficient_stock, and it charges no delivery.
    */
   async function quoteCart(input: CartQuoteInput): Promise<CartQuote> {
@@ -190,7 +226,9 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       if (!product) {
         return {
           productId: line.productId,
+          variantId: line.variantId ?? null,
           title: null,
+          variantTitle: null,
           unitPrice: null,
           qty: line.qty,
           lineTotal: null,
@@ -198,23 +236,29 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
           availableQty: null,
         };
       }
-      if (product.stockStatus === "out_of_stock") {
+      const variant = variantOf(product, line.variantId);
+      if (!variant) {
         return {
           productId: product.id,
+          variantId: line.variantId ?? null,
           title: product.title,
-          unitPrice: product.price,
+          variantTitle: null,
+          unitPrice: null,
           qty: line.qty,
           lineTotal: null,
-          issue: "out_of_stock",
-          availableQty: 0,
+          issue: "unknown_variant",
+          availableQty: null,
         };
       }
+      const base = { productId: product.id, variantId: variant.id, title: product.title, variantTitle: variant.title };
+      if (variant.availability === "out_of_stock") {
+        return { ...base, unitPrice: variant.price, qty: line.qty, lineTotal: null, issue: "out_of_stock", availableQty: 0 };
+      }
       return {
-        productId: product.id,
-        title: product.title,
-        unitPrice: product.price,
+        ...base,
+        unitPrice: variant.price,
         qty: line.qty,
-        lineTotal: roundMoney(product.price * line.qty),
+        lineTotal: roundMoney(variant.price * line.qty),
         issue: null,
         availableQty: null,
       };
@@ -245,15 +289,19 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       }
       const product = FIXTURES.find((item) => item.id === line.productId);
       if (!product) throw new OrderRejectedError({ code: "unknown_product", productId: line.productId });
-      if (product.stockStatus === "out_of_stock") {
+      const variant = variantOf(product, line.variantId);
+      if (!variant) throw new OrderRejectedError({ code: "unknown_variant", productId: line.productId });
+      if (variant.availability === "out_of_stock") {
         throw new OrderRejectedError({ code: "out_of_stock", productId: line.productId });
       }
       items.push({
         productId: product.id,
+        variantId: variant.id,
         title: product.title,
-        unitPrice: product.price,
+        variantTitle: variant.title,
+        unitPrice: variant.price,
         qty: line.qty,
-        lineTotal: roundMoney(product.price * line.qty),
+        lineTotal: roundMoney(variant.price * line.qty),
       });
     }
 

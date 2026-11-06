@@ -25,17 +25,6 @@ import { syncStateToQuery, type SyncListState } from "@/lib/sync";
 import { listStateToQuery, type StoreListState } from "@/lib/stores";
 import { ledgerStateToQuery, ratesStateToQuery, type CommissionListState } from "@/lib/commission";
 import { subscriptionStateToQuery, type SubscriptionListState } from "@/lib/subscriptions";
-import {
-  adminCategoryDeleteResponseSchema,
-  adminCategoryListSchema,
-  adminCategorySchema,
-  type AdminCategory,
-  type AdminCategoryCreateRequest,
-  type AdminCategoryDeleteResponse,
-  type AdminCategoryList,
-  type AdminCategoryUpdateRequest,
-} from "@/lib/contracts";
-import { categoryStateToQuery, type CategoryListState } from "@/lib/categories";
 import { adminOverviewSchema, type AdminOverview } from "@/lib/contracts";
 import {
   adminPlatformSettingsSchema,
@@ -125,24 +114,6 @@ export function listCommissionLedger(state: CommissionListState, signal?: AbortS
 
 export function listCommissionRates(state: CommissionListState, signal?: AbortSignal): Promise<AdminCommissionRates> {
   return call("/api/commission/rates?" + ratesStateToQuery(state, true), adminCommissionRatesSchema as Parser<AdminCommissionRates>, { signal });
-}
-
-export function listCategories(state: CategoryListState, signal?: AbortSignal): Promise<AdminCategoryList> {
-  return call("/api/categories?" + categoryStateToQuery(state, true), adminCategoryListSchema as Parser<AdminCategoryList>, { signal });
-}
-
-const pickCategory = (payload: unknown): unknown => (payload as { category?: unknown } | null)?.category;
-
-export function createCategory(input: AdminCategoryCreateRequest): Promise<AdminCategory> {
-  return call("/api/categories", adminCategorySchema as Parser<AdminCategory>, { method: "POST", body: JSON.stringify(input) }, pickCategory);
-}
-
-export function updateCategory(id: string, input: AdminCategoryUpdateRequest): Promise<AdminCategory> {
-  return call("/api/categories/" + encodeURIComponent(id), adminCategorySchema as Parser<AdminCategory>, { method: "PATCH", body: JSON.stringify(input) }, pickCategory);
-}
-
-export function deleteCategory(id: string): Promise<AdminCategoryDeleteResponse> {
-  return call("/api/categories/" + encodeURIComponent(id), adminCategoryDeleteResponseSchema as Parser<AdminCategoryDeleteResponse>, { method: "DELETE" });
 }
 
 export function listSubscriptionPlans(state: SubscriptionListState, signal?: AbortSignal): Promise<AdminSubscriptionPlanList> {

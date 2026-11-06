@@ -1,4 +1,4 @@
-import { CreditCard, LayoutDashboard, Percent, RefreshCw, ScrollText, Settings, Store, Tags, Users, type LucideIcon } from "lucide-react";
+import { CreditCard, LayoutDashboard, Percent, RefreshCw, ScrollText, Settings, Store, Users, type LucideIcon } from "lucide-react";
 import type { NavIconKey } from "./nav-config";
 
 export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
@@ -9,6 +9,5 @@ export const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
   commission: Percent,
   sync: RefreshCw,
   audit: ScrollText,
-  categories: Tags,
   settings: Settings,
 };

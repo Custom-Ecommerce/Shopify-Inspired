@@ -7,14 +7,11 @@
 import assert from "node:assert/strict";
 import { buildCartQuote, mergeQuoteLines, type QuoteCatalogRow } from "../src/lib/storefront/cart-quote";
 
-const kurta: QuoteCatalogRow = {
-  title: "Cotton Kurta",
-  price: 1000,
-  deliveryCharge: null,
-  stockQuantity: 10,
-  reservedQuantity: 0,
-  stockStatus: "in_stock",
-};
+const variant = { _id: "v1", title: "Default", price: 1000, trackQuantity: true, stockQuantity: 10 };
+
+const kurta: QuoteCatalogRow = { title: "Cotton Kurta", deliveryCharge: null, variants: [variant] };
+
+const line = (productId: string, qty: number) => ({ productId, variantId: null, qty });
 
 const store = { deliveryRate: 200, freeDeliveryThreshold: 5000 };
 
@@ -24,7 +21,7 @@ function check(name: string, run: () => void): void {
 }
 
 check("a purchasable line is priced from the catalog, and the store's delivery rate is charged once", () => {
-  const quote = buildCartQuote([{ productId: "a", qty: 2 }], new Map([["a", kurta]]), store);
+  const quote = buildCartQuote([line("a", 2)], new Map([["a", kurta]]), store);
   assert.equal(quote.lines[0].lineTotal, 2000);
   assert.equal(quote.lines[0].issue, null);
   assert.equal(quote.subtotal, 2000);
@@ -34,18 +31,18 @@ check("a purchasable line is priced from the catalog, and the store's delivery r
 });
 
 check("free delivery applies at the store's threshold, and a product's own charge wins over the store rate", () => {
-  const big = buildCartQuote([{ productId: "a", qty: 5 }], new Map([["a", kurta]]), store);
+  const big = buildCartQuote([line("a", 5)], new Map([["a", kurta]]), store);
   assert.equal(big.deliveryCharges, 0, "5 x 1000 reaches the 5000 threshold");
-  const own = buildCartQuote([{ productId: "a", qty: 1 }], new Map([["a", { ...kurta, deliveryCharge: 350 }]]), store);
+  const own = buildCartQuote([line("a", 1)], new Map([["a", { ...kurta, deliveryCharge: 350 }]]), store);
   assert.equal(own.deliveryCharges, 350);
 });
 
 check("an out-of-stock line is reported and left out of the totals", () => {
-  const sold = { ...kurta, stockStatus: "out_of_stock" as const, stockQuantity: 0 };
+  const sold = { ...kurta, variants: [{ ...variant, stockQuantity: 0 }] };
   const quote = buildCartQuote(
     [
-      { productId: "a", qty: 1 },
-      { productId: "b", qty: 1 },
+      line("a", 1),
+      line("b", 1),
     ],
     new Map([
       ["a", kurta],
@@ -60,8 +57,8 @@ check("an out-of-stock line is reported and left out of the totals", () => {
 });
 
 check("a quantity the free units cannot cover is insufficient, and reports what is left", () => {
-  const scarce = { ...kurta, stockQuantity: 3, reservedQuantity: 1 };
-  const quote = buildCartQuote([{ productId: "a", qty: 3 }], new Map([["a", scarce]]), store);
+  const scarce = { ...kurta, variants: [{ ...variant, stockQuantity: 2 }] };
+  const quote = buildCartQuote([line("a", 3)], new Map([["a", scarce]]), store);
   assert.equal(quote.lines[0].issue, "insufficient_stock");
   assert.equal(quote.lines[0].availableQty, 2);
   assert.equal(quote.canCheckout, false);
@@ -70,10 +67,10 @@ check("a quantity the free units cannot cover is insufficient, and reports what 
 check("an unknown product, or one whose price is not usable, is unknown and has no title", () => {
   const quote = buildCartQuote(
     [
-      { productId: "missing", qty: 1 },
-      { productId: "broken", qty: 1 },
+      line("missing", 1),
+      line("broken", 1),
     ],
-    new Map([["broken", { ...kurta, price: Number.NaN }]]),
+    new Map([["broken", { ...kurta, variants: [{ ...variant, price: Number.NaN }] }]]),
     store,
   );
   assert.equal(quote.lines[0].issue, "unknown_product");
@@ -97,8 +94,8 @@ check("repeated products merge into one line with the summed quantity, as the or
       { productId: "def", qty: 1 },
     ]),
     [
-      { productId: "abc", qty: 5 },
-      { productId: "def", qty: 1 },
+      { productId: "abc", variantId: null, qty: 5 },
+      { productId: "def", variantId: null, qty: 1 },
     ],
   );
 });

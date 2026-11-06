@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { HomePageProps } from "@markaz/storefront-theme-kit";
+import type { HomePageProps } from "@markaz/storefront-data";
 import { Card } from "../components/ui/card";
 import { buttonVariants } from "../components/ui/button";
 import { ProductCard } from "../components/product-card";
@@ -183,9 +183,6 @@ export function HomePage(props: HomePageProps) {
               <ProductCard
                 key={product.id ?? product.slug}
                 product={product}
-                store={store}
-                storePaths={storePaths}
-                paths={storePaths}
               />
             ))}
           </div>

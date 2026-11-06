@@ -39,6 +39,7 @@ import * as compatNs from '@markaz/api-compat';
 const compat: typeof compatNs = unwrapCjs(compatNs);
 export const listEnvelope = compat.listEnvelope;
 export const assertCan = auth.assertCan;
+export const PUBLIC_CATEGORY_READABLE_FIELDS = auth.PUBLIC_CATEGORY_READABLE_FIELDS;
 export const Discount = db.Discount;
 export const Review = db.Review;
 
@@ -56,3 +57,4 @@ export const Order = db.Order;
 // Track B shims: the storefront API reads stores and the catalog.
 export const Store = db.Store;
 export const Product = db.Product;
+export const StockMovement = db.StockMovement;

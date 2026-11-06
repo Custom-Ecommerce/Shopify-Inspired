@@ -2,7 +2,7 @@ import type { StorefrontProductSummary } from "../transport/types";
 import { storePaths } from "./paths";
 import type { ProductCardVM } from "./product-card";
 
-/** A category as a shopper navigates it. Derived from products: the seller backend has no categories endpoint. */
+/** A category as a shopper navigates it. Derived from the store's own products, so it always belongs to that store. */
 export interface CategoryVM {
   id: string;
   slug: string;

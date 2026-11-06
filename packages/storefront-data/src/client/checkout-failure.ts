@@ -42,6 +42,9 @@ export function toCheckoutFailure(error: unknown, lines: readonly CartLineRef[])
         productId: rejection.productId ?? null,
         productTitle: cartTitle(lines, rejection.productId),
       };
+    // A variant gone from the catalog reads to a shopper like a product gone from it, so themes need no new case.
+    case "variant_required":
+    case "unknown_variant":
     case "unknown_product":
       return {
         kind: "unknown_product",

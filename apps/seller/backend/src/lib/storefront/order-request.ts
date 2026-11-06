@@ -19,8 +19,8 @@ export interface ParsedOrderRequest {
   fingerprint: string;
   customer: { customerName: string; phone: string; address: string; city: string | null };
   paymentMethod: 'cod' | 'card';
-  /** Merged by product: the same product twice is one line with the summed quantity. */
-  lines: Array<{ productId: string; qty: number }>;
+  /** Merged by variant: the same variant twice is one line with the summed quantity. Null asks for the only variant. */
+  lines: Array<{ productId: string; variantId: string | null; qty: number }>;
 }
 
 const invalid = (message: string): StorefrontHttpError => new StorefrontHttpError(400, 'INVALID_REQUEST', message);
@@ -70,9 +70,10 @@ export function parseCreateOrderRequest(body: unknown, headerKey: string | null)
 
   if (input.lines.length === 0) throw new StorefrontHttpError(400, 'EMPTY_ORDER', 'The order has no items.');
 
-  const merged = new Map<string, number>();
+  const merged = new Map<string, ParsedOrderRequest['lines'][number]>();
   for (const line of input.lines) {
     const id = line.productId.toLowerCase();
+    const variantId = line.variantId ? line.variantId.toLowerCase() : null;
     if (!Number.isInteger(line.qty) || line.qty < 1 || line.qty > STOREFRONT_ORDER_MAX_QTY) {
       throw new StorefrontHttpError(400, 'INVALID_QUANTITY', 'Quantity must be a whole number from 1 to ' + STOREFRONT_ORDER_MAX_QTY + '.', {
         productId: line.productId,
@@ -82,15 +83,19 @@ export function parseCreateOrderRequest(body: unknown, headerKey: string | null)
     if (!HEX_ID.test(id)) {
       throw new StorefrontHttpError(422, 'UNKNOWN_PRODUCT', 'A product in the order is not available.', { productId: line.productId });
     }
-    const qty = (merged.get(id) ?? 0) + line.qty;
+    if (variantId !== null && !HEX_ID.test(variantId)) {
+      throw new StorefrontHttpError(422, 'UNKNOWN_VARIANT', 'A variant in the order is not available.', { productId: line.productId });
+    }
+    const key = id + '|' + (variantId ?? '');
+    const qty = (merged.get(key)?.qty ?? 0) + line.qty;
     if (qty > STOREFRONT_ORDER_MAX_QTY) {
       throw new StorefrontHttpError(400, 'INVALID_QUANTITY', 'Quantity must be a whole number from 1 to ' + STOREFRONT_ORDER_MAX_QTY + '.', {
         productId: line.productId,
       });
     }
-    merged.set(id, qty);
+    merged.set(key, { productId: id, variantId, qty });
   }
-  const lines = [...merged.entries()].map(([productId, qty]) => ({ productId, qty }));
+  const lines = [...merged.values()];
 
   const customer = {
     customerName: input.customer.customerName,
@@ -114,7 +119,7 @@ export function fingerprintOf(
     a: customer.address,
     c: customer.city,
     m: paymentMethod,
-    l: [...lines].sort((x, y) => (x.productId < y.productId ? -1 : x.productId > y.productId ? 1 : 0)).map((l) => [l.productId, l.qty]),
+    l: lines.map((l) => [l.productId, l.variantId, l.qty] as const).sort((x, y) => (String(x) < String(y) ? -1 : String(x) > String(y) ? 1 : 0)),
   });
   return createHash('sha256').update(canonical).digest('hex');
 }

@@ -9,7 +9,15 @@ export interface OrderRow {
   phone?: string | null;
   address?: string | null;
   city?: string | null;
-  items?: Array<{ productId: string; productTitle: string; unitPrice: number; quantity: number }> | null;
+  items?: Array<{
+    productId: string;
+    variantId: string;
+    productTitle: string;
+    variantTitle: string;
+    sku?: string | null;
+    unitPrice: number;
+    quantity: number;
+  }> | null;
   subtotal?: number | null;
   deliveryCharges?: number | null;
   total?: number | null;
@@ -56,7 +64,9 @@ export function toOrderDto(row: OrderRow) {
     address: row.address ?? '',
     items: (row.items ?? []).map((item) => ({
       productId: item.productId,
+      variantId: item.variantId,
       title: item.productTitle,
+      variantTitle: item.variantTitle,
       unitPrice: item.unitPrice,
       qty: item.quantity,
       lineTotal: Math.round((item.unitPrice * item.quantity + Number.EPSILON) * 100) / 100,

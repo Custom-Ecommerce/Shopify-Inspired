@@ -21,8 +21,8 @@ export interface ProductListQuery {
 
 const SORT_SPECS: Record<ProductSort, Record<string, 1 | -1>> = {
   newest: { createdAt: -1, _id: -1 },
-  price_asc: { price: 1, _id: 1 },
-  price_desc: { price: -1, _id: -1 },
+  price_asc: { minPrice: 1, _id: 1 },
+  price_desc: { minPrice: -1, _id: -1 },
   rating: { avgRating: -1, reviewCount: -1, _id: -1 },
 };
 

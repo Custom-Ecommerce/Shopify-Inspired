@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { assertCan, signSession, User, Category, Media } from '@/lib/services';
+import { assertCan, signSession, Store, User, Category, Media } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { signParams } from '@/lib/cloudinary';
 
@@ -15,10 +15,12 @@ const MEDIA1 = '65a0000000000000000000f1';
 const MEDIA_OTHER = '65a0000000000000000000f2';
 const CAT_A = '65a0000000000000000000c1';
 const CAT_B = '65a0000000000000000000c2';
+const CAT_OTHER = '65a0000000000000000000c3';
 
 const CategoryModel = Category as any;
 const MediaModel = Media as any;
 const UserModel = User as any;
+const StoreModel = Store as unknown as { findOne: () => unknown };
 
 let categories: Array<Record<string, any>> = [];
 let media: Array<Record<string, any>> = [];
@@ -65,6 +67,7 @@ function installStubs(): () => void {
     mCount: MediaModel.countDocuments,
     mCreate: MediaModel.create,
     uFindById: UserModel.findById,
+    sFindOne: StoreModel.findOne,
   };
   (mongoose as any).connect = async () => mongoose;
   CategoryModel.find = (filter: any) => query(categories.filter((r) => matches(r, filter)));
@@ -77,6 +80,7 @@ function installStubs(): () => void {
     return row;
   };
   UserModel.findById = () => ({ select: () => ({ lean: async () => ({ store: STORE }) }) });
+  StoreModel.findOne = () => query([{ _id: STORE }], true);
   return () => {
     (mongoose as any).connect = originals.connect;
     CategoryModel.find = originals.cFind;
@@ -85,14 +89,16 @@ function installStubs(): () => void {
     MediaModel.countDocuments = originals.mCount;
     MediaModel.create = originals.mCreate;
     UserModel.findById = originals.uFindById;
+    StoreModel.findOne = originals.sFindOne;
   };
 }
 
 function seed() {
   const now = '2026-10-01T00:00:00.000Z';
   categories = [
-    { _id: CAT_A, name: 'Tops', slug: 'tops', order: 1, createdAt: now, updatedAt: now },
-    { _id: CAT_B, name: 'Bottoms', slug: 'bottoms', order: 2, createdAt: now, updatedAt: now },
+    { _id: CAT_A, store: STORE, name: 'Tops', slug: 'tops', order: 1, createdAt: now, updatedAt: now },
+    { _id: CAT_B, store: STORE, name: 'Bottoms', slug: 'bottoms', order: 2, createdAt: now, updatedAt: now },
+    { _id: CAT_OTHER, store: OTHER_STORE, name: 'Hats', slug: 'hats', order: 0, createdAt: now, updatedAt: now },
   ];
   media = [
     { _id: MEDIA1, store: STORE, alt: 'Shirt front', url: 'https://res.cloudinary.com/demo/image/upload/v1/markaz/a.jpg', cloudinaryPublicId: 'markaz/a', cloudinaryResourceType: 'image', createdAt: now, updatedAt: now },
@@ -126,7 +132,7 @@ test('categories require a session: no token is refused with 401', async () => {
   assert.equal(response.status, 401);
 });
 
-test('the category list returns the platform categories in order, in the list envelope', async () => {
+test('the category list returns only the categories of the seller store, in the list envelope', async () => {
   seed();
   const restore = installStubs();
   try {
@@ -236,9 +242,10 @@ test('the upload signature is SHA-1 over the sorted parameters and the secret', 
   assert.equal(signParams({ timestamp: '1700000000', folder: 'markaz' }, 'secret'), expected);
 });
 
-test('the policy: sellers read categories but cannot write them; they may create media with alt only', () => {
+test('the policy: sellers manage named category fields only; they may create media with alt only', () => {
   assert.doesNotThrow(() => assertCan('seller', 'read', 'categories'));
-  assert.throws(() => assertCan('seller', 'create', 'categories'));
+  assert.doesNotThrow(() => assertCan('seller', 'create', 'categories', ['name']));
+  assert.throws(() => assertCan('seller', 'create', 'categories', ['store']));
   assert.doesNotThrow(() => assertCan('seller', 'create', 'media', ['alt']));
   assert.throws(() => assertCan('seller', 'create', 'media', ['url']));
 });

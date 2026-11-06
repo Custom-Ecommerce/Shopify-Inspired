@@ -16,7 +16,8 @@ import { z } from "zod";
 /** Cloudinary URLs are absolute, but Payload-local media can be relative. */
 const mediaUrl = z.string().min(1);
 const nullableText = z.string().nullable();
-const price = z.number().nonnegative();
+/** Shoppers only ever see whole rupees (D-004). */
+const price = z.number().int().nonnegative();
 
 export const StoreStatus = z.enum(["active", "pending", "suspended", "archived"]);
 export type StoreStatus = z.infer<typeof StoreStatus>;
@@ -102,9 +103,14 @@ export const StorefrontProductSummary = z.object({
   slug: z.string().min(1),
   title: z.string(),
   currency: z.literal("PKR"),
+  /** The from price: the cheapest variant's. */
   price,
-  originalPrice: price.nullable(),
+  /** The compare-at of the cheapest variant, if it has one. */
+  compareAtPrice: price.nullable(),
+  /** Derived from the variants. */
   stockStatus: StockStatus,
+  defaultVariantId: z.string().min(1),
+  hasVariants: z.boolean(),
   primaryImage: StorefrontImage.nullable(),
   categories: z.array(
     z.object({
@@ -118,7 +124,20 @@ export const StorefrontProductSummary = z.object({
 });
 export type StorefrontProductSummary = z.infer<typeof StorefrontProductSummary>;
 
+export const StorefrontProductVariant = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  price,
+  compareAtPrice: price.nullable(),
+  availability: StockStatus,
+  optionValues: z.array(z.string()),
+  imageId: z.string().nullable(),
+});
+export type StorefrontProductVariant = z.infer<typeof StorefrontProductVariant>;
+
 export const StorefrontProductDetail = StorefrontProductSummary.extend({
+  options: z.array(z.object({ name: z.string(), values: z.array(z.string()) })),
+  variants: z.array(StorefrontProductVariant).min(1),
   /** Plain text, as the seller wrote it. */
   description: nullableText,
   /** HTML-escaped with newlines as `<br>`; the only markup it contains. */

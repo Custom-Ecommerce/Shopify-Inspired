@@ -3,7 +3,8 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { addCartLine, removeCartLine, setCartLineQty } from "../domain/cart";
 import type { CartableProduct, CartLine } from "../domain/cart";
 
-const CART_STORAGE_VERSION = 1;
+/** Version 2: a line names its variant. */
+const CART_STORAGE_VERSION = 2;
 
 /** The demo storefront's cart. Stores with a tenant key get their own: see createStorefrontCartStore. */
 export const DEMO_CART_KEY = "markaz-cart:demo";
@@ -29,6 +30,7 @@ function isCartLine(value: unknown): value is CartLine {
   return (
     typeof line.id === "string" &&
     typeof line.productId === "string" &&
+    typeof line.variantId === "string" &&
     typeof line.slug === "string" &&
     typeof line.title === "string" &&
     typeof line.unitPrice === "number" &&
@@ -64,7 +66,7 @@ export function createStorefrontCartStore(storageKey: string) {
         storage: createJSONStorage(() => localStorage),
         partialize: (state): PersistedCart => ({ lines: state.lines }),
         merge: (persisted, current) => ({ ...current, lines: readLines(persisted) }),
-        // Version 1 is the first shape, so there is nothing to migrate. Unknown versions start empty.
+        // A version 1 line names no variant, and only the server knows which it would be, so older carts start empty.
         migrate: () => ({ lines: [] }),
         skipHydration: true,
       },

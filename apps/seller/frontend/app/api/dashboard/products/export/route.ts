@@ -1,3 +1,4 @@
+import { firstVariant, stockStatusOf } from "@/lib/product-stock";
 import type { ListEnvelope as PayloadFindResponse } from "@markaz/api-compat";
 import type { Product as PayloadProductDoc } from "@markaz/contracts";
 import { NextRequest, NextResponse } from "next/server";
@@ -36,12 +37,12 @@ export function GET(req: NextRequest) {
       const rows = products.map((p) => ({
         title: p.title,
         slug: p.slug,
-        price: p.price,
-        originalPrice: p.originalPrice ?? "",
+        price: firstVariant(p)?.price ?? "",
+        originalPrice: firstVariant(p)?.compareAtPrice ?? "",
         description: p.description ?? "",
         category: (typeof p.categories?.[0] === "object" ? p.categories[0]?.name : p.categories?.[0]) ?? "",
-        stockStatus: p.stockStatus,
-        stockQuantity: p.stockQuantity,
+        stockStatus: stockStatusOf(firstVariant(p)),
+        stockQuantity: firstVariant(p)?.stockQuantity ?? 0,
         isFeatured: p.isFeatured ? "true" : "false",
         highlights: (p.highlights ?? []).map((h) => h.text).join("|"),
       }));

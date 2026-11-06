@@ -38,7 +38,7 @@ const orderBody = {
     phone: PHONE,
     city: null,
     address: "House 1, Street 2, Karachi",
-    items: [{ productId: PRODUCT_ID, title: "Cotton Kurta", unitPrice: 1000, qty: 2, lineTotal: 2000 }],
+    items: [{ productId: PRODUCT_ID, variantId: "v1", title: "Cotton Kurta", variantTitle: "Default", unitPrice: 1000, qty: 2, lineTotal: 2000 }],
   },
 };
 
@@ -49,8 +49,14 @@ const productBody = {
     title: "Cotton Kurta",
     currency: "PKR",
     price: 1000,
-    originalPrice: null,
+    compareAtPrice: null,
     stockStatus: "in_stock",
+    defaultVariantId: "v1",
+    hasVariants: false,
+    options: [],
+    variants: [
+      { id: "v1", title: "Default", price: 1000, compareAtPrice: null, availability: "in_stock", optionValues: [], imageId: null },
+    ],
     primaryImage: null,
     categories: [],
     avgRating: 0,

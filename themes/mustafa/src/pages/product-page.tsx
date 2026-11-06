@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { ProductPageProps } from "@markaz/storefront-theme-kit";
+import type { ProductPageProps } from "@markaz/storefront-data";
 import { Button, buttonVariants } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
@@ -56,13 +56,14 @@ export function ProductPage(props: ProductPageProps) {
     return (
       <StatusPanel
         title="Product not found"
-        description="The item you are looking for is no longer available in our catalog."
         action={
           <Link href={catalogHref} className={buttonVariants({ size: "md" })}>
             Browse Catalog
           </Link>
         }
-      />
+      >
+        The item you are looking for is no longer available in our catalog.
+      </StatusPanel>
     );
   }
 
@@ -476,13 +477,7 @@ export function ProductPage(props: ProductPageProps) {
 
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-6">
             {relatedProducts.slice(0, 4).map((rel: any) => (
-              <ProductCard
-                key={rel.id ?? rel.slug}
-                product={rel}
-                store={store}
-                storePaths={storePaths}
-                paths={storePaths}
-              />
+              <ProductCard key={rel.id ?? rel.slug} product={rel} />
             ))}
           </div>
         </section>

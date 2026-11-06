@@ -10,13 +10,35 @@ export interface StorefrontProductSummary {
   slug: string;
   title: string;
   currency: "PKR";
+  /** The from price: the cheapest variant's. */
   price: number;
-  originalPrice: number | null;
+  /** The compare-at of the cheapest variant, if it has one. */
+  compareAtPrice: number | null;
+  /** Derived from the variants. */
   stockStatus: StockStatus;
+  /** The first variant that can be bought, or the first variant when none can. */
+  defaultVariantId: string;
+  hasVariants: boolean;
   primaryImage: StorefrontImage | null;
   categories: { id: string; slug: string; name: string }[];
   avgRating: number;
   reviewCount: number;
+}
+
+export interface StorefrontProductOption {
+  name: string;
+  values: string[];
+}
+
+/** A variant as a shopper sees it. Availability only: stock counts, SKUs and barcodes never reach a storefront. */
+export interface StorefrontProductVariant {
+  id: string;
+  title: string;
+  price: number;
+  compareAtPrice: number | null;
+  availability: StockStatus;
+  optionValues: string[];
+  imageId: string | null;
 }
 
 /**
@@ -24,6 +46,8 @@ export interface StorefrontProductSummary {
  * field for field, except descriptionHtml, which is added when a theme needs rich text.
  */
 export interface StorefrontProductDetail extends StorefrontProductSummary {
+  options: StorefrontProductOption[];
+  variants: StorefrontProductVariant[];
   description: string | null;
   highlights: string[];
   images: StorefrontImage[];
@@ -44,6 +68,7 @@ export interface CheckoutCustomer {
 
 export interface SubmitOrderLine {
   productId: string;
+  variantId?: string;
   qty: number;
 }
 
@@ -67,7 +92,10 @@ export type PaymentMethod = "cod" | "card";
 
 export interface StorefrontOrderItem {
   productId: string;
+  variantId: string;
   title: string;
+  /** "Default" for a product with no options. */
+  variantTitle: string;
   unitPrice: number;
   qty: number;
   lineTotal: number;
@@ -104,6 +132,8 @@ export type OrderRejection =
   | { code: "empty_order" }
   | { code: "invalid_quantity"; productId?: string }
   | { code: "unknown_product"; productId?: string }
+  | { code: "variant_required"; productId?: string }
+  | { code: "unknown_variant"; productId?: string }
   | { code: "out_of_stock"; productId?: string }
   | { code: "payment_method_unavailable" }
   | { code: "idempotency_conflict" }
@@ -116,6 +146,7 @@ export type TransportKind = "mock" | "remote";
 
 export interface CartQuoteLineInput {
   productId: string;
+  variantId?: string;
   qty: number;
 }
 
@@ -124,12 +155,15 @@ export interface CartQuoteInput {
 }
 
 /** Why a cart line cannot be bought as it stands. */
-export type CartQuoteIssue = "unknown_product" | "out_of_stock" | "insufficient_stock";
+export type CartQuoteIssue = "unknown_product" | "unknown_variant" | "out_of_stock" | "insufficient_stock";
 
 export interface CartQuoteLine {
   productId: string;
+  /** Null when the variant could not be resolved. */
+  variantId: string | null;
   /** Null when the product is unknown to this store. */
   title: string | null;
+  variantTitle: string | null;
   unitPrice: number | null;
   qty: number;
   /** Null for a line that cannot be bought. */

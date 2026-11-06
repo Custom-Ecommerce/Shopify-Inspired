@@ -6,6 +6,7 @@ import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { useState } from "react";
 
 import { useDashboardFetch } from "@/lib/hooks/use-dashboard-fetch";
+import { firstVariant, stockStatusOf } from "@/lib/product-stock";
 import { RefreshButton } from "@/components/dashboard/shared/RefreshButton";
 import { PageHeader } from "@/components/dashboard/shared/PageHeader";
 import { SectionCard } from "@/components/dashboard/shared/SectionCard";
@@ -73,15 +74,7 @@ export default function InventoryPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             stockQuantity: qty,
-            stockHistory: [
-              ...(product.stockHistory ?? []),
-              {
-                quantity: qty,
-                previousQuantity: product.stockQuantity,
-                reason: reason.trim() || "Manual bulk update",
-                changedAt: new Date().toISOString(),
-              },
-            ],
+            reason: reason.trim() || "Manual bulk update",
           }),
         });
       }
@@ -108,11 +101,12 @@ export default function InventoryPage() {
     {
       header: "Stock Qty",
       render: (p: PayloadProductDoc) => {
-        const threshold = p.lowStockThreshold ?? 5;
-        const low = p.stockQuantity <= threshold;
+        const variant = firstVariant(p);
+        const quantity = variant?.stockQuantity ?? 0;
+        const low = quantity <= (variant?.lowStockThreshold ?? 5);
         return (
           <span className={`font-mono ${low ? "text-destructive font-medium" : ""}`}>
-            {p.stockQuantity}
+            {quantity}
           </span>
         );
       },
@@ -120,12 +114,12 @@ export default function InventoryPage() {
     {
       header: "Threshold",
       render: (p: PayloadProductDoc) => (
-        <span className="font-mono text-muted-foreground">{p.lowStockThreshold ?? 5}</span>
+        <span className="font-mono text-muted-foreground">{firstVariant(p)?.lowStockThreshold ?? 5}</span>
       ),
     },
     {
       header: "Status",
-      render: (p: PayloadProductDoc) => <StatusBadge status={p.stockStatus} />,
+      render: (p: PayloadProductDoc) => <StatusBadge status={stockStatusOf(firstVariant(p))} />,
     },
   ];
 

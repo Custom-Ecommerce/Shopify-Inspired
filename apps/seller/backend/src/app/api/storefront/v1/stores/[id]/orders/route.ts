@@ -30,6 +30,8 @@ export const dynamic = 'force-dynamic';
  *   400 INVALID_REQUEST | EMPTY_ORDER | INVALID_QUANTITY | PAYMENT_METHOD_UNAVAILABLE
  *   404 STORE_NOT_FOUND    403 STORE_NOT_ACTIVE
  *   409 OUT_OF_STOCK (productId)   409 IDEMPOTENCY_CONFLICT (the key was used for a different order)
+ *   422 VARIANT_REQUIRED (productId)  a product with several variants and no variantId
+ *   422 UNKNOWN_VARIANT (productId)   the variantId is not a variant of that product
  *   422 UNKNOWN_PRODUCT (productId)   unknown, other store, or unpublished
  *   429 RATE_LIMITED       503 STOREFRONT_UNAVAILABLE
  */

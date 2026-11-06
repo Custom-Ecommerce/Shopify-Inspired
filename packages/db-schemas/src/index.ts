@@ -25,3 +25,4 @@ export * from './models/order';
 export * from './billing/ports-impl';
 // Track B: the catalog the storefront API reads.
 export * from './models/product';
+export * from './models/stock-movement';

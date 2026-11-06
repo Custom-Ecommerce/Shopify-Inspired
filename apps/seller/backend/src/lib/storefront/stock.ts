@@ -1,103 +1,98 @@
-import { Product } from '@/lib/services';
+import { Product, StockMovement } from '@/lib/services';
 import { StorefrontHttpError } from '@/lib/storefront/errors';
-
-type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
-
-interface StockRow {
-  stockQuantity: number;
-  stockStatus: StockStatus;
-  lowStockThreshold?: number | null;
-}
-
-/** Status after units were taken. Only moves a status down, never overrides a seller's manual choice upward. */
-export function statusAfterReserve(row: StockRow): StockStatus | null {
-  if (row.stockQuantity <= 0) return row.stockStatus === 'out_of_stock' ? null : 'out_of_stock';
-  const threshold = row.lowStockThreshold;
-  if (row.stockStatus === 'in_stock' && typeof threshold === 'number' && row.stockQuantity <= threshold) return 'low_stock';
-  return null;
-}
-
-/** Status after units were given back. Only moves a status up when the new quantity justifies it. */
-export function statusAfterRelease(row: StockRow): StockStatus | null {
-  if (row.stockQuantity <= 0) return null;
-  const threshold = row.lowStockThreshold;
-  const low = typeof threshold === 'number' && row.stockQuantity <= threshold;
-  if (row.stockStatus === 'out_of_stock') return low ? 'low_stock' : 'in_stock';
-  if (row.stockStatus === 'low_stock' && !low && typeof threshold === 'number') return 'in_stock';
-  return null;
-}
 
 export interface Reservation {
   productId: string;
+  variantId: string;
   qty: number;
 }
 
-const outOfStock = (productId: string): StorefrontHttpError =>
-  new StorefrontHttpError(409, 'OUT_OF_STOCK', 'A product in the order is out of stock.', { productId });
+const outOfStock = (productId: string, variantId: string): StorefrontHttpError =>
+  new StorefrontHttpError(409, 'OUT_OF_STOCK', 'A product in the order is out of stock.', { productId, variantId });
 
-/**
- * Takes qty units in ONE conditional write: the filter only matches while the available quantity
- * (stock minus reserved) still covers qty, so two shoppers racing for the last unit cannot both win and
- * stock can never go negative. No match means someone else got there first: OUT_OF_STOCK.
- *
- * The history entry and the derived status are a second write; it only records and relabels, the quantity
- * guard above is what protects the stock, so a failure there is logged and does not fail the order.
- */
-export async function reserveStock(storeId: string, productId: string, qty: number): Promise<void> {
-  const after = (await (Product as any)
-    .findOneAndUpdate(
-      {
-        _id: productId,
-        store: storeId,
-        isPublished: true,
-        stockStatus: { $ne: 'out_of_stock' },
-        $expr: { $gte: [{ $subtract: ['$stockQuantity', { $ifNull: ['$reservedQuantity', 0] }] }, qty] },
-      },
-      { $inc: { stockQuantity: -qty } },
-      { new: true },
-    )
-    .select('stockQuantity stockStatus lowStockThreshold')
-    .lean()) as StockRow | null;
-
-  if (!after) throw outOfStock(productId);
-  await recordStockChange(productId, after, qty, 'storefront_order', statusAfterReserve(after), -qty);
+interface VariantStock {
+  _id: unknown;
+  stockQuantity: number;
 }
 
-/** Gives units back after an order failed to save. Best effort: a failure is logged, never thrown. */
-export async function releaseStock(storeId: string, productId: string, qty: number): Promise<void> {
+const stockOf = (row: { variants: VariantStock[] }, variantId: string): number | null => {
+  const wanted = variantId.toLowerCase();
+  return row.variants.find((variant) => String(variant._id).toLowerCase() === wanted)?.stockQuantity ?? null;
+};
+
+/**
+ * Takes qty units of one variant in ONE conditional write. The $elemMatch only matches while that variant still holds
+ * qty units, and the positional operator decrements exactly that variant, so two shoppers racing for the last unit
+ * cannot both win and stock can never go negative. No match means someone else got there first.
+ *
+ * A variant that does not track quantity has nothing to take: the write cannot match it, and a read confirms the
+ * reservation instead. That read decides nothing about stock, so it needs no atomicity.
+ *
+ * The movement record is a second write. It only records; the conditional update is what protects the stock, so a
+ * failure there is logged and does not fail the order.
+ */
+export async function reserveStock(storeId: string, productId: string, variantId: string, qty: number): Promise<void> {
+  const owner = { _id: productId, store: storeId, isPublished: true };
+
+  const after = (await Product.findOneAndUpdate(
+    { ...owner, variants: { $elemMatch: { _id: variantId, trackQuantity: true, stockQuantity: { $gte: qty } } } },
+    { $inc: { 'variants.$.stockQuantity': -qty } },
+    { new: true },
+  )
+    .select('variants._id variants.stockQuantity')
+    .lean()) as unknown as { variants: VariantStock[] } | null;
+
+  if (after) {
+    await recordMovement(storeId, productId, variantId, stockOf(after, variantId), -qty, 'storefront_order');
+    return;
+  }
+
+  const untracked = await Product.exists({ ...owner, variants: { $elemMatch: { _id: variantId, trackQuantity: false } } });
+  if (!untracked) throw outOfStock(productId, variantId);
+}
+
+/** Gives units back to one variant after an order failed to save. Best effort: a failure is logged, never thrown. */
+export async function releaseStock(storeId: string, productId: string, variantId: string, qty: number): Promise<void> {
   try {
-    const after = (await (Product as any)
-      .findOneAndUpdate({ _id: productId, store: storeId }, { $inc: { stockQuantity: qty } }, { new: true })
-      .select('stockQuantity stockStatus lowStockThreshold')
-      .lean()) as StockRow | null;
-    if (after) await recordStockChange(productId, after, qty, 'storefront_order_released', statusAfterRelease(after), qty);
+    const after = (await Product.findOneAndUpdate(
+      { _id: productId, store: storeId, variants: { $elemMatch: { _id: variantId, trackQuantity: true } } },
+      { $inc: { 'variants.$.stockQuantity': qty } },
+      { new: true },
+    )
+      .select('variants._id variants.stockQuantity')
+      .lean()) as unknown as { variants: VariantStock[] } | null;
+    if (after) await recordMovement(storeId, productId, variantId, stockOf(after, variantId), qty, 'storefront_order_released');
   } catch (err) {
-    console.error('[seller-backend] could not release reserved stock', { productId, qty }, err);
+    console.error('[seller-backend] could not release reserved stock', { productId, variantId, qty }, err);
   }
 }
 
-async function recordStockChange(
+async function recordMovement(
+  storeId: string,
   productId: string,
-  after: StockRow,
-  qty: number,
-  reason: string,
-  nextStatus: StockStatus | null,
+  variantId: string,
+  quantity: number | null,
   delta: number,
+  reason: string,
 ): Promise<void> {
+  if (quantity === null) return;
   try {
-    const update: Record<string, unknown> = {
-      $push: {
-        stockHistory: { quantity: after.stockQuantity, previousQuantity: after.stockQuantity - delta, reason, changedAt: new Date() },
-      },
-    };
-    if (nextStatus) update.$set = { stockStatus: nextStatus };
-    await (Product as any).updateOne({ _id: productId }, update);
+    await StockMovement.create({
+      store: storeId,
+      product: productId,
+      variantId,
+      previousQuantity: quantity - delta,
+      quantity,
+      delta,
+      reason,
+      changedAt: new Date(),
+    });
   } catch (err) {
-    console.error('[seller-backend] could not record stock change', { productId, qty, reason }, err);
+    console.error('[seller-backend] could not record stock movement', { productId, variantId, delta, reason }, err);
   }
 }
 
 /** Gives back every reservation in the list. Never throws. */
 export async function releaseAll(storeId: string, reservations: Reservation[]): Promise<void> {
-  for (const r of reservations) await releaseStock(storeId, r.productId, r.qty);
+  for (const r of reservations) await releaseStock(storeId, r.productId, r.variantId, r.qty);
 }

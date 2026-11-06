@@ -1,5 +1,7 @@
+import { StorefrontHttpError } from './errors';
 import { computeTotals, roundMoney } from './pricing';
 import type { PricingStore } from './pricing';
+import { availabilityOf, canSupply, resolveVariant, unitsLeft, type CheckoutVariant } from './variant';
 
 /*
  * Cart quote, pure. Prices a cart from catalog rows the caller has already read. It reads no database and moves no
@@ -7,26 +9,27 @@ import type { PricingStore } from './pricing';
  * which keeps the total a shopper sees in the cart the total they are charged.
  */
 
-export type QuoteIssue = 'unknown_product' | 'out_of_stock' | 'insufficient_stock';
+export type QuoteIssue = 'unknown_product' | 'unknown_variant' | 'out_of_stock' | 'insufficient_stock';
 
 export interface QuoteRequestLine {
   productId: string;
+  /** Null asks for the product's only variant. */
+  variantId: string | null;
   qty: number;
 }
 
 /** A catalog row as the quote reads it. Only published products of the store reach this function. */
 export interface QuoteCatalogRow {
   title: string;
-  price: number;
   deliveryCharge: number | null;
-  stockQuantity: number | null;
-  reservedQuantity: number | null;
-  stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock';
+  variants: CheckoutVariant[];
 }
 
 export interface QuoteLine {
   productId: string;
+  variantId: string | null;
   title: string | null;
+  variantTitle: string | null;
   unitPrice: number | null;
   qty: number;
   lineTotal: number | null;
@@ -46,9 +49,20 @@ function usablePrice(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
+interface ResolvedLine {
+  productId: string;
+  row: QuoteCatalogRow;
+  variant: CheckoutVariant;
+  qty: number;
+}
+
 /**
- * Lines that cannot be bought carry an issue and are left out of the totals. The same rule the order uses: a product is
- * out of stock when its status says so or when the free units cannot cover the quantity.
+ * Lines that cannot be bought carry an issue and are left out of the totals. The same rule the order uses: a variant is
+ * out of stock when it has no units, and short when its units cannot cover the quantity.
+ *
+ * A product with several variants and no variantId is a 422 VARIANT_REQUIRED, the answer an order gets, because the
+ * cart has no way to price what it cannot name. A variantId that does not belong to the product is a line issue, since
+ * a seller can delete a variant while it sits in a shopper's cart.
  */
 export function buildCartQuote(
   requested: readonly QuoteRequestLine[],
@@ -57,35 +71,61 @@ export function buildCartQuote(
 ): CartQuote {
   const pricing: Array<{ unitPrice: number; qty: number; deliveryCharge: number | null }> = [];
 
-  const lines = requested.map((line): QuoteLine => {
+  // Asking for the Default variant by name and by omission is one variant, so stock is judged once for both.
+  const resolved = new Map<string, ResolvedLine>();
+  const lines: Array<QuoteLine | ResolvedLine> = [];
+
+  for (const line of requested) {
     const row = catalog.get(line.productId);
-    if (!row || !usablePrice(row.price)) {
-      return {
-        productId: line.productId,
-        title: null,
-        unitPrice: null,
-        qty: line.qty,
-        lineTotal: null,
-        issue: 'unknown_product',
-        availableQty: null,
-      };
+    if (!row) {
+      lines.push(refusal(line, null, 'unknown_product'));
+      continue;
     }
-    const available = Math.max(0, (row.stockQuantity ?? 0) - (row.reservedQuantity ?? 0));
-    const base = { productId: line.productId, title: row.title, unitPrice: row.price, qty: line.qty };
-    if (row.stockStatus === 'out_of_stock') {
-      return { ...base, lineTotal: null, issue: 'out_of_stock', availableQty: available };
+    const match = resolveVariant(row.variants, line.variantId);
+    if (match.kind === 'variant_required') {
+      throw new StorefrontHttpError(422, 'VARIANT_REQUIRED', 'Choose a variant of this product.', { productId: line.productId });
     }
-    if (available < line.qty) {
-      return { ...base, lineTotal: null, issue: 'insufficient_stock', availableQty: available };
+    if (match.kind === 'unknown_variant') {
+      lines.push(refusal(line, row.title, 'unknown_variant'));
+      continue;
     }
-    pricing.push({ unitPrice: row.price, qty: line.qty, deliveryCharge: row.deliveryCharge });
-    return { ...base, lineTotal: roundMoney(row.price * line.qty), issue: null, availableQty: available };
+    if (!usablePrice(match.variant.price)) {
+      lines.push(refusal(line, null, 'unknown_product'));
+      continue;
+    }
+    const key = line.productId + '|' + String(match.variant._id).toLowerCase();
+    const existing = resolved.get(key);
+    if (existing) {
+      existing.qty += line.qty;
+      continue;
+    }
+    const entry: ResolvedLine = { productId: line.productId, row, variant: match.variant, qty: line.qty };
+    resolved.set(key, entry);
+    lines.push(entry);
+  }
+
+  const priced = lines.map((line): QuoteLine => {
+    if (!('variant' in line)) return line;
+    const { productId, row, variant, qty } = line;
+    const base = {
+      productId,
+      variantId: String(variant._id),
+      title: row.title,
+      variantTitle: variant.title,
+      unitPrice: variant.price,
+      qty,
+      availableQty: unitsLeft(variant),
+    };
+    if (availabilityOf(variant) === 'out_of_stock') return { ...base, lineTotal: null, issue: 'out_of_stock' };
+    if (!canSupply(variant, qty)) return { ...base, lineTotal: null, issue: 'insufficient_stock' };
+    pricing.push({ unitPrice: variant.price, qty, deliveryCharge: row.deliveryCharge });
+    return { ...base, lineTotal: roundMoney(variant.price * qty), issue: null };
   });
 
   const totals = computeTotals(pricing, store);
-  const canCheckout = lines.length > 0 && lines.every((line) => line.issue === null);
+  const canCheckout = priced.length > 0 && priced.every((line) => line.issue === null);
   return {
-    lines,
+    lines: priced,
     subtotal: totals.subtotal,
     deliveryCharges: totals.deliveryCharges,
     total: totals.total,
@@ -93,15 +133,33 @@ export function buildCartQuote(
   };
 }
 
+function refusal(line: QuoteRequestLine, title: string | null, issue: QuoteIssue): QuoteLine {
+  return {
+    productId: line.productId,
+    variantId: line.variantId,
+    title,
+    variantTitle: null,
+    unitPrice: null,
+    qty: line.qty,
+    lineTotal: null,
+    issue,
+    availableQty: null,
+  };
+}
+
 /**
- * Merges repeated products into one line with the summed quantity, as the order does, so a quote and an order judge
- * stock the same way. Keys are lower-cased ids, matching the catalog lookup.
+ * Merges repeated lines into one with the summed quantity, as the order does, so a quote and an order judge stock the
+ * same way. Keys are lower-cased ids, matching the catalog lookup.
  */
-export function mergeQuoteLines(lines: readonly QuoteRequestLine[]): QuoteRequestLine[] {
-  const merged = new Map<string, number>();
+export function mergeQuoteLines(lines: ReadonlyArray<{ productId: string; variantId?: string | null; qty: number }>): QuoteRequestLine[] {
+  const merged = new Map<string, QuoteRequestLine>();
   for (const line of lines) {
-    const id = line.productId.toLowerCase();
-    merged.set(id, (merged.get(id) ?? 0) + line.qty);
+    const productId = line.productId.toLowerCase();
+    const variantId = line.variantId ? line.variantId.toLowerCase() : null;
+    const key = productId + '|' + (variantId ?? '');
+    const existing = merged.get(key);
+    if (existing) existing.qty += line.qty;
+    else merged.set(key, { productId, variantId, qty: line.qty });
   }
-  return [...merged.entries()].map(([productId, qty]) => ({ productId, qty }));
+  return [...merged.values()];
 }

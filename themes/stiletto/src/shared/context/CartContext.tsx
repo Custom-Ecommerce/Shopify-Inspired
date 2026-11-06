@@ -75,7 +75,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addToCart = useCallback<CartContextValue["addToCart"]>(
     (item) => {
       // As before, adding something already in the cart opens the cart and leaves the quantity alone.
-      const isAlreadyInCart = lines.some((line) => line.id === (item.productId ?? item.lineId));
+      const isAlreadyInCart = lines.some((line) => line.id === item.lineId);
       if (!isAlreadyInCart) {
         add(
           {
@@ -84,6 +84,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
             title: item.title,
             image: item.image ? { url: item.image, alt: item.title } : null,
             price: toMoney(parseNumericPrice(item.price)),
+            // The adapter gives each product its variant id as the line id.
+            defaultVariantId: item.lineId,
+            hasVariants: false,
           },
           item.quantity,
         );

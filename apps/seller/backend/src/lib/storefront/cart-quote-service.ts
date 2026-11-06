@@ -17,10 +17,9 @@ export async function loadCartQuote(
   const rows =
     queryable.length === 0
       ? []
-      : ((await (Product as any)
-          .find({ _id: { $in: queryable }, store: storeId, isPublished: true })
-          .select('title price deliveryCharge stockQuantity reservedQuantity stockStatus')
-          .lean()) as Array<QuoteCatalogRow & { _id: unknown }>);
+      : ((await Product.find({ _id: { $in: queryable }, store: storeId, isPublished: true })
+          .select('title deliveryCharge variants')
+          .lean()) as unknown as Array<QuoteCatalogRow & { _id: unknown }>);
   const catalog = new Map(rows.map((row) => [String(row._id).toLowerCase(), row] as const));
   return buildCartQuote(lines, catalog, commerce);
 }

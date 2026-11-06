@@ -1,7 +1,10 @@
 export interface CartLine {
-  /** One line per product for now, so the line id is the product id. */
+  /** One line per variant, so the line id is the variant id. */
   id: string;
   productId: string;
+  variantId: string;
+  /** Null for a product with no options. */
+  variantTitle: string | null;
   slug: string;
   title: string;
   image: { url: string; alt: string } | null;
@@ -12,6 +15,8 @@ export interface CartLine {
 
 export interface CartableProduct {
   id: string;
+  variantId: string;
+  variantTitle: string | null;
   slug: string;
   title: string;
   image: { url: string; alt: string } | null;
@@ -27,13 +32,15 @@ export function normaliseQty(qty: number): number {
 
 export function addCartLine(lines: CartLine[], item: CartableProduct, qty: number): CartLine[] {
   const amount = normaliseQty(qty);
-  const existing = lines.find((line) => line.id === item.id);
+  const existing = lines.find((line) => line.id === item.variantId);
   if (!existing) {
     return [
       ...lines,
       {
-        id: item.id,
+        id: item.variantId,
         productId: item.id,
+        variantId: item.variantId,
+        variantTitle: item.variantTitle,
         slug: item.slug,
         title: item.title,
         image: item.image,
@@ -43,7 +50,7 @@ export function addCartLine(lines: CartLine[], item: CartableProduct, qty: numbe
     ];
   }
   return lines.map((line) =>
-    line.id === item.id
+    line.id === item.variantId
       ? { ...line, unitPrice: item.unitPrice, qty: normaliseQty(line.qty + amount) }
       : line,
   );

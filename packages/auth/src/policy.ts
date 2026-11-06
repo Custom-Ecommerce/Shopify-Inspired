@@ -63,6 +63,12 @@ export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
 'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote',
 ] as const;
 
+// What a seller may set on a category of their store. store and isDemo are never client-writable.
+export const SELLER_CATEGORY_WRITABLE_FIELDS = ['name', 'slug', 'order', 'description'] as const;
+
+// What an anonymous storefront may read of a category.
+export const PUBLIC_CATEGORY_READABLE_FIELDS = ['name', 'slug', 'order', 'description', 'banner'] as const;
+
 export const POLICY_MATRIX: Readonly<Record<string, CollectionPolicy>> = {
 stores: {
 read: {
@@ -126,11 +132,16 @@ update: { actors: [], fields: '*' },
 delete: { actors: [], fields: '*' },
 },
 
+// Categories belong to one store. A seller manages their own; which store that is, the route decides. Admin may only
+// read (D-006), and the storefront reads the public fields. Everything else is denied, system included.
 categories: {
-read: { actors: ['public', 'admin', 'system', 'seller'], fields: '*' },
-create: { actors: ['admin', 'system'], fields: '*' },
-update: { actors: ['admin', 'system'], fields: '*' },
-delete: { actors: ['admin', 'system'], fields: '*' },
+read: {
+actors: ['seller', 'admin', 'public'],
+fields: { seller: '*', admin: '*', public: PUBLIC_CATEGORY_READABLE_FIELDS },
+},
+create: { actors: ['seller'], fields: { seller: SELLER_CATEGORY_WRITABLE_FIELDS } },
+update: { actors: ['seller'], fields: { seller: SELLER_CATEGORY_WRITABLE_FIELDS } },
+delete: { actors: ['seller'], fields: { seller: '*' } },
 },
 
 subscriptionPlans: {
@@ -197,15 +208,9 @@ Object.assign(POLICY_MATRIX, {
   },
 });
 
-// B10.3 declarations. Categories are read-only for sellers, as in Payload (ID-26). A seller may create a media
-// record for their store, supplying alt only (ID-23). Update stays with the system; delete with admin and system.
+// B10.3 declarations. A seller may create a media record for their store, supplying alt only (ID-23). Update stays
+// with the system; delete with admin and system.
 Object.assign(POLICY_MATRIX, {
-  categories: {
-    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
-    create: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
-    update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
-    delete: { actors: ['admin', 'system'], fields: '*' },
-  },
   media: {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
     create: { actors: ['system', 'seller'], fields: { system: '*', seller: ['alt'] } },
