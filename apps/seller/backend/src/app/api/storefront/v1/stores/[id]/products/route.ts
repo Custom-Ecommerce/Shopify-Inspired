@@ -35,7 +35,7 @@ const LIST_PROJECTION = {
 const PREVIEW_LIST_PROJECTION = { ...LIST_PROJECTION, isPublished: 1, isDemo: 1 };
 
 /**
- * GET /api/storefront/v1/stores/:id/products?category=&q=&sort=&page=&limit=
+ * GET /api/storefront/v1/stores/:id/products?category=&q=&sort=&page=&limit=&ids=
  *
  * Public: no session. Lists the published products of one active store. A preview credential good for this store lists
  * everything not in the trash instead, and also works on a pending store. Any other credential is ignored.
@@ -43,6 +43,8 @@ const PREVIEW_LIST_PROJECTION = { ...LIST_PROJECTION, isPublished: 1, isDemo: 1 
  *   sort   newest (default) | price_asc | price_desc | rating   (anything else is a 400)
  *   q      title search, trimmed, cut to 80 characters
  *   category  a category slug of this store; an unknown slug yields an empty page
+ *   ids    comma-separated product ids, at most 48, for a shopper's favourites. Always the Live list, even with a preview
+ *          credential, because the answer decides which saved ids are dropped.
  *
  *   404 STORE_NOT_FOUND   malformed or unknown store id
  *   403 STORE_NOT_ACTIVE  the store exists but is not serving (the body carries its status)
@@ -53,10 +55,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const { id } = await context.params;
     if (!objectIdSchema.safeParse(id).success) throw storeNotFound();
 
-    preview = await isPreviewRequest(request, id);
-    const headers = preview ? PREVIEW_RESPONSE_HEADERS : PUBLIC_CACHE_HEADERS;
-
     const query = parseProductListQuery(request.nextUrl.searchParams);
+    preview = query.ids === null && (await isPreviewRequest(request, id));
+    const headers = preview ? PREVIEW_RESPONSE_HEADERS : PUBLIC_CACHE_HEADERS;
 
     await connectSellerDb().catch(() => {
       throw databaseUnavailable();
@@ -74,7 +75,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         { headers },
       );
 
+    if (query.ids?.length === 0) return emptyPage();
+
     const filter = preview ? previewListFilter(id) : liveListFilter(id);
+    if (query.ids) filter._id = { $in: query.ids };
 
     if (query.category) {
       const category = await Category.findOne({ store: id, slug: query.category }).select('_id').lean();

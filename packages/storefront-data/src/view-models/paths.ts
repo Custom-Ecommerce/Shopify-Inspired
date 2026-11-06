@@ -6,6 +6,8 @@
 export const storePaths = {
   catalog: "/products",
   cart: "/cart",
+  /** The shopper's saved products, for themes that provide the page. */
+  favourites: "/favourites",
   checkout: "/checkout",
   /** The search page. The search form submits here, with the query in the q parameter. */
   search: "/search",

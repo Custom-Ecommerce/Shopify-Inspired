@@ -78,7 +78,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     if (!current) throw productNotFound();
 
     if (data.categories) await assertStoreCategories(storeId, data.categories);
-    await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)]);
+    await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)], data.videos);
 
     const prepared = data.variants || data.options ? await preparePatchedVariants(storeId, id, current, data) : null;
     assertVariantImagesInGallery(data.media ?? current.media ?? [], prepared?.variants ?? current.variants);

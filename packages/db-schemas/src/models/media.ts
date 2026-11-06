@@ -14,6 +14,13 @@ export interface IMedia extends Document {
   filesize?: number | null;
   width?: number | null;
   height?: number | null;
+  /** What the file is. A record without one is an image. */
+  resourceType: 'image' | 'video';
+  /** Videos only. Seconds, as Cloudinary measured it, never as a client said. */
+  duration?: number | null;
+  bytes?: number | null;
+  format?: string | null;
+  posterUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +36,11 @@ const MediaSchema = new Schema<IMedia>(
     filesize: { type: Number, min: 0, default: null },
     width: { type: Number, min: 0, default: null },
     height: { type: Number, min: 0, default: null },
+    resourceType: { type: String, enum: ['image', 'video'], default: 'image' },
+    duration: { type: Number, min: 0, default: null },
+    bytes: { type: Number, min: 0, default: null },
+    format: { type: String, default: null },
+    posterUrl: { type: String, default: null },
   },
   { timestamps: true },
 );

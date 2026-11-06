@@ -193,6 +193,11 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     return FIXTURES.map((product) => toSummary(clone(product)));
   }
 
+  async function getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]> {
+    await delay(150);
+    return FIXTURES.filter((product) => ids.includes(product.id)).map((product) => toSummary(clone(product)));
+  }
+
   async function getProduct(slug: string): Promise<StorefrontProductDetail | null> {
     await delay(150);
     const match = FIXTURES.find((product) => product.slug === slug);
@@ -372,7 +377,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     return { items: items.slice((page - 1) * limit, page * limit).map(toSummary), page, totalPages };
   }
 
-  return { kind: "mock", getProducts, listCategories, listProducts, getProduct, quoteCart, submitOrder, lookupOrder };
+  return { kind: "mock", getProducts, getProductsByIds, listCategories, listProducts, getProduct, quoteCart, submitOrder, lookupOrder };
 }
 
 const defaultTransport = createMockTransport({ products: DEFAULT_MOCK_PRODUCTS });

@@ -37,6 +37,13 @@ assert.equal(can('public', operation, 'products', ['title']), false, operation);
 }
 });
 
+test('products: videos are a seller field and a public read', () => {
+assert.equal(can('seller', 'create', 'products', ['videos']), true);
+assert.equal(can('seller', 'update', 'products', ['videos']), true);
+assert.equal(can('public', 'read', 'products', ['videos']), true);
+assert.equal(can('admin', 'update', 'products', ['videos']), false);
+});
+
 test('storePreview: only a seller may ask for a preview link, and nothing else can be done to one (D-042)', () => {
 assert.equal(can('seller', 'create', 'storePreview'), true);
 for (const actor of ['admin', 'system', 'public'] as const) {

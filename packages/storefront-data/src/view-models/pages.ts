@@ -58,6 +58,8 @@ export interface ContentPageProps {
   body: string;
 }
 export type NotFoundPageProps = Record<string, never>;
+/** The list lives in the browser, so the page loads it with useFavouriteProducts. */
+export type FavouritesPageProps = Record<string, never>;
 export interface CollectionsPageProps {
   categories: CategoryVM[];
 }

@@ -5,6 +5,7 @@ import { Minus, Plus } from "lucide-react";
 import { initialSelection, toVariantSelectionVM, toggleOption } from "@markaz/storefront-data";
 import type { ProductDetailVM, SelectableValue, VariantBlock } from "@markaz/storefront-data";
 import { useCartContext } from "../../shared/context/CartContext";
+import { FavouriteButton } from "../../shared/components/product/FavouriteButton";
 import { PreviewLabel } from "../../shared/components/product/PreviewLabel";
 import type { NormalizedProduct } from "../../types";
 
@@ -74,9 +75,12 @@ export function ProductInfo({ product, detail, onVariantImage }: ProductInfoProp
           </span>
         )}
         <PreviewLabel label={product.previewLabel} className="mb-2" />
-        <h1 className="font-heading text-[26px] sm:text-[34px] md:text-[40px] uppercase tracking-[0.05em] text-[var(--featured-text)] leading-tight">
-          {product.title}
-        </h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="font-heading text-[26px] sm:text-[34px] md:text-[40px] uppercase tracking-[0.05em] text-[var(--featured-text)] leading-tight">
+            {product.title}
+          </h1>
+          <FavouriteButton productId={product.id} title={product.title} previewLabel={product.previewLabel} className="shrink-0" />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-b border-[var(--separator-border)] pb-5">

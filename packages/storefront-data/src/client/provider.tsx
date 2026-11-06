@@ -2,7 +2,8 @@
 
 import React, { useMemo } from "react";
 import { createStorefrontCartStore, DEMO_CART_STORE } from "./cart-store";
-import { CartStoreProvider, OrderTransportProvider } from "./context";
+import { CartStoreProvider, DEMO_FAVOURITES_STORE, FavouritesStoreProvider, OrderTransportProvider } from "./context";
+import { createFavouritesStore, favouritesKey } from "../domain/favourites";
 import { createBffTransport } from "../transport/remote";
 import { createMockTransport, mockTransport } from "../transport/mock";
 import type { MockFixtures } from "../transport/mock";
@@ -27,6 +28,7 @@ export function StorefrontProvider({
     () => (storeKey ? createStorefrontCartStore("markaz-cart:" + storeKey) : DEMO_CART_STORE),
     [storeKey],
   );
+  const favourites = useMemo(() => (storeKey ? createFavouritesStore(favouritesKey(storeKey)) : DEMO_FAVOURITES_STORE), [storeKey]);
   const hasDemoFixtures = Boolean(demoFixtures);
   const transport = useMemo<OrderTransport>(
     () => (storeKey ? createBffTransport() : demoFixtures ? createMockTransport(demoFixtures) : mockTransport),
@@ -37,7 +39,9 @@ export function StorefrontProvider({
 
   return (
     <OrderTransportProvider value={transport}>
-      <CartStoreProvider value={cart}>{children}</CartStoreProvider>
+      <CartStoreProvider value={cart}>
+        <FavouritesStoreProvider value={favourites}>{children}</FavouritesStoreProvider>
+      </CartStoreProvider>
     </OrderTransportProvider>
   );
 }

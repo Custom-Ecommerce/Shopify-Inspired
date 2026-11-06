@@ -72,13 +72,28 @@ export async function assertStoreCategories(storeId: string, categoryIds: readon
   }
 }
 
-/** Every media id a write names: the gallery, the SEO image and the variant images. */
-export async function assertStoreMedia(storeId: string, mediaIds: ReadonlyArray<string | null | undefined>): Promise<void> {
-  const ids = unique(mediaIds.filter((id): id is string => typeof id === 'string'));
-  if (ids.length === 0) return;
-  const owned = await Media.countDocuments({ store: storeId, _id: { $in: ids } });
-  if (owned !== ids.length) {
-    throw new ProductRequestError(422, 'PRODUCT_MEDIA_INVALID', 'Choose images from this store.');
+/**
+ * Every media id a write names. The gallery, the SEO image and the variant images must be images of this store, and the
+ * videos must be videos of this store. A record with no resourceType is an image, so only 'video' counts as one.
+ */
+export async function assertStoreMedia(
+  storeId: string,
+  imageIds: ReadonlyArray<string | null | undefined>,
+  videoIds: readonly string[] = [],
+): Promise<void> {
+  const images = unique(imageIds.filter((id): id is string => typeof id === 'string'));
+  if (images.length > 0) {
+    const owned = await Media.countDocuments({ store: storeId, _id: { $in: images }, resourceType: { $ne: 'video' } });
+    if (owned !== images.length) {
+      throw new ProductRequestError(422, 'PRODUCT_MEDIA_INVALID', 'Choose images from this store.');
+    }
+  }
+  const videos = unique(videoIds);
+  if (videos.length > 0) {
+    const owned = await Media.countDocuments({ store: storeId, _id: { $in: videos }, resourceType: 'video' });
+    if (owned !== videos.length) {
+      throw new ProductRequestError(422, 'PRODUCT_MEDIA_INVALID', 'Choose videos from this store.');
+    }
   }
 }
 
@@ -205,7 +220,7 @@ function variantExpression(variant: PreparedVariant): Record<string, unknown> {
  * stored array, not a number: an order's $inc that lands between our read and this write is kept.
  */
 export function productPatchSet(body: ProductUpdateRequest, prepared: PreparedProductVariants | null): Record<string, unknown> {
-  const { title, slug, description, tags, deliveryCharge, isFeatured, hideWhenOutOfStock, seoTitle, seoDescription, highlights, categories, media, seoImage } =
+  const { title, slug, description, tags, deliveryCharge, isFeatured, hideWhenOutOfStock, seoTitle, seoDescription, highlights, categories, media, videos, seoImage } =
     body;
 
   const plain = { title, slug, tags, deliveryCharge, isFeatured, hideWhenOutOfStock, seoTitle, seoDescription };
@@ -218,6 +233,7 @@ export function productPatchSet(body: ProductUpdateRequest, prepared: PreparedPr
   if (highlights !== undefined) set.highlights = literal(highlights.map((text) => ({ text })));
   if (categories !== undefined) set.categories = literal(unique(categories).map(objectId));
   if (media !== undefined) set.media = literal(unique(media).map(objectId));
+  if (videos !== undefined) set.videos = literal(unique(videos).map(objectId));
   if (seoImage !== undefined) set.seoImage = literal(seoImage === null ? null : objectId(seoImage));
 
   if (prepared) {
@@ -249,6 +265,13 @@ interface PopulatedMedia {
   alt?: string | null;
 }
 
+interface PopulatedVideo {
+  _id: unknown;
+  url?: string | null;
+  posterUrl?: string | null;
+  duration?: number | null;
+}
+
 /** A product as .lean() returns it after populating categories and media. */
 export interface SellerProductRow {
   _id: unknown;
@@ -268,6 +291,7 @@ export interface SellerProductRow {
   variants: VariantRow[];
   categories?: Array<PopulatedCategory | null> | null;
   media?: Array<PopulatedMedia | null> | null;
+  videos?: Array<PopulatedVideo | null> | null;
   deliveryCharge?: number | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
@@ -356,6 +380,9 @@ export function toSellerProductDetail(row: SellerProductRow): SellerProductDetai
     media: (row.media ?? [])
       .filter((media): media is PopulatedMedia => !!media)
       .map((media) => ({ id: String(media._id), url: media.url ?? '', alt: media.alt ?? null })),
+    videos: (row.videos ?? []).flatMap((video) =>
+      video?.url ? [{ id: String(video._id), url: video.url, posterUrl: video.posterUrl ?? null, duration: video.duration ?? null }] : [],
+    ),
     deliveryCharge: row.deliveryCharge ?? null,
     seoTitle: row.seoTitle ?? null,
     seoDescription: row.seoDescription ?? null,
@@ -368,6 +395,7 @@ export async function loadSellerProduct(storeId: string, productId: string): Pro
   const row = (await Product.findOne({ _id: productId, store: storeId, deletedAt: null })
     .populate({ path: 'categories', select: 'name slug' })
     .populate({ path: 'media', select: 'url alt' })
+    .populate({ path: 'videos', select: 'url posterUrl duration' })
     .lean()) as unknown as SellerProductRow | null;
   if (!row) throw productNotFound();
   return toSellerProductDetail(row);

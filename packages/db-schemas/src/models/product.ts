@@ -45,6 +45,8 @@ export interface IProduct extends Document {
   slug: string;
   categories: Types.ObjectId[];
   media: Types.ObjectId[];
+  /** Video media, in the seller's order. */
+  videos: Types.ObjectId[];
   description?: string | null;
   highlights: IProductHighlight[];
   tags: string[];
@@ -158,6 +160,11 @@ const ProductSchema = new Schema<IProduct>(
       },
     },
     media: { type: [{ type: Schema.Types.ObjectId, ref: 'Media' }], default: [] },
+    videos: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'Media' }],
+      default: [],
+      validate: { validator: (value: unknown[]) => value.length <= 4, message: 'a product has at most 4 videos' },
+    },
     description: { type: String, default: null },
     highlights: { type: [HighlightSchema], default: [] },
     tags: { type: [{ type: String, trim: true }], default: [] },

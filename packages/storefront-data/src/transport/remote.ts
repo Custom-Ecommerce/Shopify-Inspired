@@ -260,6 +260,13 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): Order
       throwIfRefused(result);
       return unwrap(result, WireOrderLookup, "order lookup").data;
     },
+
+    async getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]> {
+      requireHttp();
+      if (ids.length === 0) return [];
+      const result = await exchange("GET", "/products?ids=" + ids.map(encodeURIComponent).join(","), { retry: true });
+      return unwrap(result, WireProductList, "product list").data;
+    },
   };
 }
 
@@ -272,6 +279,7 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): Order
  *   POST /cart/quote            price a cart without moving stock
  *   POST /orders                create order, with an Idempotency-Key header; refusals become OrderRejectedError
  *   POST /orders/lookup         order tracking by id and phone; 404 ORDER_NOT_FOUND becomes null
+ *   GET  /products?ids=         the Live products among these ids
  *
  * Reads retry once, and only when fetch itself fails. HTTP responses are never retried. Writes are never retried
  * automatically: the caller retries with the same idempotency key.
@@ -304,6 +312,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     quoteCart: orders.quoteCart,
     submitOrder: orders.submitOrder,
     lookupOrder: orders.lookupOrder,
+    getProductsByIds: orders.getProductsByIds,
 
     async getProducts(): Promise<StorefrontProductSummary[]> {
       requireHttp();

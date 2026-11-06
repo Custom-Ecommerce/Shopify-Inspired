@@ -71,13 +71,13 @@ export const PUBLIC_CATEGORY_READABLE_FIELDS = ['name', 'slug', 'order', 'descri
 // What a seller may set on a product of their store. store, isPublished, isDemo and every derived field (minPrice,
 // ratings, counts) are never client-writable. Stock of an existing variant has its own rule: see D-034.
 export const SELLER_PRODUCT_WRITABLE_FIELDS = [
-'title', 'slug', 'description', 'highlights', 'tags', 'categories', 'media', 'options', 'variants',
+'title', 'slug', 'description', 'highlights', 'tags', 'categories', 'media', 'videos', 'options', 'variants',
 'deliveryCharge', 'isFeatured', 'hideWhenOutOfStock', 'seoTitle', 'seoDescription', 'seoImage',
 ] as const;
 
 // What an anonymous storefront may read of a published product.
 export const PUBLIC_PRODUCT_READABLE_FIELDS = [
-'title', 'slug', 'description', 'highlights', 'tags', 'categories', 'media', 'options', 'variants', 'minPrice',
+'title', 'slug', 'description', 'highlights', 'tags', 'categories', 'media', 'videos', 'options', 'variants', 'minPrice',
 'deliveryCharge', 'avgRating', 'reviewCount', 'seoTitle', 'seoDescription', 'seoImage',
 ] as const;
 

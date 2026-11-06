@@ -20,6 +20,7 @@ const DETAIL_PROJECTION = {
   minPrice: 1,
   categories: 1,
   media: 1,
+  videos: 1,
   avgRating: 1,
   reviewCount: 1,
   description: 1,
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       .select(preview ? PREVIEW_DETAIL_PROJECTION : DETAIL_PROJECTION)
       .populate({ path: 'categories', select: 'slug name' })
       .populate({ path: 'media', select: 'url alt' })
+      .populate({ path: 'videos', select: 'url posterUrl duration' })
       .populate({ path: 'seoImage', select: 'url' })
       .lean()) as unknown as ProductDetailRow | null;
     if (!row) throw productNotFound();

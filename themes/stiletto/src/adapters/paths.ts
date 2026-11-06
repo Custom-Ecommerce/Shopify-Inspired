@@ -5,6 +5,7 @@ export const paths = {
   home: "/",
   catalog: storePaths.catalog,
   cart: storePaths.cart,
+  favourites: storePaths.favourites,
   checkout: storePaths.checkout,
   search: storePaths.search,
   searchFor: storePaths.searchFor,

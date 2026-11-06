@@ -88,6 +88,13 @@ export function toValidatedProductSummaries(rows: ProductRow[], preview = false)
   return rows.map((row) => storefrontProductSummarySchema.parse({ ...toProductSummaryDto(row), ...previewFields(row, preview) }));
 }
 
+interface DetailVideo {
+  _id?: unknown;
+  url?: string | null;
+  posterUrl?: string | null;
+  duration?: number | null;
+}
+
 interface DetailMedia extends PopulatedMedia {
   _id?: unknown;
 }
@@ -95,6 +102,7 @@ interface DetailMedia extends PopulatedMedia {
 /** A product as .lean() returns it for the detail page: every media entry and the SEO image populated. */
 export interface ProductDetailRow extends Omit<ProductRow, 'media'> {
   media?: Array<DetailMedia | null> | null;
+  videos?: Array<DetailVideo | null> | null;
   options?: Array<{ name: string; values: string[] }> | null;
   description?: string | null;
   highlights?: Array<{ text?: string | null } | null> | null;
@@ -138,6 +146,10 @@ export function toProductDetailDto(row: ProductDetailRow, storeDeliveryRate: num
     description: nonEmpty(row.description),
     highlights: (row.highlights ?? []).map((h) => nonEmpty(h?.text)).filter((t): t is string => t !== null),
     images,
+    videos: (row.videos ?? []).flatMap((video) => {
+      const url = nonEmpty(video?.url);
+      return url ? [{ id: String(video?._id), url, posterUrl: nonEmpty(video?.posterUrl), duration: video?.duration ?? null }] : [];
+    }),
     seo: {
       title: nonEmpty(row.seoTitle),
       description: nonEmpty(row.seoDescription),

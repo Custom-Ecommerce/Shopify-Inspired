@@ -5,6 +5,8 @@ import * as contractsNs from '@markaz/contracts';
 // receiver and digest routes do, so the ES module test runner and the Next bundler agree.
 const contracts = unwrapCjs(contractsNs) as typeof contractsNs;
 
+export const { MEDIA_VIDEO_FORMATS, MEDIA_VIDEO_MAX_BYTES, MEDIA_VIDEO_MAX_SECONDS, MEDIA_VIDEO_MIME_TYPES } = contracts;
+
 export const {
   objectIdSchema,
   loginRequestSchema,

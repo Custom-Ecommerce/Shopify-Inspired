@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, User } from "lucide-react";
+import { ChevronDown, Heart, User } from "lucide-react";
 import { Button } from "../../shared/components/primitives/button";
 import { AnnouncementBar } from "./AnnouncementBar";
 import { MegaMenu } from "./MegaMenu";
@@ -13,6 +13,7 @@ import { CartDrawer } from "./CartDrawer";
 import { useScrollState } from "../../shared/hooks/useScrollState";
 import type { HeaderProps } from "../../types";
 import { BrandDisplay } from "../../components/brand/BrandDisplay";
+import { paths } from "../../adapters/paths";
 
 export function Header({
   announcement,
@@ -111,6 +112,9 @@ export function Header({
           {/* Right Action Drawers */}
           <div className="flex items-center gap-1 md:gap-3">
             <SearchDrawer data={searchDrawerData} />
+            <Link href={paths.favourites} aria-label="Favourites" className="flex size-9 items-center justify-center hover:opacity-60 transition-opacity text-inherit">
+              <Heart className="size-6 md:size-8" strokeWidth={1.25} />
+            </Link>
             <Button variant="ghost" size="icon" className="hover:opacity-60 transition-opacity text-inherit hidden md:flex">
               <User className="size-6 md:size-8" strokeWidth={1.25} />
             </Button>

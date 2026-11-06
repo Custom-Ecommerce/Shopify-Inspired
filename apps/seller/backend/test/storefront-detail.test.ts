@@ -174,6 +174,7 @@ test('returns the full detail and it matches the storefront wire schema', async 
       { id: 'm1', url: 'https://res.cloudinary.com/demo/a.jpg', alt: 'Front' },
       { id: 'm2', url: 'https://res.cloudinary.com/demo/b.jpg', alt: 'Blue shirt' },
     ],
+    videos: [],
     seo: { title: 'Buy the blue shirt', description: null, imageUrl: 'https://res.cloudinary.com/demo/seo.jpg' },
     tags: ['summer'],
     categorySlugs: ['shirts'],
@@ -199,6 +200,26 @@ test("a product's own delivery charge wins over the store rate, and 0 means free
   assert.equal((await (await get(STORE_ID, 'blue-shirt')).json()).data.deliveryCharge, 90);
   products = [product({ deliveryCharge: 0 })];
   assert.equal((await (await get(STORE_ID, 'blue-shirt')).json()).data.deliveryCharge, 0);
+});
+
+test('videos come back in order, a dangling one is dropped, and a missing poster is null', async () => {
+  storeRow = activeStore();
+  products = [
+    product({
+      videos: [
+        { _id: 'v2', url: 'https://res.cloudinary.com/demo/video/b.mp4', posterUrl: 'https://res.cloudinary.com/demo/video/b.jpg', duration: 42 },
+        null,
+        { _id: 'v1', url: 'https://res.cloudinary.com/demo/video/a.mp4' },
+      ],
+    }),
+  ];
+  const res = await get(STORE_ID, 'blue-shirt');
+  const { data } = storefrontProductDetailResponseSchema.parse(await res.json());
+  assert.deepEqual(data.videos, [
+    { id: 'v2', url: 'https://res.cloudinary.com/demo/video/b.mp4', posterUrl: 'https://res.cloudinary.com/demo/video/b.jpg', duration: 42 },
+    { id: 'v1', url: 'https://res.cloudinary.com/demo/video/a.mp4', posterUrl: null, duration: null },
+  ]);
+  assert.equal('videos' in rec.projection, true);
 });
 
 test('a product with no images and no description still validates', async () => {

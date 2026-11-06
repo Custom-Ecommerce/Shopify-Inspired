@@ -19,6 +19,13 @@ export const WireGalleryImage = WireImage.extend({
   id: z.string().min(1).optional(),
 });
 
+export const WireVideo = z.object({
+  id: z.string().min(1),
+  url: z.string().min(1),
+  posterUrl: z.string().nullable(),
+  duration: z.number().nonnegative().nullable(),
+});
+
 export const WireCategoryList = z.object({
   data: z.array(
     z.object({
@@ -76,6 +83,7 @@ export const WireProductDetail = WireProductSummary.extend({
   description: nullableText,
   highlights: z.array(z.string()),
   images: z.array(WireGalleryImage),
+  videos: z.array(WireVideo).default([]),
   seo: z.object({
     title: nullableText,
     description: nullableText,

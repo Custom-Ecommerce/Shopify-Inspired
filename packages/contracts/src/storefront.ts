@@ -65,6 +65,14 @@ export const storefrontImageSchema = z.object({
 /** A picture of a product's gallery. The id is what a variant's imageId names, so a selector can switch to it. */
 export const storefrontGalleryImageSchema = storefrontImageSchema.extend({ id: z.string().min(1) });
 
+/** A video of a product. duration is in seconds, null if it was never measured. */
+export const storefrontVideoSchema = z.object({
+  id: z.string().min(1),
+  url: z.string().min(1),
+  posterUrl: z.string().nullable(),
+  duration: z.number().nonnegative().nullable(),
+});
+
 export const storefrontStoreSchema = z.object({
   id: z.string().min(1),
   slug: z.string().min(1),
@@ -213,6 +221,7 @@ export const storefrontProductDetailSchema = storefrontProductSummarySchema.exte
   description: nullableText,
   highlights: z.array(z.string()),
   images: z.array(storefrontGalleryImageSchema),
+  videos: z.array(storefrontVideoSchema),
   seo: z.object({
     title: nullableText,
     description: nullableText,

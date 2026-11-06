@@ -1,4 +1,5 @@
 import {
+  objectIdSchema,
   STOREFRONT_CATEGORY_SLUG_PATTERN,
   STOREFRONT_PRODUCTS_DEFAULT_LIMIT,
   STOREFRONT_PRODUCTS_MAX_LIMIT,
@@ -17,6 +18,8 @@ export interface ProductListQuery {
   sort: ProductSort;
   page: number;
   limit: number;
+  /** Null without the parameter. A list, possibly empty, with it: an empty list means no products, never all of them. */
+  ids: string[] | null;
 }
 
 const SORT_SPECS: Record<ProductSort, Record<string, 1 | -1>> = {
@@ -44,6 +47,8 @@ export function escapeRegex(value: string): string {
  * - limit is clamped to 1..48 (default 24); page to 1..1000 (default 1). Numeric abuse is clamped, not rejected.
  * - q is trimmed and cut to 80 characters.
  * - sort and category are enumerated or pattern-checked; a bad value is a 400 rather than a silent fallback.
+ * - ids is comma-separated. What is not an ObjectId is ignored, repeats count once, and the first 48 are kept. All of them
+ *   fit on one page, so page and limit do not apply.
  */
 export function parseProductListQuery(params: URLSearchParams): ProductListQuery {
   const limit = parseIntParam(params.get('limit'), STOREFRONT_PRODUCTS_DEFAULT_LIMIT, 1, STOREFRONT_PRODUCTS_MAX_LIMIT);
@@ -63,7 +68,20 @@ export function parseProductListQuery(params: URLSearchParams): ProductListQuery
     throw new StorefrontHttpError(400, 'INVALID_REQUEST', 'category is not a valid slug');
   }
 
+  const ids = params.has('ids')
+    ? [...new Set((params.get('ids') ?? '').split(',').map((id) => id.trim().toLowerCase()))]
+        .filter((id) => objectIdSchema.safeParse(id).success)
+        .slice(0, STOREFRONT_PRODUCTS_MAX_LIMIT)
+    : null;
+
   const rawQ = (params.get('q') ?? '').trim().slice(0, STOREFRONT_SEARCH_MAX_LENGTH).trim();
 
-  return { category: rawCategory === '' ? null : rawCategory, q: rawQ === '' ? null : rawQ, sort, page, limit };
+  return {
+    category: rawCategory === '' ? null : rawCategory,
+    q: rawQ === '' ? null : rawQ,
+    sort,
+    page: ids === null ? page : 1,
+    limit: ids === null ? limit : STOREFRONT_PRODUCTS_MAX_LIMIT,
+    ids,
+  };
 }

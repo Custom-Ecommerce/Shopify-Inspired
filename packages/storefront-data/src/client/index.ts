@@ -6,6 +6,8 @@ export { useCart } from "./use-cart";
 export type { CartableProductVM, CartableVariantVM, UseCartResult } from "./use-cart";
 export { useCartQuote } from "./use-cart-quote";
 export type { CartQuoteStatus, UseCartQuoteResult } from "./use-cart-quote";
+export { useFavouriteProducts, useFavourites } from "./use-favourites";
+export type { FavouriteProductsStatus, UseFavouriteProductsResult, UseFavouritesResult } from "./use-favourites";
 export { useCheckout } from "./use-checkout";
 export type { CheckoutFailure, CheckoutStatus, UseCheckoutResult } from "./use-checkout";
 export { useOrderLookup } from "./use-order-lookup";

@@ -5,7 +5,8 @@ export { MAX_SEARCH_LENGTH, searchProductSummaries } from "./domain/search";
 export { toProductCardVM } from "./view-models/product-card";
 export type { ProductCardVM } from "./view-models/product-card";
 export { initialSelection, toProductDetailVM, toVariantSelectionVM } from "./view-models/product-detail";
-export type { ProductDetailVM, ProductVariantVM, VariantBlock, VariantSelectionVM } from "./view-models/product-detail";
+export type { ProductDetailVM, ProductVariantVM, ProductVideoVM, VariantBlock, VariantSelectionVM } from "./view-models/product-detail";
+export { canFavourite } from "./domain/favourites";
 export { resolveVariant, selectableOptions, toggleOption } from "./domain/variants";
 export type { SelectableOption, SelectableState, SelectableValue, SelectedOptions } from "./domain/variants";
 export { toCartVM } from "./view-models/cart";
@@ -54,5 +55,6 @@ export type {
   CollectionsPageProps,
   CollectionPageProps,
   FeedbackPageProps,
+  FavouritesPageProps,
 } from "./view-models/pages";
 /* @theme-integration-patch:root-index */

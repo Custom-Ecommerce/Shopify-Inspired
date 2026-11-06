@@ -53,6 +53,7 @@ interface ProductRow extends Doc {
   isDemo: boolean;
   categories: string[];
   media: string[];
+  videos?: string[];
   options: Array<{ name: string; values: string[] }>;
   variants: VariantRow[];
   minPrice: number;
@@ -86,7 +87,9 @@ const CategoryStub = Category as unknown as {
   countDocuments: (filter: { store: string; _id: { $in: string[] } }) => Promise<number>;
   findOne: (filter: Doc) => StubQuery;
 };
-const MediaStub = Media as unknown as { countDocuments: (filter: { store: string; _id: { $in: string[] } }) => Promise<number> };
+const MediaStub = Media as unknown as {
+  countDocuments: (filter: { store: string; _id: { $in: string[] }; resourceType?: unknown }) => Promise<number>;
+};
 const StoreStub = Store as unknown as {
   exists: (filter: Doc) => Promise<unknown>;
   findOne: (filter: Doc) => StubQuery;
@@ -206,6 +209,7 @@ const leaned = (row: ProductRow): Doc => ({
   ...structuredClone(row),
   categories: row.categories.map((id) => ({ _id: id, name: 'Lawn', slug: 'lawn' })),
   media: row.media.map((id) => ({ _id: id, url: 'https://cdn.test/' + id + '.jpg', alt: null })),
+  videos: (row.videos ?? []).map((id) => ({ _id: id, url: 'https://cdn.test/' + id + '.mp4', posterUrl: 'https://cdn.test/' + id + '.jpg', duration: 30 })),
 });
 
 function query(rows: ProductRow[], single: boolean): StubQuery {
@@ -820,6 +824,65 @@ test("variant image: it must be one of this product's images, on create, on patc
   const created = await create({ title: validCreate.title, categories: validCreate.categories, variants: [{ price: 1000, imageId: MEDIA_A }] });
   assert.equal(created.status, 422);
   assert.equal(await errorCode(created), 'PRODUCT_MEDIA_INVALID');
+});
+
+/** These ids are videos of the store; every other id is an image of the store. */
+function storeHasVideos(videos: readonly string[]): void {
+  MediaStub.countDocuments = async (filter) =>
+    filter._id.$in.filter((id) => (filter.resourceType === 'video' ? videos.includes(id) : !videos.includes(id))).length;
+}
+
+test('videos: accepted only as video media of this store, in the order sent, and returned on the product', async () => {
+  const [first, second] = MEDIA_IDS;
+  storeHasVideos([first, second]);
+  const res = await patch(PRODUCT_A, { videos: [second, first] });
+  assert.equal(res.status, 200);
+  assert.deepEqual(row(PRODUCT_A).videos?.map(String), [second, first]);
+  const body = (await res.json()) as { videos: Array<{ id: string; url: string; posterUrl: string; duration: number }> };
+  assert.deepEqual(body.videos.map((video) => video.id), [second, first]);
+  assert.equal(body.videos[0].duration, 30);
+
+  const reordered = await patch(PRODUCT_A, { videos: [first] });
+  assert.equal(reordered.status, 200);
+  assert.deepEqual(row(PRODUCT_A).videos?.map(String), [first]);
+});
+
+test('videos: an image is not a video, a video is not an image, and a video cannot be a variant image', async () => {
+  const [video, image] = MEDIA_IDS;
+  storeHasVideos([video]);
+
+  const imageAsVideo = await patch(PRODUCT_A, { videos: [image] });
+  assert.equal(imageAsVideo.status, 422);
+  assert.equal(await errorCode(imageAsVideo), 'PRODUCT_MEDIA_INVALID');
+
+  const videoAsImage = await patch(PRODUCT_A, { media: [video] });
+  assert.equal(videoAsImage.status, 422);
+  assert.equal(await errorCode(videoAsImage), 'PRODUCT_MEDIA_INVALID');
+
+  const variantVideo = await patch(PRODUCT_A, { variants: [{ id: VARIANT_A, imageId: video }] });
+  assert.equal(variantVideo.status, 422);
+  assert.equal(await errorCode(variantVideo), 'PRODUCT_MEDIA_INVALID');
+});
+
+test('videos: another store\'s video is refused, four fit, a fifth and a repeat do not', async () => {
+  storeHasVideos(MEDIA_IDS.slice(0, 4));
+  assert.equal((await patch(PRODUCT_A, { videos: [MEDIA_IDS[5]] })).status, 422);
+  assert.equal((await patch(PRODUCT_A, { videos: MEDIA_IDS.slice(0, 4) })).status, 200);
+  assert.equal((await patch(PRODUCT_A, { videos: MEDIA_IDS.slice(0, 5) })).status, 422);
+  assert.equal((await patch(PRODUCT_A, { videos: [MEDIA_IDS[0], MEDIA_IDS[0]] })).status, 422);
+  assert.equal(row(PRODUCT_A).videos?.length, 4);
+});
+
+test('videos: create takes them too, and a product without any reads as an empty list', async () => {
+  const [video] = MEDIA_IDS;
+  storeHasVideos([video]);
+  const res = await create({ ...validCreate, videos: [video] });
+  assert.equal(res.status, 201);
+  const { videos } = (await res.json()) as { videos: Array<{ id: string }> };
+  assert.deepEqual(videos.map((entry) => entry.id), [video]);
+
+  const read = await itemGET(request('GET', '/api/products/' + PRODUCT_A), ctx(PRODUCT_A));
+  assert.deepEqual(((await read.json()) as { videos: unknown[] }).videos, []);
 });
 
 const publish = (id: string, call: Call = {}): Promise<Response> => publishPOST(request('POST', '/api/products/' + id + '/publish', call), ctx(id));

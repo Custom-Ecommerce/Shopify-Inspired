@@ -157,7 +157,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     await assertStoreCategories(storeId, data.categories);
-    await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)]);
+    await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)], data.videos);
     const { options, variants, minPrice } = await prepareProductVariants(storeId, createdVariantInput(data));
     assertVariantImagesInGallery(data.media ?? [], variants);
 
@@ -167,6 +167,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       slug,
       categories: [...new Set(data.categories)],
       media: [...new Set(data.media ?? [])],
+      videos: data.videos ?? [],
       description: data.description ? data.description : null,
       highlights: (data.highlights ?? []).map((text) => ({ text })),
       tags: data.tags ?? [],

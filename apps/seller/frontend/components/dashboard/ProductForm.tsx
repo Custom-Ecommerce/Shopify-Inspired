@@ -20,6 +20,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Surface } from "@/components/shared/Surface";
 import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
 import { VariantBuilder } from "@/components/dashboard/VariantBuilder";
+import { ProductVideos } from "@/components/dashboard/ProductVideos";
+import type { VideoEntry } from "@/components/dashboard/ProductVideos";
 
 const MAX_IMAGES = 10;
 const MAX_HIGHLIGHTS = 10;
@@ -49,6 +51,7 @@ interface FormState {
   isFeatured: boolean;
   hideWhenOutOfStock: boolean;
   images: ImageEntry[];
+  videos: VideoEntry[];
 }
 
 function initialState(product?: SellerProductDetail): FormState {
@@ -69,6 +72,7 @@ function initialState(product?: SellerProductDetail): FormState {
     isFeatured: product?.isFeatured ?? false,
     hideWhenOutOfStock: product?.hideWhenOutOfStock ?? false,
     images: (product?.media ?? []).map((media) => ({ id: media.id, url: media.url })),
+    videos: product?.videos ?? [],
   };
 }
 
@@ -122,6 +126,7 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
   const [categories, setCategories] = useState<CategoryDoc[]>([]);
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [published, setPublished] = useState(product?.status === "published");
   const [publishing, setPublishing] = useState(false);
@@ -271,6 +276,7 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
       highlights,
       categories: form.categoryIds,
       media: form.images.map((img) => img.id),
+      videos: form.videos.map((video) => video.id),
       deliveryCharge: optionalNumber(form.deliveryCharge),
       isFeatured: form.isFeatured,
       hideWhenOutOfStock: form.hideWhenOutOfStock,
@@ -590,10 +596,16 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
             )}
           </div>
         </div>
+        <ProductVideos
+          videos={form.videos}
+          alt={form.title}
+          onChange={(update) => setForm((f) => ({ ...f, videos: update(f.videos) }))}
+          onBusyChange={setUploadingVideo}
+        />
       </Surface>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" variant="clay" disabled={saving || uploading || isInvalid}>
+        <Button type="submit" variant="clay" disabled={saving || uploading || uploadingVideo || isInvalid}>
           {saving ? "Saving..." : isEdit ? "Save changes" : "Create product"}
         </Button>
         {product ? (

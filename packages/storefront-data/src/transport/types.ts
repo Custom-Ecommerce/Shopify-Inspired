@@ -13,6 +13,14 @@ export interface StorefrontGalleryImage extends StorefrontImage {
   id?: string;
 }
 
+/** A video of a product. Fixtures have none. */
+export interface StorefrontProductVideo {
+  id: string;
+  url: string;
+  posterUrl: string | null;
+  duration: number | null;
+}
+
 export interface StorefrontProductSummary {
   id: string;
   slug: string;
@@ -71,6 +79,7 @@ export interface StorefrontProductDetail extends StorefrontProductSummary {
   description: string | null;
   highlights: string[];
   images: StorefrontGalleryImage[];
+  videos?: StorefrontProductVideo[];
   seo: { title: string | null; description: string | null; imageUrl: string | null };
   tags: string[];
   categorySlugs: string[];
@@ -215,6 +224,8 @@ export interface OrderTransport {
   submitOrder(payload: SubmitOrderPayload): Promise<SubmitOrderResult>;
   /** Resolves to null when no order matches both the id and the phone. Refusals reject with OrderRejectedError. */
   lookupOrder(input: OrderLookupInput): Promise<StorefrontOrder | null>;
+  /** The Live products among these ids, at most 48 per call. An id with no Live product is simply absent from the answer. */
+  getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]>;
 }
 
 /**

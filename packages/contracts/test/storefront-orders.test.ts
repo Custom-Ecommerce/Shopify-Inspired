@@ -33,6 +33,7 @@ const detail = {
   description: 'A shirt.',
   highlights: ['Cotton'],
   images: [{ id: '65a0000000000000000000e9', url: 'https://res.cloudinary.com/x/a.jpg', alt: 'Blue shirt' }],
+  videos: [],
   seo: { title: null, description: null, imageUrl: null },
   tags: ['summer'],
   categorySlugs: ['shirts'],

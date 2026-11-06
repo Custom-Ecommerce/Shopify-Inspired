@@ -31,6 +31,14 @@ function toVariantVM(variant: StorefrontProductVariant): ProductVariantVM {
   };
 }
 
+export interface ProductVideoVM {
+  id: string;
+  url: string;
+  posterUrl: string | null;
+  /** Seconds. */
+  duration: number | null;
+}
+
 export interface ProductDetailVM extends ProductCardVM {
   options: StorefrontProductOption[];
   variants: ProductVariantVM[];
@@ -38,6 +46,8 @@ export interface ProductDetailVM extends ProductCardVM {
   highlights: string[];
   /** id is null only for fixtures, which link no variant to an image. */
   gallery: { id: string | null; url: string; alt: string }[];
+  /** Kept apart from the gallery: a variant only ever points at an image. */
+  videos: ProductVideoVM[];
   /** The cheapest and dearest variant. */
   priceRange: { min: Money; max: Money };
   deliveryFee: Money;
@@ -59,6 +69,7 @@ export function toProductDetailVM(dto: StorefrontProductDetail): ProductDetailVM
     description: dto.description,
     highlights: [...dto.highlights],
     gallery: dto.images.map((image) => ({ id: image.id ?? null, url: image.url, alt: image.alt })),
+    videos: (dto.videos ?? []).map((video) => ({ id: video.id, url: video.url, posterUrl: video.posterUrl, duration: video.duration })),
     priceRange: { min: toMoney(Math.min(dto.price, ...prices)), max: toMoney(Math.max(dto.price, ...prices)) },
     deliveryFee,
     deliveryLabel: dto.deliveryCharge === 0 ? "Free delivery" : "Delivery " + deliveryFee.formatted,

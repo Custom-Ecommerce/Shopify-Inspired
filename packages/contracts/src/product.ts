@@ -175,6 +175,7 @@ export const PRODUCT_MAX_TAGS = 30;
 export const PRODUCT_TAG_MAX = 50;
 export const PRODUCT_MAX_CATEGORIES = 20;
 export const PRODUCT_MAX_IMAGES = 10;
+export const PRODUCT_MAX_VIDEOS = 4;
 export const PRODUCT_SEO_TITLE_MAX = 200;
 export const PRODUCT_SEO_DESCRIPTION_MAX = 500;
 
@@ -211,6 +212,12 @@ const productContentFields = {
     .optional(),
   tags: z.array(z.string().trim().min(1).max(PRODUCT_TAG_MAX)).max(PRODUCT_MAX_TAGS).optional(),
   media: z.array(objectIdSchema).max(PRODUCT_MAX_IMAGES).optional(),
+  /** The whole ordered list when sent. */
+  videos: z
+    .array(objectIdSchema)
+    .max(PRODUCT_MAX_VIDEOS)
+    .refine((ids) => duplicateIgnoringCase(ids) === null, 'A video is listed twice.')
+    .optional(),
   deliveryCharge: rupeesInputSchema.nullable().optional(),
   isFeatured: z.boolean().optional(),
   hideWhenOutOfStock: z.boolean().optional(),
@@ -402,6 +409,14 @@ export interface SellerProductSummary {
   updatedAt: string;
 }
 
+/** A video of a product, as the dashboard and the storefront show it. */
+export interface SellerProductVideo {
+  id: string;
+  url: string;
+  posterUrl: string | null;
+  duration: number | null;
+}
+
 export interface SellerProductVariant extends ProductVariant {
   availability: StockStatus;
 }
@@ -412,6 +427,7 @@ export interface SellerProductDetail extends SellerProductSummary {
   options: Array<{ name: string; values: string[] }>;
   variants: SellerProductVariant[];
   media: Array<{ id: string; url: string; alt: string | null }>;
+  videos: SellerProductVideo[];
   deliveryCharge: number | null;
   seoTitle: string | null;
   seoDescription: string | null;
