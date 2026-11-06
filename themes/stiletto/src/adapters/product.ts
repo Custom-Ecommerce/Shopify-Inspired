@@ -30,6 +30,7 @@ function textToHtml(text: string): string {
 export function toStilettoProduct(source: Source, reviews: ReviewItem[] = []): NormalizedProduct {
   const detail = isDetail(source) ? source : null;
   const images = detail && detail.gallery.length > 0 ? detail.gallery.map((g) => g.url) : source.image ? [source.image.url] : [PLACEHOLDER_IMAGE];
+  const gallery = detail && detail.gallery.length > 0 ? detail.gallery : images.map((url) => ({ url, alt: source.title }));
   const categories = source.categories ?? [];
   const tags = [...new Set([...(detail?.tags ?? []), ...categories.flatMap((c) => [c.name, c.slug])])];
   const variant: NormalizedVariant = {
@@ -49,6 +50,10 @@ export function toStilettoProduct(source: Source, reviews: ReviewItem[] = []): N
     tags,
     price: formatCurrency(moneyString(source.price.amount), "PKR"),
     images,
+    gallery,
+    // D-035: until the variant selector, a product with several variants cannot be bought here, so it reads as sold out.
+    stockLabel: source.canQuickAdd ? source.stock.label : "Out of stock",
+    stockTone: source.canQuickAdd ? "positive" : "negative",
     sizes: [],
     colors: [],
     variantsInfo: "",

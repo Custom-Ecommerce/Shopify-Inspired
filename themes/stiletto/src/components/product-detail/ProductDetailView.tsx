@@ -39,7 +39,7 @@ export function ProductDetailView({
     <div className="w-full">
       <div className="py-8 md:py-16 px-4 md:px-12 max-w-container-max mx-auto w-full space-y-16">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-start">
-          <ProductGallery images={product.images} title={product.title} />
+          <ProductGallery images={product.gallery ?? product.images.map((url) => ({ url, alt: product.title }))} title={product.title} />
 
           <div className="flex flex-col">
             <ProductInfo product={product} />

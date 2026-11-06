@@ -2,17 +2,13 @@ import type { SellerProductSummary } from "@markaz/contracts";
 import type { ListEnvelope } from "@markaz/api-compat";
 import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { resolveStorePage } from "@/lib/resolve-store-page";
 import { storeHref } from "@/lib/store-routes";
 
-import { DeleteProductButton } from "@/components/dashboard/DeleteProductButton";
+import { ProductsTable } from "@/components/dashboard/ProductsTable";
 import { PageHeader } from "@/components/dashboard/shared/PageHeader";
-import { SectionCard } from "@/components/dashboard/shared/SectionCard";
-import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
-import { DataTable } from "@/components/dashboard/shared/DataTable";
 import { EmptyState } from "@/components/dashboard/shared/EmptyState";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
 
@@ -61,37 +57,6 @@ export default async function DashboardProductsPage({
   const pageHref = (target: number): string => `${storeHref(storeId, "/products")}?${queryFor(target).toString()}`;
   const isFiltered = q !== "" || status !== "all";
 
-  const productColumns = [
-    {
-      header: "Title",
-      render: (p: SellerProductSummary) => (
-        <span className="inline-flex items-center gap-2">
-          {p.title}
-          {p.isDemo ? <Badge variant="secondary">Demo</Badge> : null}
-        </span>
-      ),
-    },
-    {
-      header: "Price",
-      render: (p: SellerProductSummary) => `${p.variantCount > 1 ? "From " : ""}PKR ${p.minPrice.toLocaleString()}`,
-    },
-    { header: "Stock Qty", render: (p: SellerProductSummary) => p.totalStock },
-    { header: "Stock", render: (p: SellerProductSummary) => <StatusBadge status={p.stockStatus} /> },
-    { header: "Status", render: (p: SellerProductSummary) => <StatusBadge status={p.status} /> },
-    { header: "Category", render: (p: SellerProductSummary) => p.categories[0]?.name ?? "—" },
-    {
-      header: "",
-      render: (p: SellerProductSummary) => (
-        <div className="flex items-center justify-end gap-4 whitespace-nowrap">
-          <Button variant="link" size="sm" className="h-auto p-0" render={<Link href={storeHref(storeId, `/products/${p.id}`)} />}>
-            Edit
-          </Button>
-          {p.isDemo ? <DeleteProductButton productId={p.id} productTitle={p.title} /> : null}
-        </div>
-      ),
-    },
-  ];
-
   return (
     <div className="p-6 sm:p-8">
       <PageHeader title="Products">
@@ -112,6 +77,7 @@ export default async function DashboardProductsPage({
           <option value="all">All</option>
           <option value="draft">Draft</option>
           <option value="published">Published</option>
+          <option value="trash">Trash</option>
         </select>
         <select name="sort" defaultValue={sort} aria-label="Sort" className={SELECT_CLASS}>
           <option value="newest">Newest</option>
@@ -126,13 +92,11 @@ export default async function DashboardProductsPage({
         <ErrorState message="Could not load your products." />
       ) : products.length === 0 ? (
         <EmptyState
-          title={isFiltered ? "No matching products" : "No products yet"}
-          description={isFiltered ? "Try another search or filter." : "Start adding products to your store."}
+          title={status === "trash" ? "Trash is empty" : isFiltered ? "No matching products" : "No products yet"}
+          description={status === "trash" ? "Deleted products wait here for 365 days." : isFiltered ? "Try another search or filter." : "Start adding products to your store."}
         />
       ) : (
-        <SectionCard noPadding>
-          <DataTable data={products} columns={productColumns} keyExtractor={(p) => p.id} />
-        </SectionCard>
+        <ProductsTable key={status} products={products} trash={status === "trash"} />
       )}
 
       {totalPages > 1 ? (

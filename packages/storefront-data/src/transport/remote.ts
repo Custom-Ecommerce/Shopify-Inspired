@@ -142,6 +142,8 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
       return { code: "invalid_quantity", productId };
     case "UNKNOWN_PRODUCT":
       return { code: "unknown_product", productId };
+    case "PRODUCT_UNAVAILABLE":
+      return { code: "product_unavailable", productId };
     case "VARIANT_REQUIRED":
       return { code: "variant_required", productId };
     case "UNKNOWN_VARIANT":

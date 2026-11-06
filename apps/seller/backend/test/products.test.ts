@@ -2,8 +2,10 @@ import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { Category, Media, Product, Store, signSession } from '@/lib/services';
+import { ArchivedReview, Category, Media, Product, Review, StockMovement, Store, assertCan, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
+import { publishProblem } from '@/lib/product-lifecycle';
+import { purgeExpiredProducts, retentionCutoff, toArchivedReview, trashDaysLeft, type PurgeableProduct } from '@/lib/trash';
 
 const SECRET = 'x'.repeat(40);
 
@@ -56,6 +58,11 @@ interface ProductRow extends Doc {
   minPrice: number;
 }
 
+interface UpdateStage {
+  $set?: Doc;
+  $inc?: Record<string, number>;
+}
+
 interface StubQuery {
   select: () => StubQuery;
   sort: () => StubQuery;
@@ -69,7 +76,7 @@ const mongooseStub = mongoose as unknown as { connect: () => Promise<unknown> };
 const ProductStub = Product as unknown as {
   find: (filter: Doc) => StubQuery;
   findOne: (filter: Doc) => StubQuery;
-  findOneAndUpdate: (filter: Doc, update: Array<{ $set: Doc }>) => StubQuery;
+  findOneAndUpdate: (filter: Doc, update: UpdateStage[] | UpdateStage) => StubQuery;
   countDocuments: (filter: Doc) => Promise<number>;
   exists: (filter: Doc) => Promise<unknown>;
   create: (doc: Doc) => Promise<Doc>;
@@ -107,6 +114,26 @@ let writes: number;
 /** Runs after the route's read and before its write: the moment a shopper's order can land. */
 let betweenReadAndWrite: () => void;
 let restore: () => void;
+let reviews: Doc[];
+let archived: Doc[];
+let publishPOST: ItemHandler;
+let unpublishPOST: ItemHandler;
+let restorePOST: ItemHandler;
+let retentionPOST: CollectionHandler;
+let adjustPOST: CollectionHandler;
+let inventoryGET: CollectionHandler;
+let historyGET: CollectionHandler;
+let movements: Doc[];
+
+const MovementStub = StockMovement as unknown as {
+  create: (doc: Doc) => Promise<unknown>;
+  find: (filter: Doc) => unknown;
+  countDocuments: (filter: Doc) => Promise<number>;
+};
+const ReviewStub = Review as unknown as { find: (filter: Doc) => unknown; deleteMany: (filter: Doc) => Promise<unknown> };
+const ArchiveStub = ArchivedReview as unknown as {
+  bulkWrite: (ops: Array<{ updateOne: { filter: { _id: unknown }; update: { $setOnInsert: Doc } } }>) => Promise<unknown>;
+};
 
 before(async () => {
   process.env.SELLER_AUTH_SECRET = SECRET;
@@ -123,10 +150,46 @@ before(async () => {
   itemPATCH = item.PATCH;
   itemDELETE = item.DELETE;
   liveListGET = live.GET;
+  publishPOST = (await import('../src/app/api/products/[id]/publish/route')).POST;
+  unpublishPOST = (await import('../src/app/api/products/[id]/unpublish/route')).POST;
+  restorePOST = (await import('../src/app/api/products/[id]/restore/route')).POST;
+  retentionPOST = (await import('../src/app/api/internal/retention/route')).POST;
+  adjustPOST = (await import('../src/app/api/inventory/adjust/route')).POST;
+  inventoryGET = (await import('../src/app/api/inventory/route')).GET;
+  historyGET = (await import('../src/app/api/inventory/history/route')).GET;
 });
+
+function variantMatches(candidate: Doc, clause: Doc): boolean {
+  return Object.entries(clause).every(([key, value]) => {
+    if (key === '$or') return (value as Doc[]).some((inner) => variantMatches(candidate, inner));
+    if (typeof value === 'object' && value !== null) {
+      const bound = value as { $gt?: number; $gte?: number; $lte?: number };
+      const number = Number(candidate[key]);
+      if (bound.$gt !== undefined) return number > bound.$gt;
+      if (bound.$gte !== undefined) return number >= bound.$gte;
+      if (bound.$lte !== undefined) return number <= bound.$lte;
+    }
+    return String(candidate[key]) === String(value);
+  });
+}
 
 function matches(row: ProductRow, filter: Doc): boolean {
   return Object.entries(filter).every(([key, value]) => {
+    if (key === '$or') return (value as Doc[]).some((clause) => matches(row, clause));
+    if (key === 'variants') return row.variants.some((candidate) => variantMatches(candidate, (value as { $elemMatch: Doc }).$elemMatch));
+    if (value === null) return (row[key] ?? null) === null;
+    if (key === 'deletedBy.role') return (row.deletedBy as { role?: string } | null)?.role !== (value as { $ne: string }).$ne;
+    if (typeof value === 'object' && value !== null && '$type' in value) return !!row[key];
+    if (typeof value === 'object' && value !== null && '$regex' in value) {
+      const { $regex, $options } = value as { $regex: string; $options?: string };
+      return new RegExp($regex, $options).test(String(row[key]));
+    }
+    if (typeof value === 'object' && value !== null && '$lt' in value) {
+      return !!row[key] && new Date(row[key] as string) < (value as { $lt: Date }).$lt;
+    }
+    if (key !== '_id' && typeof value === 'object' && value !== null && '$ne' in value) {
+      return (row[key] ?? null) !== (value as { $ne: unknown }).$ne;
+    }
     if (key === 'variants._id') {
       return (value as { $all: unknown[] }).$all.every((id) => row.variants.some((variant) => String(variant._id) === String(id)));
     }
@@ -167,7 +230,7 @@ function evaluate(expression: unknown, doc: Doc, vars: Doc = {}): unknown {
     return expression.startsWith('$') ? doc[expression.slice(1)] : expression;
   }
   if (Array.isArray(expression)) return expression.map((entry) => evaluate(entry, doc, vars));
-  if (typeof expression !== 'object' || expression === null) return expression;
+  if (typeof expression !== 'object' || expression === null || expression instanceof Date) return expression;
 
   const op = expression as Doc;
   if ('$literal' in op) return op.$literal;
@@ -216,6 +279,9 @@ const product = (id: string, store: string, variants: VariantRow[], overrides: P
   isPublished: false,
   isDemo: false,
   isFeatured: false,
+  hideWhenOutOfStock: false,
+  deletedAt: null,
+  deletedBy: null,
   categories: [store === STORE_A ? CAT_A : CAT_B],
   media: [],
   options: [],
@@ -246,6 +312,8 @@ beforeEach(() => {
   ];
   writes = 0;
   betweenReadAndWrite = () => {};
+  reviews = [];
+  archived = [];
 
   const saved = {
     connect: mongooseStub.connect,
@@ -262,8 +330,42 @@ beforeEach(() => {
     storeExists: StoreStub.exists,
     storeFindOne: StoreStub.findOne,
     storeFindById: StoreStub.findById,
+    reviewFind: ReviewStub.find,
+    reviewDelete: ReviewStub.deleteMany,
+    archive: ArchiveStub.bulkWrite,
+    movement: MovementStub.create,
+    movementFind: MovementStub.find,
+    movementCount: MovementStub.countDocuments,
   };
 
+  movements = [];
+  const movementsOf = (filter: Doc): Doc[] =>
+    movements.filter((movement) => Object.entries(filter).every(([key, value]) => String(movement[key]) === String(value)));
+  MovementStub.create = async (doc) => doc;
+  MovementStub.find = (filter) => {
+    const q = { sort: () => q, skip: () => q, limit: () => q, lean: async () => movementsOf(filter) };
+    return q;
+  };
+  MovementStub.countDocuments = async (filter) => movementsOf(filter).length;
+  ReviewStub.find = (filter) => {
+    const q = {
+      select: () => q,
+      lean: async () => reviews.filter((review) => String(review.product) === String(filter.product) && String(review.store) === String(filter.store)),
+    };
+    return q;
+  };
+  ReviewStub.deleteMany = async (filter) => {
+    reviews = reviews.filter((review) => String(review.product) !== String(filter.product));
+    return {};
+  };
+  ArchiveStub.bulkWrite = async (ops) => {
+    for (const op of ops) {
+      if (!archived.some((row) => row._id === op.updateOne.filter._id)) {
+        archived.push({ _id: op.updateOne.filter._id, ...op.updateOne.update.$setOnInsert });
+      }
+    }
+    return {};
+  };
   mongooseStub.connect = async () => mongoose;
   ProductStub.find = (filter) => query(products.filter((row) => matches(row, filter)), false);
   ProductStub.findOne = (filter) => query(products.filter((row) => matches(row, filter)), true);
@@ -284,15 +386,22 @@ beforeEach(() => {
     const row = products.find((candidate) => matches(candidate, filter));
     if (row) {
       const stored = { ...row };
-      for (const stage of update) {
-        for (const [field, value] of Object.entries(stage.$set)) (row as Doc)[field] = evaluate(value, stored);
+      for (const stage of Array.isArray(update) ? update : [update]) {
+        for (const [field, value] of Object.entries(stage.$set ?? {})) (row as Doc)[field] = evaluate(value, stored);
+        const delta = stage.$inc?.['variants.$.stockQuantity'];
+        if (delta !== undefined) {
+          const wanted = String((filter.variants as { $elemMatch: { _id: unknown } }).$elemMatch._id);
+          const target = row.variants.find((candidate) => String(candidate._id) === wanted);
+          if (target) target.stockQuantity += delta;
+        }
       }
     }
     return query(row ? [row] : [], true);
   };
   ProductStub.deleteOne = async (filter) => {
+    const before = products.length;
     products = products.filter((row) => !matches(row, filter));
-    return { deletedCount: 1 };
+    return { deletedCount: before - products.length };
   };
   CategoryStub.countDocuments = async (filter) =>
     ownedCount(filter._id.$in, filter.store, { [CAT_A]: STORE_A, [CAT_B]: STORE_B });
@@ -328,6 +437,12 @@ beforeEach(() => {
     StoreStub.exists = saved.storeExists;
     StoreStub.findOne = saved.storeFindOne;
     StoreStub.findById = saved.storeFindById;
+    ReviewStub.find = saved.reviewFind;
+    ReviewStub.deleteMany = saved.reviewDelete;
+    ArchiveStub.bulkWrite = saved.archive;
+    MovementStub.create = saved.movement;
+    MovementStub.find = saved.movementFind;
+    MovementStub.countDocuments = saved.movementCount;
   };
 });
 
@@ -389,7 +504,7 @@ test('the list shows only the seller\'s store, with derived stock and a demo mar
 });
 
 test('the list refuses an unknown status or sort', async () => {
-  assert.equal((await listGET(request('GET', '/api/products', { query: '?status=trash' }))).status, 422);
+  assert.equal((await listGET(request('GET', '/api/products', { query: '?status=archived' }))).status, 422);
   assert.equal((await listGET(request('GET', '/api/products', { query: '?sort=stockQuantity' }))).status, 422);
 });
 
@@ -565,12 +680,7 @@ test('the first edit makes a demo product the seller\'s own', async () => {
   assert.equal(row(DEMO_A).isPublished, false);
 });
 
-test('delete: a demo product goes for good, any other product answers 501', async () => {
-  const refused = await itemDELETE(request('DELETE', '/api/products/' + PRODUCT_A), ctx(PRODUCT_A));
-  assert.equal(refused.status, 501);
-  assert.equal(await errorCode(refused), 'PRODUCT_DELETE_NOT_AVAILABLE');
-  assert.ok(row(PRODUCT_A));
-
+test('delete: a demo product skips trash and goes for good', async () => {
   assert.equal((await itemDELETE(request('DELETE', '/api/products/' + DEMO_A), ctx(DEMO_A))).status, 200);
   assert.ok(!products.some((candidate) => candidate._id === DEMO_A));
 });
@@ -586,4 +696,448 @@ test('Live never lists a demo product, even a published one, while the seller\'s
 
   const seller = (await (await listGET(request('GET', '/api/products'))).json()) as { docs: Array<{ id: string }> };
   assert.ok(seller.docs.some((doc) => doc.id === DEMO_A));
+});
+
+/* ------------------------------------------------ images ------------------------------------------------ */
+
+const MEDIA_IDS = Array.from({ length: 11 }, (_, index) => '65a0000000000000000001' + index.toString(16).padStart(2, '0'));
+
+function ownAllMedia(): void {
+  MediaStub.countDocuments = async (filter) => filter._id.$in.filter((id) => id !== MEDIA_B).length;
+}
+
+test('images: an image of another store is refused on the gallery and on a variant', async () => {
+  const gallery = await patch(PRODUCT_A, { media: [MEDIA_A, MEDIA_B] });
+  assert.equal(gallery.status, 422);
+  assert.equal(await errorCode(gallery), 'PRODUCT_MEDIA_INVALID');
+
+  const linked = await patch(PRODUCT_A, { variants: [{ id: VARIANT_A, imageId: MEDIA_B }] });
+  assert.equal(linked.status, 422);
+  assert.equal(await errorCode(linked), 'PRODUCT_MEDIA_INVALID');
+  assert.equal(row(PRODUCT_A).variants[0].imageId, null);
+});
+
+test('images: ten fit and an eleventh is refused', async () => {
+  ownAllMedia();
+  assert.equal((await patch(PRODUCT_A, { media: MEDIA_IDS.slice(0, 10) })).status, 200);
+  assert.equal(row(PRODUCT_A).media.length, 10);
+  assert.equal((await patch(PRODUCT_A, { media: MEDIA_IDS })).status, 422);
+  assert.equal(row(PRODUCT_A).media.length, 10);
+});
+
+test('images: a new order persists, the first is the primary, and a removed image is gone', async () => {
+  ownAllMedia();
+  await patch(PRODUCT_A, { media: MEDIA_IDS.slice(0, 3) });
+  const res = await patch(PRODUCT_A, { media: [MEDIA_IDS[2], MEDIA_IDS[0]] });
+  assert.equal(res.status, 200);
+  assert.deepEqual(row(PRODUCT_A).media.map(String), [MEDIA_IDS[2], MEDIA_IDS[0]]);
+  const body = (await res.json()) as { imageUrl: string; media: Array<{ id: string }> };
+  assert.match(body.imageUrl, new RegExp(MEDIA_IDS[2]));
+  assert.deepEqual(body.media.map((image) => image.id), [MEDIA_IDS[2], MEDIA_IDS[0]]);
+});
+
+test('images: a variant links to an image of this store', async () => {
+  const res = await patch(SIZED_A, { variants: [{ id: VARIANT_S, imageId: MEDIA_A }, { id: VARIANT_M }] });
+  assert.equal(res.status, 200);
+  assert.equal(String(row(SIZED_A).variants[0].imageId), MEDIA_A);
+  assert.equal(row(SIZED_A).variants[1].imageId, null);
+});
+
+test('images: a variant link can be cleared', async () => {
+  row(SIZED_A).variants[0].imageId = MEDIA_A;
+  assert.equal((await patch(SIZED_A, { variants: [{ id: VARIANT_S, imageId: null }, { id: VARIANT_M }] })).status, 200);
+  assert.equal(row(SIZED_A).variants[0].imageId, null);
+});
+
+/* ---------------------------------------------- publishing ---------------------------------------------- */
+
+const publish = (id: string, call: Call = {}): Promise<Response> => publishPOST(request('POST', '/api/products/' + id + '/publish', call), ctx(id));
+const unpublish = (id: string, call: Call = {}): Promise<Response> => unpublishPOST(request('POST', '/api/products/' + id + '/unpublish', call), ctx(id));
+const liveIds = async (): Promise<string[]> => {
+  const res = await liveListGET(new NextRequest('http://seller.test/api/storefront/v1/stores/' + STORE_A + '/products'), ctx(STORE_A));
+  return ((await res.json()) as { data: Array<{ id: string }> }).data.map((item) => item.id);
+};
+
+test('publish makes a draft Live, and unpublish takes it back', async () => {
+  assert.deepEqual(await liveIds(), []);
+  const res = await publish(PRODUCT_A);
+  assert.equal(res.status, 200);
+  assert.equal(((await res.json()) as { status: string }).status, 'published');
+  assert.deepEqual(await liveIds(), [PRODUCT_A]);
+
+  assert.equal((await unpublish(PRODUCT_A)).status, 200);
+  assert.equal(row(PRODUCT_A).isPublished, false);
+  assert.deepEqual(await liveIds(), []);
+});
+
+test('an unedited demo product cannot be published; after an edit it can (D-022, D-037)', async () => {
+  const refused = await publish(DEMO_A);
+  assert.equal(refused.status, 422);
+  assert.equal(await errorCode(refused), 'PRODUCT_DEMO_NOT_EDITED');
+  assert.equal(row(DEMO_A).isPublished, false);
+
+  await patch(DEMO_A, { title: 'My first kurta' });
+  assert.equal((await publish(DEMO_A)).status, 200);
+});
+
+test('the publish rules, each with its own code', () => {
+  const complete = { title: 'Kurta', isDemo: false, categories: [CAT_A], variants: [{ price: 100 }] };
+  assert.equal(publishProblem(complete), null);
+  assert.equal(publishProblem({ ...complete, title: ' ' })?.code, 'PRODUCT_TITLE_REQUIRED');
+  assert.equal(publishProblem({ ...complete, categories: [] })?.code, 'PRODUCT_CATEGORY_REQUIRED');
+  assert.equal(publishProblem({ ...complete, variants: [] })?.code, 'PRODUCT_PRICE_REQUIRED');
+  assert.equal(publishProblem({ ...complete, variants: [{ price: 0 }] })?.code, 'PRODUCT_PRICE_REQUIRED');
+  assert.equal(publishProblem({ ...complete, variants: [{ price: 0 }, { price: 5 }] }), null);
+});
+
+test('a PATCH still cannot publish, and an admin or another store cannot either', async () => {
+  assert.equal((await patch(PRODUCT_A, { isPublished: true })).status, 422);
+  assert.equal((await publish(PRODUCT_A, { token: adminToken })).status, 403);
+  assert.equal((await publish(PRODUCT_B)).status, 404);
+  assert.equal((await unpublish(PRODUCT_B)).status, 404);
+  assert.equal(row(PRODUCT_B).isPublished, false);
+});
+
+test('hideWhenOutOfStock leaves Live lists only while nothing can be bought', async () => {
+  row(PRODUCT_A).isPublished = true;
+  assert.equal((await patch(PRODUCT_A, { hideWhenOutOfStock: true })).status, 200);
+  assert.deepEqual(await liveIds(), [PRODUCT_A]);
+
+  row(PRODUCT_A).variants[0].stockQuantity = 0;
+  assert.deepEqual(await liveIds(), []);
+
+  row(PRODUCT_A).variants[0].trackQuantity = false;
+  assert.deepEqual(await liveIds(), [PRODUCT_A]);
+
+  row(PRODUCT_A).variants[0].trackQuantity = true;
+  row(PRODUCT_A).hideWhenOutOfStock = false;
+  assert.deepEqual(await liveIds(), [PRODUCT_A], 'without the option an out-of-stock product stays listed');
+});
+
+/* ------------------------------------------------- trash ------------------------------------------------- */
+
+const trash = (id: string, call: Call = {}): Promise<Response> => itemDELETE(request('DELETE', '/api/products/' + id, call), ctx(id));
+const purge = (id: string, call: Call = {}): Promise<Response> =>
+  itemDELETE(request('DELETE', '/api/products/' + id, { ...call, query: '?permanent=true' }), ctx(id));
+const restoreItem = (id: string, call: Call = {}): Promise<Response> => restorePOST(request('POST', '/api/products/' + id + '/restore', call), ctx(id));
+const listed = async (query: string): Promise<string[]> => {
+  const res = await listGET(request('GET', '/api/products', { query }));
+  return ((await res.json()) as { docs: Array<{ id: string }> }).docs.map((doc) => doc.id);
+};
+
+test('delete moves a product to trash: unpublished, stamped, and hidden everywhere but the trash view', async () => {
+  row(PRODUCT_A).isPublished = true;
+  const res = await trash(PRODUCT_A);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { trashed: true, id: PRODUCT_A });
+
+  assert.equal(row(PRODUCT_A).isPublished, false);
+  assert.ok(row(PRODUCT_A).deletedAt instanceof Date);
+  assert.equal((row(PRODUCT_A).deletedBy as { role: string }).role, 'seller');
+
+  for (const query of ['', '?status=all', '?status=draft', '?status=published']) assert.ok(!(await listed(query)).includes(PRODUCT_A), query);
+  assert.deepEqual(await listed('?status=trash'), [PRODUCT_A]);
+  assert.equal((await itemGET(request('GET', '/api/products/' + PRODUCT_A), ctx(PRODUCT_A))).status, 404);
+  assert.deepEqual(await liveIds(), []);
+});
+
+test('a trashed product cannot be edited, published, unpublished, or trashed again', async () => {
+  await trash(PRODUCT_A);
+  assert.equal((await patch(PRODUCT_A, { title: 'Back from the dead' })).status, 404);
+  assert.notEqual(row(PRODUCT_A).title, 'Back from the dead');
+  assert.equal((await publish(PRODUCT_A)).status, 404);
+  assert.equal((await unpublish(PRODUCT_A)).status, 404);
+  assert.equal((await trash(PRODUCT_A)).status, 404);
+  assert.equal(row(PRODUCT_A).isPublished, false);
+});
+
+test('a product trashed between the read and the write of a PATCH is left alone', async () => {
+  betweenReadAndWrite = () => {
+    row(PRODUCT_A).deletedAt = new Date();
+  };
+  const res = await patch(PRODUCT_A, { title: 'Too late' });
+  assert.equal(res.status, 409);
+  assert.notEqual(row(PRODUCT_A).title, 'Too late');
+});
+
+test('the trash view says how long is left, and a restored product comes back as a draft', async () => {
+  row(PRODUCT_A).isPublished = true;
+  await trash(PRODUCT_A);
+  const list = (await (await listGET(request('GET', '/api/products', { query: '?status=trash' }))).json()) as {
+    docs: Array<{ status: string; trash: { daysLeft: number; restorable: boolean } }>;
+  };
+  assert.equal(list.docs[0].status, 'trash');
+  assert.equal(list.docs[0].trash.daysLeft, 365);
+  assert.equal(list.docs[0].trash.restorable, true);
+
+  const res = await restoreItem(PRODUCT_A);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { status: string; trash: unknown };
+  assert.equal(body.status, 'draft');
+  assert.equal(body.trash, null);
+  assert.equal(row(PRODUCT_A).deletedAt, null);
+  assert.equal(row(PRODUCT_A).isPublished, false);
+});
+
+test('restore: only from trash, only this store, and never what an admin deleted', async () => {
+  const notTrashed = await restoreItem(PRODUCT_A);
+  assert.equal(notTrashed.status, 409);
+  assert.equal(await errorCode(notTrashed), 'PRODUCT_NOT_IN_TRASH');
+  assert.equal((await restoreItem(PRODUCT_B)).status, 404);
+
+  Object.assign(row(PRODUCT_A), { deletedAt: new Date(), deletedBy: { user: ADMIN, role: 'admin' } });
+  const refused = await restoreItem(PRODUCT_A);
+  assert.equal(refused.status, 403);
+  assert.equal(await errorCode(refused), 'PRODUCT_ADMIN_DELETED');
+  assert.ok(row(PRODUCT_A).deletedAt);
+
+  const list = (await (await listGET(request('GET', '/api/products', { query: '?status=trash' }))).json()) as { docs: Array<{ trash: { restorable: boolean } }> };
+  assert.equal(list.docs[0].trash.restorable, false);
+  assert.equal((await purge(PRODUCT_A)).status, 403, 'nor may the seller destroy it');
+});
+
+test('permanent delete works only from trash, and archives reviews without the customer', async () => {
+  const notTrashed = await purge(PRODUCT_A);
+  assert.equal(notTrashed.status, 409);
+  assert.equal(await errorCode(notTrashed), 'PRODUCT_NOT_IN_TRASH');
+  assert.ok(row(PRODUCT_A));
+
+  reviews = [
+    {
+      _id: 'r1',
+      product: PRODUCT_A,
+      store: STORE_A,
+      customer: SELLER_B,
+      order: 'o1',
+      images: [MEDIA_A],
+      rating: 4,
+      title: 'Nice',
+      body: 'Soft fabric',
+      status: 'approved',
+      createdAt: new Date(NOW),
+    },
+    { _id: 'r2', product: PRODUCT_B, store: STORE_B, rating: 1, body: 'Other product', createdAt: new Date(NOW) },
+  ];
+  await trash(PRODUCT_A);
+  assert.equal((await purge(PRODUCT_A)).status, 200);
+
+  assert.ok(!products.some((candidate) => candidate._id === PRODUCT_A));
+  assert.deepEqual(reviews.map((review) => review._id), ['r2']);
+  assert.equal(archived.length, 1);
+  const { archivedAt, reviewedAt, ...kept } = archived[0];
+  assert.ok(archivedAt instanceof Date);
+  assert.equal((reviewedAt as Date).toISOString(), NOW);
+  assert.deepEqual(kept, {
+    _id: 'r1',
+    rating: 4,
+    title: 'Nice',
+    body: 'Soft fabric',
+    product: { title: 'Kurta b1', slug: 'kurta-b1', store: STORE_A },
+  });
+});
+
+test('the archived shape is built field by field: an identifier added to a review stays out', () => {
+  const review = { _id: 'r1', rating: 5, body: 'Good', createdAt: new Date(NOW), phone: '0300', address: 'Home', customerName: 'Sara' };
+  const shaped = toArchivedReview(review as never, { _id: 'p', store: 's', title: 'T', slug: 't' } as unknown as PurgeableProduct, new Date(NOW));
+  assert.deepEqual(Object.keys(shaped).sort(), ['archivedAt', 'body', 'product', 'rating', 'reviewedAt', 'title']);
+  assert.equal(JSON.stringify(shaped).includes('0300'), false);
+});
+
+test('a product restored while it was being purged survives with its reviews', async () => {
+  await trash(PRODUCT_A);
+  reviews = [{ _id: 'r1', product: PRODUCT_A, store: STORE_A, rating: 4, body: 'Soft', createdAt: new Date(NOW) }];
+  const saved = ArchiveStub.bulkWrite;
+  ArchiveStub.bulkWrite = async (ops) => {
+    row(PRODUCT_A).deletedAt = null;
+    return saved(ops);
+  };
+  assert.equal((await purge(PRODUCT_A)).status, 404);
+  assert.ok(row(PRODUCT_A));
+  assert.equal(reviews.length, 1);
+});
+
+test('an admin session cannot trash or purge through the seller route', async () => {
+  assert.equal((await trash(PRODUCT_A, { token: adminToken })).status, 403);
+  assert.equal((await purge(PRODUCT_A, { token: adminToken })).status, 403);
+});
+
+/* ----------------------------------------------- retention ----------------------------------------------- */
+
+const DAY = 24 * 60 * 60 * 1000;
+const RETENTION_NOW = new Date('2027-06-01T00:00:00.000Z');
+const daysAgo = (days: number): Date => new Date(RETENTION_NOW.getTime() - days * DAY);
+
+test('retention purges only what has been in trash for more than 365 days', async () => {
+  row(PRODUCT_A).deletedAt = daysAgo(366);
+  row(PRODUCT_B).deletedAt = daysAgo(365);
+  row(SIZED_A).deletedAt = daysAgo(10);
+  reviews = [{ _id: 'r1', product: PRODUCT_A, store: STORE_A, rating: 4, body: 'Soft', createdAt: new Date(NOW) }];
+
+  const seen: unknown[] = [];
+  const result = await purgeExpiredProducts(RETENTION_NOW, { beforePurge: async (item) => void seen.push(item._id) });
+
+  assert.deepEqual(result, { purged: 1, failed: 0, more: false });
+  assert.deepEqual(seen, [PRODUCT_A], 'the email hook is told first');
+  assert.deepEqual(products.map((candidate) => candidate._id).sort(), [DEMO_A, PRODUCT_B, SIZED_A].sort());
+  assert.equal(archived.length, 1);
+  assert.equal(reviews.length, 0);
+});
+
+test('retention arithmetic: the cutoff, and the days a seller is told', () => {
+  assert.equal(retentionCutoff(RETENTION_NOW).getTime(), daysAgo(365).getTime());
+  assert.equal(trashDaysLeft(daysAgo(0), RETENTION_NOW), 365);
+  assert.equal(trashDaysLeft(daysAgo(364.5), RETENTION_NOW), 1);
+  assert.equal(trashDaysLeft(daysAgo(400), RETENTION_NOW), 0);
+});
+
+test('one product that fails to purge does not stop the others', async () => {
+  row(PRODUCT_A).deletedAt = daysAgo(400);
+  row(SIZED_A).deletedAt = daysAgo(400);
+  const logged = console.error;
+  console.error = () => {};
+  try {
+    const result = await purgeExpiredProducts(RETENTION_NOW, {
+      beforePurge: async (item) => {
+        if (item._id as unknown as string === PRODUCT_A) throw new Error('mail is down');
+      },
+    });
+    assert.deepEqual(result, { purged: 1, failed: 1, more: false });
+    assert.ok(row(PRODUCT_A));
+  } finally {
+    console.error = logged;
+  }
+});
+
+test('the retention route is closed without its secret, and system is the only actor it runs as', async () => {
+  const call = (secret?: string): Promise<Response> =>
+    retentionPOST(new NextRequest('http://seller.test/api/internal/retention', { method: 'POST', headers: secret ? { 'x-retention-secret': secret } : {} }));
+
+  delete process.env.RETENTION_CRON_SECRET;
+  assert.equal((await call('anything')).status, 503);
+
+  process.env.RETENTION_CRON_SECRET = 'a-long-shared-secret';
+  assert.equal((await call()).status, 401);
+  assert.equal((await call('wrong')).status, 401);
+
+  row(PRODUCT_A).deletedAt = new Date(Date.now() - 400 * DAY);
+  const res = await call('a-long-shared-secret');
+  assert.equal(res.status, 200);
+  assert.equal(((await res.json()) as { purged: number }).purged, 1);
+  delete process.env.RETENTION_CRON_SECRET;
+
+  assert.doesNotThrow(() => assertCan('system', 'delete', 'productLifecycle'));
+});
+
+/* --------------------------------------------- inventory routes --------------------------------------------- */
+
+const adjust = (lines: unknown, call: Call = {}): Promise<Response> =>
+  adjustPOST(request('POST', '/api/inventory/adjust', { ...call, body: { lines } }));
+
+test('adjust: this store only, a body naming a store is refused, and an admin may not adjust', async () => {
+  const foreign = await adjust([{ productId: PRODUCT_B, variantId: VARIANT_B, delta: 1, reason: 'x' }]);
+  assert.equal(foreign.status, 422);
+  assert.equal(await errorCode(foreign), 'PRODUCT_NOT_FOUND');
+  assert.equal(row(PRODUCT_B).variants[0].stockQuantity, 7);
+
+  const stray = await adjustPOST(request('POST', '/api/inventory/adjust', { body: { store: STORE_B, lines: [] } }));
+  assert.equal(stray.status, 422);
+  assert.equal((await adjust([{ productId: PRODUCT_A, variantId: VARIANT_A, delta: 1, reason: 'x' }], { token: adminToken })).status, 403);
+});
+
+test('adjust: a line needs exactly one of delta and setTo, and a reason', async () => {
+  const base = { productId: PRODUCT_A, variantId: VARIANT_A };
+  for (const line of [{ ...base, reason: 'x' }, { ...base, delta: 1, setTo: 1, reason: 'x' }, { ...base, delta: 1 }, { ...base, delta: 0, reason: 'x' }, { ...base, setTo: -1, reason: 'x' }]) {
+    assert.equal((await adjust([line])).status, 422, JSON.stringify(line));
+  }
+  assert.equal(row(PRODUCT_A).variants[0].stockQuantity, 7);
+});
+
+test('adjust answers 200 with per-line results when any line worked', async () => {
+  const res = await adjust([
+    { productId: PRODUCT_A, variantId: VARIANT_A, delta: 2, reason: 'Delivery' },
+    { productId: PRODUCT_B, variantId: VARIANT_B, delta: 2, reason: 'Delivery' },
+  ]);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { succeeded: number; failed: number };
+  assert.deepEqual([body.succeeded, body.failed], [1, 1]);
+  assert.equal(row(PRODUCT_A).variants[0].stockQuantity, 9);
+});
+
+test('the inventory list leaves out trash and carries the status the backend derived', async () => {
+  await trash(PRODUCT_A);
+  const res = await inventoryGET(request('GET', '/api/inventory'));
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { docs: Array<{ id: string; variants: Array<{ id: string; availability: string }> }> };
+  assert.ok(!body.docs.some((doc) => doc.id === PRODUCT_A || doc.id === PRODUCT_B));
+  const sized = body.docs.find((doc) => doc.id === SIZED_A);
+  assert.deepEqual(sized?.variants.map((v) => [v.id, v.availability]), [[VARIANT_S, 'in_stock'], [VARIANT_M, 'out_of_stock']]);
+});
+
+test('the inventory list searches by title and says how many pages there are, so every product can be reached', async () => {
+  const found = (await (await inventoryGET(request('GET', '/api/inventory', { query: '?q=KURTA%20B4' }))).json()) as { docs: Array<{ id: string }> };
+  assert.deepEqual(found.docs.map((doc) => doc.id), [SIZED_A]);
+
+  const paged = (await (await inventoryGET(request('GET', '/api/inventory', { query: '?page=2&limit=1' }))).json()) as { page: number; totalDocs: number; totalPages: number };
+  assert.deepEqual([paged.page, paged.totalDocs, paged.totalPages], [2, 3, 3]);
+});
+
+const movement = (id: string, store: string, product: string, variantId: string, overrides: Doc = {}): Doc => ({
+  _id: id,
+  store,
+  product,
+  variantId,
+  previousQuantity: 7,
+  delta: -1,
+  quantity: 6,
+  reason: 'Order ORD-1',
+  actor: null,
+  changedAt: new Date(NOW),
+  ...overrides,
+});
+
+test('stock history reads this store only, can narrow to a variant, and says who made a change', async () => {
+  movements = [
+    movement('65a0000000000000000000f1', STORE_A, SIZED_A, VARIANT_S, { actor: SELLER_A, reason: 'Stock count', delta: 2, quantity: 9 }),
+    movement('65a0000000000000000000f2', STORE_A, SIZED_A, VARIANT_M),
+    movement('65a0000000000000000000f3', STORE_B, SIZED_A, VARIANT_S),
+  ];
+  const read = async (query: string): Promise<Array<{ id: string; actor: string | null; reason: string }>> => {
+    const res = await historyGET(request('GET', '/api/inventory/history', { query }));
+    assert.equal(res.status, 200);
+    return ((await res.json()) as { docs: Array<{ id: string; actor: string | null; reason: string }> }).docs;
+  };
+
+  const all = await read('?productId=' + SIZED_A);
+  assert.deepEqual(all.map((entry) => entry.id), ['65a0000000000000000000f1', '65a0000000000000000000f2']);
+
+  const one = await read('?productId=' + SIZED_A + '&variantId=' + VARIANT_S);
+  assert.deepEqual(one.map((entry) => [entry.reason, entry.actor]), [['Stock count', SELLER_A]]);
+  assert.deepEqual((await read('?productId=' + SIZED_A + '&variantId=' + VARIANT_M)).map((entry) => entry.actor), [null]);
+});
+
+test('stock history needs a product, refuses a malformed id, and is not open to an admin or another store', async () => {
+  const history = (query: string, call: Call = {}): Promise<Response> => historyGET(request('GET', '/api/inventory/history', { ...call, query }));
+  assert.equal((await history('')).status, 422);
+  assert.equal((await history('?productId=nope')).status, 422);
+  assert.equal((await history('?productId=' + SIZED_A + '&variantId=nope')).status, 422);
+  assert.equal((await history('?productId=' + SIZED_A, { token: adminToken })).status, 403);
+  assert.equal((await history('?productId=' + SIZED_A, { storeHeader: STORE_B })).status, 403);
+});
+
+test('a trashed product keeps its slug and SKU, so restoring it can never clash, and the refusal says why', async () => {
+  row(PRODUCT_A).slug = 'blue-lawn-suit';
+  row(PRODUCT_A).variants[0].sku = 'BLS-1';
+  await trash(PRODUCT_A);
+
+  const slug = await create(validCreate);
+  assert.equal(slug.status, 409);
+  const slugError = ((await slug.json()) as { errors: Array<{ code: string; message: string }> }).errors[0];
+  assert.equal(slugError.code, 'PRODUCT_SLUG_TAKEN');
+  assert.match(slugError.message, /trash/);
+
+  const sku = await create({ ...validCreate, slug: 'another-suit', sku: 'BLS-1' });
+  assert.equal(sku.status, 409);
+  const skuError = ((await sku.json()) as { errors: Array<{ code: string; message: string }> }).errors[0];
+  assert.equal(skuError.code, 'SKU_TAKEN');
+  assert.match(skuError.message, /trash/);
 });

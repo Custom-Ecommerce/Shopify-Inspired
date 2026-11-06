@@ -9,7 +9,7 @@ import { availabilityOf, canSupply, resolveVariant, unitsLeft, type CheckoutVari
  * which keeps the total a shopper sees in the cart the total they are charged.
  */
 
-export type QuoteIssue = 'unknown_product' | 'unknown_variant' | 'out_of_stock' | 'insufficient_stock';
+export type QuoteIssue = 'unknown_product' | 'product_unavailable' | 'unknown_variant' | 'out_of_stock' | 'insufficient_stock';
 
 export interface QuoteRequestLine {
   productId: string;
@@ -18,7 +18,7 @@ export interface QuoteRequestLine {
   qty: number;
 }
 
-/** A catalog row as the quote reads it. Only published products of the store reach this function. */
+/** A catalog row as the quote reads it. Only Live products of the store reach this function as rows. */
 export interface QuoteCatalogRow {
   title: string;
   deliveryCharge: number | null;
@@ -63,11 +63,15 @@ interface ResolvedLine {
  * A product with several variants and no variantId is a 422 VARIANT_REQUIRED, the answer an order gets, because the
  * cart has no way to price what it cannot name. A variantId that does not belong to the product is a line issue, since
  * a seller can delete a variant while it sits in a shopper's cart.
+ *
+ * `unavailable` holds the products of this store that exist but are not for sale (D-037): a draft, an unedited demo, or
+ * one in trash. Their lines are refused with product_unavailable, and say nothing else about the product.
  */
 export function buildCartQuote(
   requested: readonly QuoteRequestLine[],
   catalog: ReadonlyMap<string, QuoteCatalogRow>,
   store: PricingStore,
+  unavailable: ReadonlySet<string> = new Set(),
 ): CartQuote {
   const pricing: Array<{ unitPrice: number; qty: number; deliveryCharge: number | null }> = [];
 
@@ -76,6 +80,10 @@ export function buildCartQuote(
   const lines: Array<QuoteLine | ResolvedLine> = [];
 
   for (const line of requested) {
+    if (unavailable.has(line.productId)) {
+      lines.push(refusal(line, null, 'product_unavailable'));
+      continue;
+    }
     const row = catalog.get(line.productId);
     if (!row) {
       lines.push(refusal(line, null, 'unknown_product'));

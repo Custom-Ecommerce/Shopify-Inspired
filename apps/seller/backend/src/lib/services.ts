@@ -40,6 +40,7 @@ const compat: typeof compatNs = unwrapCjs(compatNs);
 export const listEnvelope = compat.listEnvelope;
 export const assertCan = auth.assertCan;
 export const PUBLIC_CATEGORY_READABLE_FIELDS = auth.PUBLIC_CATEGORY_READABLE_FIELDS;
+export const SELLER_STORE_READABLE_FIELDS = auth.SELLER_STORE_READABLE_FIELDS;
 export const Discount = db.Discount;
 export const Review = db.Review;
 
@@ -58,3 +59,4 @@ export const Order = db.Order;
 export const Store = db.Store;
 export const Product = db.Product;
 export const StockMovement = db.StockMovement;
+export const ArchivedReview = db.ArchivedReview;

@@ -115,6 +115,13 @@ export function rejectionToEnvelope(rejection: OrderRejection): {
         message: "A product in the order is not available.",
         extra: withProduct(rejection.productId),
       };
+    case "product_unavailable":
+      return {
+        status: 422,
+        code: "PRODUCT_UNAVAILABLE",
+        message: "A product in the order is no longer for sale.",
+        extra: withProduct(rejection.productId),
+      };
     case "variant_required":
       return {
         status: 422,

@@ -85,7 +85,7 @@ export async function prepareProductVariants(
   const skus = variants.flatMap((variant) => (variant.sku === null ? [] : [variant.sku]));
   const taken = await skusTakenElsewhere(storeId, skus, productId);
   if (taken.length > 0) {
-    throw new ProductVariantError(409, 'SKU_TAKEN', 'Another product in this store already uses SKU ' + taken[0] + '.', { skus: taken });
+    throw new ProductVariantError(409, 'SKU_TAKEN', 'Another product in this store already uses SKU ' + taken[0] + '. Products in trash keep their SKUs.', { skus: taken });
   }
 
   return {

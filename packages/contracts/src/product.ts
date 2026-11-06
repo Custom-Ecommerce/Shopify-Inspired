@@ -213,6 +213,7 @@ const productContentFields = {
   media: z.array(objectIdSchema).max(PRODUCT_MAX_IMAGES).optional(),
   deliveryCharge: rupeesInputSchema.nullable().optional(),
   isFeatured: z.boolean().optional(),
+  hideWhenOutOfStock: z.boolean().optional(),
   seoTitle: z.string().trim().max(PRODUCT_SEO_TITLE_MAX).nullable().optional(),
   seoDescription: z.string().trim().max(PRODUCT_SEO_DESCRIPTION_MAX).nullable().optional(),
   seoImage: objectIdSchema.nullable().optional(),
@@ -308,7 +309,7 @@ export type ProductCreateRequest = z.output<typeof productCreateRequestSchema>;
 export type ProductUpdateRequest = z.output<typeof productUpdateRequestSchema>;
 export type ProductVariantPatch = z.output<typeof productVariantPatchSchema>;
 
-export const PRODUCT_LIST_STATUSES = ['all', 'draft', 'published'] as const;
+export const PRODUCT_LIST_STATUSES = ['all', 'draft', 'published', 'trash'] as const;
 export const PRODUCT_LIST_SORTS = ['newest', 'oldest', 'title', 'price'] as const;
 export type ProductListStatus = (typeof PRODUCT_LIST_STATUSES)[number];
 export type ProductListSort = (typeof PRODUCT_LIST_SORTS)[number];
@@ -357,6 +358,18 @@ export const productSchema = z.object({
 export type Product = z.infer<typeof productSchema>;
 export type ProductVariant = z.infer<typeof productVariantSchema>;
 
+/** D-010: how long a product waits in trash before the retention job purges it. */
+export const PRODUCT_TRASH_RETENTION_DAYS = 365;
+
+/** Where a trashed product stands. Derived by the backend, so the dashboard only shows it. */
+export interface SellerProductTrashInfo {
+  deletedAt: string;
+  purgeAt: string;
+  daysLeft: number;
+  /** False when an admin deleted it: the seller may look, not bring it back. */
+  restorable: boolean;
+}
+
 export interface SellerProductCategory {
   id: string;
   name: string;
@@ -368,9 +381,12 @@ export interface SellerProductSummary {
   id: string;
   title: string;
   slug: string;
-  status: 'draft' | 'published';
+  status: 'draft' | 'published' | 'trash';
   isDemo: boolean;
   isFeatured: boolean;
+  hideWhenOutOfStock: boolean;
+  /** Null unless the product is in trash. */
+  trash: SellerProductTrashInfo | null;
   description: string | null;
   highlights: string[];
   minPrice: number;
@@ -401,5 +417,87 @@ export interface SellerProductDetail extends SellerProductSummary {
   seoDescription: string | null;
   seoImage: string | null;
 }
+
+export const INVENTORY_ADJUST_MAX_LINES = 100;
+export const INVENTORY_REASON_MAX = 200;
+export const INVENTORY_QUANTITY_MAX = 1_000_000;
+
+/** One stock change. Either a delta, or the count the seller just took (setTo), never both. */
+export const inventoryAdjustLineSchema = z
+  .object({
+    productId: objectIdSchema,
+    variantId: objectIdSchema,
+    delta: z
+      .number()
+      .int()
+      .min(-INVENTORY_QUANTITY_MAX)
+      .max(INVENTORY_QUANTITY_MAX)
+      .refine((value) => value !== 0, 'Enter a change other than 0.')
+      .optional(),
+    setTo: z.number().int().min(0).max(INVENTORY_QUANTITY_MAX).optional(),
+    reason: z.string().trim().min(1, 'Enter a reason.').max(INVENTORY_REASON_MAX),
+  })
+  .strict()
+  .refine((line) => (line.delta === undefined) !== (line.setTo === undefined), 'Send either delta or setTo.');
+
+/** POST /api/inventory/adjust. The store comes from the session, never from the body. */
+export const inventoryAdjustRequestSchema = z
+  .object({ lines: z.array(inventoryAdjustLineSchema).min(1).max(INVENTORY_ADJUST_MAX_LINES) })
+  .strict();
+
+export type InventoryAdjustLine = z.output<typeof inventoryAdjustLineSchema>;
+export type InventoryAdjustRequest = z.output<typeof inventoryAdjustRequestSchema>;
+
+export type InventoryLineErrorCode =
+  | 'PRODUCT_NOT_FOUND'
+  | 'VARIANT_NOT_FOUND'
+  | 'VARIANT_NOT_TRACKED'
+  | 'STOCK_WOULD_GO_NEGATIVE'
+  | 'STOCK_CHANGED'
+  | 'STOCK_WRITE_FAILED';
+
+/** The answer for one line, in request order. One refused line never undoes another. */
+export type InventoryAdjustResult =
+  | { ok: true; productId: string; variantId: string; previousQuantity: number; delta: number; quantity: number; availability: StockStatus }
+  | { ok: false; productId: string; variantId: string; status: number; code: InventoryLineErrorCode; message: string };
+
+export interface InventoryAdjustResponse {
+  results: InventoryAdjustResult[];
+  succeeded: number;
+  failed: number;
+}
+
+/** One variant on the inventory page. Availability is derived by the backend. */
+export interface InventoryVariant {
+  id: string;
+  title: string;
+  sku: string | null;
+  trackQuantity: boolean;
+  stockQuantity: number;
+  lowStockThreshold: number | null;
+  availability: StockStatus;
+}
+
+export interface InventoryProduct {
+  id: string;
+  title: string;
+  status: 'draft' | 'published';
+  isDemo: boolean;
+  stockStatus: StockStatus;
+  variants: InventoryVariant[];
+}
+
+/** One row of the stock history. actor is null for a change an order made. */
+export interface StockHistoryEntry {
+  id: string;
+  variantId: string;
+  previousQuantity: number;
+  delta: number;
+  quantity: number;
+  reason: string;
+  actor: string | null;
+  changedAt: string;
+}
+
 export type ProductRelation = z.infer<typeof relation>;
 export type StockMovement = z.infer<typeof stockMovementSchema>;

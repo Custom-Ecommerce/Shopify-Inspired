@@ -69,6 +69,8 @@ export const {
   PRODUCT_LIST_SORTS,
   PRODUCT_LIST_STATUSES,
   PRODUCT_SLUG_MAX,
+  PRODUCT_TRASH_RETENTION_DAYS,
+  inventoryAdjustRequestSchema,
   productCreateRequestSchema,
   productUpdateRequestSchema,
 } = contracts;

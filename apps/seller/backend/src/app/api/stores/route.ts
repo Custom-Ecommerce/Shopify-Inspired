@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { z } from 'zod';
-import { SELLER_STORE_READABLE_FIELDS, assertCan } from '@markaz/auth';
-import { Store } from '@markaz/db-schemas';
 import { authenticate } from '@/lib/auth';
+import { seedStoreDemoData } from '@/lib/demo-data';
 import { HttpError, handleRouteError, isDuplicateKeyError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
+import { SELLER_STORE_READABLE_FIELDS, Store, assertCan } from '@/lib/services';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -142,6 +142,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       if (isDuplicateKeyError(err)) throw new HttpError(409, 'A store with this slug already exists');
       throw err;
     }
+
+    await seedStoreDemoData(String(created._id));
 
     return NextResponse.json(
       {

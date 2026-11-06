@@ -5,8 +5,8 @@ import type { CartQuote, CartQuoteIssue } from "../transport/types";
 export interface CartQuoteLineVM {
   productId: string;
   variantId: string | null;
-  /** A variant gone from the catalog reads to a shopper like a product gone from it, so themes need no new case. */
-  issue: Exclude<CartQuoteIssue, "unknown_variant"> | null;
+  /** A variant gone, or a product no longer for sale, reads to a shopper like a product gone, so themes need no new case. */
+  issue: Exclude<CartQuoteIssue, "unknown_variant" | "product_unavailable"> | null;
   /** Units that can still be bought, when the server knows them. */
   availableQty: number | null;
   lineTotal: Money | null;
@@ -26,7 +26,7 @@ export function toCartQuoteVM(quote: CartQuote): CartQuoteVM {
     lines: quote.lines.map((line) => ({
       productId: line.productId,
       variantId: line.variantId,
-      issue: line.issue === "unknown_variant" ? "unknown_product" : line.issue,
+      issue: line.issue === "unknown_variant" || line.issue === "product_unavailable" ? "unknown_product" : line.issue,
       availableQty: line.availableQty,
       lineTotal: line.lineTotal === null ? null : toMoney(line.lineTotal),
     })),

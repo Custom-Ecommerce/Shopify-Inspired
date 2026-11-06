@@ -38,6 +38,9 @@ const LIST_PROJECTION = {
   isPublished: 1,
   isDemo: 1,
   isFeatured: 1,
+  hideWhenOutOfStock: 1,
+  deletedAt: 1,
+  deletedBy: 1,
   description: 1,
   highlights: 1,
   minPrice: 1,
@@ -78,7 +81,7 @@ function oneOf<T extends string>(raw: string | null, allowed: readonly T[], fall
  *
  * The products of the seller's store, in the list envelope, plus hasDemoProduct, whatever the page shows.
  *   q       title search, cut to 80 characters
- *   status  all (default) | draft | published
+ *   status  all (default) | draft | published, none of which holds a trashed product | trash
  *   sort    newest (default) | oldest | title | price
  *   stock   low: only products with a tracked variant at 5 units or fewer
  */
@@ -97,8 +100,9 @@ export async function GET(request: NextRequest): Promise<Response> {
     const stock = oneOf(params.get('stock'), ['any', 'low'] as const, 'any', 'stock');
     const q = (params.get('q') ?? '').trim().slice(0, SEARCH_MAX_LENGTH).trim();
 
-    const filter: Record<string, unknown> = { store: storeId };
-    if (status !== 'all') filter.isPublished = status === 'published';
+    // $type, not $ne: null. The trash index is partial on $type, and a query only uses it when it matches that condition.
+    const filter: Record<string, unknown> = { store: storeId, deletedAt: status === 'trash' ? { $type: 'date' } : null };
+    if (status === 'draft' || status === 'published') filter.isPublished = status === 'published';
     if (q !== '') filter.title = { $regex: escapeRegex(q), $options: 'i' };
     if (stock === 'low') {
       filter.variants = { $elemMatch: { trackQuantity: true, stockQuantity: { $lte: LOW_STOCK_UNITS } } };
@@ -166,6 +170,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       tags: data.tags ?? [],
       deliveryCharge: data.deliveryCharge ?? null,
       isFeatured: data.isFeatured ?? false,
+      hideWhenOutOfStock: data.hideWhenOutOfStock ?? false,
       seoTitle: data.seoTitle ?? null,
       seoDescription: data.seoDescription ?? null,
       seoImage: data.seoImage ?? null,

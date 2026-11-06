@@ -154,3 +154,38 @@ assert.equal(can('system', 'create', 'categories', ['name']), false);
 assert.equal(can('system', 'update', 'categories', ['name']), false);
 assert.equal(can('system', 'delete', 'categories'), false);
 });
+
+test('productLifecycle: a seller publishes, restores and deletes; nobody else writes, and a PATCH still cannot publish', () => {
+assert.equal(can('seller', 'update', 'productLifecycle', ['isPublished']), true);
+assert.equal(can('seller', 'update', 'productLifecycle', ['deletedAt']), true);
+assert.equal(can('seller', 'update', 'productLifecycle', ['isDemo']), false);
+assert.equal(can('seller', 'update', 'productLifecycle'), false);
+assert.equal(can('seller', 'delete', 'productLifecycle'), true);
+assert.equal(can('system', 'delete', 'productLifecycle'), true);
+for (const actor of ['admin', 'public'] as const) {
+assert.equal(can(actor, 'update', 'productLifecycle', ['isPublished']), false, actor);
+assert.equal(can(actor, 'delete', 'productLifecycle'), false, actor);
+}
+assert.equal(can('seller', 'update', 'products', ['isPublished']), false);
+assert.equal(can('seller', 'update', 'products', ['hideWhenOutOfStock']), true);
+});
+
+test('inventory: a seller reads and adjusts stock only; movements are never created or removed by hand', () => {
+assert.equal(can('seller', 'read', 'inventory'), true);
+assert.equal(can('seller', 'update', 'inventory', ['stockQuantity']), true);
+assert.equal(can('seller', 'update', 'inventory', ['price']), false);
+assert.equal(can('seller', 'create', 'inventory', ['stockQuantity']), false);
+assert.equal(can('seller', 'delete', 'inventory'), false);
+assert.equal(can('public', 'read', 'inventory'), false);
+assert.equal(can('admin', 'update', 'inventory', ['stockQuantity']), false);
+});
+
+test('archivedReviews: only system writes, once; no actor updates or deletes', () => {
+assert.equal(can('system', 'create', 'archivedReviews'), true);
+assert.equal(can('seller', 'read', 'archivedReviews'), false);
+assert.equal(can('seller', 'create', 'archivedReviews'), false);
+for (const actor of ['admin', 'seller', 'system', 'public'] as const) {
+assert.equal(can(actor, 'update', 'archivedReviews', ['body']), false, actor);
+assert.equal(can(actor, 'delete', 'archivedReviews'), false, actor);
+}
+});

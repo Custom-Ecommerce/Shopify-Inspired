@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { mediaUploadFieldsSchema } from '@/lib/contracts';
 import { authenticate } from '@/lib/auth';
+import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError, handleRouteError, jsonError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, listEnvelope, Media } from '@/lib/services';
-import { plainDoc, requireSellerStoreId, toWire } from '@/lib/seller-scope';
+import { plainDoc, toWire } from '@/lib/seller-scope';
 import { uploadImage } from '@/lib/cloudinary';
 
 export const runtime = 'nodejs';
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const limit = parseIntParam(params.get('limit'), 20, 1, 100);
 
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
     const filter = { store: storeId };
 
     const [rows, totalDocs] = await Promise.all([
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     assertCan(ctx.actor, 'create', 'media', ['alt']);
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const uploaded = await uploadImage(file);
     const created = await Media.create({

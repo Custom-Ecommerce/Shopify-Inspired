@@ -52,9 +52,13 @@ export async function nextCategoryOrder(storeId: string): Promise<number> {
 }
 
 /**
- * How many products of this store still use a category. The flat Product model has no deletion marker yet, so every
- * product counts; once products can sit in trash, decide here whether a trashed product still holds its category.
+ * How many products of this store still use a category, and how many of those sit in trash. A trashed product counts
+ * (D-030): it can be restored, and every product needs a category (D-015). A permanently deleted one is gone.
  */
-export function countProductsInCategory(storeId: string, categoryId: string): Promise<number> {
-  return Product.countDocuments({ store: storeId, categories: categoryId });
+export async function countProductsInCategory(storeId: string, categoryId: string): Promise<{ total: number; trashed: number }> {
+  const [total, trashed] = await Promise.all([
+    Product.countDocuments({ store: storeId, categories: categoryId }),
+    Product.countDocuments({ store: storeId, categories: categoryId, deletedAt: { $ne: null } }),
+  ]);
+  return { total, trashed };
 }

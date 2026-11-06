@@ -47,6 +47,7 @@ export const STOREFRONT_ERROR_CODES = [
   // Variants.
   'VARIANT_REQUIRED',
   'UNKNOWN_VARIANT',
+  'PRODUCT_UNAVAILABLE',
 ] as const;
 export type StorefrontErrorCode = (typeof STOREFRONT_ERROR_CODES)[number];
 
@@ -286,7 +287,7 @@ export const storefrontCartQuoteRequestSchema = z.object({
   lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
 });
 
-export const storefrontCartQuoteIssueSchema = z.enum(['unknown_product', 'unknown_variant', 'out_of_stock', 'insufficient_stock']);
+export const storefrontCartQuoteIssueSchema = z.enum(['unknown_product', 'product_unavailable', 'unknown_variant', 'out_of_stock', 'insufficient_stock']);
 
 export const storefrontCartQuoteLineSchema = z.object({
   productId: z.string(),

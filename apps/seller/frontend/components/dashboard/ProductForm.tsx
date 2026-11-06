@@ -4,11 +4,12 @@ import type { Category as CategoryDoc, SellerProductDetail } from "@markaz/contr
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { useStoreHref } from "@/lib/dashboard-context";
 import { discountPercent } from "@/lib/product-pricing";
+import { refusalMessage, runProductAction } from "@/lib/product-actions";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +44,7 @@ interface FormState {
   stockQuantity: string;
   deliveryCharge: string;
   isFeatured: boolean;
+  hideWhenOutOfStock: boolean;
   images: ImageEntry[];
 }
 
@@ -62,6 +64,7 @@ function initialState(product?: SellerProductDetail): FormState {
     stockQuantity: variant ? String(variant.stockQuantity) : "0",
     deliveryCharge: product?.deliveryCharge != null ? String(product.deliveryCharge) : "",
     isFeatured: product?.isFeatured ?? false,
+    hideWhenOutOfStock: product?.hideWhenOutOfStock ?? false,
     images: (product?.media ?? []).map((media) => ({ id: media.id, url: media.url })),
   };
 }
@@ -93,13 +96,6 @@ function changedVariant(product: SellerProductDetail, form: FormState) {
   return unchanged ? null : { id: variant.id, ...fields };
 }
 
-/** The proxy sends `{ error, details }`. A refused field has its own message in details. */
-function refusalMessage(body: unknown): string {
-  const { error, details } = (body ?? {}) as { error?: string; details?: unknown };
-  const first = Array.isArray(details) ? (details[0] as { message?: string } | undefined) : undefined;
-  return first?.message ?? error ?? "Could not save this product.";
-}
-
 export function ProductForm({ product }: { product?: SellerProductDetail }) {
   const storeFetch = useStoreFetch();
   const href = useStoreHref();
@@ -114,6 +110,8 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [published, setPublished] = useState(product?.status === "published");
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
     storeFetch("/api/proxy/categories?limit=200")
@@ -158,6 +156,31 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
     setForm((f) => ({ ...f, images: f.images.filter((img) => img.id !== id) }));
   }
 
+  /** The gallery order is the shoppers' order: the first image is the primary one. */
+  function moveImage(index: number, target: number) {
+    setForm((f) => {
+      const images = [...f.images];
+      const [image] = images.splice(index, 1);
+      images.splice(target, 0, image);
+      return { ...f, images };
+    });
+  }
+
+  /** Publishing acts on what is saved, so the page says so rather than guessing at unsaved edits. */
+  async function togglePublished() {
+    if (!product) return;
+    setPublishing(true);
+    const refusal = await runProductAction(storeFetch, product.id, published ? "unpublish" : "publish");
+    setPublishing(false);
+    if (refusal !== null) {
+      toast.error(refusal);
+      return;
+    }
+    setPublished(!published);
+    toast.success(published ? "Unpublished." : "Published.");
+    router.refresh();
+  }
+
   function toggleCategory(id: string, checked: boolean) {
     setForm((f) => ({
       ...f,
@@ -199,6 +222,7 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
       media: form.images.map((img) => img.id),
       deliveryCharge: optionalNumber(form.deliveryCharge),
       isFeatured: form.isFeatured,
+      hideWhenOutOfStock: form.hideWhenOutOfStock,
     };
 
     let data: Record<string, unknown>;
@@ -322,6 +346,15 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
           />
           <Label htmlFor="isFeatured">Feature this product on homepage</Label>
         </div>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="hideWhenOutOfStock"
+            checked={form.hideWhenOutOfStock}
+            onCheckedChange={(checked) => setForm((f) => ({ ...f, hideWhenOutOfStock: checked === true }))}
+          />
+          <Label htmlFor="hideWhenOutOfStock">Hide from the store while out of stock</Label>
+        </div>
       </Surface>
 
       <Surface variant="clay" level={2} className="p-6 flex flex-col gap-5 rounded-2xl">
@@ -427,23 +460,64 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
         <div>
           <Label className="mb-1">Images (max {MAX_IMAGES})</Label>
           <div className="flex gap-2 mb-2 flex-wrap">
-            {form.images.map((img) => (
-              <div key={img.id} className="relative w-20 h-20 border border-border rounded-md overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img.url} alt="" className="object-cover w-full h-full" />
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon"
-                  className="absolute top-1 right-1 rounded-full size-5 shadow-sm"
-                  onClick={() => removeImage(img.id)}
-                >
-                  <X className="size-3" />
-                </Button>
+            {form.images.map((img, index) => (
+              <div key={img.id} className="flex flex-col gap-1 w-24">
+                <div className="relative w-24 h-24 border border-border rounded-md overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={img.url} alt="" className="object-cover w-full h-full" />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    aria-label="Remove image"
+                    className="absolute top-1 right-1 rounded-full size-5 shadow-sm"
+                    onClick={() => removeImage(img.id)}
+                  >
+                    <X className="size-3" />
+                  </Button>
+                  {index === 0 ? (
+                    <span className="absolute bottom-1 left-1 rounded bg-background/90 px-1 text-[10px] font-medium">Primary</span>
+                  ) : null}
+                </div>
+                <div className="flex items-center justify-between">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Move image earlier"
+                    className="size-6"
+                    disabled={index === 0}
+                    onClick={() => moveImage(index, index - 1)}
+                  >
+                    <ArrowLeft className="size-3" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Set as primary image"
+                    className="size-6"
+                    disabled={index === 0}
+                    onClick={() => moveImage(index, 0)}
+                  >
+                    <Star className="size-3" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Move image later"
+                    className="size-6"
+                    disabled={index === form.images.length - 1}
+                    onClick={() => moveImage(index, index + 1)}
+                  >
+                    <ArrowRight className="size-3" />
+                  </Button>
+                </div>
               </div>
             ))}
             {form.images.length < MAX_IMAGES && (
-              <label className="w-20 h-20 border border-dashed border-border bg-card rounded-md flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
+              <label className="w-24 h-24 border border-dashed border-border bg-card rounded-md flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
                 <span className="text-2xl text-muted-foreground">+</span>
                 <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
               </label>
@@ -452,9 +526,20 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
         </div>
       </Surface>
 
-      <Button type="submit" variant="clay" disabled={saving || uploading || isInvalid} className="self-start">
-        {saving ? "Saving..." : isEdit ? "Save changes" : "Create product"}
-      </Button>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" variant="clay" disabled={saving || uploading || isInvalid}>
+          {saving ? "Saving..." : isEdit ? "Save changes" : "Create product"}
+        </Button>
+        {product ? (
+          <>
+            <Button type="button" variant="clay-soft" disabled={saving || publishing} onClick={togglePublished}>
+              {publishing ? "Working..." : published ? "Unpublish" : "Publish"}
+            </Button>
+            <StatusBadge status={published ? "published" : "draft"} />
+            <span className="text-xs text-muted-foreground">Publishing uses the last saved version.</span>
+          </>
+        ) : null}
+      </div>
     </form>
   );
 }

@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { STOREFRONT_PRODUCT_SLUG_PATTERN, storefrontProductDetailResponseSchema } from '@/lib/contracts';
 import { Product } from '@/lib/services';
 import { PUBLIC_CACHE_HEADERS, StorefrontHttpError, handleStorefrontError } from '@/lib/storefront/errors';
+import { liveProductFilter } from '@/lib/storefront/live-product';
 import { toValidatedProductDetail, type ProductDetailRow } from '@/lib/storefront/product-dto';
 import { loadActiveStore } from '@/lib/storefront/store-guard';
 
@@ -56,7 +57,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     // A slug that cannot be a product never reaches the catalog query.
     if (!STOREFRONT_PRODUCT_SLUG_PATTERN.test(slug)) throw productNotFound();
 
-    const row = (await Product.findOne({ store: id, slug, isPublished: true, isDemo: false })
+    const row = (await Product.findOne({ ...liveProductFilter(id), slug })
       .select(DETAIL_PROJECTION)
       .populate({ path: 'categories', select: 'slug name' })
       .populate({ path: 'media', select: 'url alt' })

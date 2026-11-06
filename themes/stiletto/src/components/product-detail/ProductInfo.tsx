@@ -163,9 +163,15 @@ export function ProductInfo({ product }: ProductInfoProps) {
             SAVE {discountPercent}%
           </span>
         )}
-        <span className="text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 rounded font-semibold bg-[var(--status-positive-bg)] text-[var(--status-positive-text)]">
-          {hasPackOption ? `In Stock (${selectedPack})` : "In Stock"}
-        </span>
+        {product.stockTone === "negative" ? (
+          <span className="text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 rounded font-semibold bg-[var(--featured-bg-secondary)] text-[var(--featured-card-muted)]">
+            {product.stockLabel}
+          </span>
+        ) : (
+          <span className="text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 rounded font-semibold bg-[var(--status-positive-bg)] text-[var(--status-positive-text)]">
+            {hasPackOption ? `${product.stockLabel ?? "In Stock"} (${selectedPack})` : (product.stockLabel ?? "In Stock")}
+          </span>
+        )}
       </div>
 
       {hasPackOption && (

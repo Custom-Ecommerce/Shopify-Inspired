@@ -12,6 +12,8 @@ const SHIRT = '65a0000000000000000000b1';
 const MUG = '65a0000000000000000000b2';
 const DRAFT = '65a0000000000000000000b3';
 const FOREIGN = '65a0000000000000000000b4';
+const DEMO = '65a0000000000000000000b5';
+const TRASHED = '65a0000000000000000000b6';
 const GHOST = '65a0000000000000000000ff';
 
 const StoreModel = Store as any;
@@ -58,6 +60,8 @@ beforeEach(() => {
       product(MUG, { title: 'Mug', price: 400, stockQuantity: 3, deliveryCharge: 100 }),
       product(DRAFT, { title: 'Draft', price: 100, stockQuantity: 5, isPublished: false }),
       product(FOREIGN, { title: 'Foreign', price: 100, stockQuantity: 5, store: OTHER_STORE_ID }),
+      product(DEMO, { title: 'Demo', price: 100, stockQuantity: 5, isDemo: true }),
+      product(TRASHED, { title: 'Trashed', price: 100, stockQuantity: 5, deletedAt: new Date() }),
     ].map((p) => [p._id, p]),
   );
   orders = [];
@@ -93,7 +97,7 @@ beforeEach(() => {
       lean: async () => {
         const rows = ids
           .map((id) => products.get(id.toLowerCase()))
-          .filter((p): p is Record<string, any> => !!p && String(p.store) === String(filter.store) && p.isPublished === filter.isPublished)
+          .filter((p): p is Record<string, any> => !!p && String(p.store) === String(filter.store))
           .map((p) => structuredClone(p));
         reads.afterProductFind?.();
         return rows;
@@ -107,6 +111,8 @@ beforeEach(() => {
     const p = products.get(String(filter._id).toLowerCase());
     if (!p || String(p.store) !== String(filter.store)) return null;
     if (filter.isPublished !== undefined && p.isPublished !== filter.isPublished) return null;
+    if (filter.deletedAt === null && p.deletedAt) return null;
+    if (filter.isDemo !== undefined && p.isDemo === true) return null;
     const wanted = filter.variants.$elemMatch;
     const variant: Record<string, unknown> | undefined = p.variants.find(
       (candidate: Record<string, unknown>) => String(candidate._id).toLowerCase() === wanted._id.toLowerCase(),
@@ -189,6 +195,8 @@ interface VariantFilter {
   _id: string;
   store: string;
   isPublished?: boolean;
+  isDemo?: { $ne: boolean };
+  deletedAt?: null;
   variants: { $elemMatch: { _id: string; trackQuantity?: boolean; stockQuantity?: { $gte: number } } };
 }
 
@@ -487,8 +495,41 @@ test('if saving the order fails, the stock is given back and the client gets a 5
 
 /* ---------------------------------------- bad products ---------------------------------------- */
 
-test('an unknown, unpublished, foreign, or malformed product id is 422 UNKNOWN_PRODUCT', async () => {
-  for (const productId of [GHOST, DRAFT, FOREIGN, 'not-an-object-id']) {
+test('a draft, an unedited demo and a trashed product are 422 PRODUCT_UNAVAILABLE, and no stock moves (D-037)', async () => {
+  for (const productId of [DRAFT, DEMO, TRASHED]) {
+    const res = await order({ lines: [{ productId: SHIRT, qty: 1 }, { productId, qty: 1 }] });
+    assert.equal(res.status, 422, productId);
+    const body = await res.json();
+    assert.equal(body.error.code, 'PRODUCT_UNAVAILABLE');
+    assert.equal(body.productId, productId);
+  }
+  assert.equal(orders.length, 0);
+  assert.equal(variant(SHIRT).stockQuantity, 10);
+});
+
+test('a product trashed after the order was priced is refused at the stock write, and earlier lines are given back', async () => {
+  reads.afterProductFind = () => {
+    products.get(MUG)!.deletedAt = new Date();
+  };
+  const res = await order({ lines: [{ productId: SHIRT, qty: 1 }, { productId: MUG, qty: 1 }] });
+  assert.equal(res.status, 422);
+  assert.equal((await res.json()).error.code, 'PRODUCT_UNAVAILABLE');
+  assert.equal(orders.length, 0);
+  assert.equal(variant(SHIRT).stockQuantity, 10);
+});
+
+test('an order keeps its own snapshot after the product is gone from the catalog', async () => {
+  assert.equal((await order({ lines: [{ productId: SHIRT, qty: 1 }] })).status, 201);
+  products.delete(SHIRT);
+  const item = orders[0].items[0];
+  assert.equal(item.productTitle, 'Blue shirt');
+  assert.equal(item.variantTitle, 'Default');
+  assert.equal(item.unitPrice, 1500);
+  assert.equal(item.quantity, 1);
+});
+
+test('an unknown, foreign, or malformed product id is 422 UNKNOWN_PRODUCT', async () => {
+  for (const productId of [GHOST, FOREIGN, 'not-an-object-id']) {
     const res = await order({ lines: [{ productId, qty: 1 }] });
     assert.equal(res.status, 422, productId);
     const body = await res.json();

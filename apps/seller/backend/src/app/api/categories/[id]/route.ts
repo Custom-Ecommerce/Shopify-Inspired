@@ -76,8 +76,8 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
 }
 
 /**
- * DELETE /api/categories/:id. A category that still holds products is refused with 409 CATEGORY_IN_USE and the count,
- * so the dashboard can say why. A demo category follows the same guard. Categories have no trash, so a delete is
+ * DELETE /api/categories/:id. A category that still holds products, trashed ones included (D-030), is refused with 409
+ * CATEGORY_IN_USE and the counts, so the dashboard can say why. A demo category follows the same guard. Categories have no trash, so a delete is
  * always permanent and immediate.
  */
 export async function DELETE(request: NextRequest, context: Ctx): Promise<Response> {
@@ -92,12 +92,12 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     const existing = await Category.findOne({ _id: id, store: storeId }).select('_id').lean();
     if (!existing) throw categoryNotFound();
 
-    const productCount = await countProductsInCategory(storeId, id);
+    const { total: productCount, trashed: trashedCount } = await countProductsInCategory(storeId, id);
     if (productCount > 0) {
       const noun = productCount === 1 ? '1 product' : productCount + ' products';
-      return categoryError(409, 'CATEGORY_IN_USE', 'This category still holds ' + noun + '. Move or delete them first.', {
-        productCount,
-      });
+      const inTrash = trashedCount > 0 ? ' (' + trashedCount + ' in trash)' : '';
+      const message = 'This category still holds ' + noun + inTrash + '. Move or delete them first.';
+      return categoryError(409, 'CATEGORY_IN_USE', message, { productCount, trashedCount });
     }
 
     await Category.deleteOne({ _id: id, store: storeId });

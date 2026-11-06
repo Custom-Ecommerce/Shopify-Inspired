@@ -10,6 +10,7 @@ import {
   handleStorefrontError,
   storeNotFound,
 } from '@/lib/storefront/errors';
+import { liveListFilter } from '@/lib/storefront/live-product';
 import { toValidatedProductSummaries, type ProductRow } from '@/lib/storefront/product-dto';
 import { escapeRegex, parseProductListQuery, sortSpec } from '@/lib/storefront/product-query';
 
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         { headers: PUBLIC_CACHE_HEADERS },
       );
 
-    const filter: Record<string, unknown> = { store: id, isPublished: true, isDemo: false };
+    const filter = liveListFilter(id);
 
     if (query.category) {
       const category = await Category.findOne({ store: id, slug: query.category }).select('_id').lean();

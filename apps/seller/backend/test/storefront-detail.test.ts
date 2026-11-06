@@ -39,7 +39,11 @@ function simulateOutage(): void {
 
 /** Applies the equality filters the route sends, so an unpublished or foreign product is genuinely not found. */
 function matches(row: Record<string, any>, filter: Record<string, any>): boolean {
-  return Object.entries(filter).every(([k, v]) => String(row[k]) === String(v));
+  return Object.entries(filter).every(([k, v]) => {
+    if (v === null) return (row[k] ?? null) === null;
+    if (typeof v === 'object' && '$ne' in v) return row[k] !== v.$ne;
+    return String(row[k]) === String(v);
+  });
 }
 
 beforeEach(() => {
@@ -181,7 +185,7 @@ test('the query is store-scoped and published-only, and never selects stock coun
   storeRow = activeStore();
   products = [product()];
   await get(STORE_ID, 'blue-shirt');
-  assert.deepEqual(rec.filter, { store: STORE_ID, slug: 'blue-shirt', isPublished: true, isDemo: false });
+  assert.deepEqual(rec.filter, { store: STORE_ID, slug: 'blue-shirt', isPublished: true, isDemo: { $ne: true }, deletedAt: null });
   for (const hidden of ['stockQuantity', 'reservedQuantity', 'stockHistory', 'store', 'viewCount', 'lowStockThreshold']) {
     assert.equal(hidden in rec.projection, false, hidden + ' must not be selected');
   }
@@ -224,6 +228,26 @@ test('an unpublished product is indistinguishable from a missing one', async () 
   const res = await get(STORE_ID, 'blue-shirt');
   assert.equal(res.status, 404);
   assert.equal((await res.json()).error.code, 'PRODUCT_NOT_FOUND');
+});
+
+test('a demo product and a trashed product are not found, and a demo row with no flag at all is still served as not demo', async () => {
+  storeRow = activeStore();
+  products = [product({ isDemo: true })];
+  assert.equal((await get(STORE_ID, 'blue-shirt')).status, 404);
+  products = [product({ deletedAt: new Date() })];
+  assert.equal((await get(STORE_ID, 'blue-shirt')).status, 404);
+  products = [product({ isDemo: undefined })];
+  assert.equal((await get(STORE_ID, 'blue-shirt')).status, 200);
+});
+
+test('an out-of-stock product set to hide keeps its product page: only lists hide it', async () => {
+  storeRow = activeStore();
+  const sold = product({ hideWhenOutOfStock: true });
+  sold.variants[0].stockQuantity = 0;
+  products = [sold];
+  const res = await get(STORE_ID, 'blue-shirt');
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).data.stockStatus, 'out_of_stock');
 });
 
 test("another store's product is not served under this store", async () => {

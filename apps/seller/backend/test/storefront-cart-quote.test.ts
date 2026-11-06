@@ -12,6 +12,9 @@ const SHIRT_DEFAULT = '65a0000000000000000000e1';
 const TOP = '65a0000000000000000000c2';
 const TOP_S = '65a0000000000000000000e2';
 const TOP_M = '65a0000000000000000000e3';
+const DRAFT = '65a0000000000000000000c3';
+const DEMO = '65a0000000000000000000c4';
+const TRASHED = '65a0000000000000000000c5';
 
 /** The part of a Mongoose query these routes use. */
 interface StubQuery {
@@ -60,9 +63,15 @@ beforeEach(() => {
   ProductModel.find = () => {
     productReads += 1;
     return stubQuery([
-      { _id: SHIRT, title: 'Blue shirt', deliveryCharge: null, variants: [{ _id: SHIRT_DEFAULT, title: 'Default', price: 1500, trackQuantity: true, stockQuantity: 10 }] },
+      { _id: SHIRT, isPublished: true, title: 'Blue shirt', deliveryCharge: null, variants: [{ _id: SHIRT_DEFAULT, title: 'Default', price: 1500, trackQuantity: true, stockQuantity: 10 }] },
+      ...[
+        { _id: DRAFT, isPublished: false },
+        { _id: DEMO, isPublished: true, isDemo: true },
+        { _id: TRASHED, isPublished: false, deletedAt: new Date() },
+      ].map((flags) => ({ ...flags, title: 'Secret', deliveryCharge: null, variants: [{ _id: SHIRT_DEFAULT, title: 'Default', price: 1, trackQuantity: true, stockQuantity: 10 }] })),
       {
         _id: TOP,
+        isPublished: true,
         title: 'Lawn top',
         deliveryCharge: 400,
         variants: [
@@ -149,4 +158,17 @@ test('a product with one variant may leave variantId out, and naming it too is o
   assert.equal(data.lines.length, 1);
   assert.equal(data.lines[0].qty, 3);
   assert.equal(data.lines[0].variantId, SHIRT_DEFAULT);
+});
+
+test('a draft, an unedited demo and a trashed product are per-line refusals that block checkout and show nothing (D-037)', async () => {
+  const res = await post({ lines: [{ productId: SHIRT, qty: 1 }, { productId: DRAFT, qty: 1 }, { productId: DEMO, qty: 1 }, { productId: TRASHED, qty: 1 }] });
+  assert.equal(res.status, 200);
+  const { data } = storefrontCartQuoteResponseSchema.parse(await res.json());
+  assert.deepEqual(data.lines.map((line) => line.issue), [null, 'product_unavailable', 'product_unavailable', 'product_unavailable']);
+  for (const line of data.lines.slice(1)) {
+    assert.equal(line.title, null);
+    assert.equal(line.unitPrice, null);
+  }
+  assert.equal(data.subtotal, 1500);
+  assert.equal(data.canCheckout, false);
 });

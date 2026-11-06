@@ -29,6 +29,8 @@ interface CategoryRow {
 interface ProductRow {
   store: string;
   isPublished: boolean;
+  isDemo?: boolean;
+  deletedAt?: string | null;
   categories: string[];
 }
 
@@ -121,7 +123,12 @@ beforeEach(() => {
   StoreStub.findById = (id) => oneQuery(stores.find((row) => row._id === id) ?? null);
   ProductStub.distinct = async (_field, filter) => {
     catalogReads += 1;
-    const matching = products.filter((row) => row.store === filter.store && row.isPublished === filter.isPublished);
+    const live = filter as unknown as { deletedAt?: null; isDemo?: { $ne: boolean } };
+    assert.equal(live.deletedAt, null);
+    assert.deepEqual(live.isDemo, { $ne: true });
+    const matching = products.filter(
+      (row) => row.store === filter.store && row.isPublished === filter.isPublished && !row.deletedAt && row.isDemo !== true,
+    );
     return [...new Set(matching.flatMap((row) => row.categories))];
   };
   CategoryStub.find = (filter) => {
@@ -198,4 +205,13 @@ test('an unknown or malformed store is 404 STORE_NOT_FOUND', async () => {
     assert.equal(((await res.json()) as { error: { code: string } }).error.code, 'STORE_NOT_FOUND');
   }
   assert.equal(catalogReads, 0);
+});
+
+test('a category held only by a demo or a trashed product does not show', async () => {
+  products = [
+    { store: STORE_A, isPublished: true, isDemo: true, categories: [ZARI] },
+    { store: STORE_A, isPublished: true, deletedAt: '2026-10-01T00:00:00.000Z', categories: [LAWN] },
+  ];
+  const res = await categoriesGET(new NextRequest('http://localhost/x'), { params: Promise.resolve({ id: STORE_A }) });
+  assert.deepEqual(((await res.json()) as { data: unknown[] }).data, []);
 });

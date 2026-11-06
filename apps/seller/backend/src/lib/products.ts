@@ -8,12 +8,14 @@ import type {
   SellerProductCategory,
   SellerProductDetail,
   SellerProductSummary,
+  SellerProductTrashInfo,
   SellerProductVariant,
 } from '@markaz/contracts';
 import { PRODUCT_DEFAULT_VARIANT_FIELDS } from '@/lib/contracts';
 import { HttpError, handleRouteError, isDuplicateKeyError } from '@/lib/http';
 import { ProductVariantError, prepareProductVariants, type PreparedProductVariants, type PreparedVariant } from '@/lib/product-variants';
 import { Category, Media, Product } from '@/lib/services';
+import { trashDaysLeft, trashPurgeDate } from '@/lib/trash';
 
 /** Machine-readable reasons for a refused product write. The dashboard reads them through the proxy. */
 export type ProductErrorCode =
@@ -22,7 +24,12 @@ export type ProductErrorCode =
   | 'PRODUCT_CATEGORY_INVALID'
   | 'PRODUCT_MEDIA_INVALID'
   | 'PRODUCT_CHANGED'
-  | 'PRODUCT_DELETE_NOT_AVAILABLE'
+  | 'PRODUCT_DEMO_NOT_EDITED'
+  | 'PRODUCT_TITLE_REQUIRED'
+  | 'PRODUCT_CATEGORY_REQUIRED'
+  | 'PRODUCT_PRICE_REQUIRED'
+  | 'PRODUCT_NOT_IN_TRASH'
+  | 'PRODUCT_ADMIN_DELETED'
   | 'STOCK_VIA_INVENTORY';
 
 export class ProductRequestError extends HttpError {
@@ -45,7 +52,7 @@ export function handleProductError(err: unknown): NextResponse {
   // (store, slug) is the only unique index on products, so it decides a race the same way it decides a plain clash.
   if (isDuplicateKeyError(err)) {
     return NextResponse.json(
-      { errors: [{ message: 'A product with this slug already exists in this store', code: 'PRODUCT_SLUG_TAKEN' }] },
+      { errors: [{ message: 'A product with this slug already exists in this store. Products in trash keep their slug.', code: 'PRODUCT_SLUG_TAKEN' }] },
       { status: 409 },
     );
   }
@@ -183,9 +190,10 @@ function variantExpression(variant: PreparedVariant): Record<string, unknown> {
  * stored array, not a number: an order's $inc that lands between our read and this write is kept.
  */
 export function productPatchSet(body: ProductUpdateRequest, prepared: PreparedProductVariants | null): Record<string, unknown> {
-  const { title, slug, description, tags, deliveryCharge, isFeatured, seoTitle, seoDescription, highlights, categories, media, seoImage } = body;
+  const { title, slug, description, tags, deliveryCharge, isFeatured, hideWhenOutOfStock, seoTitle, seoDescription, highlights, categories, media, seoImage } =
+    body;
 
-  const plain = { title, slug, tags, deliveryCharge, isFeatured, seoTitle, seoDescription };
+  const plain = { title, slug, tags, deliveryCharge, isFeatured, hideWhenOutOfStock, seoTitle, seoDescription };
   const set: Record<string, unknown> = { isDemo: literal(false) };
   for (const [field, value] of Object.entries(plain)) {
     if (value !== undefined) set[field] = literal(value);
@@ -205,10 +213,13 @@ export function productPatchSet(body: ProductUpdateRequest, prepared: PreparedPr
   return set;
 }
 
-/** The filter of that write. A variant we keep must still exist, or its stock expression would have nothing to read. */
+/**
+ * The filter of that write. A variant we keep must still exist, or its stock expression would have nothing to read, and
+ * a product trashed since the read is not edited.
+ */
 export function productPatchFilter(storeId: string, productId: string, prepared: PreparedProductVariants | null): Record<string, unknown> {
   const kept = (prepared?.variants ?? []).flatMap((variant) => (variant._id === undefined ? [] : [objectId(variant._id)]));
-  return { _id: productId, store: storeId, ...(kept.length > 0 ? { 'variants._id': { $all: kept } } : {}) };
+  return { _id: productId, store: storeId, deletedAt: null, ...(kept.length > 0 ? { 'variants._id': { $all: kept } } : {}) };
 }
 
 interface PopulatedCategory {
@@ -231,6 +242,9 @@ export interface SellerProductRow {
   isPublished?: boolean | null;
   isDemo?: boolean | null;
   isFeatured?: boolean | null;
+  hideWhenOutOfStock?: boolean | null;
+  deletedAt?: Date | string | null;
+  deletedBy?: { role?: string | null } | null;
   description?: string | null;
   highlights?: Array<{ text?: string | null } | null> | null;
   tags?: string[] | null;
@@ -260,6 +274,17 @@ function categoriesOf(row: SellerProductRow): SellerProductCategory[] {
     .map((category) => ({ id: String(category._id), name: category.name ?? '', slug: category.slug ?? '' }));
 }
 
+function trashInfo(row: SellerProductRow): SellerProductTrashInfo | null {
+  if (!row.deletedAt) return null;
+  const deletedAt = new Date(row.deletedAt);
+  return {
+    deletedAt: deletedAt.toISOString(),
+    purgeAt: trashPurgeDate(deletedAt).toISOString(),
+    daysLeft: trashDaysLeft(deletedAt, new Date()),
+    restorable: row.deletedBy?.role !== 'admin',
+  };
+}
+
 /** One row of the seller's list. Availability is derived here, through the rule the storefront uses. */
 export function toSellerProductSummary(row: SellerProductRow): SellerProductSummary {
   const variants = byPosition(row.variants);
@@ -270,9 +295,11 @@ export function toSellerProductSummary(row: SellerProductRow): SellerProductSumm
     id: String(row._id),
     title: row.title,
     slug: row.slug,
-    status: row.isPublished ? 'published' : 'draft',
+    status: row.deletedAt ? 'trash' : row.isPublished ? 'published' : 'draft',
     isDemo: row.isDemo === true,
     isFeatured: row.isFeatured === true,
+    hideWhenOutOfStock: row.hideWhenOutOfStock === true,
+    trash: trashInfo(row),
     description: row.description ?? null,
     highlights: (row.highlights ?? []).flatMap((highlight) => (highlight?.text ? [highlight.text] : [])),
     minPrice: row.minPrice,
@@ -321,9 +348,9 @@ export function toSellerProductDetail(row: SellerProductRow): SellerProductDetai
   };
 }
 
-/** One product of one store, with what the edit page shows. Another store's product is simply not found. */
+/** One product of one store, with what the edit page shows. Another store's product, or a trashed one, is not found. */
 export async function loadSellerProduct(storeId: string, productId: string): Promise<SellerProductDetail> {
-  const row = (await Product.findOne({ _id: productId, store: storeId })
+  const row = (await Product.findOne({ _id: productId, store: storeId, deletedAt: null })
     .populate({ path: 'categories', select: 'name slug' })
     .populate({ path: 'media', select: 'url alt' })
     .lean()) as unknown as SellerProductRow | null;

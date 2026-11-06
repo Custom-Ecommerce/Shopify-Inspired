@@ -207,7 +207,12 @@ beforeEach(() => {
     return { deletedCount: 1 };
   };
   ProductStub.countDocuments = async (filter) =>
-    products.filter((row) => row.store === String(filter.store) && row.categories.includes(String(filter.categories))).length;
+    products.filter(
+      (row) =>
+        row.store === String(filter.store) &&
+        row.categories.includes(String(filter.categories)) &&
+        (filter.deletedAt === undefined || (row as { deletedAt?: unknown }).deletedAt),
+    ).length;
   StoreStub.exists = async (filter) => (stores.some((row) => same(row, filter)) ? { _id: filter._id } : null);
   StoreStub.findOne = (filter) => query(stores.filter((row) => same(row, filter)), true);
 
@@ -412,6 +417,16 @@ test('delete is refused with 409 CATEGORY_IN_USE and the count while products us
 
   products = [];
   assert.equal((await itemDELETE(request('DELETE', '/api/categories/' + CAT_A1), ctx(CAT_A1))).status, 200);
+});
+
+test('a trashed product still holds its category, and the refusal says so (D-030)', async () => {
+  products = [{ store: STORE_A, categories: [CAT_A1], deletedAt: NOW } as (typeof products)[number]];
+  const res = await itemDELETE(request('DELETE', '/api/categories/' + CAT_A1), ctx(CAT_A1));
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { errors: Array<{ productCount: number; trashedCount: number; message: string }> };
+  assert.equal(body.errors[0].productCount, 1);
+  assert.equal(body.errors[0].trashedCount, 1);
+  assert.match(body.errors[0].message, /1 in trash/);
 });
 
 test('the delete guard counts only the products of this store', async () => {

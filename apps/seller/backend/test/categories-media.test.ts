@@ -6,6 +6,7 @@ import { NextRequest } from 'next/server';
 import { assertCan, signSession, Store, User, Category, Media } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { signParams } from '@/lib/cloudinary';
+import { assertStoreMedia } from '@/lib/products';
 
 const SECRET = 'x'.repeat(40);
 const USER = '65a000000000000000000001';
@@ -112,13 +113,13 @@ function authed(method: string, url: string, body?: unknown, bearer = token): Ne
   return new NextRequest(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
 }
 
-function multipart(file: Blob | null, alt: string | null): NextRequest {
+function multipart(file: Blob | null, alt: string | null, storeHeader?: string): NextRequest {
   const form = new FormData();
   if (file) form.append('file', file, 'a.png');
   if (alt !== null) form.append('alt', alt);
   return new NextRequest('http://seller.test/api/media', {
     method: 'POST',
-    headers: { authorization: 'Bearer ' + token },
+    headers: { authorization: 'Bearer ' + token, ...(storeHeader ? { 'x-store-id': storeHeader } : {}) },
     body: form,
   });
 }
@@ -233,6 +234,48 @@ test('an image upload is signed, stored under the seller store, and answered wit
     assert.equal((signature as string).length, 40);
   } finally {
     globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test('media follows x-store-id: an upload for a second store lands there, and that store may use it', async () => {
+  seed();
+  const restore = installStubs();
+  const StoreExists = Store as unknown as { exists: (filter: { _id: string }) => Promise<unknown> };
+  const savedExists = StoreExists.exists;
+  const savedCount = MediaModel.countDocuments;
+  StoreExists.exists = async (filter) => (filter._id === OTHER_STORE ? { _id: filter._id } : null);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ secure_url: 'https://res.cloudinary.com/demo/n.png', public_id: 'n', resource_type: 'image', width: 1, height: 1, bytes: 1 }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as any;
+  try {
+    const response = await mediaPOST(multipart(image('image/png'), 'Second store', OTHER_STORE));
+    assert.equal(response.status, 201);
+    const body = (await response.json()) as { id: string; store: string };
+    assert.equal(body.store, OTHER_STORE);
+
+    MediaModel.countDocuments = async (filter: { store: string; _id: { $in: string[] } }) =>
+      media.filter((row) => row.store === filter.store && filter._id.$in.includes(String(row._id))).length;
+    await assertStoreMedia(OTHER_STORE, [body.id]);
+    await assert.rejects(assertStoreMedia(STORE, [body.id]), /Choose images from this store/);
+    MediaModel.countDocuments = savedCount;
+
+    const list = await mediaGET(
+      new NextRequest('http://seller.test/api/media', { headers: { authorization: 'Bearer ' + token, 'x-store-id': OTHER_STORE } }),
+    );
+    assert.equal(list.status, 200);
+    const listed = (await list.json()) as { docs: Array<{ store: string }> };
+    assert.ok(listed.docs.length > 0);
+    assert.ok(listed.docs.every((doc) => doc.store === OTHER_STORE));
+
+    StoreExists.exists = async () => null;
+    assert.equal((await mediaPOST(multipart(image('image/png'), 'Not mine', OTHER_STORE))).status, 403);
+  } finally {
+    globalThis.fetch = originalFetch;
+    StoreExists.exists = savedExists;
     restore();
   }
 });

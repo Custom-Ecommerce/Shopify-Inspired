@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { storefrontCategoryListResponseSchema } from '@/lib/contracts';
 import { PUBLIC_CATEGORY_READABLE_FIELDS, Category, Product, assertCan } from '@/lib/services';
 import { PUBLIC_CACHE_HEADERS, handleStorefrontError } from '@/lib/storefront/errors';
+import { liveListFilter } from '@/lib/storefront/live-product';
 import { loadActiveStore } from '@/lib/storefront/store-guard';
 
 export const runtime = 'nodejs';
@@ -44,7 +45,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     assertCan('public', 'read', 'categories', PUBLIC_CATEGORY_READABLE_FIELDS);
     await loadActiveStore(id);
 
-    const held = await Product.distinct('categories', { store: id, isPublished: true, isDemo: false });
+    const held = await Product.distinct('categories', liveListFilter(id));
     const rows = (await Category.find({ store: id, _id: { $in: held } })
       .select('name slug order description banner')
       .sort({ order: 1, name: 1 })

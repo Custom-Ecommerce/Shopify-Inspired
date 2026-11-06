@@ -5,7 +5,7 @@ import Image from "next/image";
 import { ZoomIn, X } from "lucide-react";
 
 interface ProductGalleryProps {
-  images: string[];
+  images: { url: string; alt: string }[];
   title: string;
 }
 
@@ -17,7 +17,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const displayImages =
-    images && images.length > 0 ? images : ["/placeholder.jpg"];
+    images && images.length > 0 ? images : [{ url: "/placeholder.jpg", alt: title }];
 
   const activeImage = displayImages[activeImageIndex] || displayImages[0]!;
 
@@ -42,8 +42,8 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
       >
         {/* Main Base Image (Always visible by default) */}
         <Image
-          src={activeImage}
-          alt={`${title} - Image ${activeImageIndex + 1}`}
+          src={activeImage.url}
+          alt={activeImage.alt}
           fill
           priority
           sizes="(max-width: 768px) 100vw, 50vw"
@@ -55,7 +55,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
           <div
             className="absolute inset-0 z-10 pointer-events-none cursor-crosshair transition-all duration-75"
             style={{
-              backgroundImage: `url(${activeImage})`,
+              backgroundImage: `url(${activeImage.url})`,
               backgroundPosition: `${zoomPos.x}% ${zoomPos.y}%`,
               backgroundSize: "250%",
               backgroundRepeat: "no-repeat",
@@ -100,8 +100,8 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
               }`}
             >
               <Image
-                src={img}
-                alt={`${title} thumbnail ${idx + 1}`}
+                src={img.url}
+                alt={img.alt}
                 fill
                 sizes="64px"
                 className="object-cover object-center"

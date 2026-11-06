@@ -136,7 +136,7 @@ export const WireOrderLookup = z.object({
   data: WireOrder,
 });
 
-const quoteIssue = z.enum(["unknown_product", "unknown_variant", "out_of_stock", "insufficient_stock"]);
+const quoteIssue = z.enum(["unknown_product", "product_unavailable", "unknown_variant", "out_of_stock", "insufficient_stock"]);
 
 export const WireCartQuoteLine = z.object({
   productId: z.string().min(1),

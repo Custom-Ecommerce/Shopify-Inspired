@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { isDuplicateKeyError } from '@/lib/http';
 import { Order, Product } from '@/lib/services';
-import { StorefrontHttpError } from '@/lib/storefront/errors';
+import { StorefrontHttpError, productUnavailable } from '@/lib/storefront/errors';
+import { isLiveProduct, type LiveFlags } from '@/lib/storefront/live-product';
 import { generateOrderId } from '@/lib/storefront/order-id';
 import type { OrderRow } from '@/lib/storefront/order-dto';
 import type { ParsedOrderRequest } from '@/lib/storefront/order-request';
@@ -16,7 +17,7 @@ export interface PlaceOrderResult {
   replayed: boolean;
 }
 
-interface CatalogRow {
+interface CatalogRow extends LiveFlags {
   _id: unknown;
   title: string;
   deliveryCharge?: number | null;
@@ -80,13 +81,13 @@ function replay(existing: OrderRow, fingerprint: string): PlaceOrderResult {
 }
 
 /**
- * Reads every product in the request from the catalog (this store, published only) and prices the order from
- * the variant each line resolves to. Checks stock in request order, so the first problem line is the one reported.
+ * Reads every product in the request from this store's catalog and prices the order from the variant each line
+ * resolves to. A product that is not Live is refused with 422 PRODUCT_UNAVAILABLE (D-037). Checks stock in request order, so the first problem line is the one reported.
  * A line naming the Default variant and one leaving it out are the same variant, so their quantities are added first.
  */
 async function priceOrder(storeId: string, commerce: StoreCommerce, request: ParsedOrderRequest) {
-  const rows = (await Product.find({ _id: { $in: request.lines.map((l) => l.productId) }, store: storeId, isPublished: true })
-    .select('title deliveryCharge variants')
+  const rows = (await Product.find({ _id: { $in: request.lines.map((l) => l.productId) }, store: storeId })
+    .select('title deliveryCharge variants isPublished isDemo deletedAt')
     .lean()) as unknown as CatalogRow[];
   const byId = new Map(rows.map((row) => [String(row._id).toLowerCase(), row]));
 
@@ -94,6 +95,7 @@ async function priceOrder(storeId: string, commerce: StoreCommerce, request: Par
   for (const line of request.lines) {
     const row = byId.get(line.productId);
     if (!row) throw unknownProduct(line.productId);
+    if (!isLiveProduct(row)) throw productUnavailable(line.productId);
 
     const match = resolveVariant(row.variants, line.variantId);
     if (match.kind === 'variant_required') throw variantRequired(line.productId);

@@ -28,6 +28,12 @@ export interface IProductVariant {
   position: number;
 }
 
+/** Who moved a product to trash. An admin's delete is not the seller's to undo. */
+export interface IProductDeletedBy {
+  user: Types.ObjectId;
+  role: 'seller' | 'admin';
+}
+
 /**
  * Collection: products. Store-scoped catalog item in the Shopify model: options, and at least one variant. A product
  * with no options has exactly one variant, the Default. Availability is derived on read from the variants, so atomic
@@ -50,6 +56,11 @@ export interface IProduct extends Document {
   isPublished: boolean;
   /** The sample product seeded with a new store. Never Live; the seller's first edit clears it. */
   isDemo: boolean;
+  /** The seller's choice: leave Live lists and category counts while out of stock. The product page stays reachable. */
+  hideWhenOutOfStock: boolean;
+  /** Set while the product is in trash. Every query outside the trash view excludes it. */
+  deletedAt?: Date | null;
+  deletedBy?: IProductDeletedBy | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
   seoImage?: Types.ObjectId | null;
@@ -125,6 +136,14 @@ function variantsMatchOptions(this: IProduct, variants: IProductVariant[]): bool
   return combinations.size === variants.length;
 }
 
+const DeletedBySchema = new Schema<IProductDeletedBy>(
+  {
+    user: { type: Schema.Types.ObjectId, required: true },
+    role: { type: String, enum: ['seller', 'admin'], required: true },
+  },
+  { _id: false },
+);
+
 const ProductSchema = new Schema<IProduct>(
   {
     store: { type: Schema.Types.ObjectId, required: true },
@@ -172,6 +191,9 @@ const ProductSchema = new Schema<IProduct>(
     isFeatured: { type: Boolean, default: false },
     isPublished: { type: Boolean, default: false },
     isDemo: { type: Boolean, default: false },
+    hideWhenOutOfStock: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: DeletedBySchema, default: null },
     seoTitle: { type: String, default: null },
     seoDescription: { type: String, default: null },
     seoImage: { type: Schema.Types.ObjectId, ref: 'Media', default: null },
@@ -196,6 +218,8 @@ ProductSchema.index({ store: 1, isPublished: 1, createdAt: -1, _id: -1 });
 ProductSchema.index({ store: 1, isPublished: 1, categories: 1, createdAt: -1 });
 ProductSchema.index({ store: 1, isPublished: 1, minPrice: 1, _id: 1 });
 ProductSchema.index({ store: 1, isPublished: 1, avgRating: -1, reviewCount: -1, _id: -1 });
+// The trash view of one store. Only trashed products are in this index, so it stays small.
+ProductSchema.index({ store: 1, deletedAt: 1 }, { partialFilterExpression: { deletedAt: { $type: 'date' } } });
 // Finds who holds a SKU. This does NOT enforce uniqueness: a unique index over an embedded array cannot, because it
 // says nothing about two entries in one document, and the null SKUs of a document would clash with those of another.
 // Uniqueness is enforced by the write path. See apps/seller/backend/src/lib/product-variants.ts.

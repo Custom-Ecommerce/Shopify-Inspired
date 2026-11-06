@@ -16,7 +16,8 @@ export type StorefrontErrorCode =
   | 'IDEMPOTENCY_CONFLICT'
   | 'RATE_LIMITED'
   | 'VARIANT_REQUIRED'
-  | 'UNKNOWN_VARIANT';
+  | 'UNKNOWN_VARIANT'
+  | 'PRODUCT_UNAVAILABLE';
 
 /** Carries the storefront error envelope: { error: { code, message }, ...extra }. */
 export class StorefrontHttpError extends Error {
@@ -50,6 +51,10 @@ export function handleStorefrontError(err: unknown): NextResponse {
   console.error('[seller-backend] unhandled storefront route error', err);
   return storefrontError(new StorefrontHttpError(500, 'INTERNAL_ERROR', 'Internal server error'));
 }
+
+/** The product exists but is not for sale: a draft, an unedited demo, or in trash (D-037). */
+export const productUnavailable = (productId: string): StorefrontHttpError =>
+  new StorefrontHttpError(422, 'PRODUCT_UNAVAILABLE', 'A product in the order is no longer for sale.', { productId });
 
 export const storeNotFound = (): StorefrontHttpError =>
   new StorefrontHttpError(404, 'STORE_NOT_FOUND', 'Store not found.');

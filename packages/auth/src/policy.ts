@@ -72,7 +72,7 @@ export const PUBLIC_CATEGORY_READABLE_FIELDS = ['name', 'slug', 'order', 'descri
 // ratings, counts) are never client-writable. Stock of an existing variant has its own rule: see D-034.
 export const SELLER_PRODUCT_WRITABLE_FIELDS = [
 'title', 'slug', 'description', 'highlights', 'tags', 'categories', 'media', 'options', 'variants',
-'deliveryCharge', 'isFeatured', 'seoTitle', 'seoDescription', 'seoImage',
+'deliveryCharge', 'isFeatured', 'hideWhenOutOfStock', 'seoTitle', 'seoDescription', 'seoImage',
 ] as const;
 
 // What an anonymous storefront may read of a published product.
@@ -166,6 +166,32 @@ fields: { seller: '*', admin: '*', public: PUBLIC_PRODUCT_READABLE_FIELDS },
 create: { actors: ['seller'], fields: { seller: SELLER_PRODUCT_WRITABLE_FIELDS } },
 update: { actors: ['seller'], fields: { seller: SELLER_PRODUCT_WRITABLE_FIELDS } },
 delete: { actors: ['seller'], fields: { seller: '*' } },
+},
+
+// What happens to a product as a whole, kept apart from the edits above so isPublished stays out of a PATCH. update is
+// publish, unpublish and restore. delete is the permanent delete: a seller's from trash, system's from the retention job.
+productLifecycle: {
+read: { actors: [], fields: {} },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['isPublished', 'deletedAt'] } },
+delete: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
+},
+
+// Stock of existing variants (D-034). update is the adjust endpoint, the only way that stock changes; read is the
+// inventory list and the stock history. A movement is never edited or removed.
+inventory: {
+read: { actors: ['seller'], fields: { seller: '*' } },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['stockQuantity'] } },
+delete: { actors: [], fields: {} },
+},
+
+// Reviews of permanently deleted products (D-014, A-004). Only the delete step writes them, and nobody changes them.
+archivedReviews: {
+read: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
+create: { actors: ['system'], fields: { system: '*' } },
+update: { actors: [], fields: {} },
+delete: { actors: [], fields: {} },
 },
 
 subscriptionPlans: {

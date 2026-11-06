@@ -1,5 +1,6 @@
 import { Product, StockMovement } from '@/lib/services';
-import { StorefrontHttpError } from '@/lib/storefront/errors';
+import { StorefrontHttpError, productUnavailable } from '@/lib/storefront/errors';
+import { liveProductFilter } from '@/lib/storefront/live-product';
 
 export interface Reservation {
   productId: string;
@@ -28,11 +29,14 @@ const stockOf = (row: { variants: VariantStock[] }, variantId: string): number |
  * A variant that does not track quantity has nothing to take: the write cannot match it, and a read confirms the
  * reservation instead. That read decides nothing about stock, so it needs no atomicity.
  *
+ * Only a Live product can be reserved (D-037): the conditions sit in the write itself, so a product trashed or
+ * unpublished after the order was priced is refused here, with 422 PRODUCT_UNAVAILABLE rather than out of stock.
+ *
  * The movement record is a second write. It only records; the conditional update is what protects the stock, so a
  * failure there is logged and does not fail the order.
  */
 export async function reserveStock(storeId: string, productId: string, variantId: string, qty: number): Promise<void> {
-  const owner = { _id: productId, store: storeId, isPublished: true };
+  const owner = { _id: productId, ...liveProductFilter(storeId) };
 
   const after = (await Product.findOneAndUpdate(
     { ...owner, variants: { $elemMatch: { _id: variantId, trackQuantity: true, stockQuantity: { $gte: qty } } } },
@@ -48,10 +52,16 @@ export async function reserveStock(storeId: string, productId: string, variantId
   }
 
   const untracked = await Product.exists({ ...owner, variants: { $elemMatch: { _id: variantId, trackQuantity: false } } });
-  if (!untracked) throw outOfStock(productId, variantId);
+  if (untracked) return;
+
+  const live = await Product.exists({ ...owner, variants: { $elemMatch: { _id: variantId } } });
+  throw live ? outOfStock(productId, variantId) : productUnavailable(productId);
 }
 
-/** Gives units back to one variant after an order failed to save. Best effort: a failure is logged, never thrown. */
+/**
+ * Gives units back to one variant after an order failed to save. Best effort: a failure is logged, never thrown. It
+ * deliberately has no Live conditions: units already taken go back even if the product was trashed in the meantime.
+ */
 export async function releaseStock(storeId: string, productId: string, variantId: string, qty: number): Promise<void> {
   try {
     const after = (await Product.findOneAndUpdate(
@@ -67,13 +77,15 @@ export async function releaseStock(storeId: string, productId: string, variantId
   }
 }
 
-async function recordMovement(
+/** Writes one history row. An order's change has no actor; a seller's adjustment names them. */
+export async function recordMovement(
   storeId: string,
   productId: string,
   variantId: string,
   quantity: number | null,
   delta: number,
   reason: string,
+  actor: unknown = null,
 ): Promise<void> {
   if (quantity === null) return;
   try {
@@ -85,6 +97,7 @@ async function recordMovement(
       quantity,
       delta,
       reason,
+      actor,
       changedAt: new Date(),
     });
   } catch (err) {

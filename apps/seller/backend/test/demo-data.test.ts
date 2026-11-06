@@ -1,7 +1,9 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { Category, Product, Store, User } from '@/lib/services';
+import { NextRequest } from 'next/server';
+import { Category, Product, Store, User, signSession } from '@/lib/services';
+import { SELLER_AUDIENCE } from '@/lib/accounts';
 import type { AuthContext } from '@/lib/auth';
 import { seedStoreDemoData } from '../src/lib/demo-data';
 import { provisionStore } from '../src/lib/workspace';
@@ -170,4 +172,24 @@ test('provisionStore seeds the new store, and a seeding failure does not fail st
     const second = await provisionStore(ctx, 'Zari House');
     assert.equal(second.ok, true);
   });
+});
+
+test('POST /api/stores seeds the store it creates, once', async () => {
+  const secret = 'x'.repeat(40);
+  process.env.SELLER_AUTH_SECRET = secret;
+  const token = await signSession({ sub: SELLER, role: 'admin' }, secret, SELLER_AUDIENCE);
+  const { POST } = await import('../src/app/api/stores/route');
+
+  const res = await POST(
+    new NextRequest('http://seller.test/api/stores', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Lawn House', slug: 'lawn-house', owner: SELLER }),
+    }),
+  );
+  assert.equal(res.status, 201);
+  const { doc } = (await res.json()) as { doc: { id: string } };
+  assert.equal(products.length, 1);
+  assert.equal(products[0].store, doc.id);
+  assert.equal(products[0].isDemo, true);
 });
