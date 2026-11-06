@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { z } from 'zod';
+import { STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from '@markaz/platform-kit/reservation';
 import { authenticate } from '@/lib/auth';
 import { seedStoreDemoData } from '@/lib/demo-data';
 import { HttpError, handleRouteError, isDuplicateKeyError, parseIntParam } from '@/lib/http';
@@ -20,8 +21,8 @@ const createStoreSchema = z
     slug: z
       .string()
       .trim()
-      .min(2)
-      .max(63)
+      .min(STORE_SLUG_MIN_LENGTH)
+      .max(STORE_SLUG_MAX_LENGTH)
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'slug may only contain lowercase letters, digits and single hyphens'),
     owner: z.string().optional(),
   })

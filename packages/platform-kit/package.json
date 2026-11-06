@@ -13,6 +13,7 @@
     "./hmac": "./src/hmac.ts",
     "./phone": "./src/phone.ts",
     "./commerce": "./src/commerce.ts",
+    "./preview": "./src/preview.ts",
     "./reservation": "./src/reservation/index.ts",
     "./themes": "./src/themes/index.ts",
     "./revalidate": "./src/revalidate/index.ts"

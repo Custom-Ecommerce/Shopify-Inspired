@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { RESERVED_SUBDOMAINS } from '@markaz/platform-kit/reservation';
+import { RESERVED_SUBDOMAINS, STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from '@markaz/platform-kit/reservation';
 import { THEME_MANIFEST } from '@markaz/platform-kit/themes';
 
 export const config = {
@@ -8,6 +8,9 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|theme-assets/).*)',
   ],
 };
+
+/** A store's host label: the platform-kit slug limit, as a DNS label (no hyphen at either end). */
+const STORE_LABEL = new RegExp(`^[a-z0-9][a-z0-9-]{${STORE_SLUG_MIN_LENGTH - 2},${STORE_SLUG_MAX_LENGTH - 2}}[a-z0-9]$`);
 
 /**
  * Emits a redirect with an explicit absolute `location`. Relative locations are
@@ -107,7 +110,7 @@ export function middleware(request: NextRequest) {
     }
 
     
-    if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(label) || label.startsWith('xn--')) {
+    if (!STORE_LABEL.test(label) || label.startsWith('xn--')) {
       return new NextResponse(null, { status: 404 });
     }
     
