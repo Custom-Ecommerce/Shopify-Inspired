@@ -1,5 +1,7 @@
 import "server-only";
 
+import { PREVIEW_CREDENTIAL_HEADER } from "@markaz/platform-kit/preview";
+
 import { STOREFRONT_API_PREFIX, parseResponse, sellerGet } from "./client";
 import { StoreNotFoundError } from "./errors";
 import { StoreByKeyResponse, type StoreStatus, type StorefrontStore } from "./schemas";
@@ -11,7 +13,8 @@ export const STORE_REVALIDATE_SECONDS = 300;
 export type StoreLookupBy = "slug" | "handle";
 
 export type StoreByKey =
-  | { kind: "active"; store: StorefrontStore }
+  /** `preview` is true when the backend accepted the preview credential. Then the store may also be pending (A-012). */
+  | { kind: "active"; store: StorefrontStore; preview: boolean }
   /** The store exists but is not serving; the backend exposes only its state. */
   | { kind: "inactive"; status: Exclude<StoreStatus, "active"> };
 
@@ -30,22 +33,28 @@ export function normalizeStoreKey(key: string): string | null {
  * store id is only known from the response. Throws `StoreNotFoundError` for an
  * unknown or malformed key (no request is made for the latter), plus the usual
  * unavailable / rate-limited errors.
+ *
+ * With a preview token the call carries it as a header and skips the data cache altogether, so a preview answer has no
+ * cache entry that a live request could ever read, and the reverse.
  */
-export async function fetchStoreByKey(key: string, by: StoreLookupBy): Promise<StoreByKey> {
+export async function fetchStoreByKey(key: string, by: StoreLookupBy, previewToken: string | null = null): Promise<StoreByKey> {
   const normalized = normalizeStoreKey(key);
   if (!normalized) throw new StoreNotFoundError();
 
-  const body = await sellerGet(`${STOREFRONT_API_PREFIX}/stores/by-key/${encodeURIComponent(normalized)}`, {
-    query: { by },
-    tags: [storeResolveTag(normalized)],
-    revalidate: STORE_REVALIDATE_SECONDS,
-  });
+  const path = `${STOREFRONT_API_PREFIX}/stores/by-key/${encodeURIComponent(normalized)}`;
+  const body = await sellerGet(
+    path,
+    previewToken === null
+      ? { query: { by }, tags: [storeResolveTag(normalized)], revalidate: STORE_REVALIDATE_SECONDS }
+      : { query: { by }, headers: { [PREVIEW_CREDENTIAL_HEADER]: previewToken } },
+  );
 
-  const { data } = parseResponse(StoreByKeyResponse, body, "store");
+  const { data, preview } = parseResponse(StoreByKeyResponse, body, "store");
 
   // Status-only payload: pending / suspended / archived.
   if (!("id" in data)) return { kind: "inactive", status: data.status };
-  // Full DTO. The backend only sends it for active stores; fail closed if not.
+  // Full DTO. The backend only sends it for active stores, or in a preview it accepted; fail closed if not.
+  if (preview === true) return { kind: "active", store: data, preview: true };
   if (data.status !== "active") return { kind: "inactive", status: data.status };
-  return { kind: "active", store: data };
+  return { kind: "active", store: data, preview: false };
 }

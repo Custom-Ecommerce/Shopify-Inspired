@@ -186,6 +186,16 @@ update: { actors: ['seller'], fields: { seller: ['stockQuantity'] } },
 delete: { actors: [], fields: {} },
 },
 
+// A preview link of a store (D-018, D-019). create is the click on "Preview store". Only the store's owner previews in
+// this epic (D-042), so an admin has no row here even though an admin can read the store. Nothing else exists to do to a
+// link: it is signed, not stored.
+storePreview: {
+read: { actors: [], fields: {} },
+create: { actors: ['seller'], fields: { seller: '*' } },
+update: { actors: [], fields: {} },
+delete: { actors: [], fields: {} },
+},
+
 // Reviews of permanently deleted products (D-014, A-004). Only the delete step writes them, and nobody changes them.
 archivedReviews: {
 read: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },

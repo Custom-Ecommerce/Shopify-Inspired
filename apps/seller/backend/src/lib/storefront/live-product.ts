@@ -21,10 +21,31 @@ export function liveListFilter(storeId: string): Record<string, unknown> {
   };
 }
 
+/**
+ * What a seller's preview shows (D-018, D-022): everything in the store that is not in the trash, drafts and the sample
+ * product included. A route uses this only after isPreviewRequest said yes for exactly this store. Checkout never does.
+ */
+export function previewProductFilter(storeId: string): Record<string, unknown> {
+  return { store: storeId, deletedAt: null };
+}
+
+/** Preview lists and the category list. hideWhenOutOfStock is not applied: the seller is here to see everything. */
+export function previewListFilter(storeId: string): Record<string, unknown> {
+  return previewProductFilter(storeId);
+}
+
 export interface LiveFlags {
   isPublished?: boolean | null;
   isDemo?: boolean | null;
   deletedAt?: unknown;
+}
+
+export type PreviewLabel = 'Draft' | 'Sample product';
+
+/** Why a shopper would not see this product, for the tag in a preview. Null when it is Live. */
+export function previewLabelOf(row: LiveFlags): PreviewLabel | null {
+  if (row.isDemo === true) return 'Sample product';
+  return row.isPublished === true ? null : 'Draft';
 }
 
 /** liveProductFilter for a row already read, so a refusal can name the line instead of calling the product unknown. */

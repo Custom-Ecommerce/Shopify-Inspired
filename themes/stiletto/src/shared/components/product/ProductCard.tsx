@@ -7,6 +7,7 @@ import Link from "next/link";
 import { productCardDictionary } from "../../constants/dictionary";
 import { productCardExitVariants } from "../../lib/animations";
 import { Button } from "../primitives/button";
+import { PreviewLabel } from "./PreviewLabel";
 
 import "swiper/css";
 import "swiper/css/pagination";
@@ -88,6 +89,7 @@ export function ProductCard({ product, index, variant }: ProductCardProps) {
       className="snap-start shrink-0 w-[60vw] md:w-[28vw] lg:w-[22%] max-w-[320px] flex flex-col group cursor-pointer"
     >
       <div className={`relative w-full aspect-[3/4] ${tokens.imageBg} rounded-xl overflow-hidden mb-5`}>
+        <PreviewLabel label={product.previewLabel} className="absolute top-3 left-3 z-20" />
         <Swiper
           modules={[Pagination]}
           pagination={{ clickable: true }}

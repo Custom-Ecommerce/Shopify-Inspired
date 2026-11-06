@@ -1,5 +1,6 @@
 import { productAvailability, variantAvailability } from '@markaz/platform-kit/commerce';
 import { storefrontProductDetailSchema, storefrontProductSummarySchema } from '@/lib/contracts';
+import { previewLabelOf } from '@/lib/storefront/live-product';
 
 interface PopulatedCategory {
   _id: unknown;
@@ -37,6 +38,9 @@ export interface ProductRow {
   media?: Array<PopulatedMedia | null> | null;
   avgRating?: number | null;
   reviewCount?: number | null;
+  /** Read in a preview only, for the tag. A live read does not ask for them. */
+  isPublished?: boolean | null;
+  isDemo?: boolean | null;
 }
 
 const byPosition = (variants: readonly VariantRow[]): VariantRow[] =>
@@ -74,9 +78,14 @@ export function toProductSummaryDto(row: ProductRow) {
   };
 }
 
+/** The tag, in a preview only. A live response does not have the key at all. */
+function previewFields(row: Pick<ProductRow, 'isPublished' | 'isDemo'>, preview: boolean) {
+  return preview ? { previewLabel: previewLabelOf(row) } : {};
+}
+
 /** Validates the projection against the contract, so a malformed row fails closed instead of reaching a theme. */
-export function toValidatedProductSummaries(rows: ProductRow[]) {
-  return rows.map((row) => storefrontProductSummarySchema.parse(toProductSummaryDto(row)));
+export function toValidatedProductSummaries(rows: ProductRow[], preview = false) {
+  return rows.map((row) => storefrontProductSummarySchema.parse({ ...toProductSummaryDto(row), ...previewFields(row, preview) }));
 }
 
 interface DetailMedia extends PopulatedMedia {
@@ -144,6 +153,6 @@ export function toProductDetailDto(row: ProductDetailRow, storeDeliveryRate: num
 }
 
 /** Validates the projection against the contract, so a malformed row fails closed instead of reaching a theme. */
-export function toValidatedProductDetail(row: ProductDetailRow, storeDeliveryRate: number) {
-  return storefrontProductDetailSchema.parse(toProductDetailDto(row, storeDeliveryRate));
+export function toValidatedProductDetail(row: ProductDetailRow, storeDeliveryRate: number, preview = false) {
+  return storefrontProductDetailSchema.parse({ ...toProductDetailDto(row, storeDeliveryRate), ...previewFields(row, preview) });
 }

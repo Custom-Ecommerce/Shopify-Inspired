@@ -9,6 +9,7 @@ import { getTheme, resolveEffectiveTheme } from '@/lib/themes';
 import { ThemeScope } from '@/components/theme-scope';
 import { TenantProvider, type TenantSnapshot } from '@/context/tenant-context';
 import { StoreShell } from '@/containers/shell';
+import { PreviewBanner } from '@/components/preview-banner';
 
 /** Fallback when a store has no free-delivery threshold configured. */
 const DEFAULT_FREE_DELIVERY_THRESHOLD = 5000;
@@ -71,6 +72,7 @@ export default async function TenantLayout({
         <StoreShell snapshot={snapshot} theme={theme} chrome={chrome}>
           <div className="tenant-boundary">{children}</div>
         </StoreShell>
+        {result.previewToken !== null && <PreviewBanner notLiveYet={store.status !== 'active'} />}
       </StorefrontProvider>
     </TenantProvider>
   );

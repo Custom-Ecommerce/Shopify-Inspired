@@ -14,6 +14,7 @@ import {
   SidebarGroupLabel,
   SidebarGroupContent,
 } from "@/components/ui/sidebar";
+import { PreviewStoreButton } from "@/components/dashboard/PreviewStoreButton";
 import { UserMenu } from "@/components/dashboard/UserMenu";
 import { StoreSwitcher } from "@/components/dashboard/StoreSwitcher";
 import { BrandMark } from "@/components/shared/BrandMark";
@@ -172,6 +173,11 @@ export function DashboardSidebar() {
 
       <SidebarFooter className="px-2 pb-3">
         <SidebarMenu className="gap-2">
+          {activeStore && (
+            <SidebarMenuItem>
+              <PreviewStoreButton />
+            </SidebarMenuItem>
+          )}
           {/* "View My Store": outlined external CTA (blueprint §4.3) */}
           {activeStore && (
             <SidebarMenuItem>

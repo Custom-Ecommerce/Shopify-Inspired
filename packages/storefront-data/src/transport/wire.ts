@@ -48,6 +48,7 @@ export const WireProductSummary = z.object({
   ),
   avgRating: z.number().nonnegative(),
   reviewCount: z.number().int().nonnegative(),
+  previewLabel: z.enum(["Draft", "Sample product"]).nullable().optional(),
 });
 
 export const WireProductOption = z.object({

@@ -170,7 +170,10 @@ export const StorefrontErrorEnvelope = z.object({
 });
 export type StorefrontErrorEnvelope = z.infer<typeof StorefrontErrorEnvelope>;
 
-export const StoreByKeyResponse = envelope(z.union([StorefrontStore, StorefrontStoreStatusOnly]));
+export const StoreByKeyResponse = envelope(z.union([StorefrontStore, StorefrontStoreStatusOnly])).extend({
+  /** True only when the backend accepted the preview credential for this exact store. */
+  preview: z.boolean().optional(),
+});
 export const CategoriesResponse = envelope(z.array(StorefrontCategory));
 export const ProductDetailResponse = envelope(StorefrontProductDetail);
 

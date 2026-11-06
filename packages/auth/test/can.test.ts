@@ -37,6 +37,16 @@ assert.equal(can('public', operation, 'products', ['title']), false, operation);
 }
 });
 
+test('storePreview: only a seller may ask for a preview link, and nothing else can be done to one (D-042)', () => {
+assert.equal(can('seller', 'create', 'storePreview'), true);
+for (const actor of ['admin', 'system', 'public'] as const) {
+assert.equal(can(actor, 'create', 'storePreview'), false, actor);
+}
+for (const operation of ['read', 'update', 'delete'] as const) {
+assert.equal(can('seller', operation, 'storePreview'), false, operation);
+}
+});
+
 test('seller update with no field list is denied (fail-closed)', () => {
 assert.equal(can('seller', 'update', 'stores'), false);
 });

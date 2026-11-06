@@ -48,6 +48,8 @@ export const STOREFRONT_ERROR_CODES = [
   'VARIANT_REQUIRED',
   'UNKNOWN_VARIANT',
   'PRODUCT_UNAVAILABLE',
+  // Seller preview: an order sent from a preview is never placed.
+  'PREVIEW_ORDER_BLOCKED',
 ] as const;
 export type StorefrontErrorCode = (typeof STOREFRONT_ERROR_CODES)[number];
 
@@ -103,6 +105,8 @@ export const storefrontStoreStatusOnlySchema = z.object({
 
 export const storefrontStoreByKeyResponseSchema = z.object({
   data: z.union([storefrontStoreSchema, storefrontStoreStatusOnlySchema]),
+  /** True only when the request's preview credential was accepted for this store. Then a pending store has a full body. */
+  preview: z.boolean().optional(),
 });
 
 export const storefrontProductSummarySchema = z.object({
@@ -123,6 +127,8 @@ export const storefrontProductSummarySchema = z.object({
   categories: z.array(z.object({ id: z.string().min(1), slug: z.string().min(1), name: z.string() })),
   avgRating: z.number().nonnegative(),
   reviewCount: z.number().int().nonnegative(),
+  /** Sent only in a seller's preview: why a shopper would not see this product. Live responses never have this key. */
+  previewLabel: z.enum(['Draft', 'Sample product']).nullable().optional(),
 });
 
 /** A store category as a shopper navigates it. Only categories that hold a published product are listed. */

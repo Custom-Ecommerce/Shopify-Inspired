@@ -67,6 +67,7 @@ export function toStilettoProduct(source: Source, reviews: ReviewItem[] = []): N
     metafields: [],
     specs: [],
     reviews,
+    previewLabel: source.previewLabel,
   };
 }
 

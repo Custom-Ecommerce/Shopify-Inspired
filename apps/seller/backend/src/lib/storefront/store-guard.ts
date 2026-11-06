@@ -46,13 +46,18 @@ export function assertStoreId(id: string): void {
   if (!objectIdSchema.safeParse(id).success) throw storeNotFound();
 }
 
+/** Does a store in this state serve this request? A pending store serves its owner's preview (A-012); nothing else changes. */
+export function servesStore(status: string, preview: boolean): boolean {
+  return status === 'active' || (preview && status === 'pending');
+}
+
 /**
- * Resolves the :id of a storefront route to an active store, or throws.
+ * Resolves the :id of a storefront route to an active store, or throws. With preview set, a pending store resolves too.
  *   404 STORE_NOT_FOUND   malformed or unknown id (a malformed id never reaches the database)
  *   403 STORE_NOT_ACTIVE  the store exists but is not serving
  *   503 STOREFRONT_UNAVAILABLE  the database is down
  */
-export async function loadActiveStore(id: string): Promise<StoreCommerce> {
+export async function loadActiveStore(id: string, options: { preview?: boolean } = {}): Promise<StoreCommerce> {
   assertStoreId(id);
 
   await connectSellerDb().catch(() => {
@@ -61,7 +66,7 @@ export async function loadActiveStore(id: string): Promise<StoreCommerce> {
 
   const store = (await (Store as any).findById(id).select('status storefront paymentSettings').lean()) as ActiveStoreRow | null;
   if (!store) throw storeNotFound();
-  if (store.status !== 'active') {
+  if (!servesStore(store.status, options.preview === true)) {
     throw new StorefrontHttpError(403, 'STORE_NOT_ACTIVE', 'This store is not available.', { status: store.status });
   }
   return readStoreCommerce({ ...store, _id: store._id ?? id });

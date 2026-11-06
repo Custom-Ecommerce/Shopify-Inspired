@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { useCartContext } from "../../shared/context/CartContext";
+import { PreviewLabel } from "../../shared/components/product/PreviewLabel";
 import type { NormalizedProduct } from "../../types";
 
 interface ProductInfoProps {
@@ -144,6 +145,7 @@ export function ProductInfo({ product }: ProductInfoProps) {
             {product.productType}
           </span>
         )}
+        <PreviewLabel label={product.previewLabel} className="mb-2" />
         <h1 className="font-heading text-[26px] sm:text-[34px] md:text-[40px] uppercase tracking-[0.05em] text-[var(--featured-text)] leading-tight">
           {product.title}
         </h1>

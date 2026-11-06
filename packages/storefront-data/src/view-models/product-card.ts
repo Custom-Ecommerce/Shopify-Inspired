@@ -1,7 +1,7 @@
 import { discountPercent } from "@markaz/platform-kit/commerce";
 import { toMoney } from "../domain/money";
 import type { Money } from "../domain/money";
-import type { StockStatus, StorefrontProductSummary } from "../transport/types";
+import type { PreviewLabel, StockStatus, StorefrontProductSummary } from "../transport/types";
 
 export interface ProductCardVM {
   id: string;
@@ -22,6 +22,8 @@ export interface ProductCardVM {
   rating: { average: number; count: number } | null;
   /** The product's categories. Optional so existing consumers are unaffected. */
   categories?: { id: string; slug: string; name: string }[];
+  /** Null on a live store. In a preview, says why a shopper would not see this product. */
+  previewLabel: PreviewLabel | null;
 }
 
 const STOCK_LABELS: Record<StockStatus, string> = {
@@ -49,6 +51,7 @@ export function toProductCardVM(dto: StorefrontProductSummary): ProductCardVM {
     canQuickAdd: !dto.hasVariants && dto.stockStatus !== "out_of_stock",
     rating: dto.reviewCount > 0 ? { average: dto.avgRating, count: dto.reviewCount } : null,
     categories: dto.categories.map((c) => ({ id: c.id, slug: c.slug, name: c.name })),
+    previewLabel: dto.previewLabel ?? null,
   };
 }
 /* @theme-integration-patch:card */

@@ -93,6 +93,7 @@ export async function resolveTransport(source: StorefrontSource): Promise<Storef
     baseUrl: normalizeBaseUrl(process.env.SELLER_BACKEND_API_URL || "http://localhost:4001"),
     storeId: lookup.store.id,
     mode: REMOTE_MODE,
+    previewToken: lookup.previewToken,
   });
 }
 
@@ -118,6 +119,7 @@ export async function resolveOrderTransport(key: string, clientIp: string | null
       storeId: lookup.store.id,
       mode: REMOTE_MODE,
       clientIp,
+      previewToken: lookup.previewToken,
     }),
   };
 }

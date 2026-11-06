@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { PREVIEW_COOKIE_NAME, PREVIEW_CREDENTIAL_HEADER, PREVIEW_QUERY_PARAM, isPreviewTokenShape } from '@markaz/platform-kit/preview';
 import { RESERVED_SUBDOMAINS, STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from '@markaz/platform-kit/reservation';
 import { THEME_MANIFEST } from '@markaz/platform-kit/themes';
+import { PREVIEW_CACHE_CONTROL, confirmPreviewToken, previewCookie, previewSecondsLeft, withoutPreviewParam } from '@markaz/storefront-data/preview';
 
 export const config = {
   matcher: [
@@ -21,7 +23,29 @@ function redirectTo(target: string, status: 307 | 308): NextResponse {
   return new NextResponse(null, { status, headers: { location: target } });
 }
 
-export function middleware(request: NextRequest) {
+/**
+ * A preview link was opened on a store host (D-019). The token leaves the URL here whatever happens: a good one becomes the
+ * host-only cookie, anything else just lands on the live store. Only the seller backend can say which it is.
+ */
+async function enterPreview(request: NextRequest, storeKey: string, host: string): Promise<NextResponse> {
+  const url = request.nextUrl;
+  const token = url.searchParams.get(PREVIEW_QUERY_PARAM);
+  const scheme = (request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '')).split(',')[0].trim();
+  const response = redirectTo(`${scheme}://${host}${withoutPreviewParam(url.pathname, url.search)}`, 307);
+  response.headers.set('cache-control', PREVIEW_CACHE_CONTROL);
+  response.headers.set('referrer-policy', 'no-referrer');
+
+  if (isPreviewTokenShape(token)) {
+    const baseUrl = process.env.SELLER_BACKEND_API_URL || 'http://localhost:4001';
+    if (await confirmPreviewToken({ baseUrl, storeKey, token })) {
+      const seconds = previewSecondsLeft(token, Date.now());
+      if (seconds > 0) response.headers.append('set-cookie', previewCookie(token, seconds, process.env.NODE_ENV === 'production'));
+    }
+  }
+  return response;
+}
+
+export async function middleware(request: NextRequest) {
   const url = request.nextUrl;
   const rawHost = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
   
@@ -50,6 +74,8 @@ export function middleware(request: NextRequest) {
   requestHeaders.delete('x-markaz-tenant');
   requestHeaders.delete('x-markaz-theme');
   requestHeaders.delete('x-markaz-noindex');
+  // Only the cookie below may set this. A browser that sends the header itself is not believed.
+  requestHeaders.delete(PREVIEW_CREDENTIAL_HEADER);
 
   // T1: Marketing / Platform Hosts
   if (host === rootDomain || platformHostnames.includes(host)) {
@@ -117,16 +143,26 @@ export function middleware(request: NextRequest) {
     requestHeaders.set('x-markaz-tier', 'T3');
     requestHeaders.set('x-markaz-kind', 'tenant');
     requestHeaders.set('x-markaz-tenant', label);
+    // Later requests read the cookie and never the query. The token rides on to the server as a request header; the seller
+    // backend checks it for this exact store on every call, so a stale or foreign cookie simply gets the live store.
+    const previewToken = request.cookies.get(PREVIEW_COOKIE_NAME)?.value;
+    const hasPreviewCookie = isPreviewTokenShape(previewToken);
+    if (hasPreviewCookie) requestHeaders.set(PREVIEW_CREDENTIAL_HEADER, previewToken);
     // The storefront API lives under /api/storefront on the store's own host. Pass it through with the tenant
     // headers set, so the BFF can tell which store the request is for. Rewriting it would send it to a page route.
     if (url.pathname.startsWith('/api/storefront/')) {
       return NextResponse.next({ request: { headers: requestHeaders } });
     }
+    if (url.searchParams.has(PREVIEW_QUERY_PARAM)) return enterPreview(request, label, host);
     const res = NextResponse.rewrite(new URL('/tenant/' + label + url.pathname + url.search, request.url), { request: { headers: requestHeaders } });
     res.headers.set('x-robots-tag', 'noindex');
+    if (hasPreviewCookie) {
+      res.headers.set('cache-control', PREVIEW_CACHE_CONTROL);
+      res.headers.append('vary', 'Cookie');
+    }
     return res;
   }
-  
+
   // T2: Demo (theme.<slug>.<root>)
   if (labels.length === 2 && labels[0] === 'theme') {
     const themeSlug = labels[1];

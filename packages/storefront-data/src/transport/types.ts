@@ -5,6 +5,9 @@ export interface StorefrontImage {
   alt: string;
 }
 
+/** Why a shopper would not see a product. Only a seller's preview ever carries one. */
+export type PreviewLabel = "Draft" | "Sample product";
+
 export interface StorefrontProductSummary {
   id: string;
   slug: string;
@@ -23,6 +26,8 @@ export interface StorefrontProductSummary {
   categories: { id: string; slug: string; name: string }[];
   avgRating: number;
   reviewCount: number;
+  /** Sent only in a preview. */
+  previewLabel?: PreviewLabel | null;
 }
 
 /** A category of the store, as the seller named and ordered it. The backend sends only those holding a published product. */

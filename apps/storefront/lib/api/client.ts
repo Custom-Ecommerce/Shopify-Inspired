@@ -33,6 +33,8 @@ export interface SellerGetOptions {
    * (`cache: "no-store"`); Next 15 does not cache `fetch` by default anyway.
    */
   revalidate?: number;
+  /** Extra request headers. A call that carries a credential must also leave `revalidate` unset, so it is never cached. */
+  headers?: Record<string, string>;
 }
 
 /** Read per call, not at module load, so the value tracks the runtime env. */
@@ -63,7 +65,7 @@ function attempt(url: string, options: SellerGetOptions): Promise<Response> {
 
   return fetch(url, {
     method: "GET",
-    headers: { accept: "application/json" },
+    headers: { accept: "application/json", ...options.headers },
     signal: AbortSignal.timeout(SELLER_TIMEOUT_MS),
     ...(next ? { next } : { cache: "no-store" as const }),
   });

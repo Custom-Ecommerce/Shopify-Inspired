@@ -51,6 +51,8 @@ export interface RemoteSelection {
   fetchImpl?: typeof fetch;
   /** The shopper's IP as the BFF trusts it. The backend uses it for its per-client limits. */
   clientIp?: string | null;
+  /** A preview the backend accepted. Set only from the store lookup. */
+  previewToken?: string | null;
 }
 
 /** Builds the transport for a decided kind. Mock is shared; remote is bound to one store. */

@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { PREVIEW_CREDENTIAL_HEADER } from "@markaz/platform-kit/preview";
 import { OrderRejectedError, TransportUnavailableError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
 import type {
@@ -58,6 +59,11 @@ export interface RemoteTransportOptions {
    * shopper and not to the storefront server. Omit it for calls that are not made on a shopper's behalf.
    */
   clientIp?: string | null;
+  /**
+   * A preview the backend accepted for this store. Sent as a header on every call, never in a URL. Every call here is
+   * already no-store, so a preview answer has no cache entry at all. A credential: never log it.
+   */
+  previewToken?: string | null;
 }
 
 export interface BffTransportOptions {
@@ -160,6 +166,9 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
       return { code: "invalid_request", message: message ?? "Invalid request." };
     case "STORE_NOT_ACTIVE":
       return { code: "store_inactive" };
+    // Reads as an invalid request, whose message every theme already shows, so no theme needs a new case.
+    case "PREVIEW_ORDER_BLOCKED":
+      return { code: "invalid_request", message: message ?? "This is a preview, so no order was placed." };
     default:
       return null;
   }
@@ -184,9 +193,11 @@ function makeExchanger(options: {
   timeoutMs: number;
   fetchImpl: typeof fetch;
   clientIp?: string | null;
+  previewToken?: string | null;
 }): Exchanger {
   const forwarded: Record<string, string> =
     options.clientIp && options.clientIp !== "unknown" ? { "x-forwarded-for": options.clientIp } : {};
+  if (options.previewToken) forwarded[PREVIEW_CREDENTIAL_HEADER] = options.previewToken;
 
   return async (method, path, request) => {
     const attempts = request.retry ? 2 : 1;
@@ -274,6 +285,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     timeoutMs: options.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,
     fetchImpl: options.fetchImpl ?? defaultFetch,
     clientIp: options.clientIp,
+    previewToken: options.previewToken,
   });
 
   const requireHttp = (): void => {

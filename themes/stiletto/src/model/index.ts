@@ -58,6 +58,8 @@ export interface NormalizedProduct {
   metafields?: Array<{ id?: string; key?: string; value: string }>;
   specs?: NormalizedProductSpec[];
   reviews: ReviewItem[];
+  /** Only in a seller's preview: the data layer's tag for this product. */
+  previewLabel?: string | null;
 }
 
 export interface NormalizedCategory {
