@@ -12,6 +12,7 @@ import { categoryCreateRequestSchema } from '@/lib/contracts';
 import { HttpError, handleRouteError, isDuplicateKeyError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { parseBody } from '@/lib/placeholder';
+import { revalidateStoreCategories } from '@/lib/revalidate';
 import { assertCan, Category, listEnvelope } from '@/lib/services';
 import { plainDoc, toWire } from '@/lib/seller-scope';
 
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         order: body.data.order ?? (await nextCategoryOrder(storeId)),
         store: storeId,
       });
+      await revalidateStoreCategories(storeId);
       return NextResponse.json(toWire(plainDoc(created)), { status: 201 });
     } catch (err) {
       if (isDuplicateKeyError(err)) return slugTaken();

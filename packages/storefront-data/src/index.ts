@@ -10,13 +10,13 @@ export { toCartVM } from "./view-models/cart";
 export type { CartVM, CartLineVM } from "./view-models/cart";
 export type { CatalogPageData } from "./view-models/catalog";
 export { storePaths } from "./view-models/paths";
-export { deriveCategories } from "./view-models/chrome";
+export { toCategoryVMs } from "./view-models/chrome";
 export type { CategoryVM, StoreChromeVM } from "./view-models/chrome";
 export { createMockTransport, mockProduct } from "./transport/mock";
 export type { MockFixtures, MockProductInput } from "./transport/mock";
 export { validateCheckout } from "./domain/checkout";
 export type { CheckoutValues, CheckoutFieldErrors } from "./domain/checkout";
-export type { ProductQuery, ProductListPage, ProductSort, StorefrontProductDetail, StorefrontProductSummary } from "./transport/types";
+export type { ProductQuery, ProductListPage, ProductSort, StorefrontCategory, StorefrontProductDetail, StorefrontProductSummary } from "./transport/types";
 // Re-exported so a theme that imports the hook from the package root works (Mustafa's product card does).
 export { useCart } from "./client/use-cart";
 export type {

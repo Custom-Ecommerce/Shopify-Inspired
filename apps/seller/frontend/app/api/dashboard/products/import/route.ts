@@ -9,13 +9,27 @@ interface CsvRow {
   originalPrice?: string;
   description?: string;
   category?: string;
-  stockStatus?: string;
   stockQuantity?: string;
   isFeatured?: string;
   highlights?: string;
 }
 
-const STOCK_STATUSES = new Set(["in_stock", "low_stock", "out_of_stock"]);
+interface StoreCategory {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+/** The categories of the verified store, read once per import. Bulk import is rebuilt with its own batch. */
+async function loadStoreCategories(token: string, storeId: string): Promise<StoreCategory[]> {
+  const res = await fetch(`${PAYLOAD_API_URL}/api/categories?limit=200`, {
+    headers: { Authorization: `JWT ${token}`, "x-store-id": storeId },
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const data: { docs?: StoreCategory[] } = await res.json();
+  return data.docs ?? [];
+}
 
 function slugify(input: string): string {
   return input.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -46,6 +60,8 @@ export async function POST(req: NextRequest) {
   const parsed = Papa.parse<CsvRow>(csvText, { header: true, skipEmptyLines: true });
   const rows = parsed.data;
 
+  const categories = await loadStoreCategories(token, storeId).catch((): StoreCategory[] => []);
+
   let success = 0;
   const errors: { row: number; reason: string }[] = [];
 
@@ -69,78 +85,34 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    // Slug uniqueness is scoped to "for this seller's store" per spec —
-    // in practice `slug` is globally unique on the Products collection
-    // (see Products.ts), so this check is really "is this slug taken by
-    // ANYONE" — but reported to the seller in terms of their own import,
-    // since a cross-store collision is what they'd actually hit.
-    try {
-      const where = encodeURIComponent(JSON.stringify({ slug: { equals: slug } }));
-      const checkRes = await fetch(`${PAYLOAD_API_URL}/api/products?where=${where}&limit=1&depth=0`, {
-        cache: "no-store",
-      });
-      const checkData = await checkRes.json();
-      if (checkData?.docs?.length) {
-        errors.push({ row: rowNum, reason: `Slug "${slug}" is already taken.` });
-        continue;
-      }
-    } catch {
-      errors.push({ row: rowNum, reason: "Could not verify slug uniqueness." });
-      continue;
-    }
-
-    const stockStatus = STOCK_STATUSES.has(row.stockStatus ?? "") ? row.stockStatus : "in_stock";
     const stockQuantity = row.stockQuantity ? Number(row.stockQuantity) : 0;
     const highlights = row.highlights
-      ? row.highlights.split("|").map((text) => ({ text: text.trim() })).filter((h) => h.text)
+      ? row.highlights.split("|").map((text) => text.trim()).filter(Boolean)
       : undefined;
 
-    // `categories` (plural, relationship, hasMany, required — see
-    // Products.ts) needs an actual Category id, not a free-text name.
-    // The CSV's `category` column is treated as a name or slug and
-    // resolved here; a 24-hex-char value is assumed to already be an id.
+    // The CSV's `category` column is a name, a slug or an id of a category of this store.
     const categoryValue = row.category?.trim();
-    let categoryId: string | undefined;
-    if (categoryValue) {
-      if (/^[a-f0-9]{24}$/i.test(categoryValue)) {
-        categoryId = categoryValue;
-      } else {
-        try {
-          const where = encodeURIComponent(
-            JSON.stringify({ or: [{ name: { equals: categoryValue } }, { slug: { equals: categoryValue } }] })
-          );
-          const catRes = await fetch(`${PAYLOAD_API_URL}/api/categories?where=${where}&limit=1&depth=0`, {
-            cache: "no-store",
-          });
-          const catData = await catRes.json();
-          categoryId = catData?.docs?.[0]?.id;
-        } catch {
-          // fall through — handled by the required-field check below
-        }
-      }
-    }
+    const wanted = categoryValue?.toLowerCase();
+    const categoryId = categories.find(
+      (c) => c.id === categoryValue || c.name.toLowerCase() === wanted || c.slug === wanted
+    )?.id;
     if (!categoryId) {
       errors.push({ row: rowNum, reason: categoryValue ? `Category "${categoryValue}" not found.` : "Missing category." });
       continue;
     }
 
+    // A taken slug comes back as a refusal for this row. A CSV row has no images: add them in the product form.
     const data: Record<string, unknown> = {
       title: row.title.trim(),
       slug,
       price,
-      originalPrice: row.originalPrice ? Number(row.originalPrice) : undefined,
+      compareAtPrice: row.originalPrice ? Number(row.originalPrice) : undefined,
       description: row.description?.trim() || undefined,
-      stockStatus,
-      stockQuantity: Number.isNaN(stockQuantity) ? 0 : stockQuantity,
+      stockQuantity: Number.isInteger(stockQuantity) && stockQuantity >= 0 ? stockQuantity : 0,
       isFeatured: row.isFeatured?.trim().toLowerCase() === "true",
       highlights,
       categories: [categoryId],
-      // Products.media is required (minRows: 1) — a CSV row has no way to
-      // supply image files, so a bulk-imported product is created without
-      // one and needs at least one added via the dashboard's product edit
-      // form afterwards. Noted in the delivery report.
     };
-    data.store = storeId; // unconditional (§6.4)
 
     try {
       const res = await fetch(`${PAYLOAD_API_URL}/api/products`, {
@@ -155,7 +127,8 @@ export async function POST(req: NextRequest) {
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => null);
-        errors.push({ row: rowNum, reason: errData?.errors?.[0]?.message ?? `Import failed (${res.status}).` });
+        const reason = errData?.errors?.[0]?.message ?? errData?.issues?.[0]?.message;
+        errors.push({ row: rowNum, reason: reason ?? `Import failed (${res.status}).` });
         continue;
       }
       success++;

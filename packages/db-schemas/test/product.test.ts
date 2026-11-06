@@ -26,7 +26,8 @@ const sized = (variants: Array<Record<string, unknown>>) => ({
 test('product accepts a minimal valid document and applies defaults', () => {
   const doc = product();
   assert.equal(doc.validateSync(), undefined);
-  assert.equal(doc.isPublished, true);
+  assert.equal(doc.isPublished, false);
+  assert.equal(doc.isDemo, false);
   assert.equal(doc.avgRating, 0);
   assert.equal(doc.reviewCount, 0);
   assert.equal(doc.deliveryCharge, null);

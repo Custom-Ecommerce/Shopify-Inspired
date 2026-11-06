@@ -108,6 +108,7 @@ function product(overrides: Record<string, any> = {}) {
       },
     ],
     isPublished: true,
+    isDemo: false,
     categories: [{ _id: '65a0000000000000000000c1', slug: 'shirts', name: 'Shirts' }, null],
     media: [
       { _id: 'm1', url: 'https://res.cloudinary.com/demo/a.jpg', alt: 'Front' },
@@ -180,7 +181,7 @@ test('the query is store-scoped and published-only, and never selects stock coun
   storeRow = activeStore();
   products = [product()];
   await get(STORE_ID, 'blue-shirt');
-  assert.deepEqual(rec.filter, { store: STORE_ID, slug: 'blue-shirt', isPublished: true });
+  assert.deepEqual(rec.filter, { store: STORE_ID, slug: 'blue-shirt', isPublished: true, isDemo: false });
   for (const hidden of ['stockQuantity', 'reservedQuantity', 'stockHistory', 'store', 'viewCount', 'lowStockThreshold']) {
     assert.equal(hidden in rec.projection, false, hidden + ' must not be selected');
   }

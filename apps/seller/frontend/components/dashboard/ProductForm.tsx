@@ -1,9 +1,9 @@
 "use client";
 
-import type { Product as PayloadProductDoc, Category as PayloadCategoryDoc, StockStatus as PayloadStockStatus } from "@markaz/contracts";
+import type { Category as CategoryDoc, SellerProductDetail } from "@markaz/contracts";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { useStoreHref } from "@/lib/dashboard-context";
-import { firstVariant, stockStatusOf } from "@/lib/product-stock";
+import { discountPercent } from "@/lib/product-pricing";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,13 +15,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Surface } from "@/components/shared/Surface";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
+
+const MAX_IMAGES = 10;
+const MAX_HIGHLIGHTS = 10;
 
 function slugify(input: string): string {
   return input.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -35,51 +32,91 @@ interface ImageEntry {
 interface FormState {
   title: string;
   slug: string;
-  price: string;
-  originalPrice: string;
   description: string;
-  categoryId: string;
-  stockStatus: PayloadStockStatus;
+  highlights: string;
+  categoryIds: string[];
+  price: string;
+  compareAtPrice: string;
+  sku: string;
+  barcode: string;
+  trackQuantity: boolean;
   stockQuantity: string;
+  deliveryCharge: string;
   isFeatured: boolean;
-  highlights: string[];
   images: ImageEntry[];
 }
 
-function initialStateFromProduct(product?: PayloadProductDoc): FormState {
-  const variant = product ? firstVariant(product) : undefined;
+function initialState(product?: SellerProductDetail): FormState {
+  const variant = product?.variants[0];
   return {
     title: product?.title ?? "",
     slug: product?.slug ?? "",
-    price: variant ? String(variant.price) : "",
-    originalPrice: variant?.compareAtPrice != null ? String(variant.compareAtPrice) : "",
     description: product?.description ?? "",
-    categoryId:
-      (typeof product?.categories?.[0] === "object" ? product.categories[0]?.id : product?.categories?.[0]) ?? "",
-    stockStatus: variant ? stockStatusOf(variant) : "in_stock",
+    highlights: (product?.highlights ?? []).join("\n"),
+    categoryIds: (product?.categories ?? []).map((category) => category.id),
+    price: variant ? String(variant.price) : "",
+    compareAtPrice: variant?.compareAtPrice != null ? String(variant.compareAtPrice) : "",
+    sku: variant?.sku ?? "",
+    barcode: variant?.barcode ?? "",
+    trackQuantity: variant?.trackQuantity ?? true,
     stockQuantity: variant ? String(variant.stockQuantity) : "0",
+    deliveryCharge: product?.deliveryCharge != null ? String(product.deliveryCharge) : "",
     isFeatured: product?.isFeatured ?? false,
-    highlights: (product?.highlights ?? []).map((h) => h.text),
-    images: (product?.media ?? [])
-      .filter((m): m is Exclude<typeof m, string> => typeof m === "object" && m !== null)
-      .map((m) => ({ id: m.id, url: m.url ?? "" })),
+    images: (product?.media ?? []).map((media) => ({ id: media.id, url: media.url })),
   };
 }
 
-export function ProductForm({ product }: { product?: PayloadProductDoc }) {
+const optionalNumber = (value: string): number | null => (value.trim() === "" ? null : Number(value));
+const optionalText = (value: string): string | null => (value.trim() === "" ? null : value.trim());
+
+/** The Default variant's fields as the form holds them, in the shape the API takes. */
+function defaultVariantFields(form: FormState) {
+  return {
+    price: Number(form.price),
+    compareAtPrice: optionalNumber(form.compareAtPrice),
+    sku: optionalText(form.sku),
+    barcode: optionalText(form.barcode),
+    trackQuantity: form.trackQuantity,
+  };
+}
+
+/** The update for the Default variant, or null when the seller changed none of it. Stock is never part of it (D-034). */
+function changedVariant(product: SellerProductDetail, form: FormState) {
+  const variant = product.variants[0];
+  const fields = defaultVariantFields(form);
+  const unchanged =
+    fields.price === variant.price &&
+    fields.compareAtPrice === variant.compareAtPrice &&
+    fields.sku === variant.sku &&
+    fields.barcode === variant.barcode &&
+    fields.trackQuantity === variant.trackQuantity;
+  return unchanged ? null : { id: variant.id, ...fields };
+}
+
+/** The proxy sends `{ error, details }`. A refused field has its own message in details. */
+function refusalMessage(body: unknown): string {
+  const { error, details } = (body ?? {}) as { error?: string; details?: unknown };
+  const first = Array.isArray(details) ? (details[0] as { message?: string } | undefined) : undefined;
+  return first?.message ?? error ?? "Could not save this product.";
+}
+
+export function ProductForm({ product }: { product?: SellerProductDetail }) {
   const storeFetch = useStoreFetch();
   const href = useStoreHref();
   const router = useRouter();
   const isEdit = Boolean(product);
+  /** The variant builder comes later: until then a product with variants shows them read-only and never sends them. */
+  const hasManyVariants = (product?.variants.length ?? 1) > 1;
 
-  const [form, setForm] = useState<FormState>(() => initialStateFromProduct(product));
-  const [categories, setCategories] = useState<PayloadCategoryDoc[]>([]);
+  const [form, setForm] = useState<FormState>(() => initialState(product));
+  const [slugEdited, setSlugEdited] = useState(isEdit);
+  const [categories, setCategories] = useState<CategoryDoc[]>([]);
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    storeFetch("/api/proxy/categories?limit=200&depth=0")
+    storeFetch("/api/proxy/categories?limit=200")
       .then((res) => res.json())
       .then((data) => {
         setCategories(data?.docs ?? []);
@@ -91,15 +128,14 @@ export function ProductForm({ product }: { product?: PayloadProductDoc }) {
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
-    const remaining = 5 - form.images.length;
+    const remaining = MAX_IMAGES - form.images.length;
     if (remaining <= 0) {
-      toast.error("Maximum 5 images per product.");
+      toast.error(`Maximum ${MAX_IMAGES} images per product.`);
       return;
     }
-    const toUpload = files.slice(0, remaining);
     setUploading(true);
     try {
-      for (const file of toUpload) {
+      for (const file of files.slice(0, remaining)) {
         const body = new FormData();
         body.set("file", file);
         body.set("alt", form.title || "Product image");
@@ -122,48 +158,73 @@ export function ProductForm({ product }: { product?: PayloadProductDoc }) {
     setForm((f) => ({ ...f, images: f.images.filter((img) => img.id !== id) }));
   }
 
-  const titleError = form.title.length > 0 && form.title.trim().length < 3 ? "Title must be at least 3 characters." : null;
-  const priceError = form.price !== "" && Number(form.price) <= 0 ? "Price must be greater than 0." : null;
-  const slugError = form.slug.includes(" ") ? "Slug cannot contain spaces." : null;
-  const isInvalid = !!titleError || !!priceError || !!slugError || !form.title.trim() || !form.price || !form.description.trim() || !form.categoryId;
+  function toggleCategory(id: string, checked: boolean) {
+    setForm((f) => ({
+      ...f,
+      categoryIds: checked ? [...f.categoryIds, id] : f.categoryIds.filter((categoryId) => categoryId !== id),
+    }));
+  }
+
+  const highlights = form.highlights.split("\n").map((line) => line.trim()).filter(Boolean);
+  const price = Number(form.price);
+  const compareAt = optionalNumber(form.compareAtPrice);
+  const percentOff = discountPercent(Math.round(price), compareAt === null ? null : Math.round(compareAt));
+
+  const priceError = !hasManyVariants && form.price !== "" && price < 0 ? "Price cannot be negative." : null;
+  const compareAtError =
+    !hasManyVariants && compareAt !== null && form.price !== "" && compareAt <= price
+      ? "The compare-at price must be higher than the price."
+      : null;
+  const highlightsError = highlights.length > MAX_HIGHLIGHTS ? `At most ${MAX_HIGHLIGHTS} highlights.` : null;
+  const isInvalid =
+    !form.title.trim() ||
+    form.categoryIds.length === 0 ||
+    (!hasManyVariants && form.price === "") ||
+    !!priceError ||
+    !!compareAtError ||
+    !!highlightsError;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    if (!form.title.trim() || !form.price || !form.description.trim() || !form.categoryId) {
-      toast.error("Title, price, description, and category are required.");
+    if (isInvalid) {
+      toast.error("Title, price, and at least one category are required.");
       return;
     }
-    if (form.images.length === 0) {
-      toast.error("At least one product image is required.");
-      return;
+
+    const shared = {
+      title: form.title.trim(),
+      description: form.description.trim() === "" ? null : form.description.trim(),
+      highlights,
+      categories: form.categoryIds,
+      media: form.images.map((img) => img.id),
+      deliveryCharge: optionalNumber(form.deliveryCharge),
+      isFeatured: form.isFeatured,
+    };
+
+    let data: Record<string, unknown>;
+    if (product) {
+      const variant = hasManyVariants ? null : changedVariant(product, form);
+      data = { ...shared, slug: form.slug, ...(variant ? { variants: [variant] } : {}) };
+    } else {
+      data = {
+        ...shared,
+        ...(form.slug ? { slug: form.slug } : {}),
+        ...defaultVariantFields(form),
+        stockQuantity: Number(form.stockQuantity) || 0,
+      };
     }
 
     setSaving(true);
-    const data = {
-      title: form.title.trim(),
-      slug: form.slug,
-      price: Number(form.price),
-      originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
-      description: form.description.trim(),
-      categories: [form.categoryId],
-      stockStatus: form.stockStatus,
-      stockQuantity: Number(form.stockQuantity) || 0,
-      isFeatured: form.isFeatured,
-      highlights: form.highlights.filter((h) => h.trim()).map((text) => ({ text: text.trim() })),
-      media: form.images.map((img) => img.id),
-    };
-
     try {
-      const url = isEdit ? `/api/dashboard/products/${product!.id}` : "/api/dashboard/products";
+      const url = product ? `/api/dashboard/products/${product.id}` : "/api/dashboard/products";
       const res = await storeFetch(url, {
-        method: isEdit ? "PATCH" : "POST",
+        method: product ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
       const resData = await res.json();
       if (!res.ok) {
-        toast.error(resData?.errors?.[0]?.message ?? resData?.error ?? "Could not save this product.");
+        toast.error(refusalMessage(resData));
         return;
       }
       router.push(href("/products"));
@@ -184,10 +245,12 @@ export function ProductForm({ product }: { product?: PayloadProductDoc }) {
           <Input
             id="title"
             value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            onChange={(e) => {
+              const title = e.target.value;
+              setForm((f) => ({ ...f, title, slug: slugEdited ? f.slug : slugify(title) }));
+            }}
             required
           />
-          {titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
 
         <div>
@@ -195,86 +258,60 @@ export function ProductForm({ product }: { product?: PayloadProductDoc }) {
           <Input
             id="slug"
             value={form.slug}
-            onChange={(e) => setForm((f) => ({ ...f, slug: slugify(e.target.value) }))}
+            onChange={(e) => {
+              setSlugEdited(true);
+              setForm((f) => ({ ...f, slug: slugify(e.target.value) }));
+            }}
             className="font-mono"
           />
-          {slugError && <p className="text-xs text-destructive mt-1">{slugError}</p>}
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="price" className="mb-1">Price (PKR)*</Label>
-            <Input
-              id="price"
-              type="number"
-              min={0}
-              value={form.price}
-              onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-              required
-            />
-            {priceError && <p className="text-xs text-destructive mt-1">{priceError}</p>}
-          </div>
-          <div>
-            <Label htmlFor="originalPrice" className="mb-1">Original price (PKR)</Label>
-            <Input
-              id="originalPrice"
-              type="number"
-              min={0}
-              value={form.originalPrice}
-              onChange={(e) => setForm((f) => ({ ...f, originalPrice: e.target.value }))}
-            />
-          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {isEdit ? "Changing the title does not change the slug." : "Made from the title. You can edit it."}
+          </p>
         </div>
 
         <div>
-          <Label htmlFor="description" className="mb-1">Description*</Label>
+          <Label htmlFor="description" className="mb-1">Description</Label>
           <Textarea
             id="description"
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            required
+            maxLength={5000}
             rows={5}
           />
+          <p className="text-xs text-muted-foreground mt-1">Plain text only. Line breaks are kept.</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label className="mb-1">Category*</Label>
-            <Select
-              value={form.categoryId}
-              onValueChange={(v) => { if (v) setForm((f) => ({ ...f, categoryId: v })); }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {categoriesLoaded && categories.length === 0 ? (
-              <Link href={href("/categories")} className="mt-1 inline-block text-xs font-medium underline underline-offset-4">
-                Create a category first
-              </Link>
-            ) : null}
+        <div>
+          <Label htmlFor="highlights" className="mb-1">Highlights</Label>
+          <Textarea
+            id="highlights"
+            value={form.highlights}
+            onChange={(e) => setForm((f) => ({ ...f, highlights: e.target.value }))}
+            rows={3}
+          />
+          <p className="text-xs text-muted-foreground mt-1">One per line, up to {MAX_HIGHLIGHTS}.</p>
+          {highlightsError && <p className="text-xs text-destructive mt-1">{highlightsError}</p>}
+        </div>
+
+        <div>
+          <Label className="mb-1">Categories*</Label>
+          <div className="flex flex-col gap-2 mt-1">
+            {categories.map((category) => (
+              <div key={category.id} className="flex items-center gap-2">
+                <Checkbox
+                  id={`category-${category.id}`}
+                  checked={form.categoryIds.includes(category.id)}
+                  onCheckedChange={(checked) => toggleCategory(category.id, checked === true)}
+                />
+                <Label htmlFor={`category-${category.id}`}>{category.name}</Label>
+              </div>
+            ))}
           </div>
-          <div>
-            <Label className="mb-1">Stock Status</Label>
-            <Select
-              value={form.stockStatus}
-              onValueChange={(v) => { if (v) setForm((f) => ({ ...f, stockStatus: v as PayloadStockStatus })); }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="in_stock">In Stock</SelectItem>
-                <SelectItem value="out_of_stock">Out of Stock</SelectItem>
-                <SelectItem value="on_backorder">On Backorder</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {categoriesLoaded && categories.length === 0 ? (
+            <Link href={href("/categories")} className="mt-1 inline-block text-xs font-medium underline underline-offset-4">
+              Create a category first
+            </Link>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2">
@@ -288,9 +325,107 @@ export function ProductForm({ product }: { product?: PayloadProductDoc }) {
       </Surface>
 
       <Surface variant="clay" level={2} className="p-6 flex flex-col gap-5 rounded-2xl">
+        <h2 className="font-heading text-lg font-semibold">{hasManyVariants ? "Variants" : "Price & Stock"}</h2>
+
+        {product && hasManyVariants ? (
+          <div className="flex flex-col gap-2">
+            {product.variants.map((variant) => (
+              <div key={variant.id} className="flex items-center justify-between gap-4 text-sm">
+                <span className="font-medium">{variant.title}</span>
+                <span className="font-mono text-xs text-muted-foreground">{variant.sku ?? "No SKU"}</span>
+                <span>PKR {variant.price.toLocaleString()}</span>
+                <span className="font-mono">{variant.trackQuantity ? variant.stockQuantity : "Not tracked"}</span>
+                <StatusBadge status={variant.availability} />
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">Variants cannot be edited here yet. Adjust stock in Inventory.</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="price" className="mb-1">Price (PKR)*</Label>
+                <Input
+                  id="price"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={form.price}
+                  onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                  required
+                />
+                {priceError && <p className="text-xs text-destructive mt-1">{priceError}</p>}
+              </div>
+              <div>
+                <Label htmlFor="compareAtPrice" className="mb-1">Compare-at price (PKR)</Label>
+                <Input
+                  id="compareAtPrice"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={form.compareAtPrice}
+                  onChange={(e) => setForm((f) => ({ ...f, compareAtPrice: e.target.value }))}
+                />
+                {compareAtError && <p className="text-xs text-destructive mt-1">{compareAtError}</p>}
+                {percentOff > 0 && <p className="text-xs text-muted-foreground mt-1">Shoppers see {percentOff}% off.</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="sku" className="mb-1">SKU</Label>
+                <Input id="sku" value={form.sku} onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))} maxLength={64} />
+              </div>
+              <div>
+                <Label htmlFor="barcode" className="mb-1">Barcode</Label>
+                <Input id="barcode" value={form.barcode} onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))} maxLength={64} />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="trackQuantity"
+                checked={form.trackQuantity}
+                onCheckedChange={(checked) => setForm((f) => ({ ...f, trackQuantity: checked === true }))}
+              />
+              <Label htmlFor="trackQuantity">Track quantity</Label>
+            </div>
+
+            <div>
+              <Label htmlFor="stockQuantity" className="mb-1">{isEdit ? "Stock" : "Initial stock"}</Label>
+              <Input
+                id="stockQuantity"
+                type="number"
+                min={0}
+                step={1}
+                value={form.stockQuantity}
+                onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
+                readOnly={isEdit}
+                disabled={isEdit}
+              />
+              {isEdit && <p className="text-xs text-muted-foreground mt-1">Adjust stock in Inventory.</p>}
+            </div>
+          </>
+        )}
+
+        <div>
+          <Label htmlFor="deliveryCharge" className="mb-1">Delivery charge override (PKR)</Label>
+          <Input
+            id="deliveryCharge"
+            type="number"
+            min={0}
+            step={1}
+            value={form.deliveryCharge}
+            onChange={(e) => setForm((f) => ({ ...f, deliveryCharge: e.target.value }))}
+          />
+          <p className="text-xs text-muted-foreground mt-1">Leave empty to use the store&apos;s delivery rate.</p>
+        </div>
+      </Surface>
+
+      <Surface variant="clay" level={2} className="p-6 flex flex-col gap-5 rounded-2xl">
         <h2 className="font-heading text-lg font-semibold">Media</h2>
         <div>
-          <Label className="mb-1">Images (max 5)*</Label>
+          <Label className="mb-1">Images (max {MAX_IMAGES})</Label>
           <div className="flex gap-2 mb-2 flex-wrap">
             {form.images.map((img) => (
               <div key={img.id} className="relative w-20 h-20 border border-border rounded-md overflow-hidden">
@@ -307,7 +442,7 @@ export function ProductForm({ product }: { product?: PayloadProductDoc }) {
                 </Button>
               </div>
             ))}
-            {form.images.length < 5 && (
+            {form.images.length < MAX_IMAGES && (
               <label className="w-20 h-20 border border-dashed border-border bg-card rounded-md flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
                 <span className="text-2xl text-muted-foreground">+</span>
                 <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />

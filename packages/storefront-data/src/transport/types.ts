@@ -25,6 +25,16 @@ export interface StorefrontProductSummary {
   reviewCount: number;
 }
 
+/** A category of the store, as the seller named and ordered it. The backend sends only those holding a published product. */
+export interface StorefrontCategory {
+  id: string;
+  name: string;
+  slug: string;
+  order: number;
+  description: string | null;
+  bannerUrl: string | null;
+}
+
 export interface StorefrontProductOption {
   name: string;
   values: string[];
@@ -221,6 +231,8 @@ export interface ProductListPage {
 export interface StorefrontTransport extends OrderTransport {
   readonly kind: TransportKind;
   getProducts(): Promise<StorefrontProductSummary[]>;
+  /** The store's categories, in the seller's order. */
+  listCategories(): Promise<StorefrontCategory[]>;
   /** Paged, filtered listing. Optional so existing transports (and test doubles) keep working. */
   listProducts?(query?: ProductQuery): Promise<ProductListPage>;
   /** Resolves to null when no product has this slug. The route turns that into a 404. */

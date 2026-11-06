@@ -6,6 +6,7 @@ import { categoryUpdateRequestSchema, objectIdSchema } from '@/lib/contracts';
 import { HttpError, handleRouteError, isDuplicateKeyError, jsonError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { parseBody } from '@/lib/placeholder';
+import { revalidateStoreCategories } from '@/lib/revalidate';
 import { assertCan, Category } from '@/lib/services';
 import { plainDoc, toWire } from '@/lib/seller-scope';
 
@@ -40,7 +41,10 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
   }
 }
 
-/** PATCH /api/categories/:id. Changes only the fields sent. A new name keeps the slug; a clashing slug is a 409. */
+/**
+ * PATCH /api/categories/:id. Changes only the fields sent. A new name keeps the slug; a clashing slug is a 409. An edit
+ * makes a demo category the seller's own, so it clears isDemo. Moving it in the list is not an edit of it.
+ */
 export async function PATCH(request: NextRequest, context: Ctx): Promise<Response> {
   try {
     const { id } = await context.params;
@@ -51,14 +55,16 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     assertCan(ctx.actor, 'update', 'categories', Object.keys(body.data));
     await requireDatabase();
     const storeId = await resolveCategoryStoreId(request, ctx);
+    const reorderOnly = Object.keys(body.data).every((field) => field === 'order');
 
     try {
       const updated = await Category.findOneAndUpdate(
         { _id: id, store: storeId },
-        { $set: body.data },
+        { $set: { ...body.data, ...(reorderOnly ? {} : { isDemo: false }) } },
         { new: true, runValidators: true },
       ).lean();
       if (!updated) throw categoryNotFound();
+      await revalidateStoreCategories(storeId);
       return NextResponse.json(toWire(plainDoc(updated)));
     } catch (err) {
       if (isDuplicateKeyError(err)) return slugTaken();
@@ -71,7 +77,8 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
 
 /**
  * DELETE /api/categories/:id. A category that still holds products is refused with 409 CATEGORY_IN_USE and the count,
- * so the dashboard can say why. The demo category's rules arrive in PB-3; here it is an ordinary category.
+ * so the dashboard can say why. A demo category follows the same guard. Categories have no trash, so a delete is
+ * always permanent and immediate.
  */
 export async function DELETE(request: NextRequest, context: Ctx): Promise<Response> {
   try {
@@ -94,6 +101,7 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     }
 
     await Category.deleteOne({ _id: id, store: storeId });
+    await revalidateStoreCategories(storeId);
     return NextResponse.json({ deleted: true, id });
   } catch (err) {
     return handleRouteError(err);

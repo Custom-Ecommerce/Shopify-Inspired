@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { compareAtPriceProblem, rupeesInputSchema, wholeRupeesSchema } from './money';
 import { objectIdSchema } from './object-id';
+import type { StockStatus } from './stock-status';
 
 /** A relation as the frontend reads it: the ObjectId, or the populated document (depth 1). */
 const populatedRef = z.object({
@@ -163,6 +164,155 @@ export function variantTitle(optionValues: readonly string[]): string {
   return optionValues.length === 0 ? DEFAULT_VARIANT_TITLE : optionValues.join(' / ');
 }
 
+export const PRODUCT_TITLE_MAX = 200;
+export const PRODUCT_SLUG_MAX = 200;
+/** Lowercase letters and digits, joined by single hyphens. */
+export const PRODUCT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const PRODUCT_DESCRIPTION_MAX = 5000;
+export const PRODUCT_MAX_HIGHLIGHTS = 10;
+export const PRODUCT_HIGHLIGHT_MAX = 200;
+export const PRODUCT_MAX_TAGS = 30;
+export const PRODUCT_TAG_MAX = 50;
+export const PRODUCT_MAX_CATEGORIES = 20;
+export const PRODUCT_MAX_IMAGES = 10;
+export const PRODUCT_SEO_TITLE_MAX = 200;
+export const PRODUCT_SEO_DESCRIPTION_MAX = 500;
+
+/** Something that reads as an HTML tag. "3 < 5" is fine; "<b>" and "<!-- x -->" are not. */
+export function containsHtmlTag(text: string): boolean {
+  return /<\/?[a-z!][^>]*>/i.test(text);
+}
+
+const NO_HTML = 'Use plain text: HTML tags are not allowed.';
+
+const productTitleSchema = z.string().trim().min(1, 'Enter a title.').max(PRODUCT_TITLE_MAX);
+
+const productSlugSchema = z
+  .string()
+  .trim()
+  .min(1, 'Enter a slug.')
+  .max(PRODUCT_SLUG_MAX)
+  .regex(PRODUCT_SLUG_PATTERN, 'Use lowercase letters, numbers, and single hyphens.');
+
+const productCategoriesSchema = z.array(objectIdSchema).min(1, 'Choose at least one category.').max(PRODUCT_MAX_CATEGORIES);
+
+/** The fields of a product that are not its identity or its variants. D-008: plain text only; HTML is refused, never stripped. */
+const productContentFields = {
+  description: z
+    .string()
+    .trim()
+    .max(PRODUCT_DESCRIPTION_MAX)
+    .refine((value) => !containsHtmlTag(value), NO_HTML)
+    .nullable()
+    .optional(),
+  highlights: z
+    .array(z.string().trim().min(1).max(PRODUCT_HIGHLIGHT_MAX).refine((value) => !containsHtmlTag(value), NO_HTML))
+    .max(PRODUCT_MAX_HIGHLIGHTS)
+    .optional(),
+  tags: z.array(z.string().trim().min(1).max(PRODUCT_TAG_MAX)).max(PRODUCT_MAX_TAGS).optional(),
+  media: z.array(objectIdSchema).max(PRODUCT_MAX_IMAGES).optional(),
+  deliveryCharge: rupeesInputSchema.nullable().optional(),
+  isFeatured: z.boolean().optional(),
+  seoTitle: z.string().trim().max(PRODUCT_SEO_TITLE_MAX).nullable().optional(),
+  seoDescription: z.string().trim().max(PRODUCT_SEO_DESCRIPTION_MAX).nullable().optional(),
+  seoImage: objectIdSchema.nullable().optional(),
+};
+
+const variantCodeField = z.string().trim().max(PRODUCT_VARIANT_CODE_MAX).nullable().optional();
+const thresholdField = z.number().int().min(0).nullable().optional();
+
+/** Without options a create request carries these directly: they describe the Default variant. */
+export const PRODUCT_DEFAULT_VARIANT_FIELDS = [
+  'price',
+  'compareAtPrice',
+  'sku',
+  'barcode',
+  'trackQuantity',
+  'stockQuantity',
+  'lowStockThreshold',
+] as const;
+
+/**
+ * Create. Either the Default variant's fields, or options with variants, never both. A missing slug is made from the
+ * title. The store, the status and every derived field are never sent: an unknown key is refused.
+ */
+export const productCreateRequestSchema = z
+  .object({
+    title: productTitleSchema,
+    slug: productSlugSchema.optional(),
+    categories: productCategoriesSchema,
+    ...productContentFields,
+    options: z.array(productOptionSchema).max(PRODUCT_MAX_OPTIONS).optional(),
+    variants: z.array(productVariantInputSchema).min(1).max(PRODUCT_MAX_VARIANTS).optional(),
+    price: rupeesInputSchema.optional(),
+    compareAtPrice: rupeesInputSchema.nullable().optional(),
+    sku: variantCodeField,
+    barcode: variantCodeField,
+    trackQuantity: z.boolean().optional(),
+    stockQuantity: z.number().int().min(0).optional(),
+    lowStockThreshold: thresholdField,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.variants) {
+      for (const field of PRODUCT_DEFAULT_VARIANT_FIELDS) {
+        if (value[field] !== undefined) {
+          context.addIssue({ code: 'custom', path: [field], message: 'Send this on the variant, not on the product.' });
+        }
+      }
+      return;
+    }
+    if ((value.options ?? []).length > 0) {
+      context.addIssue({ code: 'custom', path: ['variants'], message: 'A product with options needs its variants.' });
+    }
+    if (value.price === undefined) context.addIssue({ code: 'custom', path: ['price'], message: 'Enter a price.' });
+  });
+
+/**
+ * One variant in an update. An id names an existing variant and only the fields sent change; no id adds a variant,
+ * which then needs a price. Numbers stay raw here: the variant write path rounds and validates the merged result.
+ * The title follows from optionValues and the position from the order of the list, so neither is sent.
+ */
+export const productVariantPatchSchema = z
+  .object({
+    id: objectIdSchema.optional(),
+    sku: variantCodeField,
+    barcode: variantCodeField,
+    price: z.number().optional(),
+    compareAtPrice: z.number().nullable().optional(),
+    trackQuantity: z.boolean().optional(),
+    stockQuantity: z.number().int().min(0).optional(),
+    lowStockThreshold: thresholdField,
+    optionValues: z.array(z.string()).optional(),
+    imageId: objectIdSchema.nullable().optional(),
+  })
+  .strict();
+
+/**
+ * Update. Only the fields sent change, and at least one must be sent. variants, when sent, is the whole list: an
+ * existing variant left out is removed. A client that changes no variant sends no variants.
+ */
+export const productUpdateRequestSchema = z
+  .object({
+    title: productTitleSchema.optional(),
+    slug: productSlugSchema.optional(),
+    categories: productCategoriesSchema.optional(),
+    ...productContentFields,
+    options: z.array(productOptionSchema).max(PRODUCT_MAX_OPTIONS).optional(),
+    variants: z.array(productVariantPatchSchema).min(1).max(PRODUCT_MAX_VARIANTS).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, { message: 'Change at least one field.' });
+
+export type ProductCreateRequest = z.output<typeof productCreateRequestSchema>;
+export type ProductUpdateRequest = z.output<typeof productUpdateRequestSchema>;
+export type ProductVariantPatch = z.output<typeof productVariantPatchSchema>;
+
+export const PRODUCT_LIST_STATUSES = ['all', 'draft', 'published'] as const;
+export const PRODUCT_LIST_SORTS = ['newest', 'oldest', 'title', 'price'] as const;
+export type ProductListStatus = (typeof PRODUCT_LIST_STATUSES)[number];
+export type ProductListSort = (typeof PRODUCT_LIST_SORTS)[number];
+
 export const productVariantSchema = z.object({
   id: objectIdSchema,
   title: z.string().min(1),
@@ -206,5 +356,50 @@ export const productSchema = z.object({
 
 export type Product = z.infer<typeof productSchema>;
 export type ProductVariant = z.infer<typeof productVariantSchema>;
+
+export interface SellerProductCategory {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+/** One row of the seller's product list. Stock status and totals are derived by the backend, never by the dashboard. */
+export interface SellerProductSummary {
+  id: string;
+  title: string;
+  slug: string;
+  status: 'draft' | 'published';
+  isDemo: boolean;
+  isFeatured: boolean;
+  description: string | null;
+  highlights: string[];
+  minPrice: number;
+  /** The compare-at of the cheapest variant, if it has one. */
+  compareAtPrice: number | null;
+  stockStatus: StockStatus;
+  /** Units across the variants that track quantity. */
+  totalStock: number;
+  variantCount: number;
+  imageUrl: string | null;
+  categories: SellerProductCategory[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SellerProductVariant extends ProductVariant {
+  availability: StockStatus;
+}
+
+/** One product as the seller's edit page reads it. */
+export interface SellerProductDetail extends SellerProductSummary {
+  tags: string[];
+  options: Array<{ name: string; values: string[] }>;
+  variants: SellerProductVariant[];
+  media: Array<{ id: string; url: string; alt: string | null }>;
+  deliveryCharge: number | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoImage: string | null;
+}
 export type ProductRelation = z.infer<typeof relation>;
 export type StockMovement = z.infer<typeof stockMovementSchema>;

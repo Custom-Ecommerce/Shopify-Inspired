@@ -4,6 +4,7 @@ import type {
   CartQuoteLine,
   OrderLookupInput,
   StorefrontOrder,
+  StorefrontCategory,
   StorefrontOrderItem,
   StorefrontProductDetail,
   StorefrontProductSummary,
@@ -343,6 +344,18 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
   }
 
 
+  /** Like the backend: only categories that hold a product, in a fixed order. */
+  async function listCategories(): Promise<StorefrontCategory[]> {
+    const seen = new Map<string, StorefrontCategory>();
+    for (const product of FIXTURES) {
+      for (const category of product.categories) {
+        if (seen.has(category.id)) continue;
+        seen.set(category.id, { ...category, order: seen.size, description: null, bannerUrl: null });
+      }
+    }
+    return [...seen.values()];
+  }
+
   async function listProducts(query: ProductQuery = {}): Promise<ProductListPage> {
     await delay(150);
     let items = FIXTURES.filter((p) => (query.category ? p.categories.some((c) => c.slug === query.category) : true));
@@ -359,7 +372,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     return { items: items.slice((page - 1) * limit, page * limit).map(toSummary), page, totalPages };
   }
 
-  return { kind: "mock", getProducts, listProducts, getProduct, quoteCart, submitOrder, lookupOrder };
+  return { kind: "mock", getProducts, listCategories, listProducts, getProduct, quoteCart, submitOrder, lookupOrder };
 }
 
 const defaultTransport = createMockTransport({ products: DEFAULT_MOCK_PRODUCTS });

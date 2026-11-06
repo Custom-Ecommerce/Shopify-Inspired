@@ -4,6 +4,39 @@ import assert from 'node:assert/strict';
 import { can, PolicyConfigError } from '../src/can';
 import { POLICY_MATRIX } from '../src/policy';
 
+test('products: a seller may read, create, update and delete; the fields are allowlisted', () => {
+assert.equal(can('seller', 'read', 'products'), true);
+assert.equal(can('seller', 'create', 'products', ['title', 'variants', 'categories']), true);
+assert.equal(can('seller', 'update', 'products', ['title', 'variants']), true);
+assert.equal(can('seller', 'delete', 'products'), true);
+});
+
+test('products: a seller may not write the store, the status, the demo flag or a derived field', () => {
+for (const field of ['store', 'isPublished', 'isDemo', 'minPrice', 'avgRating', 'reviewCount', 'viewCount']) {
+assert.equal(can('seller', 'create', 'products', [field]), false, field);
+assert.equal(can('seller', 'update', 'products', ['title', field]), false, field);
+}
+});
+
+test('products: an admin only reads, and system has no rows', () => {
+assert.equal(can('admin', 'read', 'products'), true);
+for (const operation of ['create', 'update', 'delete'] as const) {
+assert.equal(can('admin', operation, 'products', ['title']), false, operation);
+assert.equal(can('system', operation, 'products', ['title']), false, operation);
+}
+assert.equal(can('system', 'read', 'products'), false);
+});
+
+test('products: the public reads listed fields only and writes nothing', () => {
+assert.equal(can('public', 'read', 'products', ['title', 'variants', 'minPrice']), true);
+assert.equal(can('public', 'read', 'products'), false);
+assert.equal(can('public', 'read', 'products', ['store']), false);
+assert.equal(can('public', 'read', 'products', ['isDemo']), false);
+for (const operation of ['create', 'update', 'delete'] as const) {
+assert.equal(can('public', operation, 'products', ['title']), false, operation);
+}
+});
+
 test('seller update with no field list is denied (fail-closed)', () => {
 assert.equal(can('seller', 'update', 'stores'), false);
 });

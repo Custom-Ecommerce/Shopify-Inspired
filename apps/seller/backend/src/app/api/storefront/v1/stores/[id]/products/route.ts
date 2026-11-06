@@ -69,7 +69,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         { headers: PUBLIC_CACHE_HEADERS },
       );
 
-    const filter: Record<string, unknown> = { store: id, isPublished: true };
+    const filter: Record<string, unknown> = { store: id, isPublished: true, isDemo: false };
 
     if (query.category) {
       const category = await Category.findOne({ store: id, slug: query.category }).select('_id').lean();

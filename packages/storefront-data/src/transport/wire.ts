@@ -15,6 +15,19 @@ export const WireImage = z.object({
   alt: z.string(),
 });
 
+export const WireCategoryList = z.object({
+  data: z.array(
+    z.object({
+      id: z.string().min(1),
+      name: z.string(),
+      slug: z.string().min(1),
+      order: z.number(),
+      description: nullableText,
+      bannerUrl: nullableText,
+    }),
+  ),
+});
+
 export const WireProductSummary = z.object({
   id: z.string().min(1),
   slug: z.string().min(1),

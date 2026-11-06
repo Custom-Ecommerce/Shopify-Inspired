@@ -162,7 +162,7 @@ async function normalizeUpstreamError(
   const code = str(rec.code) ?? str(firstData?.code) ?? str(first?.code) ?? defaultCodeForStatus(res.status);
   const message =
     str(rec.error) ?? str(rec.message) ?? str(first?.message) ?? `Request failed with status ${res.status}.`;
-  const details = rec.details ?? errors;
+  const details = rec.details ?? errors ?? rec.issues;
 
   return apiError(res.status, code, message, { details, envelope, requestId });
 }

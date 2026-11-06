@@ -1,6 +1,5 @@
-import { firstVariant, stockStatusOf } from "@/lib/product-stock";
 import type { ListEnvelope as PayloadFindResponse } from "@markaz/api-compat";
-import type { Product as PayloadProductDoc } from "@markaz/contracts";
+import type { SellerProductSummary } from "@markaz/contracts";
 import { NextRequest, NextResponse } from "next/server";
 import Papa from "papaparse";
 import { proxyGet } from "@/lib/proxy";
@@ -22,14 +21,10 @@ const CSV_COLUMNS = [
 export function GET(req: NextRequest) {
   return proxyGet(req, "/api/products", {
     auth: "dashboard",
-    params: (searchParams, auth) => {
-      if (auth.storeId) {
-        searchParams.set("where", JSON.stringify({ store: { equals: auth.storeId } }));
-      }
+    params: (searchParams) => {
       searchParams.set("limit", "1000");
-      searchParams.set("depth", "1");
     },
-    responseHandler: (res, data: PayloadFindResponse<PayloadProductDoc>) => {
+    responseHandler: (res, data: PayloadFindResponse<SellerProductSummary>) => {
       if (!res.ok) {
         return NextResponse.json(data ?? { error: "Could not fetch products." }, { status: res.status });
       }
@@ -37,14 +32,14 @@ export function GET(req: NextRequest) {
       const rows = products.map((p) => ({
         title: p.title,
         slug: p.slug,
-        price: firstVariant(p)?.price ?? "",
-        originalPrice: firstVariant(p)?.compareAtPrice ?? "",
+        price: p.minPrice,
+        originalPrice: p.compareAtPrice ?? "",
         description: p.description ?? "",
-        category: (typeof p.categories?.[0] === "object" ? p.categories[0]?.name : p.categories?.[0]) ?? "",
-        stockStatus: stockStatusOf(firstVariant(p)),
-        stockQuantity: firstVariant(p)?.stockQuantity ?? 0,
+        category: p.categories[0]?.name ?? "",
+        stockStatus: p.stockStatus,
+        stockQuantity: p.totalStock,
         isFeatured: p.isFeatured ? "true" : "false",
-        highlights: (p.highlights ?? []).map((h) => h.text).join("|"),
+        highlights: p.highlights.join("|"),
       }));
 
       const csv = Papa.unparse({ fields: [...CSV_COLUMNS], data: rows });

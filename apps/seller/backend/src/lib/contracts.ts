@@ -63,6 +63,16 @@ export const {
 // Product options and variants: the write contract and the title rule.
 export const { productVariantsInputSchema, variantTitle } = contracts;
 
+// The seller's product CRUD contracts.
+export const {
+  PRODUCT_DEFAULT_VARIANT_FIELDS,
+  PRODUCT_LIST_SORTS,
+  PRODUCT_LIST_STATUSES,
+  PRODUCT_SLUG_MAX,
+  productCreateRequestSchema,
+  productUpdateRequestSchema,
+} = contracts;
+
 // Store categories: the seller's CRUD contracts and the public storefront list.
 export const {
   CATEGORY_ORDER_MAX,

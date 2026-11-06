@@ -7,6 +7,7 @@ import type {
   OrderLookupInput,
   OrderRejection,
   OrderTransport,
+  StorefrontCategory,
   StorefrontOrder,
   StorefrontProductDetail,
   StorefrontProductSummary,
@@ -19,6 +20,7 @@ import {
   WireErrorEnvelope,
   WireOrderCreated,
   WireOrderLookup,
+  WireCategoryList,
   WireProductDetailEnvelope,
   WireProductList,
   WireRefusal,
@@ -293,6 +295,12 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
       requireHttp();
       const result = await exchange("GET", "/products", { retry: true });
       return unwrap(result, WireProductList, "product list").data;
+    },
+
+    async listCategories(): Promise<StorefrontCategory[]> {
+      requireHttp();
+      const result = await exchange("GET", "/categories", { retry: true });
+      return unwrap(result, WireCategoryList, "category list").data;
     },
 
     async listProducts(query: ProductQuery = {}): Promise<ProductListPage> {

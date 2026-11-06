@@ -1,6 +1,7 @@
 /* patch_session_fix: shared workspace helpers (kept out of route files; Next only allows route exports there) */
 import { HttpError } from '@/lib/http';
 import type { AuthContext } from '@/lib/auth';
+import { seedStoreDemoData } from '@/lib/demo-data';
 import { connectSellerDb } from '@/lib/mongo';
 import { Store, User } from '@/lib/services';
 
@@ -157,6 +158,7 @@ export async function provisionStore(ctx: AuthContext, rawName: unknown): Promis
     const slug = attempt === 0 ? base : (base.slice(0, 56) + '-' + Math.random().toString(36).slice(2, 6));
     try {
       const created = await Store.create({ name, slug, owner: ctx.userObjectId, status: newStoreStatus() });
+      await seedStoreDemoData(String(created._id));
       return {
         ok: true,
         store: { id: String(created._id), name: String(created.name), slug: String(created.slug), status: String(created.status) },

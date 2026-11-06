@@ -29,6 +29,7 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   approved: "success",
   settled: "success",
   completed: "success",
+  published: "success",
   // warning
   pending: "warning",
   processing: "warning",

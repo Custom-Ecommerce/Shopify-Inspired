@@ -3,10 +3,9 @@
 //
 // Allowlists are taken from the Payload access blocks in the reference
 // (apps/admin/src/collections/*.ts and globals/*.ts). Anything not declared
-// here is denied. Collections that are seller-owned (products, orders,
-// discounts, reviews, returns, storeArticles, referrals, media,
-// broadcastLogs, customers) are deliberately NOT declared yet: can() throws
-// PolicyConfigError for them until B5 completion captures their field lists.
+// here is denied. Seller-owned collections that are still undeclared
+// (broadcastLogs, customers) make can() throw PolicyConfigError until their
+// field lists are captured.
 
 export type Actor = 'admin' | 'seller' | 'system' | 'public';
 export type Operation = 'read' | 'create' | 'update' | 'delete';
@@ -68,6 +67,19 @@ export const SELLER_CATEGORY_WRITABLE_FIELDS = ['name', 'slug', 'order', 'descri
 
 // What an anonymous storefront may read of a category.
 export const PUBLIC_CATEGORY_READABLE_FIELDS = ['name', 'slug', 'order', 'description', 'banner'] as const;
+
+// What a seller may set on a product of their store. store, isPublished, isDemo and every derived field (minPrice,
+// ratings, counts) are never client-writable. Stock of an existing variant has its own rule: see D-034.
+export const SELLER_PRODUCT_WRITABLE_FIELDS = [
+'title', 'slug', 'description', 'highlights', 'tags', 'categories', 'media', 'options', 'variants',
+'deliveryCharge', 'isFeatured', 'seoTitle', 'seoDescription', 'seoImage',
+] as const;
+
+// What an anonymous storefront may read of a published product.
+export const PUBLIC_PRODUCT_READABLE_FIELDS = [
+'title', 'slug', 'description', 'highlights', 'tags', 'categories', 'media', 'options', 'variants', 'minPrice',
+'deliveryCharge', 'avgRating', 'reviewCount', 'seoTitle', 'seoDescription', 'seoImage',
+] as const;
 
 export const POLICY_MATRIX: Readonly<Record<string, CollectionPolicy>> = {
 stores: {
@@ -141,6 +153,18 @@ fields: { seller: '*', admin: '*', public: PUBLIC_CATEGORY_READABLE_FIELDS },
 },
 create: { actors: ['seller'], fields: { seller: SELLER_CATEGORY_WRITABLE_FIELDS } },
 update: { actors: ['seller'], fields: { seller: SELLER_CATEGORY_WRITABLE_FIELDS } },
+delete: { actors: ['seller'], fields: { seller: '*' } },
+},
+
+// Products belong to one store. A seller manages their own; which store that is, the route decides. Admin may only
+// read for now (D-002: moderation arrives with its own routes), and the storefront reads published products.
+products: {
+read: {
+actors: ['seller', 'admin', 'public'],
+fields: { seller: '*', admin: '*', public: PUBLIC_PRODUCT_READABLE_FIELDS },
+},
+create: { actors: ['seller'], fields: { seller: SELLER_PRODUCT_WRITABLE_FIELDS } },
+update: { actors: ['seller'], fields: { seller: SELLER_PRODUCT_WRITABLE_FIELDS } },
 delete: { actors: ['seller'], fields: { seller: '*' } },
 },
 

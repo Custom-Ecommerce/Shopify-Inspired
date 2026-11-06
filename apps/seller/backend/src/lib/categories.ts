@@ -31,17 +31,19 @@ export async function resolveCategoryStoreId(request: NextRequest, ctx: AuthCont
   return resolveOwnedStoreId(request, ctx, requested ? { store: { equals: requested } } : null);
 }
 
-/** A slug from a category name, or '' when the name holds no Latin letter or digit, as in an Urdu name. */
-export function categorySlugFromName(name: string): string {
-  return name
+/** A slug from free text, or '' when it holds no Latin letter or digit, as in an Urdu name. */
+export function slugFromText(text: string, maxLength: number): string {
+  return text
     .toLowerCase()
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, CATEGORY_SLUG_MAX)
+    .slice(0, maxLength)
     .replace(/-+$/g, '');
 }
+
+export const categorySlugFromName = (name: string): string => slugFromText(name, CATEGORY_SLUG_MAX);
 
 /** The order that puts a new category after the store's last one. */
 export async function nextCategoryOrder(storeId: string): Promise<number> {

@@ -48,6 +48,8 @@ export interface IProduct extends Document {
   deliveryCharge?: number | null;
   isFeatured: boolean;
   isPublished: boolean;
+  /** The sample product seeded with a new store. Never Live; the seller's first edit clears it. */
+  isDemo: boolean;
   seoTitle?: string | null;
   seoDescription?: string | null;
   seoImage?: Types.ObjectId | null;
@@ -168,7 +170,8 @@ const ProductSchema = new Schema<IProduct>(
     minPrice: { type: Number, required: true, min: 0, default: 0, validate: wholeNumber },
     deliveryCharge: { type: Number, min: 0, default: null, validate: wholeNumber },
     isFeatured: { type: Boolean, default: false },
-    isPublished: { type: Boolean, default: true },
+    isPublished: { type: Boolean, default: false },
+    isDemo: { type: Boolean, default: false },
     seoTitle: { type: String, default: null },
     seoDescription: { type: String, default: null },
     seoImage: { type: Schema.Types.ObjectId, ref: 'Media', default: null },

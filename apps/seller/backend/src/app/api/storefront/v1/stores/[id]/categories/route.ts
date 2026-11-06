@@ -44,7 +44,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     assertCan('public', 'read', 'categories', PUBLIC_CATEGORY_READABLE_FIELDS);
     await loadActiveStore(id);
 
-    const held = await Product.distinct('categories', { store: id, isPublished: true });
+    const held = await Product.distinct('categories', { store: id, isPublished: true, isDemo: false });
     const rows = (await Category.find({ store: id, _id: { $in: held } })
       .select('name slug order description banner')
       .sort({ order: 1, name: 1 })

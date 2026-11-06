@@ -1,6 +1,6 @@
 import { TransportUnavailableError } from "../transport/errors";
 import type { StorefrontTransport } from "../transport/types";
-import { deriveCategories } from "../view-models/chrome";
+import { toCategoryVMs } from "../view-models/chrome";
 import type { StoreChromeVM } from "../view-models/chrome";
 import { toProductCardVM } from "../view-models/product-card";
 import { loadAllProducts } from "./all-products";
@@ -11,8 +11,8 @@ import { loadAllProducts } from "./all-products";
  */
 export async function loadStoreChrome(transport: StorefrontTransport): Promise<StoreChromeVM> {
   try {
-    const products = await loadAllProducts(transport);
-    return { categories: deriveCategories(products), products: products.map((p) => toProductCardVM(p)) };
+    const [categories, products] = await Promise.all([transport.listCategories(), loadAllProducts(transport)]);
+    return { categories: toCategoryVMs(categories, products), products: products.map((p) => toProductCardVM(p)) };
   } catch (error) {
     if (error instanceof TransportUnavailableError) return { categories: [], products: [] };
     throw error;

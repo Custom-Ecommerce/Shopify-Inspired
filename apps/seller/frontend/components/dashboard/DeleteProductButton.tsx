@@ -37,7 +37,7 @@ export function DeleteProductButton({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setError(data?.error ?? "Could not delete this product.");
+        setError(data?.error ?? "Could not delete this sample product.");
         return;
       }
       setOpen(false);
@@ -61,7 +61,7 @@ export function DeleteProductButton({
       </Button>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete product?</AlertDialogTitle>
+          <AlertDialogTitle>Delete sample product?</AlertDialogTitle>
           <AlertDialogDescription>
             This will permanently delete{" "}
             <span className="font-medium text-foreground">{productTitle}</span>.

@@ -428,3 +428,15 @@ test('an admin session may read but never write a category', async () => {
   assert.equal((await itemDELETE(request('DELETE', path, { token, storeHeader: STORE_A }), ctx(CAT_A1))).status, 403);
   assert.equal(row(CAT_A1)?.name, 'Zari');
 });
+
+test('an edit makes a demo category the seller\'s own; moving it in the list does not', async () => {
+  const demo = row(CAT_A1);
+  assert.ok(demo);
+  demo.isDemo = true;
+
+  assert.equal((await itemPATCH(request('PATCH', '/api/categories/' + CAT_A1, { body: { order: 5 } }), ctx(CAT_A1))).status, 200);
+  assert.equal(demo.isDemo, true);
+
+  assert.equal((await itemPATCH(request('PATCH', '/api/categories/' + CAT_A1, { body: { name: 'Mine' } }), ctx(CAT_A1))).status, 200);
+  assert.equal(demo.isDemo, false);
+});

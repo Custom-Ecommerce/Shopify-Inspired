@@ -4,7 +4,7 @@ import mongoose, { Schema, type Document, type Model, type Types } from 'mongoos
  * Collection: categories. Store-scoped and seller-owned: a seller creates, edits, and deletes the categories of their
  * own store, and a slug is unique inside a store, not across the platform.
  *
- * isDemo marks the category seeded with a new store. Nothing seeds it yet.
+ * isDemo marks the category seeded with a new store. The seller's first edit clears it.
  */
 export interface ICategory extends Document {
   store: Types.ObjectId;

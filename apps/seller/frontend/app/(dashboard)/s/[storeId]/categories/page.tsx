@@ -32,6 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -199,7 +200,16 @@ export default function DashboardCategoriesPage() {
         );
       },
     },
-    { header: "Name", accessorKey: "name" as keyof CategoryDoc, className: "font-medium" },
+    {
+      header: "Name",
+      className: "font-medium",
+      render: (c: CategoryDoc) => (
+        <span className="inline-flex items-center gap-2">
+          {c.name}
+          {c.isDemo ? <Badge variant="secondary">Demo</Badge> : null}
+        </span>
+      ),
+    },
     { header: "Slug", accessorKey: "slug" as keyof CategoryDoc, className: "font-mono text-xs" },
     {
       header: "Description",

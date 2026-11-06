@@ -22,6 +22,8 @@ internalHandle?: string | null;
 domain?: string | null;
 customDomainStatus: (typeof CUSTOM_DOMAIN_STATUSES)[number];
 isThemeDemo: boolean;
+/** The demo category and product were seeded. Stays true after the seller deletes them, so they never come back. */
+demoSeeded: boolean;
 owner?: Types.ObjectId | null;
 status: (typeof STORE_STATUSES)[number];
 suspensionReason?: string | null;
@@ -53,6 +55,7 @@ internalHandle: { type: String, unique: true, sparse: true },
 domain: { type: String },
 customDomainStatus: { type: String, enum: [...CUSTOM_DOMAIN_STATUSES], default: 'unset' },
 isThemeDemo: { type: Boolean, default: false },
+demoSeeded: { type: Boolean, default: false },
 owner: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
 status: { type: String, enum: [...STORE_STATUSES], required: true, default: 'pending' },
 suspensionReason: { type: String },

@@ -56,7 +56,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     // A slug that cannot be a product never reaches the catalog query.
     if (!STOREFRONT_PRODUCT_SLUG_PATTERN.test(slug)) throw productNotFound();
 
-    const row = (await Product.findOne({ store: id, slug, isPublished: true })
+    const row = (await Product.findOne({ store: id, slug, isPublished: true, isDemo: false })
       .select(DETAIL_PROJECTION)
       .populate({ path: 'categories', select: 'slug name' })
       .populate({ path: 'media', select: 'url alt' })
