@@ -1,0 +1,150 @@
+/**
+ * "Local" Storefront Theme Design Tokens (design.md)
+ * Mapped to --mu-* variables + Tailwind v4 @theme bindings
+ */
+
+:root,
+[data-theme="mustafa"],
+.mu-theme {
+  /* Font Family — Inter var + Outfit geometric rounded sans stack */
+  --mu-font-family-primary: "Inter var";
+  --mu-font-family-stack: "Inter var", "Outfit", ShopifySans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mu-font-sans: var(--mu-font-family-stack);
+
+  /* Surfaces (design.md §1.1 + legacy aliases) */
+  --mu-color-surface: #ffffff;
+  --mu-color-surface-base: #000000;
+  --mu-color-surface-muted: #f6f6f4;
+  --mu-color-surface-hero: #eff0eb;
+  --mu-color-surface-inverse: #1d1d1d;
+  --mu-color-surface-strong: #181818;
+
+  /* Text / Ink (design.md §1.1) */
+  --mu-color-ink: #181818;
+  --mu-color-ink-soft: #4a4a4a;
+  --mu-color-ink-muted: #6b6b6b;
+  --mu-color-ink-inverse: #ffffff;
+  --mu-color-ink-inverse-muted: #d9d9d9;
+
+  /* Legacy Text Aliases */
+  --mu-color-text-primary: #181818;
+  --mu-color-text-secondary: #4a4a4a;
+  --mu-color-text-muted: #6b6b6b;
+  --mu-color-text-tertiary: #ffffff;
+  --mu-color-text-inverse: #d9d9d9;
+
+  /* Borders / Lines */
+  --mu-color-line: #e6e6e3;
+  --mu-color-line-strong: #181818;
+  --mu-color-border: #e6e6e3;
+
+  /* Brand / Sage Green Accent (design.md §1.1) */
+  --mu-color-brand: #8ea86d;
+  --mu-color-brand-soft: #d4eed2;
+  --mu-color-brand-text: #3f7a2b;
+
+  /* Semantic / Status */
+  --mu-color-sale: #c8213f;
+  --mu-color-sale-ink: #ffffff;
+  --mu-color-focus: #1a56db;
+  --mu-color-danger: #c8213f;
+  --mu-color-danger-surface: #fef2f2;
+  --mu-color-success: #1f9d3a;
+  --mu-color-success-surface: #f0fdf4;
+  --mu-color-warning: #f29a1f;
+  --mu-color-warning-surface: #fffbeb;
+
+  /* Category Tile Pastels (design.md §1.1) */
+  --mu-color-tile-cream: #ebe9e0;
+  --mu-color-tile-mint: #e3eee1;
+  --mu-color-tile-sky: #d2dee0;
+
+  /* Nutri-Score Scale (design.md §1.1) */
+  --mu-color-nutri-a: #1f9d3a;
+  --mu-color-nutri-b: #8cc63f;
+  --mu-color-nutri-c: #f5d90a;
+  --mu-color-nutri-d: #f29a1f;
+  --mu-color-nutri-e: #d62020;
+
+  /* Fluid Typography Scale (design.md §1.2) */
+  --mu-text-hero: clamp(2.75rem, 1.6rem + 4.6vw, 5.5rem);
+  --mu-text-h1: clamp(2rem, 1.4rem + 2.2vw, 3rem);
+  --mu-text-h2: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem);
+  --mu-text-h3: 1.25rem;
+  --mu-text-body: 1rem;
+  --mu-text-small: 0.875rem;
+  --mu-text-xs: 0.75rem;
+  --mu-text-price-lg: clamp(2rem, 1.6rem + 1vw, 2.75rem);
+
+  /* Standard Typography Scale Aliases */
+  --mu-font-size-base: 16px;
+  --mu-font-weight-base: 400;
+  --mu-font-line-height-base: 24px;
+  --mu-font-size-xs: 12px;
+  --mu-font-size-sm: 14px;
+  --mu-font-size-md: 16px;
+  --mu-font-size-lg: 20px;
+  --mu-font-size-xl: 24px;
+  --mu-font-size-2xl: 32px;
+  --mu-font-size-3xl: 40px;
+  --mu-font-size-4xl: 56px;
+
+  /* Spacing & Layout Rhythm (design.md §1.3) */
+  --mu-space-1: 4px;
+  --mu-space-2: 8px;
+  --mu-space-3: 12px;
+  --mu-space-4: 16px;
+  --mu-space-5: 24px;
+  --mu-space-6: 40px;
+  --mu-space-7: 64px;
+  --mu-container-page: 80rem;
+  --mu-gutter: clamp(1rem, 0.5rem + 2vw, 2rem);
+  --mu-section-y: clamp(3rem, 2rem + 4vw, 5rem);
+
+  /* Border Radius (design.md §1.3) */
+  --mu-radius-pill: 9999px;
+  --mu-radius-card: 16px;
+  --mu-radius-media: 16px;
+  --mu-radius-input: 9999px;
+  --mu-radius-sm: 8px;
+  --mu-radius-badge: 4px;
+  --mu-radius-xs: 8px;
+  --mu-radius-md: 16px;
+  --mu-radius-lg: 9999px;
+
+  /* Elevation & Shadows (design.md §1.3) */
+  --mu-shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --mu-shadow-drawer: 0 0 32px rgba(0, 0, 0, 0.16);
+  --mu-shadow-1: 0 4px 12px rgba(0, 0, 0, 0.06);
+
+  /* Motion */
+  --mu-motion-duration-instant: 150ms;
+  --mu-motion-duration-fast: 300ms;
+}
+
+/* Base Theme Canvas */
+[data-theme="mustafa"],
+.mu-theme {
+  font-family: var(--mu-font-family-stack);
+  font-size: var(--mu-font-size-base);
+  font-weight: var(--mu-font-weight-base);
+  line-height: var(--mu-font-line-height-base);
+  color: var(--mu-color-ink);
+  background-color: var(--mu-color-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Defensive SVG Rule — Prevents raw SVGs from expanding to 100% viewport width */
+svg {
+  max-width: 100%;
+  flex-shrink: 0;
+}
+
+[data-theme="mustafa"] svg:not([width]):not([class*="w-"]):not([class*="size-"]),
+.mu-theme svg:not([width]):not([class*="w-"]):not([class*="size-"]) {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: inline-block;
+  vertical-align: middle;
+}

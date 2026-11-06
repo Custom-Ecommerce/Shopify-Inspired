@@ -1,0 +1,32 @@
+{
+  "name": "@markaz/platform-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared, Payload-agnostic platform rules: access primitives, store-context constants, cross-DB sync schemas, reserved host labels, theme manifest, and the storefront revalidation contract. Single source of truth for the Admin, Seller and Storefront apps.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./access": "./src/access/index.ts",
+    "./store-context": "./src/store-context.ts",
+    "./sync-schemas": "./src/sync-schemas.ts",
+    "./hmac": "./src/hmac.ts",
+    "./phone": "./src/phone.ts",
+    "./reservation": "./src/reservation/index.ts",
+    "./themes": "./src/themes/index.ts",
+    "./revalidate": "./src/revalidate/index.ts"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit",
+    "type-check": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.5.4"
+  }
+}

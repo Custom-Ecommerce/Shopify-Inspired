@@ -1,0 +1,209 @@
+/* @markaz/storefront:p0-tokens
+ *
+ * The single source of colour, radius and shadow tokens for the storefront.
+ * No other file may contain a hex, oklch, rgb or hsl literal, or a Tailwind palette class.
+ *
+ * Base: shadcn Zinc. Theme: neutral. Primary is the inverse pair (near-white on dark,
+ * near-black on light). Colour appears only in the status tokens.
+ *
+ * Provenance: the Zinc values are the shadcn published Zinc theme. They were not generated
+ * by the CLI in this session (registry unreachable). To confirm, run
+ *   pnpm dlx shadcn@latest init --base-color zinc
+ * in a scratch project and diff its :root and .dark blocks against this file.
+ * Deliberate departures from stock Zinc: light --ring is darker (3:1 UI contrast),
+ * chart-1..5 are neutral steps, status tokens, surface levels and legacy aliases are added.
+ */
+
+:root {
+  /* ---- Surfaces ---- */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --surface-1: oklch(0.985 0 0);
+  --surface-2: oklch(0.967 0.001 286.375);
+
+  /* ---- Actions (neutral) ---- */
+  --primary: oklch(0.21 0.006 285.885);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.5 0.016 285.938);
+  --text-tertiary: oklch(0.535 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+
+  /* ---- Structure ---- */
+  --border: oklch(0.92 0.004 286.32);
+  --border-strong: oklch(0.871 0.006 286.286);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.552 0.016 285.938);
+
+  /* ---- Status: the only chroma in the UI ---- */
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --destructive-subtle: oklch(0.96 0.03 27);
+  --destructive-subtle-foreground: oklch(0.45 0.18 27);
+  --success: oklch(0.52 0.14 152);
+  --success-foreground: oklch(0.985 0 0);
+  --success-subtle: oklch(0.962 0.04 152);
+  --success-subtle-foreground: oklch(0.4 0.1 152);
+  --warning: oklch(0.75 0.16 75);
+  --warning-foreground: oklch(0.2 0.02 75);
+  --warning-subtle: oklch(0.965 0.05 85);
+  --warning-subtle-foreground: oklch(0.42 0.09 65);
+  --info: oklch(0.55 0.15 250);
+  --info-foreground: oklch(0.985 0 0);
+  --info-subtle: oklch(0.96 0.03 250);
+  --info-subtle-foreground: oklch(0.42 0.12 255);
+
+  /* ---- Charts (neutral steps; status colours are never chart series) ---- */
+  --chart-1: oklch(0.21 0.006 285.885);
+  --chart-2: oklch(0.442 0.017 285.786);
+  --chart-3: oklch(0.552 0.016 285.938);
+  --chart-4: oklch(0.705 0.015 286.067);
+  --chart-5: oklch(0.871 0.006 286.286);
+
+  /* ---- Legacy aliases. Kept for existing callers; removed in P6. ---- */
+  --background-elevated: var(--surface-1);
+  --primary-hover: color-mix(in oklab, var(--primary) 88%, var(--background));
+  --primary-soft: var(--secondary);
+
+  /* ---- Radius ---- */
+  --radius: 0.75rem;
+
+  /* ---- Shadows (unchanged in P0; resting shadows are removed in P6) ---- */
+  --shadow-2xs: 0 1px 1px 0 rgb(0 0 0 / 0.03);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --surface-1: oklch(0.21 0.006 285.885);
+  --surface-2: oklch(0.244 0.006 286.033);
+
+  --primary: oklch(0.92 0.004 286.32);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --text-tertiary: oklch(0.64 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+
+  --border: oklch(1 0 0 / 10%);
+  --border-strong: oklch(1 0 0 / 18%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.705 0.015 286.067);
+
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.141 0.005 285.823);
+  --destructive-subtle: oklch(0.27 0.07 25);
+  --destructive-subtle-foreground: oklch(0.82 0.12 22);
+  --success: oklch(0.68 0.17 152);
+  --success-foreground: oklch(0.141 0.005 285.823);
+  --success-subtle: oklch(0.27 0.06 152);
+  --success-subtle-foreground: oklch(0.82 0.13 152);
+  --warning: oklch(0.78 0.16 75);
+  --warning-foreground: oklch(0.16 0.02 75);
+  --warning-subtle: oklch(0.28 0.06 75);
+  --warning-subtle-foreground: oklch(0.85 0.12 80);
+  --info: oklch(0.7 0.14 250);
+  --info-foreground: oklch(0.141 0.005 285.823);
+  --info-subtle: oklch(0.27 0.05 250);
+  --info-subtle-foreground: oklch(0.82 0.1 250);
+
+  --chart-1: oklch(0.92 0.004 286.32);
+  --chart-2: oklch(0.705 0.015 286.067);
+  --chart-3: oklch(0.552 0.016 285.938);
+  --chart-4: oklch(0.442 0.017 285.786);
+  --chart-5: oklch(0.37 0.013 285.805);
+
+  --shadow-2xs: 0 1px 1px 0 rgb(0 0 0 / 0.2);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.25);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.25);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.35);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-background-elevated: var(--background-elevated);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-destructive-subtle-foreground: var(--destructive-subtle-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-subtle-foreground: var(--success-subtle-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-subtle-foreground: var(--warning-subtle-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-subtle-foreground: var(--info-subtle-foreground);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 16px);
+
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+}

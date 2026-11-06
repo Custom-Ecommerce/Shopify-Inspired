@@ -1,0 +1,152 @@
+/* ============================================================================
+   Stiletto Theme — Semantic Design Tokens
+   ----------------------------------------------------------------------------
+   Single source of truth for every color used across the Stiletto theme.
+   Components reference these via `var(--token-name)` with NO inline
+   fallbacks — a component should never hardcode a HEX literal or bake a
+   fallback color into its own className. If a value is missing here, add
+   it here, not at the call site.
+
+   Opacity-modified utilities (Phase 8.1): plain/solid utilities use the
+   bracket form `bg-[var(--token)]`; utilities that need Tailwind's opacity
+   modifier (`/10`, `/40`, etc.) use the Tailwind v4 CSS-variable shorthand
+   `bg-(--token)/40` instead, since opacity modifiers only resolve correctly
+   against that shorthand, not against `[var(--token)]`. Both forms point at
+   the exact same token — the syntax choice is purely about whether an
+   opacity suffix is present.
+   ============================================================================ */
+
+:root {
+  /* ---- Core semantic palette (Phase 5 baseline set) -------------------- */
+  --brand-primary: #111111;      /* Primary brand ink / CTA color */
+  --brand-secondary: #666666;    /* Secondary brand tone, muted accents */
+  --brand-background: #FAF9F6;   /* App-wide page background */
+
+  --surface-primary: #FAF9F6;    /* Default light surface */
+  --surface-secondary: #F4F4F4;  /* Secondary/alternate surface */
+  --surface-inverse: #000000;    /* Dark/inverse surface (menus, drawers) */
+
+  --text-primary: #111111;       /* Primary body/heading text */
+  --text-inverse: #FFFFFF;       /* Text on inverse/dark surfaces */
+  --text-muted: #666666;         /* Secondary/muted text */
+
+  --separator-border: #E5E5E5;   /* Default hairline border/divider */
+
+  /* ---- Navigation -------------------------------------------------------- */
+  --nav-transparent-text: #E6EAC8;
+  --nav-solid-bg: var(--surface-primary);
+  --nav-solid-text: var(--surface-inverse);
+  --nav-solid-border: var(--separator-border);
+  --nav-mega-sub-text: var(--brand-secondary);
+
+  --nav-mobile-bg: var(--surface-inverse);
+  --nav-mobile-text: var(--text-inverse);
+  --nav-mobile-border: #222222;
+  --nav-mobile-muted: #888888;
+  --nav-mobile-thumb-bg: var(--brand-primary);
+
+  --nav-cart-badge-bg: var(--surface-inverse);
+  --nav-cart-badge-text: var(--text-inverse);
+
+  --separator-bg: hsl(var(--background));
+
+  /* ---- Promo banner ------------------------------------------------------ */
+  --promo-banner-bg: #EAE0D0;
+  --promo-banner-text: #593A27;
+  --promo-banner-button-bg: #633E2B;
+  --promo-banner-button-text: var(--text-inverse);
+
+  /* ---- Showcase (hero product carousel) ---------------------------------- */
+  --showcase-bg: #4F464539;
+  --showcase-banner-bg: #F6F4F0;
+  --showcase-banner-text: var(--brand-primary);
+  --showcase-card-bg: #F1EDEC;
+  --showcase-card-title: #EAE0D3;
+  --showcase-card-muted: #AFA293;
+  --showcase-swatch-border: #5B3E35;
+  --showcase-overlay-btn: #472622;
+
+  /* ---- Featured / product grid -------------------------------------------- */
+  --featured-bg: var(--surface-primary);
+  --featured-bg-secondary: var(--surface-secondary);
+  --featured-card-bg: #F1EDEC;
+  --featured-swatch-border: #D1D5DB;
+  --featured-text: var(--text-primary);
+  --featured-card-muted: var(--text-muted);
+  --featured-tabs-border: var(--separator-border);
+  --featured-overlay-btn: #F6F4F0;
+  --featured-overlay-text: var(--text-primary);
+
+  /* ---- Category ------------------------------------------------------------ */
+  --category-carousel-bg: var(--surface-primary);
+  --category-card-bg: #F1EDEC;
+  --category-arrow-bg: var(--brand-secondary);
+  --category-arrow-bg-hover: #333333;
+
+  /* ---- Collections ----------------------------------------------------------- */
+  --collection-header-bg: var(--surface-primary);
+
+  /* ---- Hero --------------------------------------------------------------- */
+  --hero-arrow-bg: #3A3A3A;
+  --hero-arrow-bg-hover: #222222;
+  --hero-slider-card-bg: var(--surface-primary);
+  --hero-slider-image-bg: #E5E7EB;
+  --hero-slider-card-text: var(--surface-inverse);
+  --hero-video-bg: #1C1B1B;
+  --hero-cta-sweep: #DCE4C9;
+
+  /* ---- Misc marketing sections ---------------------------------------------- */
+  --video-story-btn-bg: #F6F4F0;
+  --testimonials-bg: var(--surface-primary);
+  --testimonials-dot: #D1D5DB;
+  --philosophy-bg: var(--surface-primary);
+  --philosophy-border: var(--separator-border);
+  --features-bg: #EAECEE;
+  --features-text: #333333;
+
+  /* ---- Feedback / status colors (reviews, badges) --------------------------- */
+  --status-positive-bg: #ECFDF5;
+  --status-positive-text: #059669;
+  --status-warning-bg: #FFFBEB;
+  --status-warning-text: #B45309;
+  --status-neutral-bg: #F9FAFB;
+  --status-neutral-text: var(--text-muted);
+
+  /* ---- Elevated surfaces & subtle dividers --------------------------------- */
+  --surface-elevated: #FFFFFF;   /* Cards floating above the page background */
+  --surface-subtle: #F9FAFB;     /* Faint empty-state background */
+  --separator-subtle: #F3F4F6;   /* Lighter-weight divider than --separator-border */
+
+  /* ---- Rating / review badges ------------------------------------------------ */
+  --rating-badge-bg: #FFFBEB;
+  --rating-badge-border: #FDE68A;
+  --rating-badge-text: #78350F;
+  --rating-star-fill: #FBBF24;
+  --rating-star-empty: #E5E7EB;
+  --icon-muted: #9CA3AF;
+
+  /* ---- Destructive / error actions ------------------------------------------ */
+  --status-error-text: #F87171;
+  --status-error-text-hover: #FCA5A5;
+  --status-error-solid: #EF4444;  /* Solid red for error alert backgrounds/borders (opacity-modified via bg-(--status-error-solid)/N) */
+
+  /* ---- Form controls (selects, buttons, disabled states) -------------------- */
+  --form-border: #D1D5DB;
+  --form-border-hover: #9CA3AF;
+  --form-label-text: #374151;
+  --form-input-text: #111827;
+  --form-disabled-bg: #E5E7EB;
+  --form-disabled-text: #9CA3AF;
+  --cta-hover-bg: #1F2937;
+  --surface-muted: #F9FAFB;
+
+  /* ---- Discount / promo badges ----------------------------------------------- */
+  --discount-badge-bg: #FEE2E2;
+  --discount-badge-text: #DC2626;
+  --popular-badge-bg: #FBBF24;
+
+  /* ---- Stock indicator (pulsing dot) ------------------------------------------ */
+  --stock-indicator-text: #059669;
+  --stock-indicator-ping: #34D399;
+  --stock-indicator-dot: #10B981;
+}

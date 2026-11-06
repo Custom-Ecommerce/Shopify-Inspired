@@ -1,0 +1,18 @@
+{
+  "phase": "P0",
+  "modified": [
+    "apps/storefront/app/globals.css",
+    "apps/storefront/app/layout.tsx",
+    "apps/storefront/package.json"
+  ],
+  "created": [
+    "apps/storefront/styles/tokens.css",
+    "apps/storefront/styles/tokens.ts",
+    "apps/storefront/scripts/check-flat.mjs",
+    "apps/storefront/scripts/check-classes.mjs",
+    "apps/storefront/scripts/check-contrast.mjs",
+    "apps/storefront/scripts/check-tokens.mjs",
+    "apps/storefront/scripts/check-scope.mjs",
+    "apps/storefront/scripts/baseline-capture.mjs"
+  ]
+}

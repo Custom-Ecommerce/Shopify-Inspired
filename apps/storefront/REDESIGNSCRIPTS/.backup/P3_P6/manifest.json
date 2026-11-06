@@ -1,0 +1,30 @@
+{
+  "phase": "P3_P6",
+  "modified": [
+    "apps/storefront/components/marketing/features/pk-value-rows.tsx",
+    "apps/storefront/components/marketing/process/how-it-works.tsx",
+    "apps/storefront/components/marketing/themes/theme-card.tsx",
+    "apps/storefront/components/marketing/themes/theme-device-stack.tsx",
+    "apps/storefront/components/marketing/pricing/pricing-section.tsx",
+    "apps/storefront/components/marketing/pricing/plan-comparison.tsx",
+    "apps/storefront/components/marketing/pricing/billing-toggle.tsx",
+    "apps/storefront/components/marketing/support/support-section.tsx",
+    "apps/storefront/components/marketing/faq/faq-section.tsx",
+    "apps/storefront/components/marketing/cta/closing-cta.tsx",
+    "apps/storefront/components/marketing/contact/contact-form.tsx",
+    "apps/storefront/components/shared/view-all-link.tsx",
+    "apps/storefront/components/shared/surface.tsx",
+    "apps/storefront/components/shared/card.tsx",
+    "apps/storefront/components/shared/brand-mark.tsx",
+    "apps/storefront/components/ui/button.tsx",
+    "apps/storefront/app/(marketing)/features/page.tsx",
+    "apps/storefront/app/(marketing)/themes/[slug]/page.tsx",
+    "apps/storefront/components/ui/separator.tsx",
+    "apps/storefront/components/ui/sheet.tsx",
+    "apps/storefront/components/ui/toggle.tsx",
+    "apps/storefront/package.json"
+  ],
+  "created": [
+    "apps/storefront/scripts/a11y-axe.mjs"
+  ]
+}

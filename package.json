@@ -1,0 +1,32 @@
+{
+  "name": "markazify",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Markaz monorepo — Payload CMS admin, Next.js storefront, and shared core packages.",
+  "engines": {
+    "node": ">=18.20.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:admin": "turbo run dev --filter=@markaz/admin-backend-next",
+    "dev:storefront": "turbo run dev --filter=@markaz/storefront",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "dev:seller-portal": "turbo run dev --filter=@markaz/seller-portal",
+    "dev:seller-backend": "turbo run dev --filter=@markaz/seller-backend",
+    "type-check:all": "pnpm -r run type-check",
+    "check:no-payload": "node tools/check-no-payload.js",
+    "test": "pnpm -r --if-present run test",
+    "prelaunch": "node tools/prelaunch/check.js",
+    "dev:admin-frontend": "pnpm --filter @markaz/admin-frontend dev",
+    "check:tokens": "pnpm --filter @markaz/admin-frontend run check:tokens",
+    "check:no-shopify": "node tools/check-no-shopify.js",
+    "stiletto:verify": "node tools/stiletto-patch/verify.mjs"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.3",
+    "mongoose": "^8.24.1"
+  }
+}

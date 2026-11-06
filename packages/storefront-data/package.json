@@ -1,0 +1,28 @@
+{
+  "name": "@markaz/storefront-data",
+  "version": "0.2.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client/index.ts",
+    "./server": "./src/server/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@markaz/platform-kit": "workspace:*",
+    "zod": "4.4.3",
+    "zustand": "^4.5.2"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "react": "19.0.1",
+    "typescript": "^5"
+  }
+}

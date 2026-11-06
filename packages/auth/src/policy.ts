@@ -1,0 +1,237 @@
+
+// Policy matrix: the single declaration of who may read or write what.
+//
+// Allowlists are taken from the Payload access blocks in the reference
+// (apps/admin/src/collections/*.ts and globals/*.ts). Anything not declared
+// here is denied. Collections that are seller-owned (products, orders,
+// discounts, reviews, returns, storeArticles, referrals, media,
+// broadcastLogs, customers) are deliberately NOT declared yet: can() throws
+// PolicyConfigError for them until B5 completion captures their field lists.
+
+export type Actor = 'admin' | 'seller' | 'system' | 'public';
+export type Operation = 'read' | 'create' | 'update' | 'delete';
+export type FieldAllowlist = readonly string[] | '*';
+export type FieldPolicy = FieldAllowlist | Partial<Record<Actor, FieldAllowlist>>;
+
+export interface PolicyRule {
+readonly actors: readonly Actor[];
+readonly fields: FieldPolicy;
+}
+
+export interface CollectionPolicy {
+readonly read: PolicyRule;
+readonly create: PolicyRule;
+readonly update: PolicyRule;
+readonly delete: PolicyRule;
+}
+
+// Blueprint v3 section 1.2, store.operations: what a seller may write.
+export const SELLER_STORE_WRITABLE_FIELDS = ['name', 'storefront', 'paymentSettings', 'courierSettings'] as const;
+
+// Payload STORE_STAFF_WRITABLE_FIELDS (apps/admin/src/collections/Stores.ts).
+export const ADMIN_STORE_WRITABLE_FIELDS = [
+'owner', 'status', 'suspensionReason', 'suspensionNote', 'suspendedAt', 'statusChangedAt',
+'commissionMode', 'commissionRate', 'domain', 'customDomainStatus', 'archivedAt',
+] as const;
+
+// What a seller may read of their own store: no commission, owner, or billing internals.
+export const SELLER_STORE_READABLE_FIELDS = [
+'name', 'slug', 'internalHandle', 'status', 'isThemeDemo', 'domain', 'customDomainStatus',
+'storefront', 'paymentSettings', 'courierSettings',
+] as const;
+
+// What an anonymous storefront may read, the same subset the Phase 1 projection exposes.
+export const PUBLIC_STORE_READABLE_FIELDS = ['name', 'slug', 'internalHandle', 'status', 'isThemeDemo', 'storefront'] as const;
+
+// Payload SELLER_STAFF_WRITABLE_FIELDS (apps/admin/src/collections/Sellers.ts).
+export const ADMIN_SELLER_WRITABLE_FIELDS = ['accountStatus', 'storeLimitOverride'] as const;
+
+// Staff user administration. passwordHash is never writable through a generic update.
+export const ADMIN_USER_READABLE_FIELDS = ['name', 'email', 'role', 'store', 'createdAt', 'updatedAt'] as const;
+export const ADMIN_USER_CREATABLE_FIELDS = ['name', 'email', 'role', 'store'] as const;
+export const ADMIN_USER_WRITABLE_FIELDS = ['name', 'role', 'store'] as const;
+
+// Commission ledger as the supervisor may read it: totals only, no order identifiers
+// (Payload CommissionLedger fields minus orderId, sellerOrderDocId, stripePaymentIntentId, applicationFeeId).
+export const ADMIN_LEDGER_READABLE_FIELDS = [
+'store', 'orderAmount', 'commissionRate', 'commissionAmount', 'status',
+'paymentMethod', 'settlementDate', 'settlementRef', 'createdAt',
+] as const;
+
+// Payload PlatformSettings: settingsRevision has update access false, so it is excluded.
+export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
+'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote',
+] as const;
+
+export const POLICY_MATRIX: Readonly<Record<string, CollectionPolicy>> = {
+stores: {
+read: {
+actors: ['admin', 'system', 'seller', 'public'],
+fields: {
+admin: '*',
+system: '*',
+seller: SELLER_STORE_READABLE_FIELDS,
+public: PUBLIC_STORE_READABLE_FIELDS,
+},
+},
+create: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
+update: {
+actors: ['admin', 'seller', 'system'],
+fields: {
+admin: ADMIN_STORE_WRITABLE_FIELDS,
+seller: SELLER_STORE_WRITABLE_FIELDS,
+system: '*',
+},
+},
+delete: { actors: ['admin', 'system'], fields: '*' },
+},
+
+users: {
+read: { actors: ['admin', 'system'], fields: { admin: ADMIN_USER_READABLE_FIELDS, system: '*' } },
+create: { actors: ['admin', 'system'], fields: { admin: ADMIN_USER_CREATABLE_FIELDS, system: '*' } },
+update: { actors: ['admin', 'system'], fields: { admin: ADMIN_USER_WRITABLE_FIELDS, system: '*' } },
+delete: { actors: ['admin', 'system'], fields: '*' },
+},
+
+sellers: {
+read: { actors: ['admin', 'system'], fields: '*' },
+create: { actors: ['system'], fields: '*' },
+update: { actors: ['admin', 'system'], fields: { admin: ADMIN_SELLER_WRITABLE_FIELDS, system: '*' } },
+delete: { actors: ['system'], fields: '*' },
+},
+
+commissionLedger: {
+read: { actors: ['admin', 'system'], fields: { admin: ADMIN_LEDGER_READABLE_FIELDS, system: '*' } },
+create: { actors: ['system'], fields: '*' },
+update: { actors: ['system'], fields: '*' },
+delete: { actors: ['system'], fields: '*' },
+},
+
+platformSettings: {
+read: { actors: ['admin', 'system'], fields: '*' },
+create: { actors: [], fields: '*' },
+update: {
+actors: ['admin', 'system'],
+fields: { admin: ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS, system: '*' },
+},
+delete: { actors: [], fields: '*' },
+},
+
+// Audit entries are immutable: even system may not update or delete them.
+// Payload allowed systemOnly update and delete; this is an intentional tightening.
+'audit-log': {
+read: { actors: ['admin', 'system'], fields: '*' },
+create: { actors: ['system'], fields: '*' },
+update: { actors: [], fields: '*' },
+delete: { actors: [], fields: '*' },
+},
+
+categories: {
+read: { actors: ['public', 'admin', 'system', 'seller'], fields: '*' },
+create: { actors: ['admin', 'system'], fields: '*' },
+update: { actors: ['admin', 'system'], fields: '*' },
+delete: { actors: ['admin', 'system'], fields: '*' },
+},
+
+subscriptionPlans: {
+read: { actors: ['public', 'admin', 'system'], fields: { public: ['name', 'tier'], admin: '*', system: '*' } },
+create: { actors: ['admin', 'system'], fields: '*' },
+update: { actors: ['admin', 'system'], fields: '*' },
+delete: { actors: ['admin', 'system'], fields: '*' },
+},
+
+// The outbox is written only by server-side services running as 'system'.
+// A seller must never be able to enqueue sync envelopes through an API route.
+'sync-outbox': {
+read: { actors: ['admin', 'system'], fields: '*' },
+create: { actors: ['system'], fields: '*' },
+update: { actors: ['system'], fields: '*' },
+delete: { actors: ['system'], fields: '*' },
+},
+};
+
+// B10.0 declarations. Sellers may create and update their store's discounts, and may change only a review's
+// status (ID-21). Deletes are admin and system only. Creating a review is system-only (the storefront writes it).
+Object.assign(POLICY_MATRIX, {
+  discounts: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: {
+      actors: ['admin', 'system', 'seller'],
+      fields: {
+        admin: '*',
+        system: '*',
+        seller: ['code', 'type', 'value', 'minOrderAmount', 'maxUses', 'startDate', 'endDate', 'applicableProducts', 'isActive'],
+      },
+    },
+    update: {
+      actors: ['admin', 'system', 'seller'],
+      fields: { admin: '*', system: '*', seller: ['isActive', 'maxUses', 'endDate'] },
+    },
+    delete: { actors: ['admin', 'system'], fields: '*' },
+  },
+  reviews: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: ['status'] } },
+    delete: { actors: ['admin', 'system'], fields: '*' },
+  },
+});
+
+// B10.2 declarations. A seller reads their store's returns and changes only status, refundType, and
+// refundAmount on one (ID-24). Referrals are read-only for sellers: the reward fields are admin-only (ID-25).
+Object.assign(POLICY_MATRIX, {
+  returns: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: {
+      actors: ['admin', 'system', 'seller'],
+      fields: { admin: '*', system: '*', seller: ['status', 'refundType', 'refundAmount'] },
+    },
+    delete: { actors: ['admin', 'system'], fields: '*' },
+  },
+  referrals: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
+    delete: { actors: ['admin', 'system'], fields: '*' },
+  },
+});
+
+// B10.3 declarations. Categories are read-only for sellers, as in Payload (ID-26). A seller may create a media
+// record for their store, supplying alt only (ID-23). Update stays with the system; delete with admin and system.
+Object.assign(POLICY_MATRIX, {
+  categories: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
+    update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
+    delete: { actors: ['admin', 'system'], fields: '*' },
+  },
+  media: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: { actors: ['system', 'seller'], fields: { system: '*', seller: ['alt'] } },
+    update: { actors: ['system'], fields: { system: '*' } },
+    delete: { actors: ['admin', 'system'], fields: '*' },
+  },
+});
+
+// B10.4 declarations, added only where the matrix does not already declare the collection. Sellers read their
+// store's articles and orders; writes are system and admin only, as in Payload.
+{
+  const declarations: Record<string, unknown> = {
+    storeArticles: {
+      read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+      create: { actors: ['system'], fields: { system: '*' } },
+      update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
+      delete: { actors: ['admin', 'system'], fields: '*' },
+    },
+    orders: {
+      read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+      create: { actors: ['system'], fields: { system: '*' } },
+      update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
+      delete: { actors: ['admin', 'system'], fields: '*' },
+    },
+  };
+  for (const [name, rule] of Object.entries(declarations)) {
+    if (!(name in POLICY_MATRIX)) Object.assign(POLICY_MATRIX, { [name]: rule });
+  }
+}

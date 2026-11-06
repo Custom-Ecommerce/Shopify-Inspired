@@ -1,0 +1,13 @@
+{
+  "phase": "P1",
+  "modified": [
+    "apps/storefront/components/marketing/layout/header-wrapper.tsx",
+    "apps/storefront/components/marketing/layout/site-header.tsx",
+    "apps/storefront/components/marketing/layout/mobile-nav.tsx",
+    "apps/storefront/components/marketing/layout/site-footer.tsx",
+    "apps/storefront/components/marketing/layout/legal-document.tsx",
+    "apps/storefront/app/(marketing)/layout.tsx",
+    "apps/storefront/content/marketing/footer.ts"
+  ],
+  "created": []
+}

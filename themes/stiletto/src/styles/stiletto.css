@@ -1,0 +1,184 @@
+/* Generated from the original globals.css by apply-stiletto.mjs. Scoped to html[data-theme="stiletto"] by apps/storefront/postcss/scope-theme.cjs. */
+@import "tailwindcss" source(none);
+@source "../";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "../tokens/tokens.css";
+/* The original never switched to dark mode. This variant can never match, so the host's .dark class has no effect here. */
+@custom-variant dark (&:is([data-stiletto-never-dark] *));
+
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  
+  /* Stiletto Fonts Injection - Mapped to layout.tsx variables */
+  --font-sans: var(--custom-sans), sans-serif;
+  --font-serif: var(--custom-heading), serif; 
+  --font-heading: var(--custom-heading), sans-serif;
+  
+  /* Stiletto Custom Spacings */
+  --spacing-margin-mobile: 20px;
+  --spacing-margin-desktop: 64px;
+  --spacing-container-max: 1440px;
+  --spacing-gutter: 24px;
+  --spacing-section-gap: 120px;
+
+  /* Shadcn UI Variables Map */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Default Light Theme - Official Shadcn Base */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.147 0.004 49.3);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.147 0.004 49.3);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.147 0.004 49.3);
+  --primary: oklch(0.214 0.009 43.1);
+  --primary-foreground: oklch(0.986 0.002 67.8);
+  --secondary: oklch(0.96 0.002 17.2);
+  --secondary-foreground: oklch(0.214 0.009 43.1);
+  --muted: oklch(0.96 0.002 17.2);
+  --muted-foreground: oklch(0.547 0.021 43.1);
+  --accent: oklch(0.96 0.002 17.2);
+  --accent-foreground: oklch(0.214 0.009 43.1);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0.005 34.3);
+  --input: oklch(0.922 0.005 34.3);
+  --ring: oklch(0.714 0.014 41.2);
+  --chart-1: oklch(0.868 0.007 39.5);
+  --chart-2: oklch(0.547 0.021 43.1);
+  --chart-3: oklch(0.438 0.017 39.3);
+  --chart-4: oklch(0.367 0.016 35.7);
+  --chart-5: oklch(0.268 0.011 36.5);
+  --radius: 0.5rem; 
+  --sidebar: oklch(0.986 0.002 67.8);
+  --sidebar-foreground: oklch(0.147 0.004 49.3);
+  --sidebar-primary: oklch(0.214 0.009 43.1);
+  --sidebar-primary-foreground: oklch(0.986 0.002 67.8);
+  --sidebar-accent: oklch(0.96 0.002 17.2);
+  --sidebar-accent-foreground: oklch(0.214 0.009 43.1);
+  --sidebar-border: oklch(0.922 0.005 34.3);
+  --sidebar-ring: oklch(0.714 0.014 41.2);
+
+  /* Stiletto semantic color tokens now live in
+     packages/theme/src/themes/stiletto/tokens/tokens.css — imported above.
+     This app boundary intentionally defines NO raw HEX color literals. */
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans overflow-x-hidden;
+  }
+  /* Raw Design Utility Fixes */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+/* Swiper Pagination Customization */
+.product-card-swiper .swiper-pagination-bullet {
+  background: var(--showcase-card-title);
+  opacity: 0.3;
+  transition: all 0.3s ease;
+}
+.product-card-swiper .swiper-pagination-bullet-active {
+  opacity: 1;
+  background: var(--showcase-card-title);
+}
+
+
+/* ---- Isolation: undo what the host app's global rules would otherwise do to this theme. ---- */
+@layer base {
+  html[data-theme="stiletto"] :is(h1, h2, h3, h4, h5, h6, .font-heading) { font-family: inherit; letter-spacing: normal; }
+  html[data-theme="stiletto"] :focus-visible { outline-style: revert; outline-width: revert; outline-offset: revert; }
+}
+/* The original <html> carried h-full antialiased font-sans; a descendant-scoped utility cannot match <html> itself, so they are restated here. */
+html[data-theme="stiletto"] { scroll-behavior: auto; text-rendering: auto; height: 100%; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-family: var(--custom-sans), sans-serif; }
+/* Unlayered, so it beats the host's body utility classes. Mirrors the original <body className="min-h-full flex flex-col"> and its base rule. */
+html[data-theme="stiletto"] body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--custom-sans), sans-serif;
+  font-feature-settings: normal;
+  letter-spacing: normal;
+  overflow-x: hidden;
+}
+html[data-theme="stiletto"] body *::selection, html[data-theme="stiletto"] body::selection { background-color: Highlight; color: HighlightText; }
+/* Another theme's stylesheet has an unscoped svg rule (max-width: 100%; flex-shrink: 0). Restore the browser defaults this design was built with. */
+html[data-theme="stiletto"] svg:not([class*="shrink"]) { flex-shrink: 1; }
+html[data-theme="stiletto"] svg:not([class*="max-w"]) { max-width: none; }
+/* The host's wrapper elements must not take part in layout. */
+html[data-theme="stiletto"] .tenant-boundary, html[data-theme="stiletto"] .demo-provider-boundary { display: contents; }
+
+/* [stiletto-responsive-fix-v3] */
+html {
+  width: 100%;
+  max-width: 100vw;
+  min-height: 100%;
+  overflow-x: clip;
+}
+
+body {
+  width: 100%;
+  max-width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow-x: clip;
+}
+
+main,
+header,
+footer {
+  width: 100%;
+  max-width: 100vw;
+  min-width: 0;
+  box-sizing: border-box;
+}

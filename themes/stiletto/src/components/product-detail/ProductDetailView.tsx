@@ -1,0 +1,87 @@
+"use client";
+
+import type { NormalizedCategory, NormalizedProduct, ReviewItem } from "../../types";
+import { CategoryCarousel } from "../category/CategoryCarousel";
+import { ProductCarousel } from "../showcase/ProductCarousel";
+import { ProductAccordion } from "./ProductAccordion";
+import { ProductGallery } from "./ProductGallery";
+import { ProductInfo } from "./ProductInfo";
+import { ProductReviewsSection } from "./ProductReviewsSection";
+
+interface ProductDetailViewProps {
+  product: NormalizedProduct;
+  allProducts: NormalizedProduct[];
+  categories: NormalizedCategory[];
+  reviews?: ReviewItem[];
+  productHandle?: string;
+  shippingDetails?: string[];
+}
+
+export function ProductDetailView({
+  product,
+  allProducts,
+  categories,
+  reviews = [],
+  productHandle = "",
+  shippingDetails = [],
+}: ProductDetailViewProps) {
+  const similarProducts = allProducts.filter(
+    (p) =>
+      p.id !== product.id &&
+      p.productType.toLowerCase() === product.productType.toLowerCase()
+  );
+
+  const otherCategories = categories.filter(
+    (cat) => cat.title.toLowerCase() !== product.productType.toLowerCase()
+  );
+
+  return (
+    <div className="w-full">
+      <div className="py-8 md:py-16 px-4 md:px-12 max-w-container-max mx-auto w-full space-y-16">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-start">
+          <ProductGallery images={product.images} title={product.title} />
+
+          <div className="flex flex-col">
+            <ProductInfo product={product} />
+            <ProductAccordion
+              descriptionHtml={product.descriptionHtml}
+              plainTextDescription={product.plainTextDescription}
+              specs={product.specs}
+              shippingDetails={shippingDetails}
+            />
+          </div>
+        </div>
+
+        <ProductReviewsSection
+          reviews={reviews}
+          productHandle={productHandle || product.handle || ""}
+        />
+
+        <section className="pt-12 border-t border-[var(--separator-border)]">
+          <h2 className="font-heading text-[22px] md:text-[30px] uppercase tracking-[0.08em] text-[var(--featured-text)] mb-6">
+            Similar Products
+          </h2>
+
+          {similarProducts.length > 0 ? (
+            <ProductCarousel products={similarProducts} />
+          ) : (
+            <div className="py-8 text-center border border-dashed border-[var(--separator-border)] rounded-md bg-[var(--featured-bg-secondary)]">
+              <p className="font-sans text-[14px] uppercase tracking-[0.1em] text-[var(--featured-card-muted)] font-medium">
+                No similar products available
+              </p>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {otherCategories.length > 0 && (
+        <div className="w-full border-t border-[var(--separator-border)]">
+          <CategoryCarousel
+            title="Explore Other Categories"
+            items={otherCategories}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
