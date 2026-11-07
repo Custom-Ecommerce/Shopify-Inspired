@@ -8,6 +8,17 @@ import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { storeHref } from "@/lib/store-routes";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/dashboard/shared/EmptyState";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
@@ -26,6 +37,32 @@ type LoadState =
   | { kind: "not_found" }
   | { kind: "error" }
   | { kind: "ready"; order: DashboardOrderDetail };
+
+/** One button per allowed next status (OB-2). The flow itself comes from the API's allowedNext, never from here. */
+const ACTION_LABEL: Record<string, string> = {
+  confirmed: "Confirm order",
+  processing: "Start processing",
+  dispatched: "Mark as dispatched",
+  delivered: "Mark as delivered",
+};
+
+/** Moves that ask first. OB-4 replaces the dispatch question with the courier form. */
+const CONFIRM_COPY: Record<string, { title: string; description: string }> = {
+  dispatched: {
+    title: "Mark this order as dispatched?",
+    description: "Do this once the parcel has left with the courier. The order cannot go back to processing.",
+  },
+  delivered: {
+    title: "Mark this order as delivered?",
+    description: "Do this once the customer has received the parcel. This is the last step of the order.",
+  },
+};
+
+interface ActionError {
+  message: string;
+  /** The move to try again, for errors that are worth retrying as they are. */
+  retry: string | null;
+}
 
 const money = (amount: number): string => `PKR ${amount.toLocaleString()}`;
 
@@ -63,20 +100,68 @@ export default function OrderDetailPage() {
   const storeFetch = useStoreFetch();
   const params = useParams<{ storeId: string; id: string }>();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [running, setRunning] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<ActionError | null>(null);
 
-  const load = useCallback(() => {
-    setState({ kind: "loading" });
-    storeFetch(`/api/dashboard/orders/${params.id}`)
-      .then(async (res) => {
+  /** Reads the order. A quiet refresh (after an action) keeps the page on screen instead of showing the skeleton. */
+  const fetchOrder = useCallback(
+    async (quiet: boolean): Promise<void> => {
+      if (!quiet) setState({ kind: "loading" });
+      try {
+        const res = await storeFetch(`/api/dashboard/orders/${params.id}`);
         if (res.status === 404) return setState({ kind: "not_found" });
         const data = (await res.json().catch(() => null)) as DashboardOrderDetail | null;
-        if (!res.ok || !data?.id) return setState({ kind: "error" });
+        if (!res.ok || !data?.id) {
+          if (!quiet) setState({ kind: "error" });
+          return;
+        }
         setState({ kind: "ready", order: data });
-      })
-      .catch(() => setState({ kind: "error" }));
-  }, [params.id, storeFetch]);
+      } catch {
+        if (!quiet) setState({ kind: "error" });
+      }
+    },
+    [params.id, storeFetch],
+  );
+
+  const load = useCallback(() => {
+    setActionError(null);
+    void fetchOrder(false);
+  }, [fetchOrder]);
 
   useEffect(load, [load]);
+
+  /** Sends one move, then always reads the order again from the server (no optimistic update). */
+  async function runTransition(target: string): Promise<void> {
+    setRunning(target);
+    setActionError(null);
+    try {
+      const res = await storeFetch(`/api/dashboard/orders/${params.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: target }),
+      });
+      if (res.status === 409 || res.status === 422) {
+        setActionError({
+          message: "This order was changed by someone else or in another tab. It has been refreshed, so check its status and try again.",
+          retry: null,
+        });
+      } else if (!res.ok) {
+        setActionError({ message: "Could not save this change. Check your connection and try again.", retry: target });
+      }
+      await fetchOrder(true);
+    } catch {
+      setActionError({ message: "Could not save this change. Check your connection and try again.", retry: target });
+    } finally {
+      setRunning(null);
+      setConfirming(null);
+    }
+  }
+
+  function startTransition(target: string): void {
+    if (CONFIRM_COPY[target]) setConfirming(target);
+    else void runTransition(target);
+  }
 
   const backLink = (
     <Link href={storeHref(params.storeId, "/orders")} className="text-sm text-muted-foreground underline-offset-4 hover:underline">
@@ -125,9 +210,63 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* Actions: intentionally empty. OB-2 fills this area from the allowed next steps the API returns
-          (confirm, processing, dispatch, delivered); cancel, notes, payment and print arrive in OB-3 to OB-5. */}
-      <div data-slot="order-actions" className="empty:hidden" />
+      {/* Actions: one button per allowedNext entry from the API. Cancel, notes, payment and print arrive in OB-3 to OB-5. */}
+      <section aria-label="Order actions" data-slot="order-actions" className="flex flex-col gap-3 empty:hidden">
+        {order.allowedNext.length > 0 ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            {order.allowedNext.map((target) => (
+              <Button
+                key={target}
+                variant="clay"
+                className="h-11 w-full sm:w-auto"
+                disabled={running !== null}
+                onClick={() => startTransition(target)}
+              >
+                {running === target ? "Saving…" : ACTION_LABEL[target] ?? ORDER_STATUS_LABEL[target] ?? target}
+              </Button>
+            ))}
+          </div>
+        ) : order.status === "delivered" ? (
+          <p className="text-sm text-muted-foreground">No further steps. This order is delivered.</p>
+        ) : null}
+
+        {actionError ? (
+          <div role="alert" className="flex flex-col gap-2 rounded-xl border border-destructive/20 bg-destructive/8 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <span>{actionError.message}</span>
+            {actionError.retry ? (
+              <Button
+                variant="clay-soft"
+                className="h-11 w-full sm:h-9 sm:w-auto"
+                disabled={running !== null}
+                onClick={() => actionError.retry && void runTransition(actionError.retry)}
+              >
+                Try again
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
+      <AlertDialog open={confirming !== null} onOpenChange={(open) => (!open && running === null ? setConfirming(null) : undefined)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirming ? CONFIRM_COPY[confirming]?.title : ""}</AlertDialogTitle>
+            <AlertDialogDescription>{confirming ? CONFIRM_COPY[confirming]?.description : ""}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-11 w-full sm:h-9 sm:w-auto" disabled={running !== null}>
+              Not yet
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="h-11 w-full sm:h-9 sm:w-auto"
+              disabled={running !== null}
+              onClick={() => confirming && void runTransition(confirming)}
+            >
+              {running !== null ? "Saving…" : confirming ? ACTION_LABEL[confirming] : ""}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card>
         <CardHeader>

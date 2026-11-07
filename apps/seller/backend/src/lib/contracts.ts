@@ -103,3 +103,6 @@ export const { PRODUCT_CSV_COLUMNS, PRODUCT_IMPORT_MAX_BYTES, PRODUCT_IMPORT_MAX
 
 // EP-02 OB-1b: the seller dashboard order list and detail.
 export const { DASHBOARD_ORDER_STATUSES, dashboardOrderListQuerySchema, orderListDaySchema } = contracts;
+
+// EP-02 OB-2: the order status workflow and the transition request.
+export const { canTransition, nextStatuses, transitionRefusal, ORDER_TRANSITION_REFUSAL_MESSAGES, orderTransitionRequestSchema } = contracts;

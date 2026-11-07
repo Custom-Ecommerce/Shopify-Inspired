@@ -12,7 +12,9 @@ import {
   ORDER_PAYMENT_STATUS_LABELS,
   ORDER_SEARCH_MAX_LENGTH,
   ORDER_STATUS_LABELS,
+  ORDER_STATUS_NOTE_MAX,
   orderSchema,
+  orderTransitionRequestSchema,
 } from '../src/order';
 import { failingPaths } from './helpers';
 
@@ -105,8 +107,47 @@ test('dashboard list item and detail parse, and unknown keys are stripped', () =
     subtotal: 2400, deliveryCharges: 200, total: 2600, courier: null, trackingNumber: null, trackingUrl: null,
     statusHistory: [{ from: 'pending', to: 'confirmed', by: null, at: NOW_ISO, note: null }],
     notes: [{ id: null, text: 'Call first', by: null, at: NOW_ISO }],
-    cancelledAt: null, cancelReason: null, createdAt: NOW_ISO, updatedAt: NOW_ISO,
+    cancelledAt: null, cancelReason: null, createdAt: NOW_ISO, updatedAt: NOW_ISO, allowedNext: ['processing'],
   };
   assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
   assert.deepEqual(failingPaths(dashboardOrderDetailSchema.safeParse({ ...detail, paymentStatus: 'paid' })), ['paymentStatus']);
+});
+
+// EP-02 OB-2: the transition request.
+
+test('transition request: a status and an optional trimmed note', () => {
+  const parsed = orderTransitionRequestSchema.parse({ status: 'confirmed', note: '  Called the customer  ' });
+  assert.equal(parsed.status, 'confirmed');
+  assert.equal(parsed.note, 'Called the customer');
+  assert.equal(orderTransitionRequestSchema.safeParse({ status: 'confirmed' }).success, true);
+  assert.equal(orderTransitionRequestSchema.safeParse({ status: 'confirmed', note: 'x'.repeat(ORDER_STATUS_NOTE_MAX) }).success, true);
+});
+
+test('transition request: bad values are reported against their field', () => {
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({})), ['status']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'shipped' })), ['status']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'confirmed', note: 'x'.repeat(ORDER_STATUS_NOTE_MAX + 1) })), ['note']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched', courier: 'x'.repeat(61) })), ['courier']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched', trackingNumber: 'x'.repeat(65) })), ['trackingNumber']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched', trackingUrl: 'ftp://x.test/1' })), ['trackingUrl']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched', trackingUrl: 'javascript:alert(1)' })), ['trackingUrl']);
+});
+
+test('transition request: courier and tracking are accepted only with dispatched, and not required yet', () => {
+  const dispatch = orderTransitionRequestSchema.parse({
+    status: 'dispatched', courier: ' TCS ', trackingNumber: ' 123 ', trackingUrl: 'https://tcs.test/track/123',
+  });
+  assert.equal(dispatch.courier, 'TCS');
+  assert.equal(dispatch.trackingNumber, '123');
+  // OB-4 makes courier and tracking number required for dispatch; until then a bare dispatch is valid.
+  assert.equal(orderTransitionRequestSchema.safeParse({ status: 'dispatched' }).success, true);
+  for (const field of ['courier', 'trackingNumber', 'trackingUrl']) {
+    const value = field === 'trackingUrl' ? 'https://tcs.test/1' : 'TCS';
+    assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'confirmed', [field]: value })), [field], field);
+  }
+});
+
+test('transition request: unknown keys are dropped', () => {
+  const parsed = orderTransitionRequestSchema.parse({ status: 'confirmed', store: 'x', total: 1, statusHistory: [] });
+  assert.deepEqual(Object.keys(parsed), ['status']);
 });

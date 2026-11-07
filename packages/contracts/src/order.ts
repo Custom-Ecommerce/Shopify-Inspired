@@ -216,7 +216,59 @@ export const dashboardOrderDetailSchema = z.object({
   cancelReason: z.string().nullable(),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
+  /** The statuses the order may move to next (order-flow nextStatuses of the stored status), so no UI hard-codes the flow. */
+  allowedNext: z.array(z.enum(DASHBOARD_ORDER_STATUSES)),
 });
+
+// EP-02 OB-2: POST /api/orders/:id/transition.
+
+// The same limits as packages/db-schemas/src/models/order.ts (ORDER_STATUS_NOTE_MAX, ORDER_COURIER_MAX,
+// ORDER_TRACKING_NUMBER_MAX, ORDER_TRACKING_URL_MAX). Contracts does not depend on db-schemas, so the numbers are repeated.
+export const ORDER_STATUS_NOTE_MAX = 500;
+export const ORDER_COURIER_MAX = 60;
+export const ORDER_TRACKING_NUMBER_MAX = 64;
+export const ORDER_TRACKING_URL_MAX = 500;
+
+/** Only these may come with a move to dispatched. OB-4 makes courier and trackingNumber required for it. */
+export const ORDER_DISPATCH_FIELDS = ['courier', 'trackingNumber', 'trackingUrl'] as const;
+
+const HTTP_URL = /^https?:\/\//i;
+
+/**
+ * The transition request. Not strict: unknown keys are dropped, so they are neither stored nor checked by the policy.
+ * note: trimmed, at most 500 characters; an empty note is the same as none.
+ */
+export const orderTransitionRequestSchema = z
+  .object({
+    status: z.enum(DASHBOARD_ORDER_STATUSES),
+    note: z.string().trim().max(ORDER_STATUS_NOTE_MAX).nullish(),
+    courier: z.string().trim().min(1).max(ORDER_COURIER_MAX).optional(),
+    trackingNumber: z.string().trim().min(1).max(ORDER_TRACKING_NUMBER_MAX).optional(),
+    trackingUrl: z
+      .string()
+      .trim()
+      .max(ORDER_TRACKING_URL_MAX)
+      .regex(HTTP_URL, 'The tracking link must start with http:// or https://.')
+      .optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.status === 'dispatched') return;
+    for (const field of ORDER_DISPATCH_FIELDS) {
+      if (body[field] !== undefined) {
+        ctx.addIssue({ code: 'custom', path: [field], message: field + ' can only be sent with status dispatched.' });
+      }
+    }
+  });
+
+export type OrderTransitionRequestInput = z.input<typeof orderTransitionRequestSchema>;
+export type OrderTransitionRequest = z.output<typeof orderTransitionRequestSchema>;
+
+/** 200 from the transition endpoint. changed is false when the order already had the status (nothing was written). */
+export const orderTransitionResponseSchema = z.object({
+  changed: z.boolean(),
+  order: dashboardOrderDetailSchema,
+});
+export type OrderTransitionResponse = z.output<typeof orderTransitionResponseSchema>;
 
 export type DashboardOrderListQueryInput = z.input<typeof dashboardOrderListQuerySchema>;
 export type DashboardOrderListQuery = z.output<typeof dashboardOrderListQuerySchema>;

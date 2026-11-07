@@ -216,7 +216,7 @@ delete: { actors: [], fields: {} },
 // 'orders' row further down (B10.4) is left as it was. The field lists name what the client may supply; statusHistory,
 // notes[].by, the timestamps and every other derived field are written by the server only.
 //   view       read    list, detail, per-status counts
-//   transition update  confirm, processing, dispatch (courier and tracking), delivered, and a tracking edit after dispatch
+//   transition update  confirm, processing, dispatch (courier and tracking), delivered, and a tracking edit after dispatch; note is the optional history note (OB-2)
 //   cancel     update  cancel with a reason; the status itself and the stock restore are the server's
 //   note       create  add an internal note; read lists them
 //   payment    update  mark COD collected with the amount
@@ -231,7 +231,7 @@ delete: { actors: [], fields: {} },
 orderTransition: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
-update: { actors: ['seller'], fields: { seller: ['status', 'courier', 'trackingNumber', 'trackingUrl'] } },
+update: { actors: ['seller'], fields: { seller: ['status', 'note', 'courier', 'trackingNumber', 'trackingUrl'] } },
 delete: { actors: [], fields: {} },
 },
 

@@ -11,7 +11,7 @@ import type {
   DashboardOrderStatus,
   DashboardOrderStatusChange,
 } from '@markaz/contracts';
-import { DASHBOARD_ORDER_STATUSES, dashboardOrderListQuerySchema, orderListDaySchema } from '@/lib/contracts';
+import { DASHBOARD_ORDER_STATUSES, dashboardOrderListQuerySchema, nextStatuses, orderListDaySchema } from '@/lib/contracts';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { escapeRegex } from '@/lib/storefront/product-query';
 
@@ -27,22 +27,28 @@ export type OrderErrorCode =
   | 'ORDER_DATE_RANGE_INVALID'
   | 'ORDER_PAGE_INVALID'
   | 'ORDER_LIMIT_INVALID'
-  | 'ORDER_QUERY_INVALID';
+  | 'ORDER_QUERY_INVALID'
+  // EP-02 OB-2: the transition endpoint.
+  | 'ORDER_BODY_INVALID'
+  | 'ORDER_TRANSITION_ILLEGAL'
+  | 'ORDER_STATUS_CHANGED';
 
 export class OrderRequestError extends HttpError {
   readonly code: OrderErrorCode;
+  readonly details: Record<string, unknown>;
 
-  constructor(status: number, code: OrderErrorCode, message: string) {
+  constructor(status: number, code: OrderErrorCode, message: string, details: Record<string, unknown> = {}) {
     super(status, message);
     this.name = 'OrderRequestError';
     this.code = code;
+    this.details = details;
   }
 }
 
-/** handleRouteError with the order codes kept: { errors: [{ message, code }] }, as the product routes answer. */
+/** handleRouteError with the order codes kept: { errors: [{ message, code, ...details }] }, as the product routes answer. */
 export function handleOrderError(err: unknown): NextResponse {
   if (err instanceof OrderRequestError) {
-    return NextResponse.json({ errors: [{ message: err.message, code: err.code }] }, { status: err.status });
+    return NextResponse.json({ errors: [{ message: err.message, code: err.code, ...err.details }] }, { status: err.status });
   }
   return handleRouteError(err);
 }
@@ -287,7 +293,10 @@ export function toDashboardOrderListItem(doc: unknown): DashboardOrderListItem {
   };
 }
 
-/** The detail page's order, allowlisted the same way. statusHistory and notes are newest first. */
+/**
+ * The detail page's order, allowlisted the same way. statusHistory and notes are newest first. allowedNext comes from the
+ * stored status as it is, not from the mapped one: a corrupt status shows as pending but has no legal moves.
+ */
 export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
   const row = plainRow(doc);
   const createdAt = iso(row.createdAt) ?? new Date(0).toISOString();
@@ -327,5 +336,6 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     cancelReason: text(row.cancelReason),
     createdAt,
     updatedAt: iso(row.updatedAt) ?? createdAt,
+    allowedNext: nextStatuses(row.status),
   };
 }

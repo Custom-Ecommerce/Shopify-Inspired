@@ -1,0 +1,85 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  canTransition,
+  isOrderFlowStatus,
+  nextStatuses,
+  ORDER_FLOW,
+  ORDER_FLOW_STATUSES,
+  ORDER_TRANSITION_REFUSAL_MESSAGES,
+  transitionRefusal,
+} from '../src/order-flow';
+import { DASHBOARD_ORDER_STATUSES } from '../src/order';
+import { STOREFRONT_ORDER_STATUSES } from '../src/storefront';
+
+// EP-02 OB-2: the order status workflow (D-064, D-065).
+
+const LEGAL: ReadonlyArray<[string, string]> = [
+  ['pending', 'confirmed'],
+  ['confirmed', 'processing'],
+  ['processing', 'dispatched'],
+  ['dispatched', 'delivered'],
+];
+
+const isLegal = (from: string, to: string): boolean => LEGAL.some(([f, t]) => f === from && t === to);
+
+test('order flow: the statuses are the same seven as the storefront and dashboard sets', () => {
+  assert.deepEqual([...ORDER_FLOW_STATUSES], [...STOREFRONT_ORDER_STATUSES]);
+  assert.deepEqual([...ORDER_FLOW_STATUSES], [...DASHBOARD_ORDER_STATUSES]);
+  assert.deepEqual(Object.keys(ORDER_FLOW).sort(), [...ORDER_FLOW_STATUSES].sort());
+});
+
+test('order flow: of all 49 pairs exactly the four forward steps are legal', () => {
+  let legal = 0;
+  for (const from of ORDER_FLOW_STATUSES) {
+    for (const to of ORDER_FLOW_STATUSES) {
+      const expected = isLegal(from, to);
+      assert.equal(canTransition(from, to), expected, from + ' -> ' + to);
+      assert.equal(transitionRefusal(from, to) === null, expected, from + ' -> ' + to);
+      if (expected) legal += 1;
+    }
+  }
+  assert.equal(legal, 4);
+});
+
+test('order flow: nextStatuses gives one step forward, nothing out of a final status', () => {
+  assert.deepEqual(nextStatuses('pending'), ['confirmed']);
+  assert.deepEqual(nextStatuses('confirmed'), ['processing']);
+  assert.deepEqual(nextStatuses('processing'), ['dispatched']);
+  assert.deepEqual(nextStatuses('dispatched'), ['delivered']);
+  for (const status of ['delivered', 'cancelled', 'returned']) assert.deepEqual(nextStatuses(status), [], status);
+  for (const from of ORDER_FLOW_STATUSES) {
+    for (const to of nextStatuses(from)) assert.equal(canTransition(from, to), true, from + ' -> ' + to);
+  }
+});
+
+test('order flow: an unknown or corrupt status has no legal moves', () => {
+  for (const bad of ['shipped', 'PENDING', '', ' pending', null, undefined, 3, {}]) {
+    assert.deepEqual(nextStatuses(bad), [], String(bad));
+    assert.equal(isOrderFlowStatus(bad), false, String(bad));
+    assert.equal(canTransition(bad, 'confirmed'), false, String(bad));
+    assert.equal(canTransition('pending', bad), false, String(bad));
+    assert.equal(transitionRefusal(bad, 'confirmed'), 'unknown_status', String(bad));
+  }
+});
+
+test('order flow: nextStatuses returns a fresh array the caller cannot use to change the flow', () => {
+  const next = nextStatuses('pending');
+  next.push('delivered');
+  assert.deepEqual(nextStatuses('pending'), ['confirmed']);
+});
+
+test('order flow: each refusal reason', () => {
+  assert.equal(transitionRefusal('pending', 'pending'), 'same_status');
+  assert.equal(transitionRefusal('delivered', 'pending'), 'final_status');
+  assert.equal(transitionRefusal('cancelled', 'confirmed'), 'final_status');
+  assert.equal(transitionRefusal('returned', 'delivered'), 'final_status');
+  assert.equal(transitionRefusal('pending', 'cancelled'), 'cancel_elsewhere');
+  assert.equal(transitionRefusal('dispatched', 'cancelled'), 'cancel_elsewhere');
+  assert.equal(transitionRefusal('dispatched', 'returned'), 'return_elsewhere');
+  assert.equal(transitionRefusal('dispatched', 'processing'), 'backwards');
+  assert.equal(transitionRefusal('confirmed', 'pending'), 'backwards');
+  assert.equal(transitionRefusal('pending', 'processing'), 'skips_step');
+  assert.equal(transitionRefusal('pending', 'delivered'), 'skips_step');
+  for (const message of Object.values(ORDER_TRANSITION_REFUSAL_MESSAGES)) assert.ok(message.length > 0);
+});

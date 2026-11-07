@@ -238,7 +238,7 @@ const ORDER_ROWS = ['orderView', 'orderTransition', 'orderCancel', 'orderNotes',
 /** The fields a seller would send for each action; read actions send none. */
 const ORDER_ACTION_FIELDS: Record<(typeof ORDER_ACTION_NAMES)[number], readonly string[] | undefined> = {
 view: undefined,
-transition: ['status', 'courier', 'trackingNumber', 'trackingUrl'],
+transition: ['status', 'note', 'courier', 'trackingNumber', 'trackingUrl'],
 cancel: ['cancelReason'],
 note: ['text'],
 payment: ['paymentStatus', 'collectedAmount'],
@@ -336,4 +336,16 @@ assert.deepEqual([...POLICY_MATRIX.orders.create.actors], ['system']);
 assert.deepEqual([...POLICY_MATRIX.orders.update.actors], ['admin', 'system']);
 assert.deepEqual([...POLICY_MATRIX.orders.delete.actors], ['admin', 'system']);
 assert.equal(can('seller', 'update', 'orders', ['status']), false);
+});
+
+test('orderTransition (OB-2): the history note is a transition field, and only there', () => {
+assert.equal(can('seller', 'update', 'orderTransition', ['status', 'note']), true);
+assert.equal(can('seller', 'update', 'orderTransition', ['note']), true);
+assert.deepEqual([...(POLICY_MATRIX.orderTransition.update.fields as Record<string, readonly string[]>).seller], [
+'status', 'note', 'courier', 'trackingNumber', 'trackingUrl',
+]);
+assert.equal(can('admin', 'update', 'orderTransition', ['status', 'note']), false);
+assert.equal(can('seller', 'update', 'orderPayment', ['paymentStatus', 'note']), false);
+assert.equal(can('seller', 'update', 'orderCancel', ['cancelReason', 'note']), false);
+assert.equal(can('seller', 'update', 'orderTransition', ['status', 'statusHistory']), false);
 });

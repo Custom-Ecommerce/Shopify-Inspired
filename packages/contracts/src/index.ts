@@ -4,6 +4,8 @@ export * from './user';
 export * from './money';
 export * from './product';
 export * from './order';
+// EP-02 OB-2: the order status workflow.
+export * from './order-flow';
 export * from './store-article';
 export * from './workspace';
 export * from './sync-envelope';

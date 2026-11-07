@@ -510,11 +510,11 @@ test('orders: the detail shape, with history and notes newest first', async () =
   const detail = (await res.json()) as any;
   assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
   assert.deepEqual(Object.keys(detail).sort(), [
-    'address', 'cancelReason', 'cancelledAt', 'city', 'collectedAmount', 'collectedAt', 'courier', 'createdAt',
+    'address', 'allowedNext', 'cancelReason', 'cancelledAt', 'city', 'collectedAmount', 'collectedAt', 'courier', 'createdAt',
     'customerName', 'deliveryCharges', 'id', 'items', 'notes', 'orderId', 'paymentMethod', 'paymentStatus', 'phone',
     'status', 'statusHistory', 'subtotal', 'total', 'trackingNumber', 'trackingUrl', 'updatedAt',
   ]);
-  assert.equal('allowedNext' in detail, false);
+  assert.deepEqual(detail.allowedNext, ['delivered']);
   assert.deepEqual(detail.items.map((item: any) => item.lineTotal), [2400, 200]);
   assert.equal(detail.items[0].sku, 'SH-RM');
   assert.deepEqual(detail.statusHistory.map((entry: any) => entry.to), ['dispatched', 'processing', 'confirmed']);
