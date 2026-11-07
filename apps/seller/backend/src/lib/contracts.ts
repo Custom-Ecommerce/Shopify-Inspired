@@ -100,3 +100,6 @@ export const { storefrontCartQuoteRequestSchema, storefrontCartQuoteResponseSche
 
 // PB-7: bulk import and duplicate.
 export const { PRODUCT_CSV_COLUMNS, PRODUCT_IMPORT_MAX_BYTES, PRODUCT_IMPORT_MAX_ROWS, PRODUCT_TITLE_MAX } = contracts;
+
+// EP-02 OB-1b: the seller dashboard order list and detail.
+export const { DASHBOARD_ORDER_STATUSES, dashboardOrderListQuerySchema, orderListDaySchema } = contracts;

@@ -3,20 +3,24 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { authenticate } from '@/lib/auth';
-import { HttpError, handleRouteError } from '@/lib/http';
+import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
-import { assertCan, Order } from '@/lib/services';
-import { plainDoc } from '@/lib/seller-scope';
-import { publicOrder, resolveOwnedStoreId } from '@/lib/data-plane';
+import { assertCan, Order, ORDER_ACTIONS } from '@/lib/services';
+import { resolveOwnedStoreId } from '@/lib/data-plane';
+import { handleOrderError, toDashboardOrderDetail } from '@/lib/orders';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** GET /api/orders/:id. One order of the seller's own store; anything else is a 404. */
+/**
+ * GET /api/orders/:id. One order of the seller's own store, in the dashboard detail shape (EP-02 OB-1b): items with line
+ * totals, payment, courier and tracking, statusHistory and notes newest first. Only the store owner may call it (D-067).
+ *   401 no session   403 admin, or a store the seller does not own   404 unknown id, or another store's order
+ */
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
     const ctx = await authenticate(request);
-    assertCan(ctx.actor, 'read', 'orders');
+    assertCan(ctx.actor, ORDER_ACTIONS.view.operation, ORDER_ACTIONS.view.collection);
     const { id } = await context.params;
 
     await connectSellerDb().catch(() => {
@@ -28,8 +32,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const row = await Order.findOne({ _id: id, store: storeId }).lean();
     if (!row) throw new HttpError(404, 'Order not found');
 
-    return NextResponse.json(publicOrder(plainDoc(row)), { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(toDashboardOrderDetail(row), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
-    return handleRouteError(err);
+    return handleOrderError(err);
   }
 }

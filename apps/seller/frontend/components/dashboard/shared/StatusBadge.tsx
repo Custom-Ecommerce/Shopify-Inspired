@@ -51,6 +51,33 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   unset: "neutral",
   returned: "neutral",
   refunded: "neutral",
+  // order payment status (EP-02): COD still to collect, and collected
+  unpaid: "warning",
+  collected: "success",
+};
+
+/**
+ * Order labels (EP-02). Kept in step with ORDER_STATUS_LABELS and ORDER_PAYMENT_STATUS_LABELS in @markaz/contracts;
+ * the frontend imports contracts as types only, so the strings live here too.
+ */
+export const ORDER_STATUS_LABEL: Record<string, string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  processing: "Processing",
+  dispatched: "Dispatched",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+  returned: "Returned",
+};
+
+export const PAYMENT_STATUS_LABEL: Record<string, string> = {
+  unpaid: "Unpaid",
+  collected: "COD collected",
+};
+
+export const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  cod: "Cash on delivery",
+  card: "Card",
 };
 
 /** Full static class strings so Tailwind can see them. */
@@ -110,4 +137,14 @@ export function StatusBadge({ status, label: shownLabel, className }: StatusBadg
       {label}
     </span>
   );
+}
+
+/** An order's status, with its human label. */
+export function OrderStatusBadge({ status, className }: { status: string; className?: string }) {
+  return <StatusBadge status={status} label={ORDER_STATUS_LABEL[status]} className={className} />;
+}
+
+/** An order's payment status: Unpaid or COD collected. */
+export function PaymentStatusBadge({ status, className }: { status: string; className?: string }) {
+  return <StatusBadge status={status} label={PAYMENT_STATUS_LABEL[status]} className={className} />;
 }
