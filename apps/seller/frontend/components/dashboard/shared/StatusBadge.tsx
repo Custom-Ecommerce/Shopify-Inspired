@@ -30,10 +30,12 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   settled: "success",
   completed: "success",
   published: "success",
+  in_stock: "success",
   // warning
   pending: "warning",
   processing: "warning",
   requested: "warning",
+  low_stock: "warning",
   // info (blueprint §5.2: dispatched collapsed into info, see note)
   shipped: "info",
   draft: "info",
@@ -44,6 +46,7 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   failed: "destructive",
   cancelled: "destructive",
   rejected: "destructive",
+  out_of_stock: "destructive",
   // neutral
   unset: "neutral",
   returned: "neutral",
@@ -76,16 +79,18 @@ const TONE_CLASSES: Record<StatusTone, { pill: string; dot: string }> = {
 
 interface StatusBadgeProps {
   status: string;
+  /** Text to show instead of the capitalised status, for statuses whose raw value is not readable (in_stock). */
+  label?: string;
   className?: string;
 }
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
+export function StatusBadge({ status, label: shownLabel, className }: StatusBadgeProps) {
   const normalized = status?.toLowerCase().trim() || "unknown";
   const tone: StatusTone = STATUS_TONE_MAP[normalized] ?? "neutral";
   const { pill, dot } = TONE_CLASSES[tone];
 
   // Capitalise first letter for display, preserve the rest as-is
-  const label = status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown";
+  const label = shownLabel ?? (status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown");
 
   return (
     <span

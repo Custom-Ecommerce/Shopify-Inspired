@@ -24,6 +24,10 @@ export * from './media';
 
 // B10.4: analytics.
 export * from './analytics';
+// PB-7: bulk import and export of products.
+export * from './product-import';
+// PB-7: admin product moderation.
+export * from './moderation';
 // AF1: admin console store endpoints.
 export * from './admin-store';
 

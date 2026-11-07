@@ -139,7 +139,7 @@ export const storefrontProductSummarySchema = z.object({
   avgRating: z.number().nonnegative(),
   reviewCount: z.number().int().nonnegative(),
   /** Sent only in a seller's preview: why a shopper would not see this product. Live responses never have this key. */
-  previewLabel: z.enum(['Draft', 'Sample product']).nullable().optional(),
+  previewLabel: z.enum(['Draft', 'Sample product', 'Removed by admin']).nullable().optional(),
 });
 
 /** A store category as a shopper navigates it. Only categories that hold a published product are listed. */

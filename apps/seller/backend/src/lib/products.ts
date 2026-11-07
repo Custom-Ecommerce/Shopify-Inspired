@@ -11,10 +11,19 @@ import type {
   SellerProductTrashInfo,
   SellerProductVariant,
 } from '@markaz/contracts';
-import { PRODUCT_DEFAULT_VARIANT_FIELDS } from '@/lib/contracts';
+import { slugFromText } from '@/lib/categories';
+import { PRODUCT_DEFAULT_VARIANT_FIELDS, PRODUCT_SLUG_MAX } from '@/lib/contracts';
 import { HttpError, handleRouteError, isDuplicateKeyError } from '@/lib/http';
-import { ProductVariantError, prepareProductVariants, type PreparedProductVariants, type PreparedVariant } from '@/lib/product-variants';
-import { Category, Media, Product } from '@/lib/services';
+import {
+  ProductVariantError,
+  isSkuDuplicateError,
+  prepareProductVariants,
+  skuTakenFromDuplicate,
+  withSkuGuard,
+  type PreparedProductVariants,
+  type PreparedVariant,
+} from '@/lib/product-variants';
+import { Category, Media, Product, productSkus } from '@/lib/services';
 import { trashDaysLeft, trashPurgeDate } from '@/lib/trash';
 
 /** Machine-readable reasons for a refused product write. The dashboard reads them through the proxy. */
@@ -30,6 +39,14 @@ export type ProductErrorCode =
   | 'PRODUCT_PRICE_REQUIRED'
   | 'PRODUCT_NOT_IN_TRASH'
   | 'PRODUCT_ADMIN_DELETED'
+  | 'PRODUCT_TAKEN_DOWN'
+  | 'PRODUCT_NOT_MODERATED'
+  | 'PRODUCT_IN_SELLER_TRASH'
+  | 'PRODUCT_DEMO_NOT_DUPLICABLE'
+  | 'SKU_COPY_FAILED'
+  | 'IMPORT_BAD_FILE'
+  | 'IMPORT_FILE_TOO_LARGE'
+  | 'IMPORT_TOO_MANY_ROWS'
   | 'STOCK_VIA_INVENTORY';
 
 export class ProductRequestError extends HttpError {
@@ -49,7 +66,12 @@ export function handleProductError(err: unknown): NextResponse {
   if (err instanceof ProductRequestError || err instanceof ProductVariantError) {
     return NextResponse.json({ errors: [{ message: err.message, code: err.code, ...err.details }] }, { status: err.status });
   }
-  // (store, slug) is the only unique index on products, so it decides a race the same way it decides a plain clash.
+  // A lost SKU race: the unique (store, skus) index refused the write.
+  if (isSkuDuplicateError(err)) {
+    const refused = skuTakenFromDuplicate(err);
+    return NextResponse.json({ errors: [{ message: refused.message, code: refused.code, ...refused.details }] }, { status: refused.status });
+  }
+  // Any other duplicate key is the (store, slug) index, so it decides a race the same way it decides a plain clash.
   if (isDuplicateKeyError(err)) {
     return NextResponse.json(
       { errors: [{ message: 'A product with this slug already exists in this store. Products in trash keep their slug.', code: 'PRODUCT_SLUG_TAKEN' }] },
@@ -109,6 +131,24 @@ export function assertVariantImagesInGallery(mediaIds: readonly unknown[], varia
       throw new ProductRequestError(422, 'PRODUCT_MEDIA_INVALID', "A variant's image must be one of this product's images.");
     }
   }
+}
+
+/**
+ * A slug is unique inside a store, and trash keeps its slug (D-041), so a holder in trash blocks it too and is named as such.
+ * The unique index still decides a race: see handleProductError.
+ */
+export async function assertSlugFree(storeId: string, slug: string, productId: string | null = null): Promise<void> {
+  const holder = (await Product.findOne({ store: storeId, slug, ...(productId ? { _id: { $ne: productId } } : {}) })
+    .select('deletedAt')
+    .lean()) as unknown as { deletedAt?: unknown } | null;
+  if (!holder) return;
+  throw new ProductRequestError(
+    409,
+    'PRODUCT_SLUG_TAKEN',
+    holder.deletedAt
+      ? 'A product in trash still holds this slug. Restore it or delete it for good first.'
+      : 'A product with this slug already exists in this store.',
+  );
 }
 
 /** The document fields a create request writes, for the policy check: the Default variant's fields are the variants. */
@@ -200,6 +240,81 @@ const objectId = (id: string): mongoose.Types.ObjectId => new mongoose.Types.Obj
 /** In an update pipeline any string starting with $ is a field path, so everything from a seller goes in as a literal. */
 const literal = (value: unknown): { $literal: unknown } => ({ $literal: value });
 
+/**
+ * Every check of a create, and the document it would write. Nothing is written here, so POST, the import and its dry run
+ * all share one path: a new product is always a draft unless its caller decides otherwise.
+ */
+export async function prepareProductCreate(storeId: string, data: ProductCreateRequest) {
+  const slug = data.slug ?? slugFromText(data.title, PRODUCT_SLUG_MAX);
+  if (slug === '') {
+    throw new ProductRequestError(422, 'PRODUCT_SLUG_REQUIRED', 'This title cannot be turned into a slug. Enter one yourself.');
+  }
+  await assertSlugFree(storeId, slug);
+
+  await assertStoreCategories(storeId, data.categories);
+  await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)], data.videos);
+  const { options, variants, minPrice } = await prepareProductVariants(storeId, createdVariantInput(data));
+  assertVariantImagesInGallery(data.media ?? [], variants);
+
+  return {
+    store: storeId,
+    title: data.title,
+    slug,
+    categories: [...new Set(data.categories)],
+    media: [...new Set(data.media ?? [])],
+    videos: data.videos ?? [],
+    description: data.description ? data.description : null,
+    highlights: (data.highlights ?? []).map((text) => ({ text })),
+    tags: data.tags ?? [],
+    deliveryCharge: data.deliveryCharge ?? null,
+    isFeatured: data.isFeatured ?? false,
+    hideWhenOutOfStock: data.hideWhenOutOfStock ?? false,
+    seoTitle: data.seoTitle ?? null,
+    seoDescription: data.seoDescription ?? null,
+    seoImage: data.seoImage ?? null,
+    options,
+    variants,
+    minPrice,
+    isPublished: false,
+    isDemo: false,
+  };
+}
+
+/** Every check of an update, and the variants it would write. Nothing is written here: see applyProductUpdate. */
+export async function prepareProductUpdate(
+  storeId: string,
+  productId: string,
+  data: ProductUpdateRequest,
+  current: CurrentProduct,
+): Promise<PreparedProductVariants | null> {
+  if (data.slug !== undefined) await assertSlugFree(storeId, data.slug, productId);
+  if (data.categories) await assertStoreCategories(storeId, data.categories);
+  await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)], data.videos);
+
+  const prepared = data.variants || data.options ? await preparePatchedVariants(storeId, productId, current, data) : null;
+  assertVariantImagesInGallery(data.media ?? current.media ?? [], prepared?.variants ?? current.variants);
+  return prepared;
+}
+
+/** The one atomic write of an update (D-036). PATCH and the import both end here. */
+export async function applyProductUpdate(
+  storeId: string,
+  productId: string,
+  data: ProductUpdateRequest,
+  prepared: PreparedProductVariants | null,
+): Promise<void> {
+  const updated = await withSkuGuard(() =>
+    Product.findOneAndUpdate(productPatchFilter(storeId, productId, prepared), [{ $set: productPatchSet(data, prepared) }], {
+      new: true,
+    })
+      .select('_id')
+      .lean(),
+  );
+  if (!updated) {
+    throw new ProductRequestError(409, 'PRODUCT_CHANGED', 'This product changed while you were editing it. Reload and try again.');
+  }
+}
+
 /** The stock this variant holds at the moment the write runs, read by the database itself. */
 function stockAtWriteTime(variantId: mongoose.Types.ObjectId): Record<string, unknown> {
   const match = { $filter: { input: '$variants', as: 'variant', cond: { $eq: ['$$variant._id', literal(variantId)] } } };
@@ -240,6 +355,7 @@ export function productPatchSet(body: ProductUpdateRequest, prepared: PreparedPr
     set.options = literal(prepared.options);
     set.variants = prepared.variants.map(variantExpression);
     set.minPrice = literal(prepared.minPrice);
+    set.skus = literal(productSkus(prepared.variants));
   }
   return set;
 }
@@ -282,7 +398,8 @@ export interface SellerProductRow {
   isFeatured?: boolean | null;
   hideWhenOutOfStock?: boolean | null;
   deletedAt?: Date | string | null;
-  deletedBy?: { role?: string | null } | null;
+  deletedBy?: { role?: string | null; reason?: string | null } | null;
+  moderation?: { reason: string; takenDownAt: Date | string } | null;
   description?: string | null;
   highlights?: Array<{ text?: string | null } | null> | null;
   tags?: string[] | null;
@@ -321,6 +438,7 @@ function trashInfo(row: SellerProductRow): SellerProductTrashInfo | null {
     purgeAt: trashPurgeDate(deletedAt).toISOString(),
     daysLeft: trashDaysLeft(deletedAt, new Date()),
     restorable: row.deletedBy?.role !== 'admin',
+    adminReason: row.deletedBy?.role === 'admin' ? (row.deletedBy.reason ?? null) : null,
   };
 }
 
@@ -339,6 +457,7 @@ export function toSellerProductSummary(row: SellerProductRow): SellerProductSumm
     isFeatured: row.isFeatured === true,
     hideWhenOutOfStock: row.hideWhenOutOfStock === true,
     trash: trashInfo(row),
+    takedown: row.moderation ? { reason: row.moderation.reason, takenDownAt: new Date(row.moderation.takenDownAt).toISOString() } : null,
     description: row.description ?? null,
     highlights: (row.highlights ?? []).flatMap((highlight) => (highlight?.text ? [highlight.text] : [])),
     minPrice: row.minPrice,

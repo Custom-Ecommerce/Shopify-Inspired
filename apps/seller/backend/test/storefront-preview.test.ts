@@ -413,7 +413,7 @@ describe('orders', () => {
 });
 
 test('the Live filters are unchanged, and the preview filters keep the store and the trash rule', () => {
-  assert.deepEqual(liveProductFilter(STORE_A), { store: STORE_A, isPublished: true, isDemo: { $ne: true }, deletedAt: null });
+  assert.deepEqual(liveProductFilter(STORE_A), { store: STORE_A, isPublished: true, isDemo: { $ne: true }, deletedAt: null, moderation: null });
   assert.ok('$or' in liveListFilter(STORE_A));
   assert.deepEqual(previewProductFilter(STORE_A), { store: STORE_A, deletedAt: null });
   assert.deepEqual(previewListFilter(STORE_A), { store: STORE_A, deletedAt: null });

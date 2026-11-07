@@ -186,6 +186,24 @@ update: { actors: ['seller'], fields: { seller: ['stockQuantity'] } },
 delete: { actors: [], fields: {} },
 },
 
+// Bulk import and export of a store's products. Only the owner: an admin reads products through moderation, and never
+// writes them (D-002). read is the export, create is the import, which also updates what it matches.
+productBulk: {
+read: { actors: ['seller'], fields: { seller: '*' } },
+create: { actors: ['seller'], fields: { seller: '*' } },
+update: { actors: [], fields: {} },
+delete: { actors: [], fields: {} },
+},
+
+// Admin moderation of products (D-002, D-026). read is the cross-store list, update is takedown and restore, delete is the
+// admin delete and the permanent delete. It is a row of its own so an admin still cannot edit a product (products above).
+productModeration: {
+read: { actors: ['admin'], fields: { admin: '*' } },
+create: { actors: [], fields: {} },
+update: { actors: ['admin'], fields: { admin: '*' } },
+delete: { actors: ['admin'], fields: { admin: '*' } },
+},
+
 // A preview link of a store (D-018, D-019). create is the click on "Preview store". Only the store's owner previews in
 // this epic (D-042), so an admin has no row here even though an admin can read the store. Nothing else exists to do to a
 // link: it is signed, not stored.

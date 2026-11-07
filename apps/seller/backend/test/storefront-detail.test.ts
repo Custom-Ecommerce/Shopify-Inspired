@@ -186,7 +186,7 @@ test('the query is store-scoped and published-only, and never selects stock coun
   storeRow = activeStore();
   products = [product()];
   await get(STORE_ID, 'blue-shirt');
-  assert.deepEqual(rec.filter, { store: STORE_ID, slug: 'blue-shirt', isPublished: true, isDemo: { $ne: true }, deletedAt: null });
+  assert.deepEqual(rec.filter, { store: STORE_ID, slug: 'blue-shirt', isPublished: true, isDemo: { $ne: true }, deletedAt: null, moderation: null });
   for (const hidden of ['stockQuantity', 'reservedQuantity', 'stockHistory', 'store', 'viewCount', 'lowStockThreshold']) {
     assert.equal(hidden in rec.projection, false, hidden + ' must not be selected');
   }

@@ -46,6 +46,8 @@ export interface ProductDetailVM extends ProductCardVM {
   highlights: string[];
   /** id is null only for fixtures, which link no variant to an image. */
   gallery: { id: string | null; url: string; alt: string }[];
+  /** What a search result shows: the seller's SEO fields, else the title, the start of the description and the first image. */
+  seo: { title: string; description: string | null; imageUrl: string | null };
   /** Kept apart from the gallery: a variant only ever points at an image. */
   videos: ProductVideoVM[];
   /** The cheapest and dearest variant. */
@@ -56,6 +58,13 @@ export interface ProductDetailVM extends ProductCardVM {
   /** Rich description when the backend sends one. */
   descriptionHtml?: string | null;
   tags?: string[];
+}
+
+const SEO_DESCRIPTION_MAX = 160;
+
+function fallbackDescription(description: string | null): string | null {
+  const text = (description ?? "").replace(/\s+/g, " ").trim().slice(0, SEO_DESCRIPTION_MAX).trim();
+  return text === "" ? null : text;
 }
 
 export function toProductDetailVM(dto: StorefrontProductDetail): ProductDetailVM {
@@ -69,6 +78,11 @@ export function toProductDetailVM(dto: StorefrontProductDetail): ProductDetailVM
     description: dto.description,
     highlights: [...dto.highlights],
     gallery: dto.images.map((image) => ({ id: image.id ?? null, url: image.url, alt: image.alt })),
+    seo: {
+      title: dto.seo.title || dto.title,
+      description: dto.seo.description || fallbackDescription(dto.description),
+      imageUrl: dto.seo.imageUrl || dto.images[0]?.url || null,
+    },
     videos: (dto.videos ?? []).map((video) => ({ id: video.id, url: video.url, posterUrl: video.posterUrl, duration: video.duration })),
     priceRange: { min: toMoney(Math.min(dto.price, ...prices)), max: toMoney(Math.max(dto.price, ...prices)) },
     deliveryFee,

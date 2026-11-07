@@ -11,6 +11,7 @@
     "./store-context": "./src/store-context.ts",
     "./sync-schemas": "./src/sync-schemas.ts",
     "./hmac": "./src/hmac.ts",
+    "./internal-signature": "./src/internal-signature.ts",
     "./phone": "./src/phone.ts",
     "./commerce": "./src/commerce.ts",
     "./preview": "./src/preview.ts",

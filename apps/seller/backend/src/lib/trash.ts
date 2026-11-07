@@ -93,10 +93,22 @@ export interface RetentionResult {
   more: boolean;
 }
 
+/**
+ * What the retention job may purge: in trash for more than the retention period, and neither taken down nor deleted by an
+ * admin. Those two keep their record for good, however long they sit in trash (D-058, after D-040 and D-052): a seller
+ * must not make a moderation record disappear by trashing the product and waiting a year. The rule is in the query, so a
+ * kept product never reaches the purge, the notifier, or the batch limit.
+ */
+export const retentionFilter = (now: Date): Record<string, unknown> => ({
+  deletedAt: { $lt: retentionCutoff(now) },
+  moderation: null,
+  'deletedBy.role': { $ne: 'admin' },
+});
+
 /** The retention job. `now` is a parameter so the 365-day boundary can be tested and is never read from a request. */
 export async function purgeExpiredProducts(now: Date, notifier: TrashPurgeNotifier = noNotifier): Promise<RetentionResult> {
   assertCan('system', 'delete', 'productLifecycle');
-  const expired = (await Product.find({ deletedAt: { $lt: retentionCutoff(now) } })
+  const expired = (await Product.find(retentionFilter(now))
     .select('store title slug')
     .sort({ deletedAt: 1 })
     .limit(RETENTION_BATCH)

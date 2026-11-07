@@ -7,6 +7,10 @@ import { SELLER_AUDIENCE } from '@/lib/accounts';
 import type { AuthContext } from '@/lib/auth';
 import { seedStoreDemoData } from '../src/lib/demo-data';
 import { provisionStore } from '../src/lib/workspace';
+import * as themesNs from '@markaz/platform-kit/themes';
+import { unwrapCjs } from '@/lib/cjs';
+
+const { NEW_STORE_THEME_SLUG, getThemeEntry }: typeof themesNs = unwrapCjs(themesNs);
 
 const SELLER = '65a000000000000000000001';
 const STORE_A = '65a000000000000000000011';
@@ -192,4 +196,33 @@ test('POST /api/stores seeds the store it creates, once', async () => {
   assert.equal(products.length, 1);
   assert.equal(products[0].store, doc.id);
   assert.equal(products[0].isDemo, true);
+});
+
+test('a new store is created with the Stiletto theme, by both creation paths (D-059)', async () => {
+  const created: Doc[] = [];
+  const plain = StoreStub.create;
+  StoreStub.create = async (doc) => {
+    created.push(doc);
+    return plain(doc);
+  };
+  const ctx = { userId: SELLER, userObjectId: new mongoose.Types.ObjectId(SELLER), role: 'seller', actor: 'seller' } as AuthContext;
+  assert.equal((await provisionStore(ctx, 'Lawn House')).ok, true);
+
+  const secret = 'x'.repeat(40);
+  process.env.SELLER_AUTH_SECRET = secret;
+  const token = await signSession({ sub: SELLER, role: 'admin' }, secret, SELLER_AUDIENCE);
+  const { POST } = await import('../src/app/api/stores/route');
+  const res = await POST(
+    new NextRequest('http://seller.test/api/stores', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Zari House', slug: 'zari-house', owner: SELLER }),
+    }),
+  );
+  assert.equal(res.status, 201);
+
+  assert.equal(created.length, 2);
+  for (const doc of created) assert.deepEqual(doc.storefront, { activeTheme: 'stiletto' });
+  assert.equal(NEW_STORE_THEME_SLUG, 'stiletto');
+  assert.equal(getThemeEntry(NEW_STORE_THEME_SLUG)?.status, 'available');
 });

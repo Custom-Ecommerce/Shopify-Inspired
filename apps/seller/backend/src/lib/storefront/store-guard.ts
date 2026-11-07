@@ -64,7 +64,7 @@ export async function loadActiveStore(id: string, options: { preview?: boolean }
     throw databaseUnavailable();
   });
 
-  const store = (await (Store as any).findById(id).select('status storefront paymentSettings').lean()) as ActiveStoreRow | null;
+  const store = (await Store.findById(id).select('status storefront paymentSettings').lean()) as unknown as ActiveStoreRow | null;
   if (!store) throw storeNotFound();
   if (!servesStore(store.status, options.preview === true)) {
     throw new StorefrontHttpError(403, 'STORE_NOT_ACTIVE', 'This store is not available.', { status: store.status });

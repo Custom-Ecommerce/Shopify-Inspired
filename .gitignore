@@ -44,3 +44,5 @@ Thumbs.db
 
 # CSV files folder
 csv-files/
+# EP-01 verification run: holds test passwords and session tokens
+verify/

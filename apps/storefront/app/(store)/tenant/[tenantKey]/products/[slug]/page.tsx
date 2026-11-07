@@ -1,8 +1,31 @@
+import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { storePaths } from "@markaz/storefront-data";
 import { loadProductPage } from "@markaz/storefront-data/server";
 import { resolveTransport } from "@/lib/sources";
 import { getTenantTheme } from "@/lib/themes";
+
+type Params = { params: Promise<{ tenantKey: string; slug: string }> };
+
+/** One read per request: the page and its metadata share it. */
+const loadPage = cache(async (tenantKey: string, slug: string) => {
+  const transport = await resolveTransport({ kind: "tenant", key: tenantKey });
+  return transport ? loadProductPage(transport, slug) : null;
+});
+
+/** The tags of a product page, from the data layer's fallbacks. What is not Live has none: the page is a 404. */
+export async function generateMetadata({ params }: Params): Promise<Metadata> {
+  const { tenantKey, slug } = await params;
+  const outcome = await loadPage(tenantKey, slug);
+  if (outcome?.status !== "ok") return {};
+  const { title, description, imageUrl } = outcome.product.seo;
+  return {
+    title: { absolute: title },
+    description,
+    openGraph: { title, description: description ?? undefined, images: imageUrl ? [imageUrl] : undefined },
+  };
+}
 
 /**
  * A product on a live store, read on the server through the store's own transport. A product the store does not have is
@@ -11,15 +34,12 @@ import { getTenantTheme } from "@/lib/themes";
  */
 export default async function TenantProductPage({
   params,
-}: {
-  params: Promise<{ tenantKey: string; slug: string }>;
-}) {
+}: Params) {
   const { tenantKey, slug } = await params;
-  const transport = await resolveTransport({ kind: "tenant", key: tenantKey });
-  if (!transport) notFound();
+  const outcome = await loadPage(tenantKey, slug);
+  if (!outcome) notFound();
 
   const { Product, Unavailable } = (await getTenantTheme(tenantKey)).pages;
-  const outcome = await loadProductPage(transport, slug);
   if (outcome.status === "not-found") notFound();
   if (outcome.status === "unavailable") {
     return (

@@ -122,6 +122,20 @@ assert.deepEqual(toggleOption(["S", "Red"], 0, "S"), [null, "Red"]);
   assert.equal(toVariantSelectionVM(draft, ["S", "Red"]).block, "preview_only");
 }
 
+// SEO: the seller's fields win, then the title, the start of the description and the first image.
+{
+  const plain = toProductDetailVM(detail({ description: "  Soft   lawn\n" + "x".repeat(300) }));
+  assert.equal(plain.seo.title, "Kurta");
+  assert.equal(plain.seo.description?.startsWith("Soft lawn x"), true);
+  assert.equal(plain.seo.description?.length, 160);
+  assert.equal(plain.seo.imageUrl, "https://cdn.test/red.jpg");
+
+  const set = toProductDetailVM(detail({ seo: { title: "Buy a kurta", description: "Best kurta", imageUrl: "https://cdn.test/seo.jpg" } }));
+  assert.deepEqual(set.seo, { title: "Buy a kurta", description: "Best kurta", imageUrl: "https://cdn.test/seo.jpg" });
+
+  assert.deepEqual(toProductDetailVM(detail({ images: [] })).seo, { title: "Kurta", description: null, imageUrl: null });
+}
+
 // The card: several variants read "from" and open the product page; one variant is as before.
 {
   const many = toProductCardVM(product);

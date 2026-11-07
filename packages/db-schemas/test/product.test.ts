@@ -144,6 +144,31 @@ test('price sorting is indexed on minPrice, and the SKU helper index does not cl
   assert.notEqual(sku[1].unique, true);
 });
 
+test('SKUs are unique per store through the skus index, and products without SKUs are left out of it (GAP 5)', () => {
+  const index = Product.schema.indexes().find(([fields]) => 'skus' in fields);
+  assert.ok(index, 'store+skus index exists');
+  assert.deepEqual(index[0], { store: 1, skus: 1 });
+  assert.equal(index[1].unique, true);
+  assert.deepEqual(index[1].partialFilterExpression, { skus: { $type: 'string' } });
+});
+
+test('skus is derived on validate: string SKUs only, each once, no null or blank', async () => {
+  const doc = product({
+    options: [{ name: 'Size', values: ['S', 'M', 'L', 'XL'] }],
+    variants: [
+      { title: 'S', price: 100, sku: 'K-S', optionValues: ['S'] },
+      { title: 'M', price: 100, sku: null, optionValues: ['M'] },
+      { title: 'L', price: 100, optionValues: ['L'] },
+      { title: 'XL', price: 100, sku: 'K-XL', optionValues: ['XL'] },
+    ],
+  });
+  await doc.validate();
+  assert.deepEqual([...doc.skus], ['K-S', 'K-XL']);
+  const none = product();
+  await none.validate();
+  assert.deepEqual([...none.skus], []);
+});
+
 test('product uses the products collection', () => {
   assert.equal(Product.collection.name, 'products');
 });

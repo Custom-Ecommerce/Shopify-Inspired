@@ -4,7 +4,7 @@ import type { Category as CategoryDoc, SellerProductDetail } from "@markaz/contr
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { useStoreHref } from "@/lib/dashboard-context";
 import { discountPercent } from "@/lib/product-pricing";
-import { refusalMessage, runProductAction } from "@/lib/product-actions";
+import { duplicateProduct, refusalMessage, runProductAction } from "@/lib/product-actions";
 import { buildMatrix, rowProblem, usableOptions, variantPayload } from "@/lib/variant-matrix";
 import type { MatrixRow, OptionDraft, RowValues } from "@/lib/variant-matrix";
 import { useEffect, useMemo, useState } from "react";
@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Surface } from "@/components/shared/Surface";
 import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
 import { VariantBuilder } from "@/components/dashboard/VariantBuilder";
+import { ProductSeo } from "@/components/dashboard/ProductSeo";
 import { ProductVideos } from "@/components/dashboard/ProductVideos";
 import type { VideoEntry } from "@/components/dashboard/ProductVideos";
 
@@ -52,6 +53,9 @@ interface FormState {
   hideWhenOutOfStock: boolean;
   images: ImageEntry[];
   videos: VideoEntry[];
+  seoTitle: string;
+  seoDescription: string;
+  seoImage: string | null;
 }
 
 function initialState(product?: SellerProductDetail): FormState {
@@ -73,6 +77,9 @@ function initialState(product?: SellerProductDetail): FormState {
     hideWhenOutOfStock: product?.hideWhenOutOfStock ?? false,
     images: (product?.media ?? []).map((media) => ({ id: media.id, url: media.url })),
     videos: product?.videos ?? [],
+    seoTitle: product?.seoTitle ?? "",
+    seoDescription: product?.seoDescription ?? "",
+    seoImage: product?.seoImage ?? null,
   };
 }
 
@@ -130,6 +137,7 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
   const [saving, setSaving] = useState(false);
   const [published, setPublished] = useState(product?.status === "published");
   const [publishing, setPublishing] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   useEffect(() => {
     storeFetch("/api/proxy/categories?limit=200")
@@ -197,6 +205,15 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
     setPublished(!published);
     toast.success(published ? "Unpublished." : "Published.");
     router.refresh();
+  }
+
+  async function duplicate() {
+    if (!product) return;
+    setDuplicating(true);
+    const result = await duplicateProduct(storeFetch, product.id);
+    setDuplicating(false);
+    if ("refusal" in result) toast.error(result.refusal);
+    else router.push(href(`/products/${result.id}`));
   }
 
   function toggleCategory(id: string, checked: boolean) {
@@ -277,6 +294,9 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
       categories: form.categoryIds,
       media: form.images.map((img) => img.id),
       videos: form.videos.map((video) => video.id),
+      seoTitle: optionalText(form.seoTitle),
+      seoDescription: optionalText(form.seoDescription),
+      seoImage: form.seoImage,
       deliveryCharge: optionalNumber(form.deliveryCharge),
       isFeatured: form.isFeatured,
       hideWhenOutOfStock: form.hideWhenOutOfStock,
@@ -334,6 +354,13 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6 max-w-3xl">
+      {product?.takedown ? (
+        <div role="alert" className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm">
+          <p className="font-semibold">Removed by admin</p>
+          <p className="mt-1">{product.takedown.reason}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Shoppers cannot see this product, and it cannot be published until an admin restores it.</p>
+        </div>
+      ) : null}
       <Surface variant="clay" level={2} className="p-6 flex flex-col gap-5 rounded-2xl">
         <h2 className="font-heading text-lg font-semibold">Basic Details</h2>
         <div>
@@ -363,6 +390,11 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
           <p className="text-xs text-muted-foreground mt-1">
             {isEdit ? "Changing the title does not change the slug." : "Made from the title. You can edit it."}
           </p>
+          {published && product && form.slug !== product.slug ? (
+            <p role="alert" className="text-xs text-destructive mt-1">
+              This product is published. Changing its slug changes its link, and the old link will stop working: there are no redirects yet.
+            </p>
+          ) : null}
         </div>
 
         <div>
@@ -604,15 +636,32 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
         />
       </Surface>
 
+      <Surface variant="clay" level={2} className="p-6 flex flex-col gap-5 rounded-2xl">
+        <h2 className="font-heading text-lg font-semibold">Search engine listing</h2>
+        <ProductSeo
+          values={{ seoTitle: form.seoTitle, seoDescription: form.seoDescription, seoImage: form.seoImage }}
+          title={form.title}
+          description={form.description}
+          slug={form.slug}
+          images={form.images}
+          onChange={(change) => setForm((f) => ({ ...f, ...change }))}
+        />
+      </Surface>
+
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" variant="clay" disabled={saving || uploading || uploadingVideo || isInvalid}>
           {saving ? "Saving..." : isEdit ? "Save changes" : "Create product"}
         </Button>
         {product ? (
           <>
-            <Button type="button" variant="clay-soft" disabled={saving || publishing} onClick={togglePublished}>
+            <Button type="button" variant="clay-soft" disabled={saving || publishing || (Boolean(product.takedown) && !published)} onClick={togglePublished}>
               {publishing ? "Working..." : published ? "Unpublish" : "Publish"}
             </Button>
+            {product.isDemo ? null : (
+              <Button type="button" variant="clay-soft" disabled={saving || duplicating || Boolean(product.takedown)} onClick={duplicate}>
+                {duplicating ? "Working..." : "Duplicate"}
+              </Button>
+            )}
             <StatusBadge status={published ? "published" : "draft"} />
             <span className="text-xs text-muted-foreground">Publishing uses the last saved version.</span>
           </>

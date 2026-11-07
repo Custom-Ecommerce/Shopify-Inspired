@@ -19,7 +19,7 @@ export async function loadCartQuote(
     queryable.length === 0
       ? []
       : ((await Product.find({ _id: { $in: queryable }, store: storeId })
-          .select('title deliveryCharge variants isPublished isDemo deletedAt')
+          .select('title deliveryCharge variants isPublished isDemo deletedAt moderation')
           .lean()) as unknown as Array<QuoteCatalogRow & LiveFlags & { _id: unknown }>);
   const idOf = (row: { _id: unknown }): string => String(row._id).toLowerCase();
   const catalog = new Map(rows.filter(isLiveProduct).map((row) => [idOf(row), row] as const));

@@ -8,6 +8,7 @@ import { seedStoreDemoData } from '@/lib/demo-data';
 import { HttpError, handleRouteError, isDuplicateKeyError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { SELLER_STORE_READABLE_FIELDS, Store, assertCan } from '@/lib/services';
+import { newStoreStorefront } from '@/lib/store-defaults';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -138,6 +139,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         slug: input.slug,
         owner: ownerId,
         status: 'pending',
+        storefront: newStoreStorefront(),
       });
     } catch (err) {
       if (isDuplicateKeyError(err)) throw new HttpError(409, 'A store with this slug already exists');

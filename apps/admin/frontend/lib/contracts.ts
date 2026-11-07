@@ -63,5 +63,18 @@ export type {
   AdminSettingsUpdateResponse,
 } from "@markaz/contracts";
 
+export const {
+  moderationProductListSchema,
+  moderationProductSchema,
+  moderationPermanentDeleteResponseSchema,
+  moderationTakedownRequestSchema,
+  moderationRestoreRequestSchema,
+  moderationDeleteRequestSchema,
+  moderationPermanentDeleteRequestSchema,
+  MODERATION_REASON_MIN,
+  MODERATION_REASON_MAX,
+} = contracts;
+export type { ModerationProduct, ModerationProductList, ModerationPermanentDeleteResponse, ModerationStatus } from "@markaz/contracts";
+
 export const { adminOverviewSchema, ADMIN_OVERVIEW_NEW_SELLER_DAYS } = contracts;
 export type { AdminOverview } from "@markaz/contracts";

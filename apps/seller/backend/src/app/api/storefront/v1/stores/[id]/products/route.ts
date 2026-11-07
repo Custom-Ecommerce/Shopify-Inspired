@@ -32,7 +32,7 @@ const LIST_PROJECTION = {
 };
 
 /** A preview also reads what its tag is made from. */
-const PREVIEW_LIST_PROJECTION = { ...LIST_PROJECTION, isPublished: 1, isDemo: 1 };
+const PREVIEW_LIST_PROJECTION = { ...LIST_PROJECTION, isPublished: 1, isDemo: 1, moderation: 1 };
 
 /**
  * GET /api/storefront/v1/stores/:id/products?category=&q=&sort=&page=&limit=&ids=

@@ -5,6 +5,7 @@ import type { AuthContext } from '@/lib/auth';
 import { seedStoreDemoData } from '@/lib/demo-data';
 import { connectSellerDb } from '@/lib/mongo';
 import { Store, User } from '@/lib/services';
+import { newStoreStorefront } from '@/lib/store-defaults';
 
 export type WorkspaceStoreStatus = 'pending' | 'active' | 'suspended' | 'archived';
 
@@ -166,7 +167,7 @@ export async function provisionStore(ctx: AuthContext, rawName: unknown): Promis
   for (let attempt = 0; attempt < 6; attempt++) {
     const slug = attempt === 0 ? base : slugWithSuffix(base, Math.random().toString(36).slice(2).padEnd(SLUG_SUFFIX_LENGTH, '0'));
     try {
-      const created = await Store.create({ name, slug, owner: ctx.userObjectId, status: newStoreStatus() });
+      const created = await Store.create({ name, slug, owner: ctx.userObjectId, status: newStoreStatus(), storefront: newStoreStorefront() });
       await seedStoreDemoData(String(created._id));
       return {
         ok: true,

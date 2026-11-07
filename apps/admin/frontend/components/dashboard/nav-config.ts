@@ -1,4 +1,4 @@
-export type NavIconKey = "overview" | "stores" | "sellers" | "subscriptions" | "commission" | "sync" | "audit" | "settings";
+export type NavIconKey = "overview" | "stores" | "products" | "sellers" | "subscriptions" | "commission" | "sync" | "audit" | "settings";
 
 export interface NavItem {
   label: string;
@@ -20,6 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Overview", href: "/", icon: "overview", status: "live" },
       { label: "Stores", href: "/stores", icon: "stores", status: "live" },
+      { label: "Products", href: "/products", icon: "products", status: "live" },
       { label: "Sellers", href: "/sellers", icon: "sellers", status: "live" },
     ],
   },

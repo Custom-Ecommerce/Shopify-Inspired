@@ -181,3 +181,28 @@ export async function loadFavouriteProducts(
     missing: ids.filter((id) => !byId.has(id)),
   };
 }
+
+/** The last answer of the Favourites page's lookup: which ids it covered, and what came back. */
+export interface FavouritesAnswer<P> {
+  ids: readonly string[];
+  status: "ok" | "unavailable";
+  products: readonly P[];
+}
+
+/**
+ * What the Favourites page shows (GAP 10). It stays "loading" until the browser's real ids have been read (hydrated)
+ * and, when there are ids, a lookup covering every one of them has answered. An empty list after hydration is the only
+ * "ok" without a lookup. A heart taken off on the page shrinks ids to a subset of the last answer, so that answer still
+ * stands and the card goes at once, with no loading flash; a new id not yet looked up is "loading" again.
+ */
+export function favouriteProductsView<P extends { id: string }>(
+  hydrated: boolean,
+  ids: readonly string[],
+  answer: FavouritesAnswer<P> | null,
+): { status: "loading" | "ok" | "unavailable"; products: P[] } {
+  if (!hydrated) return { status: "loading", products: [] };
+  if (ids.length === 0) return { status: "ok", products: [] };
+  if (answer === null || !ids.every((id) => answer.ids.includes(id))) return { status: "loading", products: [] };
+  if (answer.status === "unavailable") return { status: "unavailable", products: [] };
+  return { status: "ok", products: answer.products.filter((product) => ids.includes(product.id)) };
+}

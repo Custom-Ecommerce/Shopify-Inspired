@@ -27,6 +27,15 @@ import { ledgerStateToQuery, ratesStateToQuery, type CommissionListState } from 
 import { subscriptionStateToQuery, type SubscriptionListState } from "@/lib/subscriptions";
 import { adminOverviewSchema, type AdminOverview } from "@/lib/contracts";
 import {
+  moderationPermanentDeleteResponseSchema,
+  moderationProductListSchema,
+  moderationProductSchema,
+  type ModerationPermanentDeleteResponse,
+  type ModerationProduct,
+  type ModerationProductList,
+} from "@/lib/contracts";
+import { productStateToQuery, type ModerationAction, type ProductListState } from "@/lib/products";
+import {
   adminPlatformSettingsSchema,
   adminSettingsUpdateResponseSchema,
   type AdminPlatformSettings,
@@ -94,6 +103,18 @@ export function changeStoreStatus(id: string, input: StoreStatusChangeRequest): 
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function listModerationProducts(state: ProductListState, signal?: AbortSignal): Promise<ModerationProductList> {
+  return call("/api/products?" + productStateToQuery(state, true), moderationProductListSchema as Parser<ModerationProductList>, { signal });
+}
+
+/** One moderation action. A restore carries no reason. */
+export function runModerationAction(action: ModerationAction, productId: string, reason: string): Promise<ModerationProduct | ModerationPermanentDeleteResponse> {
+  const init = { method: "POST", body: JSON.stringify(action === "restore" ? { productId } : { productId, reason }) };
+  const url = "/api/products/" + action;
+  if (action === "permanent-delete") return call(url, moderationPermanentDeleteResponseSchema as Parser<ModerationPermanentDeleteResponse>, init);
+  return call(url, moderationProductSchema as Parser<ModerationProduct>, init);
 }
 
 export function listSellers(state: SellerListState, signal?: AbortSignal): Promise<AdminSellerListEnvelope> {

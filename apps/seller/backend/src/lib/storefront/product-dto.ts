@@ -41,6 +41,7 @@ export interface ProductRow {
   /** Read in a preview only, for the tag. A live read does not ask for them. */
   isPublished?: boolean | null;
   isDemo?: boolean | null;
+  moderation?: unknown;
 }
 
 const byPosition = (variants: readonly VariantRow[]): VariantRow[] =>
@@ -79,7 +80,7 @@ export function toProductSummaryDto(row: ProductRow) {
 }
 
 /** The tag, in a preview only. A live response does not have the key at all. */
-function previewFields(row: Pick<ProductRow, 'isPublished' | 'isDemo'>, preview: boolean) {
+function previewFields(row: Pick<ProductRow, 'isPublished' | 'isDemo' | 'moderation'>, preview: boolean) {
   return preview ? { previewLabel: previewLabelOf(row) } : {};
 }
 

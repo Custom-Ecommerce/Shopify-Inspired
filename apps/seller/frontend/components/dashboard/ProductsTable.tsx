@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useStoreHref } from "@/lib/dashboard-context";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
-import { runProductAction, type ProductAction } from "@/lib/product-actions";
+import { duplicateProduct, runProductAction, type ProductAction } from "@/lib/product-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +15,9 @@ import { DeleteProductButton } from "@/components/dashboard/DeleteProductButton"
 import { DataTable, type ColumnDef } from "@/components/dashboard/shared/DataTable";
 import { SectionCard } from "@/components/dashboard/shared/SectionCard";
 import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
+
+/** What the seller reads for each stock status: never the raw value (In_stock). */
+const STOCK_LABELS: Record<string, string> = { in_stock: "In stock", low_stock: "Low stock", out_of_stock: "Out of stock" };
 
 const daysText = (days: number): string => (days === 1 ? "1 day" : `${days} days`);
 
@@ -55,12 +58,22 @@ export function ProductsTable({ products, trash }: { products: SellerProductSumm
     router.refresh();
   }
 
+  async function duplicate(row: SellerProductSummary) {
+    setBusy(true);
+    const result = await duplicateProduct(storeFetch, row.id);
+    setBusy(false);
+    if ("refusal" in result) toast.error(result.refusal);
+    else router.push(href(`/products/${result.id}`));
+  }
+
   const titleColumn: ColumnDef<SellerProductSummary> = {
     header: "Title",
     render: (p) => (
       <span className="inline-flex items-center gap-2">
         {p.title}
         {p.isDemo ? <Badge variant="secondary">Demo</Badge> : null}
+        {p.takedown ? <Badge variant="destructive">Removed by admin</Badge> : null}
+        {p.takedown ? <span className="text-xs text-muted-foreground">{p.takedown.reason}</span> : null}
       </span>
     ),
   };
@@ -86,7 +99,7 @@ export function ProductsTable({ products, trash }: { products: SellerProductSumm
             <DeleteProductButton productId={p.id} productTitle={p.title} mode="permanent" />
           </div>
         ) : (
-          <span className="block text-right text-xs text-muted-foreground">Removed by an admin</span>
+          <span className="block text-right text-xs text-muted-foreground">Removed by an admin{p.trash?.adminReason ? `: ${p.trash.adminReason}` : ""}</span>
         ),
     },
   ];
@@ -120,7 +133,7 @@ export function ProductsTable({ products, trash }: { products: SellerProductSumm
       ),
     },
     { header: "Stock Qty", render: (p) => p.totalStock },
-    { header: "Stock", render: (p) => <StatusBadge status={p.stockStatus} /> },
+    { header: "Stock", render: (p) => <StatusBadge status={p.stockStatus} label={STOCK_LABELS[p.stockStatus] ?? p.stockStatus} /> },
     { header: "Status", render: (p) => <StatusBadge status={p.status} /> },
     { header: "Category", render: (p) => p.categories[0]?.name ?? "—" },
     {
@@ -131,7 +144,7 @@ export function ProductsTable({ products, trash }: { products: SellerProductSumm
             variant="link"
             size="sm"
             className="h-auto p-0"
-            disabled={busy}
+            disabled={busy || (Boolean(p.takedown) && p.status !== "published")}
             onClick={() => run([p], p.status === "published" ? "unpublish" : "publish")}
           >
             {p.status === "published" ? "Unpublish" : "Publish"}
@@ -139,6 +152,11 @@ export function ProductsTable({ products, trash }: { products: SellerProductSumm
           <Button variant="link" size="sm" className="h-auto p-0" render={<Link href={href(`/products/${p.id}`)} />}>
             Edit
           </Button>
+          {p.isDemo ? null : (
+            <Button variant="link" size="sm" className="h-auto p-0" disabled={busy || Boolean(p.takedown)} onClick={() => duplicate(p)}>
+              Duplicate
+            </Button>
+          )}
           <DeleteProductButton productId={p.id} productTitle={p.title} mode={p.isDemo ? "demo" : "trash"} />
         </div>
       ),

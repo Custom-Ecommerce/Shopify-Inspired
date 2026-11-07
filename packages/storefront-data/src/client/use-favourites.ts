@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { NO_FAVOURITES, loadFavouriteProducts } from "../domain/favourites";
+import { NO_FAVOURITES, favouriteProductsView, loadFavouriteProducts } from "../domain/favourites";
+import type { FavouritesAnswer } from "../domain/favourites";
 import { toProductCardVM } from "../view-models/product-card";
 import type { ProductCardVM } from "../view-models/product-card";
 import { useFavouritesStoreApi, useOrderTransport } from "./context";
@@ -41,41 +42,43 @@ export interface UseFavouriteProductsResult {
   products: ProductCardVM[];
 }
 
+const subscribeNothing = (): (() => void) => () => {};
+const onClient = (): boolean => true;
+const onServer = (): boolean => false;
+
 /**
  * The cards of the Favourites page. An id whose product is no longer Live is dropped from the list for good. That happens
  * only after every request succeeded: an outage says nothing about the products, so it never prunes.
+ *
+ * During hydration the ids are the server's empty list, which says nothing about the browser's real list, so the page
+ * stays "loading" until hydration is over and the lookup for the real ids has answered (favouriteProductsView).
  */
 export function useFavouriteProducts(): UseFavouriteProductsResult {
   const store = useFavouritesStoreApi();
   const transport = useOrderTransport();
   const ids = useSyncExternalStore(store.subscribe, store.getIds, serverIds);
-  const [status, setStatus] = useState<FavouriteProductsStatus>("loading");
-  const [products, setProducts] = useState<ProductCardVM[]>([]);
+  // False in the server render and the hydration render, true from then on (and at once on a client-side navigation).
+  const hydrated = useSyncExternalStore(subscribeNothing, onClient, onServer);
+  const [answer, setAnswer] = useState<FavouritesAnswer<ProductCardVM> | null>(null);
 
   useEffect(() => {
+    if (!hydrated || ids.length === 0) return;
     let current = true;
-    if (ids.length === 0) {
-      setProducts([]);
-      setStatus("ok");
-      return;
-    }
     loadFavouriteProducts(transport, ids).then(
       (result) => {
         if (!current) return;
-        setProducts(result.products.map((product) => toProductCardVM(product)));
-        setStatus("ok");
+        setAnswer({ ids, status: "ok", products: result.products.map((product) => toProductCardVM(product)) });
         if (result.missing.length > 0) store.prune(result.missing);
       },
       () => {
-        if (current) setStatus("unavailable");
+        if (current) setAnswer({ ids, status: "unavailable", products: [] });
       },
     );
     return () => {
       current = false;
     };
-  }, [ids, store, transport]);
+  }, [hydrated, ids, store, transport]);
 
   // A heart taken off on this page takes the card with it at once.
-  const shown = useMemo(() => products.filter((product) => ids.includes(product.id)), [products, ids]);
-  return { status, products: shown };
+  return useMemo(() => favouriteProductsView(hydrated, ids, answer), [hydrated, ids, answer]);
 }

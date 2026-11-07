@@ -87,7 +87,7 @@ function replay(existing: OrderRow, fingerprint: string): PlaceOrderResult {
  */
 async function priceOrder(storeId: string, commerce: StoreCommerce, request: ParsedOrderRequest) {
   const rows = (await Product.find({ _id: { $in: request.lines.map((l) => l.productId) }, store: storeId })
-    .select('title deliveryCharge variants isPublished isDemo deletedAt')
+    .select('title deliveryCharge variants isPublished isDemo deletedAt moderation')
     .lean()) as unknown as CatalogRow[];
   const byId = new Map(rows.map((row) => [String(row._id).toLowerCase(), row]));
 

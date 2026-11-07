@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { Surface } from "@/components/shared/surface"; // or Card
 
 export interface FilterTileProps {
   label: string;

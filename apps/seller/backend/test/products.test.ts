@@ -1117,6 +1117,24 @@ test('retention purges only what has been in trash for more than 365 days', asyn
   assert.equal(reviews.length, 0);
 });
 
+test('retention keeps a taken-down product and an admin-deleted one for good, and still purges an ordinary one (D-058)', async () => {
+  row(PRODUCT_A).deletedAt = daysAgo(400);
+  row(PRODUCT_A).moderation = { state: 'takedown', reason: 'Counterfeit', takenDownBy: 'op-1', takenDownAt: daysAgo(401) };
+  row(PRODUCT_B).deletedAt = daysAgo(400);
+  row(PRODUCT_B).deletedBy = { user: 'op-1', role: 'admin', reason: 'Policy', wasPublished: true };
+  row(SIZED_A).deletedAt = daysAgo(366);
+  row(SIZED_A).deletedBy = { user: SELLER_A, role: 'seller' };
+
+  const seen: unknown[] = [];
+  const result = await purgeExpiredProducts(RETENTION_NOW, { beforePurge: async (item) => void seen.push(item._id) });
+
+  assert.deepEqual(result, { purged: 1, failed: 0, more: false });
+  assert.deepEqual(seen, [SIZED_A], 'the kept ones never reach the purge or the email hook');
+  assert.ok(row(PRODUCT_A), 'taken down: kept');
+  assert.ok(row(PRODUCT_B), 'deleted by an admin: kept');
+  assert.equal(products.some((candidate) => candidate._id === SIZED_A), false, 'ordinary expired product: purged');
+});
+
 test('retention arithmetic: the cutoff, and the days a seller is told', () => {
   assert.equal(retentionCutoff(RETENTION_NOW).getTime(), daysAgo(365).getTime());
   assert.equal(trashDaysLeft(daysAgo(0), RETENTION_NOW), 365);

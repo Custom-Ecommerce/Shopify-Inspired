@@ -2,25 +2,20 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import type { ProductListSort, ProductListStatus } from '@markaz/contracts';
 import { authenticate } from '@/lib/auth';
-import { slugFromText } from '@/lib/categories';
-import { PRODUCT_LIST_SORTS, PRODUCT_LIST_STATUSES, PRODUCT_SLUG_MAX, productCreateRequestSchema } from '@/lib/contracts';
+import { PRODUCT_LIST_SORTS, PRODUCT_LIST_STATUSES, productCreateRequestSchema } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { parseBody } from '@/lib/placeholder';
-import { prepareProductVariants } from '@/lib/product-variants';
 import {
-  ProductRequestError,
-  assertStoreCategories,
-  assertStoreMedia,
-  assertVariantImagesInGallery,
   createdFields,
-  createdVariantInput,
   handleProductError,
   loadSellerProduct,
+  prepareProductCreate,
   toSellerProductSummary,
   type SellerProductRow,
 } from '@/lib/products';
+import { withSkuGuard } from '@/lib/product-variants';
 import { revalidateStoreProduct } from '@/lib/revalidate';
 import { assertCan, listEnvelope, Product } from '@/lib/services';
 import { escapeRegex } from '@/lib/storefront/product-query';
@@ -42,6 +37,7 @@ const LIST_PROJECTION = {
   hideWhenOutOfStock: 1,
   deletedAt: 1,
   deletedBy: 1,
+  moderation: 1,
   description: 1,
   highlights: 1,
   minPrice: 1,
@@ -138,8 +134,8 @@ export async function GET(request: NextRequest): Promise<Response> {
  *   422 PRODUCT_SLUG_REQUIRED     no slug was sent and the title holds no Latin letter or digit
  *   422 PRODUCT_CATEGORY_INVALID  a category is not from this store
  *   422 PRODUCT_MEDIA_INVALID     an image is not from this store
- *   422 INVALID_VARIANTS, 409 SKU_TAKEN   see prepareProductVariants
- *   409 PRODUCT_SLUG_TAKEN        the unique (store, slug) index decides, so two racing requests cannot both win
+ *   422 INVALID_VARIANTS, 409 SKU_TAKEN   see prepareProductVariants. The unique (store, skus) index decides a race
+ *   409 PRODUCT_SLUG_TAKEN        said plainly when the holder is in trash (D-041). The unique (store, slug) index decides a race
  */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -151,38 +147,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     await requireDatabase();
     const storeId = await resolveOwnedStoreId(request, ctx, null);
 
-    const slug = data.slug ?? slugFromText(data.title, PRODUCT_SLUG_MAX);
-    if (slug === '') {
-      throw new ProductRequestError(422, 'PRODUCT_SLUG_REQUIRED', 'This title cannot be turned into a slug. Enter one yourself.');
-    }
-
-    await assertStoreCategories(storeId, data.categories);
-    await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)], data.videos);
-    const { options, variants, minPrice } = await prepareProductVariants(storeId, createdVariantInput(data));
-    assertVariantImagesInGallery(data.media ?? [], variants);
-
-    const created = await Product.create({
-      store: storeId,
-      title: data.title,
-      slug,
-      categories: [...new Set(data.categories)],
-      media: [...new Set(data.media ?? [])],
-      videos: data.videos ?? [],
-      description: data.description ? data.description : null,
-      highlights: (data.highlights ?? []).map((text) => ({ text })),
-      tags: data.tags ?? [],
-      deliveryCharge: data.deliveryCharge ?? null,
-      isFeatured: data.isFeatured ?? false,
-      hideWhenOutOfStock: data.hideWhenOutOfStock ?? false,
-      seoTitle: data.seoTitle ?? null,
-      seoDescription: data.seoDescription ?? null,
-      seoImage: data.seoImage ?? null,
-      options,
-      variants,
-      minPrice,
-      isPublished: false,
-      isDemo: false,
-    });
+    const document = await prepareProductCreate(storeId, data);
+    const created = await withSkuGuard(() => Product.create(document));
 
     const productId = String(created._id);
     await revalidateStoreProduct(storeId, productId);

@@ -14,8 +14,10 @@ const digest = (value: string): Buffer => createHash('sha256').update(value).dig
 
 /**
  * POST /api/internal/retention. Called once a day by an external cron, with RETENTION_CRON_SECRET in the
- * x-retention-secret header. It purges what has been in trash for more than 365 days. Unset secret: 503, so a missing
- * setting closes the route rather than opening it. The clock is the server's: a request cannot choose the date.
+ * x-retention-secret header. It purges what has been in trash for more than 365 days, except a product an admin took
+ * down or deleted: those keep their record for good (D-058, D-040, D-052; see retentionFilter in lib/trash.ts). Reviews of
+ * a purged product are archived first. Unset secret: 503, so a missing setting closes the route rather than opening it.
+ * Wrong secret: 401. The clock is the server's: a request cannot choose the date.
  */
 export async function POST(request: NextRequest): Promise<Response> {
   try {

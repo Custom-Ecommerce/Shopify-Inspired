@@ -12,6 +12,7 @@ import {
   FAVOURITES_STORAGE_VERSION,
   canFavourite,
   createFavouritesStore,
+  favouriteProductsView,
   favouritesKey,
   loadFavouriteProducts,
 } from "../src/domain/favourites";
@@ -245,6 +246,18 @@ async function main(): Promise<void> {
   assert.equal(seen[0]?.length, FAVOURITES_PAGE_SIZE);
   assert.equal(((await answer.json()) as { data: unknown[] }).data.length, 1);
   assert.equal((await routes.products(new Request("http://x.test/"), { tenantKey: null, clientIp: null })).status, 404);
+
+  // GAP 10: the page never says "no favourites" before the real ids are read and looked up.
+  const card = (id: string) => ({ id });
+  assert.deepEqual(favouriteProductsView(false, [], null), { status: "loading", products: [] }, "hydration render, server ids");
+  assert.deepEqual(favouriteProductsView(false, ["a"], null), { status: "loading", products: [] });
+  assert.deepEqual(favouriteProductsView(true, [], null), { status: "ok", products: [] }, "an empty list after hydration is the one ok without a lookup");
+  assert.deepEqual(favouriteProductsView(true, ["a", "b"], null), { status: "loading", products: [] }, "real ids, lookup pending");
+  const answered = { ids: ["a", "b"], status: "ok" as const, products: [card("a"), card("b")] };
+  assert.deepEqual(favouriteProductsView(true, ["a", "b"], answered), { status: "ok", products: [card("a"), card("b")] });
+  assert.deepEqual(favouriteProductsView(true, ["a"], answered), { status: "ok", products: [card("a")] }, "a heart taken off: no loading flash");
+  assert.deepEqual(favouriteProductsView(true, ["a", "c"], answered), { status: "loading", products: [] }, "a new id waits for its lookup");
+  assert.deepEqual(favouriteProductsView(true, ["a"], { ids: ["a"], status: "unavailable", products: [] }), { status: "unavailable", products: [] });
 
   console.log("favourites checks passed");
 }

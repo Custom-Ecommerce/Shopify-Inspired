@@ -33,7 +33,7 @@ const DETAIL_PROJECTION = {
 };
 
 /** A preview also reads what its tag is made from. */
-const PREVIEW_DETAIL_PROJECTION = { ...DETAIL_PROJECTION, isPublished: 1, isDemo: 1 };
+const PREVIEW_DETAIL_PROJECTION = { ...DETAIL_PROJECTION, isPublished: 1, isDemo: 1, moderation: 1 };
 
 const productNotFound = (): StorefrontHttpError => new StorefrontHttpError(404, 'PRODUCT_NOT_FOUND', 'Product not found.');
 

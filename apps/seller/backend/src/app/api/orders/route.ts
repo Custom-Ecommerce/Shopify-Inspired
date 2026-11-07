@@ -37,11 +37,9 @@ export async function GET(request: NextRequest): Promise<Response> {
     const limit = parseIntParam(params.get('limit'), 20, 1, 1000);
     const sort = parseSort(params.get('sort'), ORDER_SORT_FIELDS, { createdAt: -1 });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const OrderModel = Order as any;
     const [rows, totalDocs] = await Promise.all([
-      OrderModel.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).lean(),
-      OrderModel.countDocuments(filter),
+      Order.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).lean(),
+      Order.countDocuments(filter),
     ]);
     const docs = (rows as Record<string, unknown>[]).map((row) => publicOrder(plainDoc(row)));
     return NextResponse.json(listEnvelope(docs, { page, limit, totalDocs }), { headers: { 'Cache-Control': 'no-store' } });

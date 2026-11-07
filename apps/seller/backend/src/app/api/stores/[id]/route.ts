@@ -30,8 +30,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Store not found');
 
     const filter = ctx.actor === 'seller' ? { _id: id, owner: ctx.userObjectId } : { _id: id };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const query = (Store as any).findOne(filter);
+    const query = Store.findOne(filter);
     if (projection) query.select(projection.join(' '));
     const doc = await query.lean();
     if (!doc) throw new HttpError(404, 'Store not found');

@@ -176,8 +176,8 @@ export const PRODUCT_TAG_MAX = 50;
 export const PRODUCT_MAX_CATEGORIES = 20;
 export const PRODUCT_MAX_IMAGES = 10;
 export const PRODUCT_MAX_VIDEOS = 4;
-export const PRODUCT_SEO_TITLE_MAX = 200;
-export const PRODUCT_SEO_DESCRIPTION_MAX = 500;
+export const PRODUCT_SEO_TITLE_MAX = 70;
+export const PRODUCT_SEO_DESCRIPTION_MAX = 160;
 
 /** Something that reads as an HTML tag. "3 < 5" is fine; "<b>" and "<!-- x -->" are not. */
 export function containsHtmlTag(text: string): boolean {
@@ -191,6 +191,7 @@ const productTitleSchema = z.string().trim().min(1, 'Enter a title.').max(PRODUC
 const productSlugSchema = z
   .string()
   .trim()
+  .toLowerCase()
   .min(1, 'Enter a slug.')
   .max(PRODUCT_SLUG_MAX)
   .regex(PRODUCT_SLUG_PATTERN, 'Use lowercase letters, numbers, and single hyphens.');
@@ -221,8 +222,8 @@ const productContentFields = {
   deliveryCharge: rupeesInputSchema.nullable().optional(),
   isFeatured: z.boolean().optional(),
   hideWhenOutOfStock: z.boolean().optional(),
-  seoTitle: z.string().trim().max(PRODUCT_SEO_TITLE_MAX).nullable().optional(),
-  seoDescription: z.string().trim().max(PRODUCT_SEO_DESCRIPTION_MAX).nullable().optional(),
+  seoTitle: z.string().trim().max(PRODUCT_SEO_TITLE_MAX).refine((value) => !containsHtmlTag(value), NO_HTML).nullable().optional(),
+  seoDescription: z.string().trim().max(PRODUCT_SEO_DESCRIPTION_MAX).refine((value) => !containsHtmlTag(value), NO_HTML).nullable().optional(),
   seoImage: objectIdSchema.nullable().optional(),
 };
 
@@ -375,6 +376,8 @@ export interface SellerProductTrashInfo {
   daysLeft: number;
   /** False when an admin deleted it: the seller may look, not bring it back. */
   restorable: boolean;
+  /** The admin's reason, when an admin deleted it. */
+  adminReason: string | null;
 }
 
 export interface SellerProductCategory {
@@ -394,6 +397,8 @@ export interface SellerProductSummary {
   hideWhenOutOfStock: boolean;
   /** Null unless the product is in trash. */
   trash: SellerProductTrashInfo | null;
+  /** Set while an admin has taken the product down. It cannot be published until an admin restores it. */
+  takedown: { reason: string; takenDownAt: string } | null;
   description: string | null;
   highlights: string[];
   minPrice: number;

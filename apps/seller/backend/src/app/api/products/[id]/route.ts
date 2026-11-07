@@ -6,18 +6,14 @@ import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError, jsonError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { parseBody } from '@/lib/placeholder';
-import { adminDeleted } from '@/lib/product-lifecycle';
+import { adminDeleted, takenDown } from '@/lib/product-lifecycle';
 import {
   ProductRequestError,
-  assertStoreCategories,
-  assertStoreMedia,
-  assertVariantImagesInGallery,
+  applyProductUpdate,
   handleProductError,
   loadSellerProduct,
-  preparePatchedVariants,
+  prepareProductUpdate,
   productNotFound,
-  productPatchFilter,
-  productPatchSet,
   type VariantRow,
 } from '@/lib/products';
 import { revalidateStoreProduct } from '@/lib/revalidate';
@@ -77,20 +73,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     } | null;
     if (!current) throw productNotFound();
 
-    if (data.categories) await assertStoreCategories(storeId, data.categories);
-    await assertStoreMedia(storeId, [...(data.media ?? []), data.seoImage, ...(data.variants ?? []).map((variant) => variant.imageId)], data.videos);
-
-    const prepared = data.variants || data.options ? await preparePatchedVariants(storeId, id, current, data) : null;
-    assertVariantImagesInGallery(data.media ?? current.media ?? [], prepared?.variants ?? current.variants);
-
-    const updated = await Product.findOneAndUpdate(productPatchFilter(storeId, id, prepared), [{ $set: productPatchSet(data, prepared) }], {
-      new: true,
-    })
-      .select('_id')
-      .lean();
-    if (!updated) {
-      throw new ProductRequestError(409, 'PRODUCT_CHANGED', 'This product changed while you were editing it. Reload and try again.');
-    }
+    await applyProductUpdate(storeId, id, data, await prepareProductUpdate(storeId, id, data, current));
 
     await revalidateStoreProduct(storeId, id);
     return NextResponse.json(await loadSellerProduct(storeId, id));
@@ -103,6 +86,7 @@ interface DeletableRow extends PurgeableProduct {
   isDemo?: boolean;
   deletedAt?: Date | null;
   deletedBy?: { role?: string | null } | null;
+  moderation?: { reason: string } | null;
 }
 
 /**
@@ -112,6 +96,7 @@ interface DeletableRow extends PurgeableProduct {
  * DELETE /api/products/:id?permanent=true removes a trashed product for good, archiving its reviews (D-014).
  *   409 PRODUCT_NOT_IN_TRASH   it has to go to trash first
  *   403 PRODUCT_ADMIN_DELETED  an admin removed it, so what happens to it next is not the seller's call
+ *   403 PRODUCT_TAKEN_DOWN     a taken-down product can go to trash, but not be destroyed: the record stays (D-040)
  */
 export async function DELETE(request: NextRequest, context: Ctx): Promise<Response> {
   try {
@@ -124,9 +109,11 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const existing = (await Product.findOne({ _id: id, store: storeId })
-      .select('store title slug isDemo deletedAt deletedBy')
+      .select('store title slug isDemo deletedAt deletedBy moderation')
       .lean()) as unknown as DeletableRow | null;
     if (!existing) throw productNotFound();
+
+    if (existing.moderation && (permanent || existing.isDemo === true)) throw takenDown(existing.moderation.reason);
 
     if (existing.isDemo === true) {
       await Product.deleteOne({ _id: id, store: storeId, isDemo: true });

@@ -92,7 +92,8 @@ export default async function StoreDashboardLayout({
           <DashboardSidebar />
 
           {/* SidebarInset: plain page background (flat Rose style) */}
-          <SidebarInset className="bg-background">
+          {/* min-w-0: without it this flex item cannot shrink below a wide child (the variant table), and pushes the page wider than the screen. */}
+          <SidebarInset className="bg-background min-w-0">
             {/* Sticky top bar — blueprint §4.4 */}
             <header className={`sticky ${isSuspended ? "top-10" : "top-0"} z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/85 backdrop-blur-sm`}>
               <div className="flex flex-1 items-center gap-2 px-4">

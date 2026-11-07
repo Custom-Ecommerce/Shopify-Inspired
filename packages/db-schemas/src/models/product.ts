@@ -30,8 +30,20 @@ export interface IProductVariant {
 
 /** Who moved a product to trash. An admin's delete is not the seller's to undo. */
 export interface IProductDeletedBy {
-  user: Types.ObjectId;
+  /** A seller's user id, or the operator id an admin's signed request named. */
+  user: Types.ObjectId | string;
   role: 'seller' | 'admin';
+  /** Admin deletes only: what a restore returns the product to, and why it was removed. */
+  wasPublished?: boolean | null;
+  reason?: string | null;
+}
+
+/** An admin's takedown. Present only while it holds: a product with none has moderation null. */
+export interface IProductModeration {
+  state: 'takedown';
+  reason: string;
+  takenDownBy: string;
+  takenDownAt: Date;
 }
 
 /**
@@ -52,6 +64,12 @@ export interface IProduct extends Document {
   tags: string[];
   options: IProductOption[];
   variants: IProductVariant[];
+  /**
+   * The string SKUs of the variants, and nothing else: no null, no empty string. Derived on every write (the validate
+   * hook below for create/save, the seller backend's PATCH pipeline for updates). It exists only so a unique index can
+   * hold SKUs: see the note on the index at the end of this file.
+   */
+  skus: string[];
   minPrice: number;
   deliveryCharge?: number | null;
   isFeatured: boolean;
@@ -63,6 +81,8 @@ export interface IProduct extends Document {
   /** Set while the product is in trash. Every query outside the trash view excludes it. */
   deletedAt?: Date | null;
   deletedBy?: IProductDeletedBy | null;
+  /** Set while an admin has taken the product down. It is never Live then, whatever isPublished says. */
+  moderation?: IProductModeration | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
   seoImage?: Types.ObjectId | null;
@@ -71,6 +91,11 @@ export interface IProduct extends Document {
   viewCount: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** The values of the skus field for these variants: each string SKU once, in variant order. */
+export function productSkus(variants: ReadonlyArray<{ sku?: string | null }>): string[] {
+  return [...new Set(variants.flatMap((variant) => (typeof variant.sku === 'string' && variant.sku.trim() !== '' ? [variant.sku.trim()] : [])))];
 }
 
 const isWholeNumber = (value: number | null | undefined): boolean =>
@@ -140,8 +165,20 @@ function variantsMatchOptions(this: IProduct, variants: IProductVariant[]): bool
 
 const DeletedBySchema = new Schema<IProductDeletedBy>(
   {
-    user: { type: Schema.Types.ObjectId, required: true },
+    user: { type: Schema.Types.Mixed, required: true },
     role: { type: String, enum: ['seller', 'admin'], required: true },
+    wasPublished: { type: Boolean, default: null },
+    reason: { type: String, default: null },
+  },
+  { _id: false },
+);
+
+const ModerationSchema = new Schema<IProductModeration>(
+  {
+    state: { type: String, enum: ['takedown'], required: true },
+    reason: { type: String, required: true },
+    takenDownBy: { type: String, required: true },
+    takenDownAt: { type: Date, required: true },
   },
   { _id: false },
 );
@@ -194,6 +231,7 @@ const ProductSchema = new Schema<IProduct>(
       ],
     },
     minPrice: { type: Number, required: true, min: 0, default: 0, validate: wholeNumber },
+    skus: { type: [String], default: [] },
     deliveryCharge: { type: Number, min: 0, default: null, validate: wholeNumber },
     isFeatured: { type: Boolean, default: false },
     isPublished: { type: Boolean, default: false },
@@ -201,6 +239,7 @@ const ProductSchema = new Schema<IProduct>(
     hideWhenOutOfStock: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
     deletedBy: { type: DeletedBySchema, default: null },
+    moderation: { type: ModerationSchema, default: null },
     seoTitle: { type: String, default: null },
     seoDescription: { type: String, default: null },
     seoImage: { type: Schema.Types.ObjectId, ref: 'Media', default: null },
@@ -215,6 +254,7 @@ const ProductSchema = new Schema<IProduct>(
 // themselves: the seller backend's product write path does.
 ProductSchema.pre('validate', function setMinPrice(next) {
   if (this.variants.length > 0) this.minPrice = Math.min(...this.variants.map((variant) => variant.price));
+  this.skus = productSkus(this.variants);
   next();
 });
 
@@ -227,10 +267,16 @@ ProductSchema.index({ store: 1, isPublished: 1, minPrice: 1, _id: 1 });
 ProductSchema.index({ store: 1, isPublished: 1, avgRating: -1, reviewCount: -1, _id: -1 });
 // The trash view of one store. Only trashed products are in this index, so it stays small.
 ProductSchema.index({ store: 1, deletedAt: 1 }, { partialFilterExpression: { deletedAt: { $type: 'date' } } });
-// Finds who holds a SKU. This does NOT enforce uniqueness: a unique index over an embedded array cannot, because it
-// says nothing about two entries in one document, and the null SKUs of a document would clash with those of another.
-// Uniqueness is enforced by the write path. See apps/seller/backend/src/lib/product-variants.ts.
+// Finds who holds a SKU (the write path's friendly check reads it). Not unique, on purpose: a document with one variant
+// SKU set and another null matches the partial filter, and its null key would then clash with any other such document.
 ProductSchema.index({ store: 1, 'variants.sku': 1 }, { partialFilterExpression: { 'variants.sku': { $type: 'string' } } });
+// Enforces SKU uniqueness inside a store (GAP 5). skus holds only strings, and an empty array does not match the partial
+// filter, so products without SKUs are not indexed and never clash. A trashed product keeps its row here, so it keeps
+// holding its SKU (D-041). Another store's SKUs never clash: store is the first key. Two variants of ONE product with the
+// same SKU are not caught by a unique multikey index (it compares documents, not entries); the write path refuses those
+// (apps/seller/backend/src/lib/product-variants.ts, 422 INVALID_VARIANTS). A race between two writers is decided here:
+// the loser gets E11000, which the seller backend answers as 409 SKU_TAKEN.
+ProductSchema.index({ store: 1, skus: 1 }, { unique: true, partialFilterExpression: { skus: { $type: 'string' } } });
 
 export const Product: Model<IProduct> =
   (mongoose.models.Product as Model<IProduct> | undefined) ??

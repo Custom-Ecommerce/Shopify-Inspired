@@ -25,6 +25,15 @@ export const { returnStatusUpdateSchema, RETURN_TRANSITIONS } = contracts;
 // B10.3 contracts: media.
 export const { mediaUploadFieldsSchema } = contracts;
 
+// PB-7: admin moderation.
+export const {
+  moderationDeleteRequestSchema,
+  moderationPermanentDeleteRequestSchema,
+  moderationProductListQuerySchema,
+  moderationRestoreRequestSchema,
+  moderationTakedownRequestSchema,
+} = contracts;
+
 // B10.4 contracts: analytics periods and the article option sets.
 export const { ANALYTICS_PERIODS, ARTICLE_TYPES, ARTICLE_STATUSES } = contracts;
 // Track B contracts: the public storefront API.
@@ -88,3 +97,6 @@ export const {
 
 // Cart quote contracts.
 export const { storefrontCartQuoteRequestSchema, storefrontCartQuoteResponseSchema } = contracts;
+
+// PB-7: bulk import and duplicate.
+export const { PRODUCT_CSV_COLUMNS, PRODUCT_IMPORT_MAX_BYTES, PRODUCT_IMPORT_MAX_ROWS, PRODUCT_TITLE_MAX } = contracts;

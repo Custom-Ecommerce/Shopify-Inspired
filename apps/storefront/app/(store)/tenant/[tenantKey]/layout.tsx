@@ -1,5 +1,6 @@
 import "../../../globals.css";
 import React from 'react';
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { StorefrontProvider } from '@markaz/storefront-data/client';
 import { loadStoreChrome } from '@markaz/storefront-data/server';
@@ -13,6 +14,18 @@ import { PreviewBanner } from '@/components/preview-banner';
 
 /** Fallback when a store has no free-delivery threshold configured. */
 const DEFAULT_FREE_DELIVERY_THRESHOLD = 5000;
+
+/**
+ * Every page of a store is titled with the store's name, not the platform's (GAP 13). resolveStore is wrapped in React
+ * cache(), so this shares the layout's own read: no extra request. A page with its own title (product pages, from their
+ * SEO fields) overrides this one.
+ */
+export async function generateMetadata({ params }: { params: Promise<{ tenantKey: string }> }): Promise<Metadata> {
+  const { tenantKey } = await params;
+  const result = await resolveStore(tenantKey, 'slug');
+  if (result.outcome !== 'ok') return {};
+  return { title: { absolute: result.store.name } };
+}
 
 export default async function TenantLayout({
   children,

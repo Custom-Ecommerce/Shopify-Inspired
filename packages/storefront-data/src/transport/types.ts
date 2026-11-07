@@ -6,7 +6,7 @@ export interface StorefrontImage {
 }
 
 /** Why a shopper would not see a product. Only a seller's preview ever carries one. */
-export type PreviewLabel = "Draft" | "Sample product";
+export type PreviewLabel = "Draft" | "Sample product" | "Removed by admin";
 
 /** A picture of a product's gallery. id is what a variant's imageId names; fixtures may have none. */
 export interface StorefrontGalleryImage extends StorefrontImage {

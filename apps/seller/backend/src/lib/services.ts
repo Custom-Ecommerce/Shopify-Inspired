@@ -19,9 +19,11 @@ export const {
   verifySession,
   PolicyConfigError,
   PolicyDeniedError,
+  writeAuditLog,
 } = auth;
 
 export const User = db.User;
+export const AuditLog = db.AuditLog;
 
 /**
  * Loaded on first use. @markaz/billing creates its Stripe client at import time, which needs
@@ -58,5 +60,6 @@ export const Order = db.Order;
 // Track B shims: the storefront API reads stores and the catalog.
 export const Store = db.Store;
 export const Product = db.Product;
+export const productSkus = db.productSkus;
 export const StockMovement = db.StockMovement;
 export const ArchivedReview = db.ArchivedReview;

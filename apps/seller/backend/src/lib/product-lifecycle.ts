@@ -14,6 +14,10 @@ export type ProductRouteContext = { params: Promise<{ id: string }> };
 export const adminDeleted = (): ProductRequestError =>
   new ProductRequestError(403, 'PRODUCT_ADMIN_DELETED', 'An admin removed this product, so it cannot be restored or deleted here.');
 
+/** The reason travels in the body, so the seller sees why. Who took it down does not. */
+export const takenDown = (reason: string): ProductRequestError =>
+  new ProductRequestError(403, 'PRODUCT_TAKEN_DOWN', 'An admin removed this product: ' + reason, { reason });
+
 async function requireDatabase(): Promise<void> {
   await connectSellerDb().catch(() => {
     throw new HttpError(503, 'Seller database unavailable');
@@ -25,10 +29,12 @@ export interface PublishableProduct {
   isDemo?: boolean | null;
   categories?: unknown[] | null;
   variants?: Array<{ price?: number | null }> | null;
+  moderation?: { reason: string } | null;
 }
 
 /** Why a product cannot go Live, or null. A variant at 0 has not been priced yet, so it does not count. */
 export function publishProblem(row: PublishableProduct): ProductRequestError | null {
+  if (row.moderation) return takenDown(row.moderation.reason);
   if (row.isDemo === true) {
     return new ProductRequestError(422, 'PRODUCT_DEMO_NOT_EDITED', 'This is the sample product. Edit it first, then publish it.');
   }
@@ -45,7 +51,8 @@ export function publishProblem(row: PublishableProduct): ProductRequestError | n
 /**
  * POST /api/products/:id/publish and /unpublish. A trashed product, or another store's, answers 404. Publishing checks
  * the rules on a read, then writes with the demo and trash conditions in the filter, so a delete that lands in between
- * is not undone. Unpublishing has no rules. Both tell the storefront to drop its cache.
+ * is not undone, and a takedown that lands in between holds too. Unpublishing has no rules. Both tell the storefront to
+ * drop its cache.
  */
 export async function changePublished(request: NextRequest, context: ProductRouteContext, published: boolean): Promise<Response> {
   try {
@@ -58,7 +65,7 @@ export async function changePublished(request: NextRequest, context: ProductRout
 
     if (published) {
       const row = (await Product.findOne({ _id: id, store: storeId, deletedAt: null })
-        .select('title isDemo categories variants.price')
+        .select('title isDemo categories variants.price moderation')
         .lean()) as unknown as PublishableProduct | null;
       if (!row) throw productNotFound();
       const problem = publishProblem(row);
@@ -66,7 +73,7 @@ export async function changePublished(request: NextRequest, context: ProductRout
     }
 
     const updated = await Product.findOneAndUpdate(
-      { _id: id, store: storeId, deletedAt: null, ...(published ? { isDemo: { $ne: true } } : {}) },
+      { _id: id, store: storeId, deletedAt: null, ...(published ? { isDemo: { $ne: true }, moderation: null } : {}) },
       { $set: { isPublished: published } },
       { new: true },
     )

@@ -44,6 +44,29 @@ assert.equal(can('public', 'read', 'products', ['videos']), true);
 assert.equal(can('admin', 'update', 'products', ['videos']), false);
 });
 
+test('productBulk: only a seller imports and exports', () => {
+assert.equal(can('seller', 'read', 'productBulk'), true);
+assert.equal(can('seller', 'create', 'productBulk'), true);
+for (const actor of ['admin', 'system', 'public'] as const) {
+assert.equal(can(actor, 'read', 'productBulk'), false, actor);
+assert.equal(can(actor, 'create', 'productBulk'), false, actor);
+}
+assert.equal(can('seller', 'update', 'productBulk'), false);
+assert.equal(can('seller', 'delete', 'productBulk'), false);
+});
+
+test('productModeration: only an admin, and an admin still cannot create or edit a product (D-002)', () => {
+for (const operation of ['read', 'update', 'delete'] as const) {
+assert.equal(can('admin', operation, 'productModeration'), true, operation);
+for (const actor of ['seller', 'system', 'public'] as const) {
+assert.equal(can(actor, operation, 'productModeration'), false, actor + ' ' + operation);
+}
+}
+assert.equal(can('admin', 'create', 'productModeration'), false);
+assert.equal(can('admin', 'update', 'products', ['title']), false);
+assert.equal(can('admin', 'create', 'products', ['title']), false);
+});
+
 test('storePreview: only a seller may ask for a preview link, and nothing else can be done to one (D-042)', () => {
 assert.equal(can('seller', 'create', 'storePreview'), true);
 for (const actor of ['admin', 'system', 'public'] as const) {
