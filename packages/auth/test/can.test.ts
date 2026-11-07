@@ -1,8 +1,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { can, PolicyConfigError } from '../src/can';
-import { POLICY_MATRIX } from '../src/policy';
+import { assertCan, can, PolicyConfigError, PolicyDeniedError } from '../src/can';
+import { ORDER_ACTIONS, POLICY_MATRIX, type Actor } from '../src/policy';
 
 test('products: a seller may read, create, update and delete; the fields are allowlisted', () => {
 assert.equal(can('seller', 'read', 'products'), true);
@@ -228,4 +228,112 @@ for (const actor of ['admin', 'seller', 'system', 'public'] as const) {
 assert.equal(can(actor, 'update', 'archivedReviews', ['body']), false, actor);
 assert.equal(can(actor, 'delete', 'archivedReviews'), false, actor);
 }
+});
+
+// EP-02 OB-1a: order actions.
+
+const ORDER_ACTION_NAMES = ['view', 'transition', 'cancel', 'note', 'payment', 'print'] as const;
+const ORDER_ROWS = ['orderView', 'orderTransition', 'orderCancel', 'orderNotes', 'orderPayment', 'orderPrint'] as const;
+
+/** The fields a seller would send for each action; read actions send none. */
+const ORDER_ACTION_FIELDS: Record<(typeof ORDER_ACTION_NAMES)[number], readonly string[] | undefined> = {
+view: undefined,
+transition: ['status', 'courier', 'trackingNumber', 'trackingUrl'],
+cancel: ['cancelReason'],
+note: ['text'],
+payment: ['paymentStatus', 'collectedAmount'],
+print: undefined,
+};
+
+const orderCan = (actor: string, action: (typeof ORDER_ACTION_NAMES)[number], fields = ORDER_ACTION_FIELDS[action]) =>
+can(actor as Actor, ORDER_ACTIONS[action].operation, ORDER_ACTIONS[action].collection, fields);
+
+test('order actions: every action maps to a declared row', () => {
+assert.deepEqual(Object.keys(ORDER_ACTIONS), [...ORDER_ACTION_NAMES]);
+for (const name of ORDER_ACTION_NAMES) {
+assert.ok(ORDER_ACTIONS[name].collection in POLICY_MATRIX, name);
+}
+assert.deepEqual(ORDER_ACTION_NAMES.map((name) => ORDER_ACTIONS[name].collection), [...ORDER_ROWS]);
+});
+
+test('order actions: the store owner may view, transition, cancel, note, pay and print', () => {
+for (const action of ORDER_ACTION_NAMES) {
+assert.equal(orderCan('seller', action), true, action);
+}
+assert.equal(can('seller', 'read', 'orderNotes'), true);
+});
+
+test('order actions: admin is denied every action in this epic (fail-closed)', () => {
+for (const action of ORDER_ACTION_NAMES) {
+assert.equal(orderCan('admin', action), false, action);
+}
+});
+
+test('order actions: system and the public are denied every action', () => {
+for (const actor of ['system', 'public'] as const) {
+for (const action of ORDER_ACTION_NAMES) {
+assert.equal(orderCan(actor, action), false, actor + ' ' + action);
+}
+}
+});
+
+test('order actions: an unknown role is denied every action, including a future staff role not yet declared', () => {
+for (const role of ['staff', 'store_staff', 'owner', '', 'SELLER']) {
+for (const action of ORDER_ACTION_NAMES) {
+assert.equal(orderCan(role, action), false, role + ' ' + action);
+}
+}
+});
+
+test('order actions: every operation a row does not declare is denied, for every actor', () => {
+for (const row of ORDER_ROWS) {
+for (const operation of ['read', 'create', 'update', 'delete'] as const) {
+const declared = POLICY_MATRIX[row][operation].actors.length > 0;
+if (declared) continue;
+for (const actor of ['seller', 'admin', 'system', 'public'] as const) {
+assert.equal(can(actor, operation, row, ['status']), false, row + ' ' + operation + ' ' + actor);
+}
+}
+}
+assert.equal(can('seller', 'delete', 'orderNotes'), false);
+assert.equal(can('seller', 'update', 'orderNotes', ['text']), false);
+assert.equal(can('seller', 'delete', 'orderView'), false);
+});
+
+test('order write actions with no field list are denied (fail-closed)', () => {
+for (const action of ['transition', 'cancel', 'note', 'payment'] as const) {
+const { operation, collection } = ORDER_ACTIONS[action];
+assert.equal(can('seller', operation, collection), false, action);
+assert.equal(can('seller', operation, collection, []), false, action);
+}
+});
+
+test('order write actions refuse fields outside their own list', () => {
+for (const field of ['store', 'total', 'items', 'statusHistory', 'notes', 'phone', 'cancelledAt', 'collectedAt']) {
+assert.equal(orderCan('seller', 'transition', ['status', field]), false, 'transition ' + field);
+assert.equal(orderCan('seller', 'cancel', ['cancelReason', field]), false, 'cancel ' + field);
+assert.equal(orderCan('seller', 'note', ['text', field]), false, 'note ' + field);
+assert.equal(orderCan('seller', 'payment', ['paymentStatus', field]), false, 'payment ' + field);
+}
+// One action cannot do another's job.
+assert.equal(orderCan('seller', 'transition', ['paymentStatus']), false);
+assert.equal(orderCan('seller', 'payment', ['status']), false);
+assert.equal(orderCan('seller', 'cancel', ['status']), false);
+assert.equal(orderCan('seller', 'transition', ['cancelReason']), false);
+});
+
+test('assertCan throws for a denied order action', () => {
+assert.throws(
+() => assertCan('admin', ORDER_ACTIONS.cancel.operation, ORDER_ACTIONS.cancel.collection, ['cancelReason']),
+PolicyDeniedError,
+);
+assert.doesNotThrow(() => assertCan('seller', ORDER_ACTIONS.view.operation, ORDER_ACTIONS.view.collection));
+});
+
+test('the B10.4 orders row is unchanged by EP-02', () => {
+assert.deepEqual([...POLICY_MATRIX.orders.read.actors], ['admin', 'system', 'seller']);
+assert.deepEqual([...POLICY_MATRIX.orders.create.actors], ['system']);
+assert.deepEqual([...POLICY_MATRIX.orders.update.actors], ['admin', 'system']);
+assert.deepEqual([...POLICY_MATRIX.orders.delete.actors], ['admin', 'system']);
+assert.equal(can('seller', 'update', 'orders', ['status']), false);
 });

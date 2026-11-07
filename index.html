@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Markazify - current sprint tracker</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --card: #ffffff;
+  --line: #e4e3df;
+  --track: #e9e8e4;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #75746f;
+  --fill: #2a78d6;
+  --good: #0ca30c;
+  --warn: #fab219;
+  --crit: #d03b3b;
+  --mute: #8b8a85;
+  --tint-good: #e7f5e7;
+  --tint-warn: #fdf3d9;
+  --tint-crit: #fbe6e6;
+  --tint-mute: #efeeeb;
+  --focus: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface: #1a1a19;
+    --card: #222221;
+    --line: #34332f;
+    --track: #383835;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --ink-3: #a09f96;
+    --fill: #3987e5;
+    --mute: #8b8a85;
+    --tint-good: #17301b;
+    --tint-warn: #3a3118;
+    --tint-crit: #3b1d1d;
+    --tint-mute: #2c2c2a;
+    --focus: #6da7ec;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1a1a19;
+  --card: #222221;
+  --line: #34332f;
+  --track: #383835;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --ink-3: #a09f96;
+  --fill: #3987e5;
+  --mute: #8b8a85;
+  --tint-good: #17301b;
+  --tint-warn: #3a3118;
+  --tint-crit: #3b1d1d;
+  --tint-mute: #2c2c2a;
+  --focus: #6da7ec;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 14px 40px; }
+
+header.top {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+}
+header.top .in { max-width: 760px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+header.top h1 { font-size: 17px; line-height: 1.2; margin: 0; font-weight: 650; }
+header.top .sub { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+header.top .grow { flex: 1; min-width: 0; }
+.icon-btn {
+  min-width: 44px; min-height: 44px; border: 1px solid var(--line); background: var(--card);
+  border-radius: 10px; display: grid; place-items: center; font-size: 13px; padding: 0 12px;
+}
+
+.goal { margin-top: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.goal summary { list-style: none; padding: 12px 14px; min-height: 44px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.goal summary::-webkit-details-marker { display: none; }
+.goal summary::after { content: "+"; color: var(--ink-3); font-size: 20px; }
+.goal[open] summary::after { content: "\2212"; }
+.goal .body { padding: 0 14px 14px; color: var(--ink-2); font-size: 14.5px; }
+.goal .body h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); margin: 12px 0 4px; font-weight: 600; }
+
+.kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
+@media (min-width: 560px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.tile .lbl { font-size: 12.5px; color: var(--ink-2); }
+.tile .val { font-size: 28px; font-weight: 650; line-height: 1.15; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .val small { font-size: 14px; color: var(--ink-3); font-weight: 500; }
+.bar { height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+.bar > i { display: block; height: 100%; background: var(--fill); border-radius: 4px; width: 0; transition: width .3s; }
+.overall { margin-top: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.overall .row { display: flex; justify-content: space-between; font-size: 14px; color: var(--ink-2); }
+.overall .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); margin: 22px 2px 8px; font-weight: 600; }
+
+.strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; margin: 0 -14px; padding-left: 14px; padding-right: 14px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.chip {
+  flex: 0 0 auto; scroll-snap-align: start;
+  min-height: 44px; padding: 6px 12px; border: 1px solid var(--line); background: var(--card);
+  border-radius: 12px; text-align: left; min-width: 96px;
+}
+.chip[aria-pressed="true"] { border-color: var(--fill); box-shadow: inset 0 0 0 1px var(--fill); }
+.chip .t { font-weight: 600; font-size: 14px; display: block; }
+.chip .n { font-size: 12px; color: var(--ink-2); display: block; font-variant-numeric: tabular-nums; }
+.chip .bar { height: 4px; margin-top: 4px; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.fchip { min-height: 40px; padding: 4px 12px; border-radius: 20px; border: 1px solid var(--line); background: var(--card); font-size: 14px; }
+.fchip[aria-pressed="true"] { border-color: var(--fill); box-shadow: inset 0 0 0 1px var(--fill); font-weight: 600; }
+.search { width: 100%; min-height: 44px; border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 12px; }
+
+details.story { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; }
+details.story > summary { list-style: none; padding: 12px 14px; min-height: 56px; }
+details.story > summary::-webkit-details-marker { display: none; }
+.s-head { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.s-name { font-weight: 600; font-size: 15px; }
+.s-id { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+.s-count { font-size: 13px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tasks { border-top: 1px solid var(--line); }
+.task { padding: 10px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.task:last-child { border-bottom: 0; }
+.task .tx { font-size: 14.5px; overflow-wrap: anywhere; }
+.task .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--ink-2); }
+.tag { border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; background: var(--tint-mute); }
+.pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 9px; font-size: 12.5px; font-weight: 600; border: 1px solid transparent; }
+.pill .ic { font-weight: 800; }
+.pill.done { background: var(--tint-good); border-color: var(--good); } .pill.done .ic { color: var(--good); }
+.pill.progress { background: var(--tint-warn); border-color: var(--warn); } .pill.progress .ic { color: var(--warn); }
+.pill.blocked { background: var(--tint-crit); border-color: var(--crit); } .pill.blocked .ic { color: var(--crit); }
+.pill.todo { background: var(--tint-mute); border-color: var(--line); } .pill.todo .ic { color: var(--mute); }
+
+.gate { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; display: grid; gap: 6px; }
+.gate .g-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.gate .g-id { font-weight: 650; }
+.gate .g-tx { font-size: 14px; color: var(--ink-2); overflow-wrap: anywhere; }
+.gate .g-st { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+
+.empty { text-align: center; color: var(--ink-2); padding: 24px 8px; }
+footer.f { margin-top: 26px; font-size: 13px; color: var(--ink-2); }
+footer.f .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.btn { min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); background: var(--card); border-radius: 10px; }
+.msg { min-height: 1.4em; }
+.msg.err { color: var(--crit); }
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="in">
+    <div class="grow">
+      <h1 id="title">Sprint 2</h1>
+      <div class="sub" id="sub"></div>
+    </div>
+    <button class="icon-btn" id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <details class="goal" id="goal">
+    <summary>Sprint goal</summary>
+    <div class="body">
+      <p id="goalText"></p>
+      <h3>Done when</h3>
+      <p id="goalGate"></p>
+    </div>
+  </details>
+
+  <section class="kpis" aria-label="Sprint numbers">
+    <div class="tile"><div class="lbl">Tasks done</div><div class="val" id="kDone">0</div></div>
+    <div class="tile"><div class="lbl">In progress</div><div class="val" id="kProg">0</div></div>
+    <div class="tile"><div class="lbl">Not started</div><div class="val" id="kTodo">0</div></div>
+    <div class="tile"><div class="lbl">Gates passed</div><div class="val" id="kGate">0</div></div>
+  </section>
+  <section class="overall" aria-label="Overall progress">
+    <div class="row"><span>Tasks finished</span><b id="oTxt">0%</b></div>
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="oBar"><i id="oFill"></i></div>
+  </section>
+
+  <h2 class="sec">Batches</h2>
+  <div class="strip" id="batches" role="group" aria-label="Filter by batch"></div>
+
+  <h2 class="sec">Stories and tasks</h2>
+  <div class="filters" id="filters" role="group" aria-label="Filter by status"></div>
+  <input class="search" id="q" type="search" placeholder="Search a task, id or word" aria-label="Search tasks" autocomplete="off">
+  <div id="stories" style="margin-top:10px"></div>
+
+  <h2 class="sec">Verification gates</h2>
+  <div id="gates"></div>
+
+  <footer class="f">
+    <div class="btns">
+      <button class="btn" id="load" type="button">Reload from CSV</button>
+    </div>
+    <input type="file" id="file" accept=".csv,text/csv" hidden>
+    <div class="msg" id="msg" role="status"></div>
+    <div id="src"></div>
+  </footer>
+</main>
+
+<script>
+"use strict";
+const EMBEDDED = "Sprint,Batch,Seq,Story ID,User Story (Sub-management),Task ID,Task,Priority,Status,Verification Gate\nSPRINT-02,,0,,SPRINT GOAL,,\"Poori Order & Fulfilment (EP-02): seller apne orders dekhe aur filter kare, order ko validated steps se confirm -> processing -> dispatched -> delivered tak le jaye, courier aur tracking number save kare, cancel par stock sahi wapas aaye, label aur packing slip print kare, COD collected mark kare, aur customer storefront par apna order track kare. Sprint 1 ke 4 chhote gaps bhi isi sprint ke aakhri batch mein band hon. Verification epic ke end par (project manager).\",,IN PROGRESS - OB-1a done 2026-11-07; next OB-1b (list and detail),Seller A order ko poore flow se guzare (confirm -> processing -> dispatched -> delivered); Seller B ko 403/404; illegal transition 422; do baar cancel karne par stock sirf ek baar wapas; dispatch bina tracking number ke na ho; customer tracking page sahi status dikhaye; label aur packing slip sahi print hon; COD collected sirf dispatch ke baad; tsc + tests pass\nSPRINT-02,OB-1,1,EP-02.US01,Order List & Detail,EP-02.US01.T01,\"Audit the existing orders code (Order model in db-schemas, orders routes and order-service in the seller backend, storefront order placement, policy rows) and write the gap list; add the missing Order fields (statusHistory, courier, trackingNumber, paymentStatus, internal notes) to the schema with tests; no behaviour change\",P0,\"DONE - OB-1a reviewed 2026-11-07 (db-schemas 69, auth 65, tsc 0 errors in 18 workspaces)\",\nSPRINT-02,OB-1,2,EP-02.US01,Order List & Detail,EP-02.US01.T02,\"Seller backend GET /api/orders: store-scoped list with status filter, date range, search by order number, customer name and phone, newest first, pagination, and a count per status\",P0,NOT STARTED,\nSPRINT-02,OB-1,3,EP-02.US01,Order List & Detail,EP-02.US01.T03,\"Seller backend GET /api/orders/:id: full detail (item snapshot with title, variant, price and quantity, delivery address, totals, payment status, status, history); another store's order answers 404\",P0,NOT STARTED,\nSPRINT-02,OB-1,4,EP-02.US01,Order List & Detail,EP-02.US01.T04,\"Policy matrix rows for orders (view, transition, cancel, note, payment, print) in packages/auth, fail-closed, with tests; Seller B gets 403/404 on Seller A's orders\",P0,\"DONE - OB-1a reviewed 2026-11-07 (db-schemas 69, auth 65, tsc 0 errors in 18 workspaces)\",\nSPRINT-02,OB-1,5,EP-02.US01,Order List & Detail,EP-02.US01.T05,\"Seller frontend orders list page: status tabs with counts, search, date filter, mobile-friendly cards, empty, loading and error states\",P0,NOT STARTED,\nSPRINT-02,OB-1,6,EP-02.US01,Order List & Detail,EP-02.US01.T06,\"Seller frontend order detail page: items, customer and address, totals, payment, status and history, with the actions area (wired in OB-2)\",P0,NOT STARTED,\nSPRINT-02,OB-2,7,EP-02.US02,Order Status Workflow (validated transitions + history),EP-02.US02.T01,Order state machine as a pure shared module: pending -> confirmed -> processing -> dispatched -> delivered (cancel is US03); every other move is rejected with 422 ORDER_TRANSITION_ILLEGAL,P0,NOT STARTED,\nSPRINT-02,OB-2,8,EP-02.US02,Order Status Workflow (validated transitions + history),EP-02.US02.T02,\"POST /api/orders/:id/transition: idempotent (same target twice is a no-op), compare-and-set on the current status so two parallel requests cannot both win, store-scoped, audit entry\",P0,NOT STARTED,\nSPRINT-02,OB-2,9,EP-02.US02,Order Status Workflow (validated transitions + history),EP-02.US02.T03,\"statusHistory: every change stores from, to, who, when and an optional note; shown newest first on the detail page\",P0,NOT STARTED,\nSPRINT-02,OB-2,10,EP-02.US02,Order Status Workflow (validated transitions + history),EP-02.US02.T04,Seller UI: action buttons come from the allowed-next list returned by the API (the flow is not hard-coded in the frontend); confirmation for dispatched and delivered; refetch after every change,P0,NOT STARTED,\nSPRINT-02,OB-2,11,EP-02.US02,Order Status Workflow (validated transitions + history),EP-02.US02.T05,\"Tests: every legal and illegal transition, repeated call, two parallel transitions, another seller's order, order whose product was later taken down or trashed stays readable\",P0,NOT STARTED,\nSPRINT-02,OB-3,12,EP-02.US03,Cancel & Stock Restore,EP-02.US03.T01,\"POST /api/orders/:id/cancel with a required reason; allowed only from pending, confirmed and processing; dispatched, delivered and already cancelled answer 422\",P0,NOT STARTED,\nSPRINT-02,OB-3,13,EP-02.US03,Cancel & Stock Restore,EP-02.US03.T02,\"Stock restore on cancel through the Inventory adjust path only (D-034, D-036), per variant and exactly once (idempotent); a product or variant deleted since the order is skipped safely and noted in the history\",P0,NOT STARTED,\nSPRINT-02,OB-3,14,EP-02.US03,Cancel & Stock Restore,EP-02.US03.T03,Confirm what order placement deducts today (finding from the OB-1 audit) and make cancel restore exactly those quantities; a cancelled order is final; after dispatch the way back is a return (EP-13),P0,NOT STARTED,\nSPRINT-02,OB-3,15,EP-02.US03,Cancel & Stock Restore,EP-02.US03.T04,\"Seller UI cancel dialog: reason list plus free text, shows the stock that will return, clear result message\",P0,NOT STARTED,\nSPRINT-02,OB-3,16,EP-02.US03,Cancel & Stock Restore,EP-02.US03.T05,\"Placement records, per order line, whether stock was really deducted (stockDeducted true/false), and StockMovement gets an optional orderId, so cancel can restore exactly what was taken (D-066); existing placement tests must pass\",P0,NOT STARTED,\nSPRINT-02,OB-3,17,EP-02.US03,Cancel & Stock Restore,EP-02.US03.T06,\"Tests: double cancel restores once, two parallel cancels, variant stock, deleted product, cancel after dispatch refused, another seller's order\",P0,NOT STARTED,\nSPRINT-02,OB-4,18,EP-02.US04,Courier & Tracking Number (manual),EP-02.US04.T01,\"Courier list constant in packages/contracts: TCS, Leopards, M&P, Trax, PostEx, Blue-Ex, Other (with a free-text name)\",P0,NOT STARTED,\nSPRINT-02,OB-4,19,EP-02.US04,Courier & Tracking Number (manual),EP-02.US04.T02,\"Dispatch requires courier and tracking number, both saved on the order; the tracking number can be edited after dispatch and every edit goes into the history\",P0,NOT STARTED,\nSPRINT-02,OB-4,20,EP-02.US04,Courier & Tracking Number (manual),EP-02.US04.T03,\"Seller UI dispatch dialog (courier select, tracking number, optional tracking link) and an edit-tracking action\",P0,NOT STARTED,\nSPRINT-02,OB-4,21,EP-02.US04,Courier & Tracking Number (manual),EP-02.US04.T04,\"Customer tracking: public storefront endpoint and Stiletto page where the customer enters order number and phone and sees only status, courier and tracking number; a wrong phone gives the same generic not-found; rate limited; no private data (D-029: Stiletto only)\",P0,NOT STARTED,\nSPRINT-02,OB-5,22,EP-02.US05,Shipping Label & Packing Slip,EP-02.US05.T01,\"Printable shipping label (A6, print stylesheet): store name, customer, address, phone, order number, COD amount to collect, courier and tracking number; safe for long names\",P1,NOT STARTED,\nSPRINT-02,OB-5,23,EP-02.US05,Shipping Label & Packing Slip,EP-02.US05.T02,\"Packing slip: item list with variant and quantity, order number, space for notes\",P1,NOT STARTED,\nSPRINT-02,OB-5,24,EP-02.US05,Shipping Label & Packing Slip,EP-02.US05.T03,Bulk print: select several orders on the list and print their labels in one go,P1,NOT STARTED,\nSPRINT-02,OB-5,25,EP-02.US05,Shipping Label & Packing Slip,EP-02.US05.T04,\"Tests for the label and slip data (COD amount correct, prepaid shows zero, long names)\",P1,NOT STARTED,\nSPRINT-02,OB-5,26,EP-02.US06,Order Notes & Timeline,EP-02.US06.T01,\"Internal seller notes on an order (add and list, never shown to the customer), store-scoped, with an audit entry\",P1,NOT STARTED,\nSPRINT-02,OB-5,27,EP-02.US06,Order Notes & Timeline,EP-02.US06.T02,\"Timeline: one list combining status changes, tracking edits, notes and payment events, newest first\",P1,NOT STARTED,\nSPRINT-02,OB-5,28,EP-02.US06,Order Notes & Timeline,EP-02.US06.T03,Seller UI: timeline and add-note box on the order detail page,P1,NOT STARTED,\nSPRINT-02,OB-5,29,EP-02.US07,COD Collected / Payment Marking,EP-02.US07.T01,Payment status for COD orders: unpaid -> collected; collected can be set only after dispatch; no other payment methods in this epic,P1,NOT STARTED,\nSPRINT-02,OB-5,30,EP-02.US07,COD Collected / Payment Marking,EP-02.US07.T02,\"POST /api/orders/:id/payment: marks COD collected with the amount, idempotent, audit entry, policy row\",P1,NOT STARTED,\nSPRINT-02,OB-5,31,EP-02.US07,COD Collected / Payment Marking,EP-02.US07.T03,\"Seller UI: payment badge on the list and the detail page, and a Mark COD collected button\",P1,NOT STARTED,\nSPRINT-02,OB-5,32,EP-02.US07,COD Collected / Payment Marking,EP-02.US07.T04,\"Tests: before dispatch refused, repeated call, wrong amount, another seller's order\",P1,NOT STARTED,\nSPRINT-02,OB-6,33,EP-02.US09,Sprint 1 Carry-over Polish,EP-02.US09.T01,\"Checkout (CO-03): when the BFF timeout fires do not say the order failed; show that the order is being checked, look it up by its idempotency key, then show success or the retry option (packages/storefront-data transport/remote.ts and the checkout message)\",P1,NOT STARTED,\nSPRINT-02,OB-6,34,EP-02.US09,Sprint 1 Carry-over Polish,EP-02.US09.T02,\"Inventory page (CO-01): readable status labels (In stock, Low stock, Out of stock) and the status refreshes after saving a stock change\",P2,NOT STARTED,\nSPRINT-02,OB-6,35,EP-02.US09,Sprint 1 Carry-over Polish,EP-02.US09.T03,Admin Products table (CO-02): the action buttons are no longer clipped at 1024 px,P2,NOT STARTED,\nSPRINT-02,OB-6,36,EP-02.US09,Sprint 1 Carry-over Polish,EP-02.US09.T04,Parallel duplicates (CO-04): four duplicate calls at once all succeed (more attempts or jitter in product-duplicate.ts) or return a clear message,P3,NOT STARTED,\nSPRINT-02,GATE,37,,Epic Verification (project manager),V-01,\"tsc --noEmit --incremental false clean for every workspace (seller backend, admin backend, both frontends, storefront, packages, themes); next build passes for all five apps\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,38,,Epic Verification (project manager),V-02,\"All package, seller backend and admin backend tests pass (counts recorded in the report); no test skipped without a written reason\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,39,,Epic Verification (project manager),V-03,\"Real flow on real MongoDB: place a COD order from the storefront; it appears in the seller order list; status tabs and counts, date filter and search (order number, name, phone) work; detail shows the item snapshot, address, totals and payment\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,40,,Epic Verification (project manager),V-04,\"Workflow: confirm -> processing -> dispatch (courier and tracking number required) -> delivered works; skipping a step, going backwards and repeating a move give 422 or a no-op as designed; two parallel transitions leave one winner; statusHistory is correct\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,41,,Epic Verification (project manager),V-05,\"Cancel: stock returns once per variant (check on the Inventory page), a second cancel does not add stock again, cancel after dispatch is refused, a reason is required, a product deleted since the order does not break the cancel\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,42,,Epic Verification (project manager),V-06,\"Isolation: Seller B gets 403/404 on Seller A's orders for list, detail, transition, cancel, notes, payment and print; a request with no login is refused\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,43,,Epic Verification (project manager),V-07,\"Customer tracking on the Stiletto storefront: right order number and phone shows status, courier and tracking number; wrong phone and unknown number give the same generic answer; no address, items or other private data; rate limit works\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,44,,Epic Verification (project manager),V-08,\"Print in a real browser: shipping label (A6), packing slip and bulk print show correct data, COD amount (zero for prepaid), long names and Urdu text; print preview is one page per label\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,45,,Epic Verification (project manager),V-09,\"Notes, timeline and COD: notes stay hidden from the customer; timeline order and content are right; COD collected is refused before dispatch, works after, repeats are harmless, audit entries exist\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,46,,Epic Verification (project manager),V-10,\"Sprint 1 polish checked in a browser: checkout timeout shows the checking message and then the real result (slow the BFF on purpose), inventory labels and refresh, admin Products actions visible at 1024 px, four parallel duplicates\",P0,NOT STARTED,Verified by PM after Claude Code report\nSPRINT-02,GATE,47,,Epic Verification (project manager),V-11,\"Phone check at 375 px width: orders list, order detail, dispatch and cancel dialogs, notes and the customer tracking page are usable without sideways scrolling; decide the noindex header question (A-013) if the tracking page is public\",P0,NOT STARTED,Verified by PM after Claude Code report\n";
+const GENERATED = "2026-11-07 19:48";
+const BATCH_NAMES = {
+  "OB-1": "Audit, policy, list and detail",
+  "OB-2": "Status workflow",
+  "OB-3": "Cancel and stock",
+  "OB-4": "Courier and tracking",
+  "OB-5": "Label, notes, COD",
+  "OB-6": "Sprint 1 polish"
+};
+const EPIC_NAMES = { "EP-02": "Order & Fulfilment" };
+const STATUS_LABEL = { todo: "Not started", progress: "In progress", done: "Done", blocked: "Blocked" };
+const STATUS_ICON = { todo: "○", progress: "◐", done: "✓", blocked: "✕" };
+
+const $ = (id) => document.getElementById(id);
+const state = { rows: [], batch: "ALL", status: "ALL", q: "" };
+
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const out = []; let row = [], cur = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+      else cur += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ",") { row.push(cur); cur = ""; }
+    else if (c === "\n") { row.push(cur); out.push(row); row = []; cur = ""; }
+    else if (c !== "\r") cur += c;
+  }
+  if (cur !== "" || row.length) { row.push(cur); out.push(row); }
+  return out.filter((r) => r.length > 1);
+}
+
+function kind(status) {
+  const s = (status || "").toUpperCase();
+  if (s.indexOf("DONE") === 0 || s.indexOf("PASS") === 0) return "done";
+  if (s.indexOf("IN PROGRESS") === 0) return "progress";
+  if (s.indexOf("BLOCKED") === 0 || s.indexOf("FAIL") === 0) return "blocked";
+  return "todo";
+}
+
+function model(csvText) {
+  const rows = parseCSV(csvText);
+  const h = rows.shift();
+  const ix = (n) => h.indexOf(n);
+  const I = { sprint: ix("Sprint"), batch: ix("Batch"), seq: ix("Seq"), story: ix("Story ID"), sname: ix("User Story (Sub-management)"),
+    tid: ix("Task ID"), task: ix("Task"), prio: ix("Priority"), status: ix("Status"), gate: ix("Verification Gate") };
+  const m = { sprint: "", goal: "", goalGate: "", goalStatus: "", tasks: [], gates: [], stories: [] };
+  const byStory = {};
+  rows.forEach((r) => {
+    const g = (k) => (r[I[k]] || "").trim();
+    m.sprint = m.sprint || g("sprint");
+    if (g("seq") === "0" && g("sname") === "SPRINT GOAL") { m.goal = g("task"); m.goalGate = g("gate"); m.goalStatus = g("status"); return; }
+    if (g("batch") === "GATE") { m.gates.push({ id: g("tid"), text: g("task"), prio: g("prio"), status: g("status"), note: g("gate"), k: kind(g("status")) }); return; }
+    const t = { batch: g("batch"), story: g("story"), sname: g("sname"), id: g("tid"), text: g("task"), prio: g("prio"), status: g("status"), k: kind(g("status")) };
+    m.tasks.push(t);
+    if (!byStory[t.story]) { byStory[t.story] = { id: t.story, name: t.sname, tasks: [] }; m.stories.push(byStory[t.story]); }
+    byStory[t.story].tasks.push(t);
+  });
+  return m;
+}
+
+function count(list) {
+  const c = { done: 0, progress: 0, todo: 0, blocked: 0, total: list.length };
+  list.forEach((t) => c[t.k]++);
+  return c;
+}
+function pct(c) { return c.total ? Math.round((c.done * 100) / c.total) : 0; }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function pill(k) { const p = el("span", "pill " + k); p.append(el("span", "ic", STATUS_ICON[k]), document.createTextNode(STATUS_LABEL[k])); return p; }
+function bar(p) { const b = el("div", "bar"); const i = el("i"); i.style.width = p + "%"; b.appendChild(i); return b; }
+
+function render() {
+  const m = state.model;
+  const tc = count(m.tasks), gc = count(m.gates);
+  const num = (m.sprint.match(/(\d+)\s*$/) || [])[1];
+  const epicId = m.tasks.length ? (m.tasks[0].story.match(/^EP-\d+/) || [""])[0] : "";
+  $("title").textContent = (num ? "Sprint " + Number(num) : m.sprint) + (EPIC_NAMES[epicId] ? " \u00B7 " + epicId + " " + EPIC_NAMES[epicId] : "");
+  $("sub").textContent = m.goalStatus ? m.goalStatus.slice(0, 90) : "";
+  $("goalText").textContent = m.goal;
+  $("goalGate").textContent = m.goalGate;
+  $("kDone").innerHTML = tc.done + " <small>/ " + tc.total + "</small>";
+  $("kProg").textContent = tc.progress;
+  $("kTodo").textContent = tc.todo;
+  $("kGate").innerHTML = gc.done + " <small>/ " + gc.total + "</small>";
+  $("oTxt").textContent = pct(tc) + "% (" + tc.done + " of " + tc.total + ")";
+  $("oFill").style.width = pct(tc) + "%";
+  $("oBar").setAttribute("aria-valuenow", pct(tc));
+
+  // batches
+  const bs = $("batches"); bs.textContent = "";
+  const batchIds = [];
+  m.tasks.forEach((t) => { if (t.batch && batchIds.indexOf(t.batch) < 0) batchIds.push(t.batch); });
+  const all = el("button", "chip"); all.type = "button"; all.setAttribute("aria-pressed", state.batch === "ALL");
+  all.append(el("span", "t", "All batches"), el("span", "n", tc.done + " / " + tc.total), bar(pct(tc)));
+  all.onclick = () => { state.batch = "ALL"; render(); };
+  bs.appendChild(all);
+  batchIds.forEach((b) => {
+    const c = count(m.tasks.filter((t) => t.batch === b));
+    const ch = el("button", "chip"); ch.type = "button"; ch.setAttribute("aria-pressed", state.batch === b);
+    ch.append(el("span", "t", b), el("span", "n", (BATCH_NAMES[b] || "") + (BATCH_NAMES[b] ? " · " : "") + c.done + "/" + c.total), bar(pct(c)));
+    ch.onclick = () => { state.batch = b; render(); };
+    bs.appendChild(ch);
+  });
+
+  // status filters
+  const fs = $("filters"); fs.textContent = "";
+  [["ALL", "All"], ["todo", "Not started"], ["progress", "In progress"], ["done", "Done"], ["blocked", "Blocked"]].forEach(([v, l]) => {
+    const f = el("button", "fchip", l); f.type = "button"; f.setAttribute("aria-pressed", state.status === v);
+    f.onclick = () => { state.status = v; render(); };
+    fs.appendChild(f);
+  });
+
+  // stories
+  const q = state.q.toLowerCase();
+  const root = $("stories"); const open = {};
+  root.querySelectorAll("details").forEach((d) => { open[d.dataset.id] = d.open; });
+  root.textContent = "";
+  let shown = 0;
+  m.stories.forEach((s) => {
+    const sc = count(s.tasks);
+    const vis = s.tasks.filter((t) =>
+      (state.batch === "ALL" || t.batch === state.batch) &&
+      (state.status === "ALL" || t.k === state.status) &&
+      (!q || (t.id + " " + t.text + " " + t.sname + " " + t.batch).toLowerCase().indexOf(q) >= 0));
+    if (!vis.length) return;
+    shown++;
+    const d = el("details", "story"); d.dataset.id = s.id;
+    d.open = (s.id in open) ? open[s.id] : (state.batch !== "ALL" || !!q || state.status !== "ALL");
+    const sm = el("summary");
+    const head = el("div", "s-head");
+    const left = el("div"); left.append(el("div", "s-name", s.name), el("div", "s-id", s.id));
+    head.append(left, el("div", "s-count", sc.done + " / " + sc.total));
+    sm.append(head, bar(pct(sc)));
+    d.appendChild(sm);
+    const list = el("div", "tasks");
+    vis.forEach((t) => {
+      const row = el("div", "task");
+      const meta = el("div", "meta");
+      meta.append(pill(t.k), el("span", "tag", t.id.replace(/^EP-\d+\./, "")), el("span", "tag", t.batch), el("span", "tag", t.prio));
+      row.append(el("div", "tx", t.text), meta);
+      list.appendChild(row);
+    });
+    d.appendChild(list);
+    root.appendChild(d);
+  });
+  if (!shown) root.appendChild(el("div", "empty", "No task matches these filters."));
+
+  // gates
+  const gs = $("gates"); gs.textContent = "";
+  m.gates.forEach((g) => {
+    const b = el("div", "gate");
+    const top = el("div", "g-top"); top.append(el("span", "g-id", g.id), pill(g.k));
+    b.append(top, el("div", "g-tx", g.text));
+    if (g.k !== "todo") b.appendChild(el("div", "g-st", g.status));
+    gs.appendChild(b);
+  });
+
+  $("src").textContent = state.srcLabel;
+}
+
+function setTheme(t) {
+  if (t) document.documentElement.setAttribute("data-theme", t); else document.documentElement.removeAttribute("data-theme");
+}
+$("theme").onclick = () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const dark = cur ? cur === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  setTheme(dark ? "light" : "dark");
+};
+$("q").addEventListener("input", (e) => { state.q = e.target.value.trim(); render(); });
+$("load").onclick = () => $("file").click();
+$("file").onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const mm = model(String(rd.result));
+      if (!mm.tasks.length) throw new Error("No tasks found in this file.");
+      state.model = mm; state.srcLabel = "Loaded from " + f.name + " just now.";
+      $("msg").className = "msg"; $("msg").textContent = "Reloaded " + mm.tasks.length + " tasks and " + mm.gates.length + " gates.";
+      render();
+    } catch (err) { $("msg").className = "msg err"; $("msg").textContent = "Could not read that file: " + err.message; }
+  };
+  rd.readAsText(f); e.target.value = "";
+};
+
+state.model = model(EMBEDDED);
+state.srcLabel = "Data built into this page on " + GENERATED + ". To see newer progress, pick csv-files/4-sprints/current/SPRINT_02_BACKLOG.csv with the button above.";
+render();
+</script>
+</body>
+</html>
