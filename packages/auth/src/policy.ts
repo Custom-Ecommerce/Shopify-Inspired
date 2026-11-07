@@ -217,7 +217,8 @@ delete: { actors: [], fields: {} },
 // notes[].by, the timestamps and every other derived field are written by the server only.
 //   view       read    list, detail, per-status counts
 //   transition update  confirm, processing, dispatch (courier and tracking), delivered, and a tracking edit after dispatch; note is the optional history note (OB-2)
-//   cancel     update  cancel with a reason; the status itself and the stock restore are the server's
+//   cancel     update  cancel with a reason and an optional history note (OB-3: the request keys reason, note); the
+//                      status, cancelReason, cancelledAt and the stock restore are the server's
 //   note       create  add an internal note; read lists them
 //   payment    update  mark COD collected with the amount
 //   print      read    shipping label, packing slip, bulk print
@@ -238,7 +239,7 @@ delete: { actors: [], fields: {} },
 orderCancel: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
-update: { actors: ['seller'], fields: { seller: ['cancelReason'] } },
+update: { actors: ['seller'], fields: { seller: ['reason', 'note'] } },
 delete: { actors: [], fields: {} },
 },
 

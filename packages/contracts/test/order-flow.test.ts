@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CANCELLABLE_STATUSES,
+  canCancel,
+  cancelRefusal,
+  ORDER_CANCEL_REFUSAL_MESSAGES,
   canTransition,
   isOrderFlowStatus,
   nextStatuses,
@@ -82,4 +86,37 @@ test('order flow: each refusal reason', () => {
   assert.equal(transitionRefusal('pending', 'processing'), 'skips_step');
   assert.equal(transitionRefusal('pending', 'delivered'), 'skips_step');
   for (const message of Object.values(ORDER_TRANSITION_REFUSAL_MESSAGES)) assert.ok(message.length > 0);
+});
+
+// EP-02 OB-3: cancel (D-064).
+
+test('cancel: allowed from pending, confirmed and processing only', () => {
+  assert.deepEqual([...CANCELLABLE_STATUSES], ['pending', 'confirmed', 'processing']);
+  const expected: Record<string, ReturnType<typeof cancelRefusal>> = {
+    pending: null,
+    confirmed: null,
+    processing: null,
+    dispatched: 'dispatched_or_later',
+    delivered: 'dispatched_or_later',
+    returned: 'dispatched_or_later',
+    cancelled: 'already_cancelled',
+  };
+  for (const status of ORDER_FLOW_STATUSES) {
+    assert.equal(cancelRefusal(status), expected[status], status);
+    assert.equal(canCancel(status), expected[status] === null, status);
+  }
+});
+
+test('cancel: an unknown or corrupt status cannot be cancelled', () => {
+  for (const bad of ['shipped', '', 'Pending', null, undefined, 7]) {
+    assert.equal(cancelRefusal(bad), 'unknown_status', String(bad));
+    assert.equal(canCancel(bad), false, String(bad));
+  }
+});
+
+test('cancel: every refusal has a message, and the forward flow still never moves into cancelled', () => {
+  for (const reason of ['already_cancelled', 'dispatched_or_later', 'unknown_status'] as const) {
+    assert.ok(ORDER_CANCEL_REFUSAL_MESSAGES[reason].length > 0, reason);
+  }
+  for (const from of CANCELLABLE_STATUSES) assert.equal(canTransition(from, 'cancelled'), false, from);
 });

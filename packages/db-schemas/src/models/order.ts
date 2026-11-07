@@ -46,6 +46,11 @@ export interface IOrderLine {
   sku?: string | null;
   unitPrice: number;
   quantity: number;
+  /**
+   * EP-02 (D-066): true when placement really took the units from stock, false when the variant did not track quantity.
+   * Missing on orders placed before the flag existed. Cancel restores only what was taken.
+   */
+  stockDeducted?: boolean;
 }
 
 /** One status change (EP-02 US02). A tracking-number edit after dispatch is recorded as from = to = dispatched. */
@@ -102,6 +107,8 @@ export interface IOrder extends Document {
   notes: IOrderNote[];
   cancelledAt?: Date | null;
   cancelReason?: string | null;
+  /** Set once, in the same compare-and-set that cancels the order, so its stock goes back exactly once (D-066). */
+  stockRestoredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -151,6 +158,8 @@ const OrderSchema = new Schema<IOrder>(
           sku: { type: String, default: null },
           unitPrice: { type: Number, required: true, min: 0 },
           quantity: { type: Number, required: true, min: 1 },
+          // No default: a missing flag means the order predates it (D-066).
+          stockDeducted: { type: Boolean },
         },
       ],
       default: [],
@@ -168,6 +177,8 @@ const OrderSchema = new Schema<IOrder>(
     notes: { type: [OrderNoteSchema], default: [] },
     cancelledAt: { type: Date, default: null },
     cancelReason: { type: String, trim: true, maxlength: ORDER_CANCEL_REASON_MAX, default: null },
+    // No default: the cancel filter requires it to be absent ({ $exists: false }).
+    stockRestoredAt: { type: Date },
   },
   { timestamps: true },
 );

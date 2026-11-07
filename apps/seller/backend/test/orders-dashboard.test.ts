@@ -474,7 +474,7 @@ test('orders: an old order without EP-02 fields maps to the defaults, in the lis
   assert.equal(detail.trackingUrl, null);
   assert.equal(detail.cancelledAt, null);
   assert.equal(detail.cancelReason, null);
-  assert.deepEqual(detail.items, [{ productTitle: 'Cap', variantTitle: 'Default', sku: null, unitPrice: 450, quantity: 3, lineTotal: 1350 }]);
+  assert.deepEqual(detail.items, [{ productTitle: 'Cap', variantTitle: 'Default', sku: null, unitPrice: 450, quantity: 3, lineTotal: 1350, stockDeducted: null }]);
 });
 
 test('orders: the detail shape, with history and notes newest first', async () => {
@@ -510,7 +510,7 @@ test('orders: the detail shape, with history and notes newest first', async () =
   const detail = (await res.json()) as any;
   assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
   assert.deepEqual(Object.keys(detail).sort(), [
-    'address', 'allowedNext', 'cancelReason', 'cancelledAt', 'city', 'collectedAmount', 'collectedAt', 'courier', 'createdAt',
+    'address', 'allowedNext', 'canCancel', 'cancelReason', 'cancelledAt', 'city', 'collectedAmount', 'collectedAt', 'courier', 'createdAt',
     'customerName', 'deliveryCharges', 'id', 'items', 'notes', 'orderId', 'paymentMethod', 'paymentStatus', 'phone',
     'status', 'statusHistory', 'subtotal', 'total', 'trackingNumber', 'trackingUrl', 'updatedAt',
   ]);

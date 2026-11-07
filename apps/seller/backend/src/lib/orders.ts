@@ -11,7 +11,13 @@ import type {
   DashboardOrderStatus,
   DashboardOrderStatusChange,
 } from '@markaz/contracts';
-import { DASHBOARD_ORDER_STATUSES, dashboardOrderListQuerySchema, nextStatuses, orderListDaySchema } from '@/lib/contracts';
+import {
+  canCancel,
+  DASHBOARD_ORDER_STATUSES,
+  dashboardOrderListQuerySchema,
+  nextStatuses,
+  orderListDaySchema,
+} from '@/lib/contracts';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { escapeRegex } from '@/lib/storefront/product-query';
 
@@ -31,7 +37,9 @@ export type OrderErrorCode =
   // EP-02 OB-2: the transition endpoint.
   | 'ORDER_BODY_INVALID'
   | 'ORDER_TRANSITION_ILLEGAL'
-  | 'ORDER_STATUS_CHANGED';
+  | 'ORDER_STATUS_CHANGED'
+  // EP-02 OB-3: the cancel endpoint.
+  | 'ORDER_CANCEL_ILLEGAL';
 
 export class OrderRequestError extends HttpError {
   readonly code: OrderErrorCode;
@@ -322,6 +330,8 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
         unitPrice,
         quantity,
         lineTotal: money(unitPrice * quantity),
+        // D-066: null for an order placed before placement recorded it.
+        stockDeducted: typeof item.stockDeducted === 'boolean' ? item.stockDeducted : null,
       };
     }),
     subtotal: num(row.subtotal),
@@ -337,5 +347,6 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     createdAt,
     updatedAt: iso(row.updatedAt) ?? createdAt,
     allowedNext: nextStatuses(row.status),
+    canCancel: canCancel(row.status),
   };
 }

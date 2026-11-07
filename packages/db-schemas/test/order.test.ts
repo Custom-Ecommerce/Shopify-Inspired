@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   Order,
+  StockMovement,
   ORDER_CANCEL_REASON_MAX,
   ORDER_COURIER_MAX,
   ORDER_NOTE_MAX,
@@ -211,4 +212,51 @@ test('the seller order list indexes exist, none of them unique', () => {
   }
   // The order number index is unchanged: unique within a store.
   assert.equal(find({ store: 1, orderId: 1 })?.[1]?.unique, true);
+});
+
+// EP-02 OB-3 (D-066): what placement deducted, and the exactly-once restore marker.
+
+test('an order line may say whether stock was deducted; a missing flag stays missing (an old order)', () => {
+  const withFlags = order({
+    items: [
+      { productId: 'p1', variantId: 'v1', productTitle: 'Shirt', variantTitle: 'Default', unitPrice: 1200, quantity: 2, stockDeducted: true },
+      { productId: 'p2', variantId: 'v2', productTitle: 'Cap', variantTitle: 'Default', unitPrice: 300, quantity: 1, stockDeducted: false },
+    ],
+  });
+  assert.equal(withFlags.validateSync(), undefined);
+  assert.equal(withFlags.items[0]?.stockDeducted, true);
+  assert.equal(withFlags.items[1]?.stockDeducted, false);
+  const old = order();
+  assert.equal(old.validateSync(), undefined);
+  assert.equal('stockDeducted' in old.toObject().items[0], false);
+});
+
+test('stockRestoredAt has no default, so a new or loaded order does not carry it until a cancel sets it', () => {
+  assert.equal(order().stockRestoredAt, undefined);
+  assert.equal('stockRestoredAt' in order().toObject(), false);
+  const at = new Date();
+  assert.equal(order({ status: 'cancelled', stockRestoredAt: at }).stockRestoredAt?.getTime(), at.getTime());
+});
+
+test('a stock movement may name its order; manual movements do not, and the order index is sparse', () => {
+  const base = {
+    store: STORE,
+    product: '65a0000000000000000000b1',
+    variantId: '65a0000000000000000000e1',
+    previousQuantity: 3,
+    quantity: 5,
+    delta: 2,
+    reason: 'order_cancelled',
+  };
+  const withOrder = new StockMovement({ ...base, orderId: '65a000000000000000000077' });
+  assert.equal(withOrder.validateSync(), undefined);
+  assert.equal(String(withOrder.orderId), '65a000000000000000000077');
+  const manual = new StockMovement({ ...base, reason: 'Stock count' });
+  assert.equal(manual.validateSync(), undefined);
+  assert.equal('orderId' in manual.toObject(), false);
+  const index = StockMovement.schema.indexes().find(([fields]) => 'orderId' in fields);
+  assert.ok(index);
+  assert.deepEqual(index[0], { orderId: 1 });
+  assert.equal(index[1]?.sparse, true);
+  assert.notEqual(index[1]?.unique, true);
 });

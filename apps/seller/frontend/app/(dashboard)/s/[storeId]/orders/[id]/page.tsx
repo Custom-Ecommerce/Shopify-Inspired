@@ -1,6 +1,6 @@
 "use client";
 
-import type { DashboardOrderDetail } from "@markaz/contracts";
+import type { DashboardOrderDetail, OrderCancelResponse, OrderStockRestore } from "@markaz/contracts";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/dashboard/shared/EmptyState";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
 import {
@@ -96,6 +97,186 @@ function DetailSkeleton() {
   );
 }
 
+// EP-02 OB-3: cancel. The suggested reasons match ORDER_CANCEL_REASON_OPTIONS in @markaz/contracts (the frontend imports
+// contracts as types only); "Other" asks for the seller's own words. The request takes one reason string, 3 to 200 chars.
+const CANCEL_REASONS = ["Customer asked to cancel", "Customer unreachable", "Out of stock", "Wrong or fake order"] as const;
+const OTHER_REASON = "Other";
+const CANCEL_REASON_MIN = 3;
+const CANCEL_REASON_MAX = 200;
+
+const SKIP_WORDS: Record<string, string> = {
+  product_deleted: "product deleted",
+  variant_deleted: "variant deleted",
+};
+
+const itemName = (item: { productTitle: string; variantTitle: string }): string =>
+  item.variantTitle && item.variantTitle !== "Default" ? `${item.productTitle} (${item.variantTitle})` : item.productTitle;
+
+/** A short plain-words notice of what happened to the stock after a cancel. */
+function stockNoticeText(result: OrderStockRestore): string {
+  const parts = ["Order cancelled."];
+  if (result.restored.length > 0) {
+    parts.push("Back in stock: " + result.restored.map((line) => `${line.qty} × ${line.name}`).join(", ") + ".");
+  }
+  const notReturned = result.skipped.filter((line) => SKIP_WORDS[line.why]).map((line) => `${line.name} (${SKIP_WORDS[line.why]})`);
+  if (notReturned.length > 0) parts.push("Not returned: " + notReturned.join(", ") + ".");
+  if (result.failed.length > 0) {
+    parts.push("Could not return: " + result.failed.map((line) => line.name).join(", ") + ". Adjust it on the Inventory page.");
+  }
+  return parts.join(" ");
+}
+
+/**
+ * The "Cancel order" button and its dialog. The dialog lists what will go back to stock: lines whose stock was taken at
+ * placement (stockDeducted true), and for older orders (no flag) the lines that may go back if they track stock. Lines that
+ * took nothing are not listed.
+ */
+function CancelOrderDialog({
+  order,
+  disabled,
+  onCancelled,
+  onConflict,
+}: {
+  order: DashboardOrderDetail;
+  disabled: boolean;
+  onCancelled: (result: OrderStockRestore) => Promise<void>;
+  onConflict: () => Promise<void>;
+}) {
+  const storeFetch = useStoreFetch();
+  const [open, setOpen] = useState(false);
+  const [choice, setChoice] = useState<string>(CANCEL_REASONS[0]);
+  const [otherText, setOtherText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reason = choice === OTHER_REASON ? otherText.trim() : choice;
+  const reasonValid = reason.length >= CANCEL_REASON_MIN && reason.length <= CANCEL_REASON_MAX;
+  const returning = order.items.filter((item) => item.stockDeducted === true);
+  const maybeReturning = order.items.filter((item) => item.stockDeducted === null);
+
+  function openDialog(): void {
+    setChoice(CANCEL_REASONS[0]);
+    setOtherText("");
+    setError(null);
+    setOpen(true);
+  }
+
+  async function submit(): Promise<void> {
+    if (!reasonValid) {
+      setError(`Write a reason of ${CANCEL_REASON_MIN} to ${CANCEL_REASON_MAX} characters.`);
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await storeFetch(`/api/dashboard/orders/${order.id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      if (res.ok) {
+        const data = (await res.json().catch(() => null)) as OrderCancelResponse | null;
+        setOpen(false);
+        await onCancelled(data?.stockRestore ?? { restored: [], skipped: [], failed: [] });
+        return;
+      }
+      if (res.status === 409 || res.status === 422) {
+        setOpen(false);
+        await onConflict();
+        return;
+      }
+      setError("Could not cancel the order. Check your connection and try again.");
+    } catch {
+      setError("Could not cancel the order. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={(next) => (!next && !submitting ? setOpen(false) : undefined)}>
+      <Button variant="destructive" className="h-11 w-full sm:w-auto" disabled={disabled || submitting} onClick={openDialog}>
+        Cancel order
+      </Button>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel order {order.orderId}?</AlertDialogTitle>
+          <AlertDialogDescription>A cancelled order cannot be reopened.</AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">Reason</span>
+            <select
+              value={choice}
+              onChange={(event) => setChoice(event.target.value)}
+              disabled={submitting}
+              className="h-11 w-full rounded-md border border-input bg-transparent px-2 text-sm sm:h-9"
+            >
+              {[...CANCEL_REASONS, OTHER_REASON].map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          {choice === OTHER_REASON ? (
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">Your reason</span>
+              <Textarea
+                value={otherText}
+                onChange={(event) => setOtherText(event.target.value)}
+                maxLength={CANCEL_REASON_MAX}
+                disabled={submitting}
+                required
+                placeholder="Why is this order cancelled?"
+              />
+            </label>
+          ) : null}
+
+          {returning.length > 0 || maybeReturning.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              <span className="font-medium">Stock</span>
+              <ul className="flex flex-col gap-0.5 text-muted-foreground">
+                {returning.map((item, i) => (
+                  <li key={"r" + i} className="break-words">
+                    {item.quantity} × {itemName(item)} will go back to stock
+                  </li>
+                ))}
+                {maybeReturning.map((item, i) => (
+                  <li key={"m" + i} className="break-words">
+                    {item.quantity} × {itemName(item)} will go back to stock if it tracks quantity
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {error ? (
+            <p role="alert" className="text-destructive">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel className="h-11 w-full sm:h-9 sm:w-auto" disabled={submitting}>
+            Keep order
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            className="h-11 w-full sm:h-9 sm:w-auto"
+            disabled={submitting || !reasonValid}
+            onClick={() => void submit()}
+          >
+            {submitting ? "Cancelling…" : "Cancel order"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export default function OrderDetailPage() {
   const storeFetch = useStoreFetch();
   const params = useParams<{ storeId: string; id: string }>();
@@ -103,6 +284,7 @@ export default function OrderDetailPage() {
   const [running, setRunning] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ActionError | null>(null);
+  const [stockNotice, setStockNotice] = useState<string | null>(null);
 
   /** Reads the order. A quiet refresh (after an action) keeps the page on screen instead of showing the skeleton. */
   const fetchOrder = useCallback(
@@ -126,8 +308,26 @@ export default function OrderDetailPage() {
 
   const load = useCallback(() => {
     setActionError(null);
+    setStockNotice(null);
     void fetchOrder(false);
   }, [fetchOrder]);
+
+  /** After a cancel: show what happened to the stock, then read the order again (quietly). */
+  async function handleCancelled(result: OrderStockRestore): Promise<void> {
+    setActionError(null);
+    setStockNotice(stockNoticeText(result));
+    await fetchOrder(true);
+  }
+
+  /** 409 or 422 from cancel: the order moved on (or was already cancelled) elsewhere. */
+  async function handleCancelConflict(): Promise<void> {
+    setStockNotice(null);
+    setActionError({
+      message: "This order was changed by someone else or in another tab, so it was not cancelled. It has been refreshed; check its status.",
+      retry: null,
+    });
+    await fetchOrder(true);
+  }
 
   useEffect(load, [load]);
 
@@ -210,9 +410,16 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* Actions: one button per allowedNext entry from the API. Cancel, notes, payment and print arrive in OB-3 to OB-5. */}
+      {/* Actions: one button per allowedNext entry from the API, plus Cancel while canCancel (OB-3). Notes, payment and
+          print arrive in OB-4 and OB-5. */}
       <section aria-label="Order actions" data-slot="order-actions" className="flex flex-col gap-3 empty:hidden">
-        {order.allowedNext.length > 0 ? (
+        {stockNotice ? (
+          <p role="status" className="rounded-xl border bg-muted/40 p-3 text-sm">
+            {stockNotice}
+          </p>
+        ) : null}
+
+        {order.allowedNext.length > 0 || order.canCancel ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             {order.allowedNext.map((target) => (
               <Button
@@ -225,6 +432,14 @@ export default function OrderDetailPage() {
                 {running === target ? "Saving…" : ACTION_LABEL[target] ?? ORDER_STATUS_LABEL[target] ?? target}
               </Button>
             ))}
+            {order.canCancel ? (
+              <CancelOrderDialog
+                order={order}
+                disabled={running !== null}
+                onCancelled={handleCancelled}
+                onConflict={handleCancelConflict}
+              />
+            ) : null}
           </div>
         ) : order.status === "delivered" ? (
           <p className="text-sm text-muted-foreground">No further steps. This order is delivered.</p>

@@ -239,7 +239,7 @@ const ORDER_ROWS = ['orderView', 'orderTransition', 'orderCancel', 'orderNotes',
 const ORDER_ACTION_FIELDS: Record<(typeof ORDER_ACTION_NAMES)[number], readonly string[] | undefined> = {
 view: undefined,
 transition: ['status', 'note', 'courier', 'trackingNumber', 'trackingUrl'],
-cancel: ['cancelReason'],
+cancel: ['reason', 'note'],
 note: ['text'],
 payment: ['paymentStatus', 'collectedAmount'],
 print: undefined,
@@ -311,7 +311,7 @@ assert.equal(can('seller', operation, collection, []), false, action);
 test('order write actions refuse fields outside their own list', () => {
 for (const field of ['store', 'total', 'items', 'statusHistory', 'notes', 'phone', 'cancelledAt', 'collectedAt']) {
 assert.equal(orderCan('seller', 'transition', ['status', field]), false, 'transition ' + field);
-assert.equal(orderCan('seller', 'cancel', ['cancelReason', field]), false, 'cancel ' + field);
+assert.equal(orderCan('seller', 'cancel', ['reason', field]), false, 'cancel ' + field);
 assert.equal(orderCan('seller', 'note', ['text', field]), false, 'note ' + field);
 assert.equal(orderCan('seller', 'payment', ['paymentStatus', field]), false, 'payment ' + field);
 }
@@ -324,7 +324,7 @@ assert.equal(orderCan('seller', 'transition', ['cancelReason']), false);
 
 test('assertCan throws for a denied order action', () => {
 assert.throws(
-() => assertCan('admin', ORDER_ACTIONS.cancel.operation, ORDER_ACTIONS.cancel.collection, ['cancelReason']),
+() => assertCan('admin', ORDER_ACTIONS.cancel.operation, ORDER_ACTIONS.cancel.collection, ['reason']),
 PolicyDeniedError,
 );
 assert.doesNotThrow(() => assertCan('seller', ORDER_ACTIONS.view.operation, ORDER_ACTIONS.view.collection));
@@ -338,7 +338,7 @@ assert.deepEqual([...POLICY_MATRIX.orders.delete.actors], ['admin', 'system']);
 assert.equal(can('seller', 'update', 'orders', ['status']), false);
 });
 
-test('orderTransition (OB-2): the history note is a transition field, and only there', () => {
+test('orderTransition (OB-2): the history note is a transition field, and only there and on cancel', () => {
 assert.equal(can('seller', 'update', 'orderTransition', ['status', 'note']), true);
 assert.equal(can('seller', 'update', 'orderTransition', ['note']), true);
 assert.deepEqual([...(POLICY_MATRIX.orderTransition.update.fields as Record<string, readonly string[]>).seller], [
@@ -346,6 +346,19 @@ assert.deepEqual([...(POLICY_MATRIX.orderTransition.update.fields as Record<stri
 ]);
 assert.equal(can('admin', 'update', 'orderTransition', ['status', 'note']), false);
 assert.equal(can('seller', 'update', 'orderPayment', ['paymentStatus', 'note']), false);
-assert.equal(can('seller', 'update', 'orderCancel', ['cancelReason', 'note']), false);
+assert.equal(can('seller', 'update', 'orderCancel', ['reason', 'note']), true);
 assert.equal(can('seller', 'update', 'orderTransition', ['status', 'statusHistory']), false);
+});
+
+test('orderCancel (OB-3): the seller sends reason and an optional note; the stored fields stay server-owned', () => {
+assert.deepEqual([...(POLICY_MATRIX.orderCancel.update.fields as Record<string, readonly string[]>).seller], ['reason', 'note']);
+assert.equal(can('seller', 'update', 'orderCancel', ['reason']), true);
+assert.equal(can('seller', 'update', 'orderCancel', ['reason', 'note']), true);
+for (const field of ['cancelReason', 'cancelledAt', 'status', 'stockRestoredAt', 'statusHistory', 'items']) {
+assert.equal(can('seller', 'update', 'orderCancel', ['reason', field]), false, field);
+}
+for (const actor of ['admin', 'system', 'public'] as const) {
+assert.equal(can(actor, 'update', 'orderCancel', ['reason']), false, actor);
+}
+assert.equal(can('seller', 'update', 'orderCancel'), false);
 });

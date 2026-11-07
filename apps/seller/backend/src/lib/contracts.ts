@@ -106,3 +106,6 @@ export const { DASHBOARD_ORDER_STATUSES, dashboardOrderListQuerySchema, orderLis
 
 // EP-02 OB-2: the order status workflow and the transition request.
 export const { canTransition, nextStatuses, transitionRefusal, ORDER_TRANSITION_REFUSAL_MESSAGES, orderTransitionRequestSchema } = contracts;
+
+// EP-02 OB-3: cancel.
+export const { canCancel, cancelRefusal, ORDER_CANCEL_REFUSAL_MESSAGES, orderCancelRequestSchema } = contracts;

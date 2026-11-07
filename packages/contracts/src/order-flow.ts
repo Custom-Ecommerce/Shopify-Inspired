@@ -78,3 +78,28 @@ export function transitionRefusal(from: unknown, to: unknown): OrderTransitionRe
   if (to === 'returned') return 'return_elsewhere';
   return ORDER_FLOW_PATH.indexOf(to) < ORDER_FLOW_PATH.indexOf(from) ? 'backwards' : 'skips_step';
 }
+
+// EP-02 OB-3: cancel (D-064). A separate action from the forward flow: allowed only before dispatch, and final.
+
+/** The statuses an order can be cancelled from. After dispatch the way back is a return (EP-13). */
+export const CANCELLABLE_STATUSES: readonly OrderFlowStatus[] = ['pending', 'confirmed', 'processing'];
+
+export type OrderCancelRefusal = 'already_cancelled' | 'dispatched_or_later' | 'unknown_status';
+
+export const ORDER_CANCEL_REFUSAL_MESSAGES: Readonly<Record<OrderCancelRefusal, string>> = {
+  already_cancelled: 'This order is already cancelled.',
+  dispatched_or_later: 'This order has already been dispatched, so it cannot be cancelled. After dispatch the way back is a return.',
+  unknown_status: 'This order has an unknown status, so it cannot be cancelled.',
+};
+
+/** Why an order in this status cannot be cancelled, or null when it can. */
+export function cancelRefusal(status: unknown): OrderCancelRefusal | null {
+  if (!isOrderFlowStatus(status)) return 'unknown_status';
+  if (CANCELLABLE_STATUSES.includes(status)) return null;
+  if (status === 'cancelled') return 'already_cancelled';
+  return 'dispatched_or_later';
+}
+
+export function canCancel(status: unknown): boolean {
+  return cancelRefusal(status) === null;
+}

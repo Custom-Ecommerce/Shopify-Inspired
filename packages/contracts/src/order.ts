@@ -172,6 +172,8 @@ export const dashboardOrderItemSchema = z.object({
   unitPrice: z.number().min(0),
   quantity: z.number().int().min(1),
   lineTotal: z.number().min(0),
+  /** D-066: whether placement took these units from stock. null for an order placed before the flag existed. */
+  stockDeducted: z.boolean().nullable(),
 });
 
 export const dashboardOrderStatusChangeSchema = z.object({
@@ -218,6 +220,8 @@ export const dashboardOrderDetailSchema = z.object({
   updatedAt: z.string().min(1),
   /** The statuses the order may move to next (order-flow nextStatuses of the stored status), so no UI hard-codes the flow. */
   allowedNext: z.array(z.enum(DASHBOARD_ORDER_STATUSES)),
+  /** True while the order may still be cancelled (order-flow cancelRefusal of the stored status is null). */
+  canCancel: z.boolean(),
 });
 
 // EP-02 OB-2: POST /api/orders/:id/transition.
@@ -279,3 +283,44 @@ export type DashboardOrderItem = z.output<typeof dashboardOrderItemSchema>;
 export type DashboardOrderStatusChange = z.output<typeof dashboardOrderStatusChangeSchema>;
 export type DashboardOrderNote = z.output<typeof dashboardOrderNoteSchema>;
 export type DashboardOrderDetail = z.output<typeof dashboardOrderDetailSchema>;
+
+// EP-02 OB-3: POST /api/orders/:id/cancel (D-064, D-066).
+
+export const ORDER_CANCEL_REASON_MIN = 3;
+/** The seller's reason. The Order model allows up to 500 (ORDER_CANCEL_REASON_MAX); the request keeps it short. */
+export const ORDER_CANCEL_REQUEST_REASON_MAX = 200;
+
+/** The reasons the dashboard offers. The request takes any text; these are only the suggested ones. */
+export const ORDER_CANCEL_REASON_OPTIONS = [
+  'Customer asked to cancel',
+  'Customer unreachable',
+  'Out of stock',
+  'Wrong or fake order',
+] as const;
+
+/** Not strict: unknown keys are dropped, so they are neither stored nor checked by the policy. */
+export const orderCancelRequestSchema = z.object({
+  reason: z.string().trim().min(ORDER_CANCEL_REASON_MIN).max(ORDER_CANCEL_REQUEST_REASON_MAX),
+  note: z.string().trim().max(ORDER_STATUS_NOTE_MAX).nullish(),
+});
+
+export type OrderCancelRequestInput = z.input<typeof orderCancelRequestSchema>;
+export type OrderCancelRequest = z.output<typeof orderCancelRequestSchema>;
+
+/** Why a line's stock did not go back. */
+export const ORDER_STOCK_SKIP_REASONS = ['not_deducted', 'not_tracked', 'product_deleted', 'variant_deleted'] as const;
+export type OrderStockSkipReason = (typeof ORDER_STOCK_SKIP_REASONS)[number];
+
+export const orderStockRestoreSchema = z.object({
+  restored: z.array(z.object({ name: z.string(), sku: z.string().nullable(), qty: z.number().int().min(1) })),
+  skipped: z.array(z.object({ name: z.string(), why: z.enum(ORDER_STOCK_SKIP_REASONS) })),
+  failed: z.array(z.object({ name: z.string() })),
+});
+export type OrderStockRestore = z.output<typeof orderStockRestoreSchema>;
+
+/** 200 from the cancel endpoint. */
+export const orderCancelResponseSchema = z.object({
+  order: dashboardOrderDetailSchema,
+  stockRestore: orderStockRestoreSchema,
+});
+export type OrderCancelResponse = z.output<typeof orderCancelResponseSchema>;

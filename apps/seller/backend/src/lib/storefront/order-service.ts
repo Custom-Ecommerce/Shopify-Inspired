@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Types } from 'mongoose';
 import { isDuplicateKeyError } from '@/lib/http';
 import { Order, Product } from '@/lib/services';
 import { StorefrontHttpError, productUnavailable } from '@/lib/storefront/errors';
@@ -163,19 +164,25 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
 
   const { lines, totals } = await priceOrder(storeId, commerce, request);
 
+  // The order's _id is chosen before stock is taken, so every stock movement of this placement can carry it (D-066).
+  // If the order is never saved (a failure, or a parallel request with the same key won) the movements name an id that
+  // does not exist; the release movements carry the same id, so the pair still reads as taken and given back.
+  const orderObjectId = new Types.ObjectId().toHexString();
+
   const reserved: Reservation[] = [];
   try {
     for (const line of lines) {
-      await reserveStock(storeId, line.productId, line.variantId, line.qty);
-      reserved.push({ productId: line.productId, variantId: line.variantId, qty: line.qty });
+      const deducted = await reserveStock(storeId, line.productId, line.variantId, line.qty, orderObjectId);
+      reserved.push({ productId: line.productId, variantId: line.variantId, qty: line.qty, deducted });
     }
   } catch (err) {
-    await releaseAll(storeId, reserved);
+    await releaseAll(storeId, reserved, orderObjectId);
     throw err;
   }
 
   try {
     const order = await insertOrder({
+      _id: orderObjectId,
       store: storeId,
       orderGroupId: randomUUID(),
       idempotencyKey: request.idempotencyKey,
@@ -186,7 +193,7 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       phone: request.customer.phone,
       address: request.customer.address,
       city: request.customer.city,
-      items: lines.map((l) => ({
+      items: lines.map((l, i) => ({
         productId: l.productId,
         variantId: l.variantId,
         productTitle: l.title,
@@ -194,6 +201,8 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
         sku: l.sku,
         unitPrice: l.unitPrice,
         quantity: l.qty,
+        // reserved[i] is this line: lines are reserved in order and any failure above has already thrown.
+        stockDeducted: reserved[i]!.deducted,
       })),
       subtotal: totals.subtotal,
       deliveryCharges: totals.deliveryCharges,
@@ -201,7 +210,7 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
     });
     return { order, replayed: false };
   } catch (err) {
-    await releaseAll(storeId, reserved);
+    await releaseAll(storeId, reserved, orderObjectId);
     if (duplicateOn(err, 'idempotencyKey')) {
       const winner = await findByKey(storeId, request.idempotencyKey);
       if (winner) return replay(winner, request.fingerprint);

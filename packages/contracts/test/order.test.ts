@@ -15,6 +15,9 @@ import {
   ORDER_STATUS_NOTE_MAX,
   orderSchema,
   orderTransitionRequestSchema,
+  orderCancelRequestSchema,
+  orderCancelResponseSchema,
+  ORDER_CANCEL_REASON_OPTIONS,
 } from '../src/order';
 import { failingPaths } from './helpers';
 
@@ -103,11 +106,11 @@ test('dashboard list item and detail parse, and unknown keys are stripped', () =
   const detail = {
     id: item.id, orderId: 'ORD-1', status: 'confirmed', paymentMethod: null, paymentStatus: 'unpaid', collectedAt: null,
     collectedAmount: null, customerName: null, phone: null, address: null, city: null,
-    items: [{ productTitle: 'Shirt', variantTitle: 'Default', sku: null, unitPrice: 1200, quantity: 2, lineTotal: 2400 }],
+    items: [{ productTitle: 'Shirt', variantTitle: 'Default', sku: null, unitPrice: 1200, quantity: 2, lineTotal: 2400, stockDeducted: true }],
     subtotal: 2400, deliveryCharges: 200, total: 2600, courier: null, trackingNumber: null, trackingUrl: null,
     statusHistory: [{ from: 'pending', to: 'confirmed', by: null, at: NOW_ISO, note: null }],
     notes: [{ id: null, text: 'Call first', by: null, at: NOW_ISO }],
-    cancelledAt: null, cancelReason: null, createdAt: NOW_ISO, updatedAt: NOW_ISO, allowedNext: ['processing'],
+    cancelledAt: null, cancelReason: null, createdAt: NOW_ISO, updatedAt: NOW_ISO, allowedNext: ['processing'], canCancel: true,
   };
   assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
   assert.deepEqual(failingPaths(dashboardOrderDetailSchema.safeParse({ ...detail, paymentStatus: 'paid' })), ['paymentStatus']);
@@ -150,4 +153,34 @@ test('transition request: courier and tracking are accepted only with dispatched
 test('transition request: unknown keys are dropped', () => {
   const parsed = orderTransitionRequestSchema.parse({ status: 'confirmed', store: 'x', total: 1, statusHistory: [] });
   assert.deepEqual(Object.keys(parsed), ['status']);
+});
+
+// EP-02 OB-3: the cancel request.
+
+test('cancel request: a trimmed reason of 3 to 200 characters and an optional note', () => {
+  const parsed = orderCancelRequestSchema.parse({ reason: '  Customer asked to cancel  ', note: '  called twice  ' });
+  assert.equal(parsed.reason, 'Customer asked to cancel');
+  assert.equal(parsed.note, 'called twice');
+  assert.equal(orderCancelRequestSchema.safeParse({ reason: 'abc' }).success, true);
+  assert.equal(orderCancelRequestSchema.safeParse({ reason: 'x'.repeat(200) }).success, true);
+  for (const option of ORDER_CANCEL_REASON_OPTIONS) assert.equal(orderCancelRequestSchema.safeParse({ reason: option }).success, true, option);
+});
+
+test('cancel request: a missing, short or long reason and a long note are reported against their field', () => {
+  assert.deepEqual(failingPaths(orderCancelRequestSchema.safeParse({})), ['reason']);
+  assert.deepEqual(failingPaths(orderCancelRequestSchema.safeParse({ reason: '  ab  ' })), ['reason']);
+  assert.deepEqual(failingPaths(orderCancelRequestSchema.safeParse({ reason: 'x'.repeat(201) })), ['reason']);
+  assert.deepEqual(failingPaths(orderCancelRequestSchema.safeParse({ reason: 'Out of stock', note: 'x'.repeat(501) })), ['note']);
+  assert.deepEqual(failingPaths(orderCancelRequestSchema.safeParse({ reason: 12345 })), ['reason']);
+});
+
+test('cancel request: unknown keys are dropped; the response pairs the detail with the stock result', () => {
+  assert.deepEqual(Object.keys(orderCancelRequestSchema.parse({ reason: 'Out of stock', status: 'cancelled', store: 'x' })), ['reason']);
+  const stockRestore = {
+    restored: [{ name: 'T-Shirt (M)', sku: 'TS-M', qty: 2 }],
+    skipped: [{ name: 'Cap', why: 'product_deleted' }],
+    failed: [{ name: 'Mug' }],
+  };
+  assert.deepEqual(failingPaths(orderCancelResponseSchema.safeParse({ order: {}, stockRestore })).includes('order.id'), true);
+  assert.deepEqual(failingPaths(orderCancelResponseSchema.safeParse({ order: {}, stockRestore: { ...stockRestore, skipped: [{ name: 'x', why: 'gone' }] } })).includes('stockRestore.skipped.0.why'), true);
 });
