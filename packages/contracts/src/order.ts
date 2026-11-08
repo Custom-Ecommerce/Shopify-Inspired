@@ -431,3 +431,63 @@ export type OrderNoteRequest = z.output<typeof orderNoteRequestSchema>;
 
 export const orderNoteResponseSchema = z.object({ order: dashboardOrderDetailSchema });
 export type OrderNoteResponse = z.output<typeof orderNoteResponseSchema>;
+
+// EP-02 OB-5b: GET /api/orders/print, the data behind the shipping label, the packing slip and bulk print. Seller only: it
+// holds the customer's phone and address.
+
+export const ORDER_PRINT_MAX_IDS = 50;
+
+/**
+ * The cash the courier must collect: the order total for a COD order not collected yet; 0 for a collected COD order, any
+ * other method, or a missing method. Rounded to 2 decimals.
+ */
+export function labelCodAmount(order: { paymentMethod?: unknown; paymentStatus?: unknown; total?: unknown }): number {
+  if (order.paymentMethod !== 'cod' || order.paymentStatus === 'collected') return 0;
+  if (typeof order.total !== 'number' || !Number.isFinite(order.total) || order.total <= 0) return 0;
+  return Math.round((order.total + Number.EPSILON) * 100) / 100;
+}
+
+export const ORDER_PRINT_SKIP_REASONS = ['not_found', 'cancelled', 'returned'] as const;
+export type OrderPrintSkipReason = (typeof ORDER_PRINT_SKIP_REASONS)[number];
+
+export const orderPrintItemSchema = z
+  .object({
+    title: z.string(),
+    /** null for a product's Default variant. */
+    variantTitle: z.string().nullable(),
+    sku: z.string().nullable(),
+    qty: z.number().int().min(1),
+  })
+  .strict();
+
+export const orderPrintSheetSchema = z
+  .object({
+    id: z.string().min(1),
+    orderId: z.string().min(1),
+    createdAt: z.string().min(1),
+    /** A plain string: one order with a corrupt status must not fail a whole batch of labels. */
+    status: z.string(),
+    customerName: z.string().nullable(),
+    phone: z.string().nullable(),
+    address: z.string().nullable(),
+    city: z.string().nullable(),
+    items: z.array(orderPrintItemSchema),
+    paymentMethod: z.enum(DASHBOARD_ORDER_PAYMENT_METHODS).nullable(),
+    paymentStatus: z.enum(DASHBOARD_ORDER_PAYMENT_STATUSES),
+    codAmount: z.number().min(0),
+    courier: z.string().nullable(),
+    trackingNumber: z.string().nullable(),
+  })
+  .strict();
+
+/** Strict at every level: a field added on the server by mistake fails the parse instead of reaching a printout. */
+export const orderPrintResponseSchema = z
+  .object({
+    store: z.object({ name: z.string() }).strict(),
+    orders: z.array(orderPrintSheetSchema),
+    skipped: z.array(z.object({ id: z.string().min(1), reason: z.enum(ORDER_PRINT_SKIP_REASONS) }).strict()),
+  })
+  .strict();
+
+export type OrderPrintSheet = z.output<typeof orderPrintSheetSchema>;
+export type OrderPrintResponse = z.output<typeof orderPrintResponseSchema>;

@@ -5,6 +5,7 @@ import type {
   DashboardOrderDetail,
   DashboardOrderListItem,
   DashboardOrderListQuery,
+  OrderPrintSheet,
   DashboardOrderNote,
   DashboardOrderPaymentMethod,
   DashboardOrderPaymentStatus,
@@ -13,6 +14,8 @@ import type {
 } from '@markaz/contracts';
 import {
   buildOrderTimeline,
+  labelCodAmount,
+  ORDER_PRINT_MAX_IDS,
   canCancel,
   canMarkCollected,
   DASHBOARD_ORDER_STATUSES,
@@ -382,5 +385,51 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     canEditTracking: row.status === 'dispatched',
     canMarkCollected: canMarkCollected(row),
     timeline: buildOrderTimeline({ createdAt, statusHistory: history, notes: orderNotes, cancelReason: text(row.cancelReason) }),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Print (EP-02 OB-5b)
+
+const OBJECT_ID_TEXT = /^[0-9a-f]{24}$/i;
+
+/** The ?ids= list: comma separated, 1 to 50 after duplicates are dropped, first position kept, every id a 24-hex ObjectId. */
+export function parseOrderPrintIds(raw: string | null): string[] {
+  const invalid = (message: string): OrderRequestError => new OrderRequestError(400, 'ORDER_QUERY_INVALID', message, { field: 'ids' });
+  if (raw === null || raw.trim() === '') throw invalid('ids is required: a comma-separated list of order ids.');
+  const ids = raw.split(',').map((id) => id.trim().toLowerCase());
+  if (ids.some((id) => !OBJECT_ID_TEXT.test(id))) throw invalid('ids holds a value that is not an order id.');
+  const unique = [...new Set(ids)];
+  if (unique.length > ORDER_PRINT_MAX_IDS) throw invalid('At most ' + ORDER_PRINT_MAX_IDS + ' orders can be printed at once.');
+  return unique;
+}
+
+/** The fields a printout reads. Notes, history and the idempotency fields are never loaded. */
+export const ORDER_PRINT_PROJECTION =
+  'orderId createdAt status customerName phone address city items paymentMethod paymentStatus total courier trackingNumber';
+
+/** One order as a label and a slip read it. Strings pass through whole; long values are the page's CSS problem. */
+export function toOrderPrintSheet(doc: unknown): OrderPrintSheet {
+  const row = plainRow(doc);
+  return {
+    id: String(row._id ?? ''),
+    orderId: String(row.orderId ?? ''),
+    createdAt: iso(row.createdAt) ?? new Date(0).toISOString(),
+    status: String(row.status ?? ''),
+    customerName: text(row.customerName),
+    phone: text(row.phone),
+    address: text(row.address),
+    city: text(row.city),
+    items: list(row.items).map((item) => ({
+      title: String(item.productTitle ?? ''),
+      variantTitle: typeof item.variantTitle === 'string' && item.variantTitle !== 'Default' ? item.variantTitle : null,
+      sku: text(item.sku),
+      qty: num(item.quantity, 1),
+    })),
+    paymentMethod: paymentMethod(row.paymentMethod),
+    paymentStatus: paymentStatus(row.paymentStatus),
+    codAmount: labelCodAmount(row),
+    courier: text(row.courier),
+    trackingNumber: text(row.trackingNumber),
   };
 }

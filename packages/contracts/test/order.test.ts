@@ -25,6 +25,8 @@ import {
   orderPaymentRequestSchema,
   orderNoteRequestSchema,
   ORDER_NOTE_TEXT_MAX,
+  labelCodAmount,
+  orderPrintResponseSchema,
 } from '../src/order';
 import { storefrontOrderTrackingResponseSchema, storefrontOrderTrackingSchema } from '../src/storefront';
 import { failingPaths } from './helpers';
@@ -266,4 +268,42 @@ test('note request: text is trimmed, 1 to 500 characters; unknown keys are dropp
   }
   assert.deepEqual(failingPaths(orderNoteRequestSchema.safeParse({})), ['text']);
   assert.deepEqual(Object.keys(orderNoteRequestSchema.parse({ text: 'a', by: 'x', at: 'y' })), ['text']);
+});
+
+// EP-02 OB-5b: print data.
+
+test('labelCodAmount: the total for unpaid COD, 0 for collected COD, any other method or a missing one', () => {
+  assert.equal(labelCodAmount({ paymentMethod: 'cod', paymentStatus: 'unpaid', total: 4500 }), 4500);
+  assert.equal(labelCodAmount({ paymentMethod: 'cod', total: 4500 }), 4500, 'a missing paymentStatus is unpaid');
+  assert.equal(labelCodAmount({ paymentMethod: 'cod', paymentStatus: 'collected', total: 4500 }), 0);
+  assert.equal(labelCodAmount({ paymentMethod: 'card', paymentStatus: 'unpaid', total: 4500 }), 0);
+  assert.equal(labelCodAmount({ paymentStatus: 'unpaid', total: 4500 }), 0);
+  assert.equal(labelCodAmount({ paymentMethod: null, total: 4500 }), 0);
+});
+
+test('labelCodAmount: rounds to 2 decimals and never returns a bad number', () => {
+  assert.equal(labelCodAmount({ paymentMethod: 'cod', total: 1.005 }), 1.01);
+  assert.equal(labelCodAmount({ paymentMethod: 'cod', total: 19.999 }), 20);
+  assert.equal(labelCodAmount({ paymentMethod: 'cod', total: 0.1 + 0.2 }), 0.3);
+  for (const total of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, undefined, '100']) {
+    assert.equal(labelCodAmount({ paymentMethod: 'cod', total }), 0, String(total));
+  }
+});
+
+test('print response: parses a full response and rejects an extra key at every level', () => {
+  const item = { title: 'Shirt', variantTitle: null, sku: null, qty: 2 };
+  const sheet = {
+    id: '65a000000000000000000005', orderId: 'ORD-1', createdAt: '2026-11-01T10:00:00.000Z', status: 'dispatched',
+    customerName: 'Sara', phone: '+923001234567', address: 'House 1', city: null, items: [item],
+    paymentMethod: 'cod', paymentStatus: 'unpaid', codAmount: 2400, courier: null, trackingNumber: null,
+  };
+  const body = { store: { name: 'Shop' }, orders: [sheet], skipped: [{ id: 'x', reason: 'cancelled' }] };
+  assert.equal(orderPrintResponseSchema.safeParse(body).success, true);
+  assert.equal(orderPrintResponseSchema.safeParse({ ...body, extra: 1 }).success, false);
+  assert.equal(orderPrintResponseSchema.safeParse({ ...body, store: { name: 'Shop', owner: 'x' } }).success, false);
+  for (const extra of ['notes', 'statusHistory', 'timeline', 'idempotencyKey', 'store']) {
+    assert.equal(orderPrintResponseSchema.safeParse({ ...body, orders: [{ ...sheet, [extra]: [] }] }).success, false, extra);
+  }
+  assert.equal(orderPrintResponseSchema.safeParse({ ...body, orders: [{ ...sheet, items: [{ ...item, unitPrice: 1 }] }] }).success, false);
+  assert.equal(orderPrintResponseSchema.safeParse({ ...body, skipped: [{ id: 'x', reason: 'gone' }] }).success, false);
 });

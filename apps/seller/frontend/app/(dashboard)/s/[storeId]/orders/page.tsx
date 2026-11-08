@@ -13,6 +13,7 @@ import { DataTable } from "@/components/dashboard/shared/DataTable";
 import type { ColumnDef } from "@/components/dashboard/shared/DataTable";
 import { EmptyState } from "@/components/dashboard/shared/EmptyState";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
+import { OrderCheckbox, OrderSelectionBar, OrderSelectionProvider, SelectPageCheckbox } from "@/components/dashboard/orders/OrderSelection";
 import {
   ORDER_STATUS_LABEL,
   OrderStatusBadge,
@@ -103,8 +104,13 @@ function PaymentCell({ order }: { order: DashboardOrderListItem }) {
   );
 }
 
-function buildOrderColumns(storeId: string): ColumnDef<DashboardOrderListItem>[] {
+function buildOrderColumns(storeId: string, pageIds: readonly string[]): ColumnDef<DashboardOrderListItem>[] {
   return [
+    {
+      header: <SelectPageCheckbox ids={pageIds} />,
+      render: (o) => <OrderCheckbox id={o.id} label={`Select order ${o.orderId}`} />,
+      className: "w-11 px-0",
+    },
     {
       header: "Order",
       render: (o) => (
@@ -135,10 +141,11 @@ function buildOrderColumns(storeId: string): ColumnDef<DashboardOrderListItem>[]
 /** Phone layout: one card per order, nothing wider than the screen. */
 function OrderCard({ storeId, order }: { storeId: string; order: DashboardOrderListItem }) {
   return (
-    <li>
+    <li className="flex items-start">
+      <OrderCheckbox id={order.id} label={`Select order ${order.orderId}`} />
       <Link
         href={storeHref(storeId, `/orders/${order.id}`)}
-        className="flex min-w-0 flex-col gap-2 rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
+        className="flex min-w-0 flex-1 flex-col gap-2 rounded-2xl border bg-card p-4 transition-colors hover:bg-muted/40"
       >
         <span className="flex items-center justify-between gap-2">
           <span className="truncate font-mono text-sm font-medium">{order.orderId}</span>
@@ -243,16 +250,21 @@ async function OrdersResults({ storeId, token, filters }: { storeId: string; tok
           action={<Button variant="clay-soft" render={<Link href={storeHref(storeId, "/orders")} />}>Clear filters</Button>}
         />
       ) : (
-        <>
+        // Keyed on the filters and page, so changing either starts with nothing selected.
+        <OrderSelectionProvider key={queryOf(filters)} storeId={storeId}>
+          <div className="sm:hidden">
+            <SelectPageCheckbox ids={list.docs.map((order) => order.id)} showText />
+          </div>
           <ul className="flex flex-col gap-3 sm:hidden">
             {list.docs.map((order) => (
               <OrderCard key={order.id} storeId={storeId} order={order} />
             ))}
           </ul>
           <div className="hidden sm:block">
-            <DataTable data={list.docs} columns={buildOrderColumns(storeId)} keyExtractor={(o) => o.id} />
+            <DataTable data={list.docs} columns={buildOrderColumns(storeId, list.docs.map((order) => order.id))} keyExtractor={(o) => o.id} />
           </div>
-        </>
+          <OrderSelectionBar />
+        </OrderSelectionProvider>
       )}
 
       {list.totalPages > 1 ? (

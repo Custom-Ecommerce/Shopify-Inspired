@@ -994,6 +994,25 @@ export default function OrderDetailPage() {
           <p className="text-sm text-muted-foreground">No further steps. This order is delivered.</p>
         ) : null}
 
+        {order.status !== "cancelled" && order.status !== "returned" ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button
+              variant="clay-soft"
+              className="h-11 w-full sm:h-9 sm:w-auto"
+              render={<a href={storeHref(params.storeId, `/orders/print?ids=${order.id}&mode=label`)} target="_blank" rel="noopener" />}
+            >
+              Print label
+            </Button>
+            <Button
+              variant="clay-soft"
+              className="h-11 w-full sm:h-9 sm:w-auto"
+              render={<a href={storeHref(params.storeId, `/orders/print?ids=${order.id}&mode=slip`)} target="_blank" rel="noopener" />}
+            >
+              Print packing slip
+            </Button>
+          </div>
+        ) : null}
+
         {actionError ? (
           <div role="alert" className="flex flex-col gap-2 rounded-xl border border-destructive/20 bg-destructive/8 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span>{actionError.message}</span>

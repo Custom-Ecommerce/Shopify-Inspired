@@ -398,3 +398,14 @@ assert.equal(can(actor, 'create', 'orderNotes', ['text']), false, actor);
 // An empty field list is denied, so the route must not run the field check when no amount was sent.
 assert.equal(can('seller', 'update', 'orderPayment', []), false);
 });
+
+test('orderPrint (OB-5b): only the seller reads print data; nothing can be written through it', () => {
+assert.deepEqual(ORDER_ACTIONS.print, { operation: 'read', collection: 'orderPrint' });
+assert.equal(can('seller', 'read', 'orderPrint'), true);
+for (const actor of ['admin', 'system', 'public'] as const) {
+assert.equal(can(actor, 'read', 'orderPrint'), false, actor);
+}
+for (const operation of ['create', 'update', 'delete'] as const) {
+assert.equal(can('seller', operation, 'orderPrint', ['status']), false, operation);
+}
+});
