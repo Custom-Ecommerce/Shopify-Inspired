@@ -72,7 +72,7 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
 
 export const PAYMENT_STATUS_LABEL: Record<string, string> = {
   unpaid: "Unpaid",
-  collected: "COD collected",
+  collected: "Collected",
 };
 
 export const PAYMENT_METHOD_LABEL: Record<string, string> = {

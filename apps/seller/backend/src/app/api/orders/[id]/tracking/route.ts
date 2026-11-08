@@ -123,7 +123,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       { _id: id, store: storeId, status: 'dispatched' },
       {
         $set: changes,
-        $push: { statusHistory: { from: 'dispatched', to: 'dispatched', by: ctx.userObjectId, at: new Date(), note } },
+        $push: { statusHistory: { from: 'dispatched', to: 'dispatched', by: ctx.userObjectId, at: new Date(), note, kind: 'tracking' } },
       },
       { new: true, runValidators: true },
     ).lean();

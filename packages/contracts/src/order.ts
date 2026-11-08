@@ -70,7 +70,7 @@ export const ORDER_STATUS_LABELS: Readonly<Record<DashboardOrderStatus, string>>
 
 export const ORDER_PAYMENT_STATUS_LABELS: Readonly<Record<DashboardOrderPaymentStatus, string>> = {
   unpaid: 'Unpaid',
-  collected: 'COD collected',
+  collected: 'Collected',
 };
 
 export const ORDER_PAYMENT_METHOD_LABELS: Readonly<Record<DashboardOrderPaymentMethod, string>> = {
@@ -192,6 +192,23 @@ export const dashboardOrderNoteSchema = z.object({
   at: z.string().min(1),
 });
 
+/** What a history entry records. Written by newer code; older entries have none and it is derived (order-timeline). */
+export const ORDER_HISTORY_KINDS = ['status', 'tracking', 'payment', 'stock'] as const;
+export type OrderHistoryKind = (typeof ORDER_HISTORY_KINDS)[number];
+
+export const ORDER_TIMELINE_KINDS = ['placed', ...ORDER_HISTORY_KINDS, 'note'] as const;
+export type OrderTimelineKind = (typeof ORDER_TIMELINE_KINDS)[number];
+
+/** One line of the order timeline (order-timeline buildOrderTimeline). No user ids. */
+export const dashboardOrderTimelineEntrySchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(ORDER_TIMELINE_KINDS),
+  at: z.string().min(1),
+  title: z.string().min(1),
+  detail: z.string().nullable(),
+});
+export type DashboardOrderTimelineEntry = z.output<typeof dashboardOrderTimelineEntrySchema>;
+
 /** One order as the seller's detail page reads it. statusHistory and notes are newest first. */
 export const dashboardOrderDetailSchema = z.object({
   id: z.string().min(1),
@@ -224,6 +241,10 @@ export const dashboardOrderDetailSchema = z.object({
   canCancel: z.boolean(),
   /** True while the order is dispatched: its courier and tracking can be edited (OB-4). */
   canEditTracking: z.boolean(),
+  /** True for a COD order that is unpaid and dispatched or delivered (OB-5a). */
+  canMarkCollected: z.boolean(),
+  /** The order placed, every history entry and every note, newest first (OB-5a). */
+  timeline: z.array(dashboardOrderTimelineEntrySchema),
 });
 
 // EP-02 OB-2: POST /api/orders/:id/transition.
@@ -374,3 +395,39 @@ export const orderTrackingResponseSchema = z.object({
   order: dashboardOrderDetailSchema,
 });
 export type OrderTrackingResponse = z.output<typeof orderTrackingResponseSchema>;
+
+// EP-02 OB-5a: POST /api/orders/:id/payment (COD collected).
+
+/** True when the number has at most two decimals. Compared in hundredths, so 19.99 is not lost to floating point. */
+const hasTwoDecimalsAtMost = (value: number): boolean => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6;
+
+/**
+ * { amount? }. Left out, it means the order total; sent, it must equal the total (partial collection is not in this epic).
+ * Not strict: unknown keys are dropped.
+ */
+export const orderPaymentRequestSchema = z.object({
+  amount: z.number().positive().refine(hasTwoDecimalsAtMost, 'The amount can have at most 2 decimals.').optional(),
+});
+export type OrderPaymentRequest = z.output<typeof orderPaymentRequestSchema>;
+
+/** 200 from the payment endpoint. changed is false when the order was already collected (nothing written). */
+export const orderPaymentResponseSchema = z.object({
+  changed: z.boolean(),
+  order: dashboardOrderDetailSchema,
+});
+export type OrderPaymentResponse = z.output<typeof orderPaymentResponseSchema>;
+
+// EP-02 OB-5a: POST /api/orders/:id/notes (internal seller notes, never shown to the customer).
+
+/** What a seller may send. The Order model can hold more (ORDER_NOTE_MAX); the request keeps a note short. */
+export const ORDER_NOTE_TEXT_MAX = 500;
+/** Enforced inside the write. */
+export const ORDER_NOTES_MAX_COUNT = 100;
+
+export const orderNoteRequestSchema = z.object({
+  text: z.string().trim().min(1).max(ORDER_NOTE_TEXT_MAX),
+});
+export type OrderNoteRequest = z.output<typeof orderNoteRequestSchema>;
+
+export const orderNoteResponseSchema = z.object({ order: dashboardOrderDetailSchema });
+export type OrderNoteResponse = z.output<typeof orderNoteResponseSchema>;

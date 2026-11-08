@@ -19,6 +19,10 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const ORDER_PAYMENT_STATUSES = ['unpaid', 'collected'] as const;
 export type OrderPaymentStatus = (typeof ORDER_PAYMENT_STATUSES)[number];
 
+/** What a history entry records (EP-02 OB-5a). Same values as ORDER_HISTORY_KINDS in @markaz/contracts. */
+export const ORDER_HISTORY_KINDS = ['status', 'tracking', 'payment', 'stock'] as const;
+export type OrderHistoryKind = (typeof ORDER_HISTORY_KINDS)[number];
+
 /** Field limits shared with the routes that will write these fields (EP-02 OB-2..OB-5). */
 export const ORDER_NOTE_MAX = 1000;
 export const ORDER_STATUS_NOTE_MAX = 500;
@@ -61,6 +65,8 @@ export interface IOrderStatusChange {
   by: Types.ObjectId;
   at: Date;
   note?: string | null;
+  /** Written by newer code only. Older entries have none, and the timeline derives it from the entry. */
+  kind?: OrderHistoryKind;
 }
 
 /** An internal seller note (EP-02 US06). Never shown to the customer. */
@@ -120,6 +126,8 @@ const OrderStatusChangeSchema = new Schema<IOrderStatusChange>(
     by: { type: Schema.Types.ObjectId, required: true },
     at: { type: Date, required: true, default: () => new Date() },
     note: { type: String, trim: true, maxlength: ORDER_STATUS_NOTE_MAX, default: null },
+    // No default: a missing kind means the entry predates it.
+    kind: { type: String, enum: [...ORDER_HISTORY_KINDS] },
   },
   { _id: false },
 );

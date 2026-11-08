@@ -12,7 +12,9 @@ import type {
   DashboardOrderStatusChange,
 } from '@markaz/contracts';
 import {
+  buildOrderTimeline,
   canCancel,
+  canMarkCollected,
   DASHBOARD_ORDER_STATUSES,
   dashboardOrderListQuerySchema,
   nextStatuses,
@@ -41,7 +43,12 @@ export type OrderErrorCode =
   // EP-02 OB-3: the cancel endpoint.
   | 'ORDER_CANCEL_ILLEGAL'
   // EP-02 OB-4: the tracking edit.
-  | 'ORDER_TRACKING_ILLEGAL';
+  | 'ORDER_TRACKING_ILLEGAL'
+  // EP-02 OB-5a: payment and notes.
+  | 'PAYMENT_NOT_COD'
+  | 'PAYMENT_NOT_ALLOWED'
+  | 'PAYMENT_AMOUNT_MISMATCH'
+  | 'ORDER_NOTES_FULL';
 
 export class OrderRequestError extends HttpError {
   readonly code: OrderErrorCode;
@@ -61,6 +68,25 @@ export function handleOrderError(err: unknown): NextResponse {
     return NextResponse.json({ errors: [{ message: err.message, code: err.code, ...err.details }] }, { status: err.status });
   }
   return handleRouteError(err);
+}
+
+interface BodySchema<T> {
+  safeParse(value: unknown): { success: true; data: T } | { success: false; error: { issues: ReadonlyArray<{ path: PropertyKey[]; message: string }> } };
+}
+
+/** Parses a JSON request body with a contract schema. Anything wrong is 400 ORDER_BODY_INVALID naming the field. */
+export async function readOrderBody<T>(request: Request, schema: BodySchema<T>): Promise<T> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    throw new OrderRequestError(400, 'ORDER_BODY_INVALID', 'The request body must be a JSON object.', { field: null });
+  }
+  const parsed = schema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  const issue = parsed.error.issues[0];
+  const field = issue?.path.length ? String(issue.path[0]) : null;
+  throw new OrderRequestError(400, 'ORDER_BODY_INVALID', (field ? field + ': ' : '') + (issue?.message ?? 'Invalid body.'), { field });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -258,8 +284,9 @@ function newestFirst<T extends { at: string }>(entries: T[]): T[] {
     .map(({ entry }) => entry);
 }
 
-function statusHistory(value: unknown): DashboardOrderStatusChange[] {
-  const entries = list(value)
+/** The usable history entries in the order they were written. */
+function historyEntries(value: unknown): Array<DashboardOrderStatusChange & { kind: string | null }> {
+  return list(value)
     .filter((entry) => isStatus(entry.from) && isStatus(entry.to))
     .map((entry) => ({
       from: entry.from as DashboardOrderStatus,
@@ -267,17 +294,17 @@ function statusHistory(value: unknown): DashboardOrderStatusChange[] {
       by: id(entry.by),
       at: iso(entry.at) ?? '',
       note: text(entry.note),
+      kind: text(entry.kind),
     }))
     .filter((entry) => entry.at !== '');
-  return newestFirst(entries);
 }
 
-function notes(value: unknown): DashboardOrderNote[] {
-  const entries = list(value)
+/** The usable notes in the order they were written. */
+function noteEntries(value: unknown): DashboardOrderNote[] {
+  return list(value)
     .filter((entry) => typeof entry.text === 'string')
     .map((entry) => ({ id: id(entry._id), text: entry.text as string, by: id(entry.by), at: iso(entry.at) ?? '' }))
     .filter((entry) => entry.at !== '');
-  return newestFirst(entries);
 }
 
 /**
@@ -310,6 +337,8 @@ export function toDashboardOrderListItem(doc: unknown): DashboardOrderListItem {
 export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
   const row = plainRow(doc);
   const createdAt = iso(row.createdAt) ?? new Date(0).toISOString();
+  const history = historyEntries(row.statusHistory);
+  const orderNotes = noteEntries(row.notes);
   return {
     id: String(row._id ?? ''),
     orderId: String(row.orderId ?? ''),
@@ -342,8 +371,8 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     courier: text(row.courier),
     trackingNumber: text(row.trackingNumber),
     trackingUrl: text(row.trackingUrl),
-    statusHistory: statusHistory(row.statusHistory),
-    notes: notes(row.notes),
+    statusHistory: newestFirst(history.map(({ kind: _kind, ...entry }) => entry)),
+    notes: newestFirst(orderNotes),
     cancelledAt: iso(row.cancelledAt),
     cancelReason: text(row.cancelReason),
     createdAt,
@@ -351,5 +380,7 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     allowedNext: nextStatuses(row.status),
     canCancel: canCancel(row.status),
     canEditTracking: row.status === 'dispatched',
+    canMarkCollected: canMarkCollected(row),
+    timeline: buildOrderTimeline({ createdAt, statusHistory: history, notes: orderNotes, cancelReason: text(row.cancelReason) }),
   };
 }

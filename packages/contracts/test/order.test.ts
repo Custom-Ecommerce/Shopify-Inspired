@@ -22,6 +22,9 @@ import {
   COURIER_NAME_MAX,
   TRACKING_NUMBER_MAX,
   orderTrackingRequestSchema,
+  orderPaymentRequestSchema,
+  orderNoteRequestSchema,
+  ORDER_NOTE_TEXT_MAX,
 } from '../src/order';
 import { storefrontOrderTrackingResponseSchema, storefrontOrderTrackingSchema } from '../src/storefront';
 import { failingPaths } from './helpers';
@@ -115,7 +118,8 @@ test('dashboard list item and detail parse, and unknown keys are stripped', () =
     subtotal: 2400, deliveryCharges: 200, total: 2600, courier: null, trackingNumber: null, trackingUrl: null,
     statusHistory: [{ from: 'pending', to: 'confirmed', by: null, at: NOW_ISO, note: null }],
     notes: [{ id: null, text: 'Call first', by: null, at: NOW_ISO }],
-    cancelledAt: null, cancelReason: null, createdAt: NOW_ISO, updatedAt: NOW_ISO, allowedNext: ['processing'], canCancel: true, canEditTracking: false,
+    cancelledAt: null, cancelReason: null, createdAt: NOW_ISO, updatedAt: NOW_ISO, allowedNext: ['processing'], canCancel: true, canEditTracking: false, canMarkCollected: false,
+    timeline: [{ id: 'placed', kind: 'placed', at: NOW_ISO, title: 'Order placed', detail: null }],
   };
   assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
   assert.deepEqual(failingPaths(dashboardOrderDetailSchema.safeParse({ ...detail, paymentStatus: 'paid' })), ['paymentStatus']);
@@ -240,4 +244,26 @@ test('customer tracking: the response holds exactly the allowed keys, and an ext
   }
   assert.equal(storefrontOrderTrackingSchema.safeParse({ ...data, dates: { ...data.dates, shipped: null } }).success, false);
   assert.equal(storefrontOrderTrackingResponseSchema.safeParse({ data, extra: 1 }).success, false);
+});
+
+// EP-02 OB-5a: payment and note requests.
+
+test('payment request: amount is optional, positive, with at most two decimals', () => {
+  assert.deepEqual(orderPaymentRequestSchema.parse({}), {});
+  assert.equal(orderPaymentRequestSchema.parse({ amount: 4500 }).amount, 4500);
+  assert.equal(orderPaymentRequestSchema.parse({ amount: 19.99 }).amount, 19.99);
+  for (const amount of [0, -1, 1.234, '4500', null]) {
+    assert.deepEqual(failingPaths(orderPaymentRequestSchema.safeParse({ amount })), ['amount'], String(amount));
+  }
+  assert.deepEqual(Object.keys(orderPaymentRequestSchema.parse({ amount: 1, paymentStatus: 'collected' })), ['amount']);
+});
+
+test('note request: text is trimmed, 1 to 500 characters; unknown keys are dropped', () => {
+  assert.equal(orderNoteRequestSchema.parse({ text: '  Call first  ' }).text, 'Call first');
+  assert.equal(orderNoteRequestSchema.safeParse({ text: 'x'.repeat(ORDER_NOTE_TEXT_MAX) }).success, true);
+  for (const text of ['', '   ', 'x'.repeat(ORDER_NOTE_TEXT_MAX + 1), 5]) {
+    assert.deepEqual(failingPaths(orderNoteRequestSchema.safeParse({ text })), ['text']);
+  }
+  assert.deepEqual(failingPaths(orderNoteRequestSchema.safeParse({})), ['text']);
+  assert.deepEqual(Object.keys(orderNoteRequestSchema.parse({ text: 'a', by: 'x', at: 'y' })), ['text']);
 });

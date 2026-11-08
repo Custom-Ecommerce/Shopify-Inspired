@@ -6,6 +6,7 @@ import {
   ORDER_CANCEL_REASON_MAX,
   ORDER_COURIER_MAX,
   ORDER_NOTE_MAX,
+  ORDER_HISTORY_KINDS,
   ORDER_PAYMENT_METHODS,
   ORDER_PAYMENT_STATUSES,
   ORDER_STATUS_NOTE_MAX,
@@ -259,4 +260,18 @@ test('a stock movement may name its order; manual movements do not, and the orde
   assert.deepEqual(index[0], { orderId: 1 });
   assert.equal(index[1]?.sparse, true);
   assert.notEqual(index[1]?.unique, true);
+});
+
+// EP-02 OB-5a: what a history entry records.
+
+test('a history entry may carry a kind; it has no default and only known kinds validate', () => {
+  assert.deepEqual([...ORDER_HISTORY_KINDS], ['status', 'tracking', 'payment', 'stock']);
+  const entry = { from: 'dispatched', to: 'dispatched', by: USER };
+  const withKind = order({ statusHistory: [{ ...entry, kind: 'payment', note: 'COD collected: Rs. 10' }] });
+  assert.equal(withKind.validateSync(), undefined);
+  assert.equal(withKind.statusHistory[0]?.kind, 'payment');
+  const without = order({ statusHistory: [entry] });
+  assert.equal(without.validateSync(), undefined);
+  assert.equal('kind' in without.toObject().statusHistory[0], false);
+  assert.notEqual(order({ statusHistory: [{ ...entry, kind: 'bogus' }] }).validateSync(), undefined);
 });

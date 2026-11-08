@@ -103,3 +103,20 @@ export function cancelRefusal(status: unknown): OrderCancelRefusal | null {
 export function canCancel(status: unknown): boolean {
   return cancelRefusal(status) === null;
 }
+
+// EP-02 OB-5a: COD collected (D-064). Only after dispatch, and only for cash on delivery.
+
+export const PAYMENT_COLLECTABLE_STATUSES: readonly OrderFlowStatus[] = ['dispatched', 'delivered'];
+
+export type OrderPaymentRefusal = 'before_dispatch' | 'order_closed';
+
+/** Why COD cannot be marked collected in this status, or null when it can. An unknown status counts as closed. */
+export function paymentRefusal(status: unknown): OrderPaymentRefusal | null {
+  if (isOrderFlowStatus(status) && PAYMENT_COLLECTABLE_STATUSES.includes(status)) return null;
+  return status === 'pending' || status === 'confirmed' || status === 'processing' ? 'before_dispatch' : 'order_closed';
+}
+
+/** COD, not collected yet (a missing paymentStatus is unpaid), and dispatched or delivered. */
+export function canMarkCollected(order: { paymentMethod?: unknown; paymentStatus?: unknown; status?: unknown }): boolean {
+  return order.paymentMethod === 'cod' && order.paymentStatus !== 'collected' && paymentRefusal(order.status) === null;
+}

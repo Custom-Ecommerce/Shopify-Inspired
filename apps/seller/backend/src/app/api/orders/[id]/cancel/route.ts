@@ -57,7 +57,7 @@ async function noteStockSummary(id: string, storeId: string, ctx: AuthContext, s
   try {
     return await Order.findOneAndUpdate(
       { _id: id, store: storeId },
-      { $push: { statusHistory: { from: 'cancelled', to: 'cancelled', by: ctx.userObjectId, at: new Date(), note: summary } } },
+      { $push: { statusHistory: { from: 'cancelled', to: 'cancelled', by: ctx.userObjectId, at: new Date(), note: summary, kind: 'stock' } } },
       { new: true, runValidators: true },
     ).lean();
   } catch (err) {

@@ -255,7 +255,7 @@ delete: { actors: [], fields: {} },
 orderPayment: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
-update: { actors: ['seller'], fields: { seller: ['paymentStatus', 'collectedAmount'] } },
+update: { actors: ['seller'], fields: { seller: ['amount'] } },
 delete: { actors: [], fields: {} },
 },
 

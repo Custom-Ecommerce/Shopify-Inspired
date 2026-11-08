@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canMarkCollected,
+  paymentRefusal,
   CANCELLABLE_STATUSES,
   canCancel,
   cancelRefusal,
@@ -119,4 +121,30 @@ test('cancel: every refusal has a message, and the forward flow still never move
     assert.ok(ORDER_CANCEL_REFUSAL_MESSAGES[reason].length > 0, reason);
   }
   for (const from of CANCELLABLE_STATUSES) assert.equal(canTransition(from, 'cancelled'), false, from);
+});
+
+// EP-02 OB-5a: COD collected (D-064).
+
+test('payment: allowed once dispatched or delivered; refused before dispatch and on a closed order', () => {
+  const expected: Record<string, ReturnType<typeof paymentRefusal>> = {
+    pending: 'before_dispatch',
+    confirmed: 'before_dispatch',
+    processing: 'before_dispatch',
+    dispatched: null,
+    delivered: null,
+    cancelled: 'order_closed',
+    returned: 'order_closed',
+  };
+  for (const status of ORDER_FLOW_STATUSES) assert.equal(paymentRefusal(status), expected[status], status);
+  for (const bad of ['shipped', '', null, undefined]) assert.equal(paymentRefusal(bad), 'order_closed', String(bad));
+});
+
+test('payment: canMarkCollected needs COD, unpaid and dispatched or delivered', () => {
+  assert.equal(canMarkCollected({ paymentMethod: 'cod', paymentStatus: 'unpaid', status: 'dispatched' }), true);
+  assert.equal(canMarkCollected({ paymentMethod: 'cod', status: 'delivered' }), true, 'a missing paymentStatus is unpaid');
+  assert.equal(canMarkCollected({ paymentMethod: 'cod', paymentStatus: 'collected', status: 'delivered' }), false);
+  assert.equal(canMarkCollected({ paymentMethod: 'card', paymentStatus: 'unpaid', status: 'delivered' }), false);
+  assert.equal(canMarkCollected({ paymentStatus: 'unpaid', status: 'delivered' }), false, 'no method is not COD');
+  assert.equal(canMarkCollected({ paymentMethod: 'cod', paymentStatus: 'unpaid', status: 'processing' }), false);
+  assert.equal(canMarkCollected({ paymentMethod: 'cod', paymentStatus: 'unpaid', status: 'cancelled' }), false);
 });

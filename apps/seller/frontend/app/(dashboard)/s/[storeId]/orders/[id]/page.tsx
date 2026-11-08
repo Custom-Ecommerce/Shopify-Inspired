@@ -1,6 +1,6 @@
 "use client";
 
-import type { DashboardOrderDetail, OrderCancelResponse, OrderStockRestore } from "@markaz/contracts";
+import type { DashboardOrderDetail, DashboardOrderTimelineEntry, OrderCancelResponse, OrderStockRestore } from "@markaz/contracts";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -624,6 +624,183 @@ function CancelOrderDialog({
   );
 }
 
+// EP-02 OB-5a: COD collected, internal notes and the timeline.
+
+const ORDER_CHANGED_MESSAGE = "This order was changed by someone else or in another tab, so it was not marked collected. It has been refreshed; check its status.";
+
+/** "Mark COD collected": asks first, showing the amount. The server checks the amount against the order total. */
+function MarkCollectedDialog({
+  order,
+  onDone,
+  onConflict,
+}: {
+  order: DashboardOrderDetail;
+  onDone: () => Promise<void>;
+  onConflict: () => Promise<void>;
+}) {
+  const storeFetch = useStoreFetch();
+  const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(): Promise<void> {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await storeFetch(`/api/dashboard/orders/${order.id}/payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // The amount the seller just confirmed. A free order has nothing to send: amount must be above 0.
+        body: JSON.stringify(order.total > 0 ? { amount: order.total } : {}),
+      });
+      if (res.ok) {
+        setOpen(false);
+        await onDone();
+        return;
+      }
+      if (res.status === 409 || res.status === 422) {
+        setOpen(false);
+        await onConflict();
+        return;
+      }
+      setError("Could not save this. Check your connection and try again.");
+    } catch {
+      setError("Could not save this. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={(next) => (!next && !submitting ? setOpen(false) : undefined)}>
+      <Button
+        variant="clay"
+        className="h-11 w-full sm:h-9 sm:w-auto"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+      >
+        Mark COD collected
+      </Button>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Collected Rs. {order.total.toLocaleString()} in cash from the customer?</AlertDialogTitle>
+          <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+        </AlertDialogHeader>
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel className="h-11 w-full sm:h-9 sm:w-auto" disabled={submitting}>
+            Not yet
+          </AlertDialogCancel>
+          <AlertDialogAction className="h-11 w-full sm:h-9 sm:w-auto" disabled={submitting} onClick={() => void submit()}>
+            {submitting ? "Saving…" : "Yes, collected"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+const NOTE_TEXT_MAX = 500;
+
+/** The internal note box. Cleared on success; the page then reads the order again. */
+function AddNoteBox({ orderId, onAdded }: { orderId: string; onAdded: () => Promise<void> }) {
+  const storeFetch = useStoreFetch();
+  const [text, setText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const trimmed = text.trim();
+
+  async function submit(): Promise<void> {
+    if (trimmed === "") return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await storeFetch(`/api/dashboard/orders/${orderId}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: trimmed }),
+      });
+      if (res.ok) {
+        setText("");
+        await onAdded();
+        return;
+      }
+      const data = (await res.json().catch(() => null)) as { code?: string } | null;
+      setError(
+        data?.code === "ORDER_NOTES_FULL"
+          ? "This order already has the maximum of 100 notes."
+          : "Could not save the note. Check your connection and try again.",
+      );
+    } catch {
+      setError("Could not save the note. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex flex-col gap-1">
+        <span className="font-medium">
+          Add note <span className="font-normal text-muted-foreground">(internal, the customer never sees it)</span>
+        </span>
+        <Textarea value={text} onChange={(event) => setText(event.target.value)} maxLength={NOTE_TEXT_MAX} disabled={submitting} />
+      </label>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {text.length} / {NOTE_TEXT_MAX}
+        </span>
+        <Button variant="clay-soft" className="h-11 w-full sm:h-9 sm:w-auto" disabled={trimmed === "" || submitting} onClick={() => void submit()}>
+          {submitting ? "Saving…" : "Add note"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const TIMELINE_DOT: Record<DashboardOrderTimelineEntry["kind"], string> = {
+  placed: "bg-muted-foreground",
+  status: "bg-primary",
+  tracking: "bg-info",
+  payment: "bg-success",
+  stock: "bg-warning",
+  note: "bg-foreground/40",
+};
+
+/** Newest first, from the API's timeline: the order placed, every status and tracking change, payment, stock and notes. */
+function OrderTimeline({ entries }: { entries: DashboardOrderTimelineEntry[] }) {
+  return (
+    <ol className="flex flex-col gap-3 border-t pt-4">
+      {entries.map((entry) => (
+        <li key={entry.id} className="flex min-w-0 items-start gap-2.5">
+          <span className={`mt-1.5 size-2 shrink-0 rounded-full ${TIMELINE_DOT[entry.kind]}`} aria-hidden="true" />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="font-medium">{entry.title}</span>
+              {entry.kind === "note" ? (
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Internal</span>
+              ) : null}
+            </span>
+            {entry.detail ? <span className="whitespace-pre-wrap break-words text-muted-foreground">{entry.detail}</span> : null}
+            <span className="text-xs text-muted-foreground">{dateTime(entry.at)}</span>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export default function OrderDetailPage() {
   const storeFetch = useStoreFetch();
   const params = useParams<{ storeId: string; id: string }>();
@@ -633,6 +810,7 @@ export default function OrderDetailPage() {
   const [actionError, setActionError] = useState<ActionError | null>(null);
   const [stockNotice, setStockNotice] = useState<string | null>(null);
   const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
   const [confirmNote, setConfirmNote] = useState("");
 
   /** Reads the order. A quiet refresh (after an action) keeps the page on screen instead of showing the skeleton. */
@@ -658,6 +836,7 @@ export default function OrderDetailPage() {
   const load = useCallback(() => {
     setActionError(null);
     setStockNotice(null);
+    setPaymentMessage(null);
     void fetchOrder(false);
   }, [fetchOrder]);
 
@@ -931,6 +1110,26 @@ export default function OrderDetailPage() {
               <span className="tabular-nums">{money(order.collectedAmount)}</span>
             </Row>
           ) : null}
+          {paymentMessage ? (
+            <p role="alert" className="rounded-xl border border-destructive/20 bg-destructive/8 p-3">
+              {paymentMessage}
+            </p>
+          ) : null}
+          {order.canMarkCollected ? (
+            <div className="pt-1">
+              <MarkCollectedDialog
+                order={order}
+                onDone={async () => {
+                  setPaymentMessage(null);
+                  await fetchOrder(true);
+                }}
+                onConflict={async () => {
+                  setPaymentMessage(ORDER_CHANGED_MESSAGE);
+                  await fetchOrder(true);
+                }}
+              />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -979,46 +1178,11 @@ export default function OrderDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Status history</CardTitle>
+          <CardTitle>Timeline</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm">
-          {order.statusHistory.length === 0 ? (
-            <p className="text-muted-foreground">No status changes yet.</p>
-          ) : (
-            <ol className="flex flex-col gap-3">
-              {order.statusHistory.map((entry, i) => (
-                <li key={i} className="flex flex-col gap-0.5">
-                  <span>
-                    {entry.from === entry.to
-                      ? ORDER_STATUS_LABEL[entry.to]
-                      : `${ORDER_STATUS_LABEL[entry.from]} → ${ORDER_STATUS_LABEL[entry.to]}`}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{dateTime(entry.at)}</span>
-                  {entry.note ? <span className="break-words text-xs text-muted-foreground">{entry.note}</span> : null}
-                </li>
-              ))}
-            </ol>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Notes</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm">
-          {order.notes.length === 0 ? (
-            <p className="text-muted-foreground">No notes. Notes are for your team only; the customer never sees them.</p>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {order.notes.map((note, i) => (
-                <li key={note.id ?? i} className="flex flex-col gap-0.5">
-                  <span className="whitespace-pre-wrap break-words">{note.text}</span>
-                  <span className="text-xs text-muted-foreground">{dateTime(note.at)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+        <CardContent className="flex flex-col gap-4 text-sm">
+          <AddNoteBox orderId={order.id} onAdded={() => fetchOrder(true)} />
+          <OrderTimeline entries={order.timeline} />
         </CardContent>
       </Card>
     </div>

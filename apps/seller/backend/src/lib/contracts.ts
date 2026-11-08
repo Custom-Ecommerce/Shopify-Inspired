@@ -112,3 +112,6 @@ export const { canCancel, cancelRefusal, ORDER_CANCEL_REFUSAL_MESSAGES, orderCan
 
 // EP-02 OB-4: the tracking edit and customer tracking.
 export const { orderTrackingRequestSchema, storefrontOrderTrackingSchema, storefrontOrderTrackingResponseSchema } = contracts;
+
+// EP-02 OB-5a: payment, notes and the timeline.
+export const { buildOrderTimeline, canMarkCollected, orderNoteRequestSchema, orderPaymentRequestSchema, paymentRefusal } = contracts;

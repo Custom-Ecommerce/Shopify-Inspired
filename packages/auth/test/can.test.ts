@@ -241,7 +241,7 @@ view: undefined,
 transition: ['status', 'note', 'courier', 'trackingNumber', 'trackingUrl'],
 cancel: ['reason', 'note'],
 note: ['text'],
-payment: ['paymentStatus', 'collectedAmount'],
+payment: ['amount'],
 print: undefined,
 tracking: ['courier', 'trackingNumber', 'trackingUrl'],
 };
@@ -314,7 +314,7 @@ for (const field of ['store', 'total', 'items', 'statusHistory', 'notes', 'phone
 assert.equal(orderCan('seller', 'transition', ['status', field]), false, 'transition ' + field);
 assert.equal(orderCan('seller', 'cancel', ['reason', field]), false, 'cancel ' + field);
 assert.equal(orderCan('seller', 'note', ['text', field]), false, 'note ' + field);
-assert.equal(orderCan('seller', 'payment', ['paymentStatus', field]), false, 'payment ' + field);
+assert.equal(orderCan('seller', 'payment', ['amount', field]), false, 'payment ' + field);
 }
 // One action cannot do another's job.
 assert.equal(orderCan('seller', 'transition', ['paymentStatus']), false);
@@ -346,7 +346,7 @@ assert.deepEqual([...(POLICY_MATRIX.orderTransition.update.fields as Record<stri
 'status', 'note', 'courier', 'trackingNumber', 'trackingUrl',
 ]);
 assert.equal(can('admin', 'update', 'orderTransition', ['status', 'note']), false);
-assert.equal(can('seller', 'update', 'orderPayment', ['paymentStatus', 'note']), false);
+assert.equal(can('seller', 'update', 'orderPayment', ['amount', 'note']), false);
 assert.equal(can('seller', 'update', 'orderCancel', ['reason', 'note']), true);
 assert.equal(can('seller', 'update', 'orderTransition', ['status', 'statusHistory']), false);
 });
@@ -378,4 +378,23 @@ for (const operation of ['read', 'create', 'delete'] as const) {
 assert.equal(can('seller', operation, 'orderTracking', ['courier']), false, operation);
 }
 assert.equal(can('seller', 'update', 'orderTracking'), false);
+});
+
+test('orderPayment and orderNotes (OB-5a): the request keys only; the stored fields stay server-owned; admin denied', () => {
+assert.deepEqual([...(POLICY_MATRIX.orderPayment.update.fields as Record<string, readonly string[]>).seller], ['amount']);
+assert.equal(can('seller', 'update', 'orderPayment', ['amount']), true);
+for (const field of ['paymentStatus', 'collectedAmount', 'collectedAt', 'status', 'statusHistory']) {
+assert.equal(can('seller', 'update', 'orderPayment', [field]), false, field);
+}
+assert.deepEqual([...(POLICY_MATRIX.orderNotes.create.fields as Record<string, readonly string[]>).seller], ['text']);
+assert.equal(can('seller', 'create', 'orderNotes', ['text']), true);
+for (const field of ['by', 'at', 'notes']) {
+assert.equal(can('seller', 'create', 'orderNotes', ['text', field]), false, field);
+}
+for (const actor of ['admin', 'system', 'public'] as const) {
+assert.equal(can(actor, 'update', 'orderPayment', ['amount']), false, actor);
+assert.equal(can(actor, 'create', 'orderNotes', ['text']), false, actor);
+}
+// An empty field list is denied, so the route must not run the field check when no amount was sent.
+assert.equal(can('seller', 'update', 'orderPayment', []), false);
 });

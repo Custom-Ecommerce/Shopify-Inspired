@@ -6,6 +6,8 @@ export * from './product';
 export * from './order';
 // EP-02 OB-2: the order status workflow.
 export * from './order-flow';
+// EP-02 OB-5a: the order timeline.
+export * from './order-timeline';
 export * from './store-article';
 export * from './workspace';
 export * from './sync-envelope';
