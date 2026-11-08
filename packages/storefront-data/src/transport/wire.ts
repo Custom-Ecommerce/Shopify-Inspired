@@ -149,6 +149,31 @@ export const WireOrderLookup = z.object({
   data: WireOrder,
 });
 
+const trackingDate = z.string().min(1).nullable();
+
+/** Customer tracking (EP-02 OB-4). Mirrors storefrontOrderTrackingSchema in @markaz/contracts; unknown keys are dropped. */
+export const WireOrderTracking = z.object({
+  orderId: z.string().min(1),
+  status: orderStatus,
+  createdAt: z.string().min(1),
+  dates: z.object({
+    pending: trackingDate,
+    confirmed: trackingDate,
+    processing: trackingDate,
+    dispatched: trackingDate,
+    delivered: trackingDate,
+    cancelled: trackingDate,
+    returned: trackingDate,
+  }),
+  courier: z.string().nullable(),
+  trackingNumber: z.string().nullable(),
+  trackingUrl: z.string().nullable(),
+});
+
+export const WireOrderTrackingEnvelope = z.object({
+  data: WireOrderTracking,
+});
+
 const quoteIssue = z.enum(["unknown_product", "product_unavailable", "unknown_variant", "out_of_stock", "insufficient_stock"]);
 
 export const WireCartQuoteLine = z.object({

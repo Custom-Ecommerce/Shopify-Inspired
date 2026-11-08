@@ -2,19 +2,18 @@ import { NextRequest } from "next/server";
 import { proxyPost } from "@/lib/proxy";
 
 /**
- * Phase 7.4 — POST /api/dashboard/orders/:id/status
+ * POST /api/dashboard/orders/:id/status (EP-02 OB-2)
  *
- * Proxies to admin-backend's `POST /api/orders/:id/status` (Phase 7.2's
- * `orderStatus.ts` — auth, ownership, transition validation, courier
- * booking, and the whatsappNotificationUrl all live there; this route
- * forwards the JWT and the response, nothing more, same as every other
- * dashboard proxy).
+ * Forwards the JSON body { status, note?, courier?, trackingNumber?, trackingUrl? }, the seller's session and the active
+ * store header to the seller backend's POST /api/orders/:id/transition, which validates the move, writes it and answers
+ * { changed, order }. `bindStore` is off: the order is scoped by the x-store-id header, and `store` is not part of the
+ * transition request.
  */
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  return proxyPost(req, `/api/orders/${id}/status`, {
+  return proxyPost(req, `/api/orders/${encodeURIComponent(id)}/transition`, {
     auth: "dashboard",
-    bindStore: false, // custom endpoint, not a store-owned collection write
+    bindStore: false,
     logScope: "[api/dashboard/orders/:id/status]",
   });
 }

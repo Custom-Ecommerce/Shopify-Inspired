@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { objectIdSchema } from './object-id';
+import { STOREFRONT_ORDER_STATUSES } from './storefront';
 
 export const orderLineSchema = z.object({
   productId: z.string().min(1),
@@ -41,3 +42,456 @@ export const orderSchema = z.object({
 
 export type OrderLine = z.infer<typeof orderLineSchema>;
 export type Order = z.infer<typeof orderSchema>;
+
+// EP-02 OB-1b: the seller dashboard's order list and detail (D-068). The old orderSchema above is kept: the store
+// overview page still types its /api/orders?where= reads with it.
+
+/** Every stored order status. The same seven values as the storefront and the Order model ('returned' is EP-13, D-065). */
+export const DASHBOARD_ORDER_STATUSES = STOREFRONT_ORDER_STATUSES;
+export type DashboardOrderStatus = (typeof DASHBOARD_ORDER_STATUSES)[number];
+
+/** What the dashboard reads. 'unknown' stands for a stored value outside the seven; it is never accepted as input. */
+export const DASHBOARD_ORDER_DISPLAY_STATUSES = [...DASHBOARD_ORDER_STATUSES, 'unknown'] as const;
+export type DashboardOrderDisplayStatus = (typeof DASHBOARD_ORDER_DISPLAY_STATUSES)[number];
+
+/** COD only in EP-02 (US07). An order written before EP-02 has no payment status and reads as unpaid. */
+export const DASHBOARD_ORDER_PAYMENT_STATUSES = ['unpaid', 'collected'] as const;
+export type DashboardOrderPaymentStatus = (typeof DASHBOARD_ORDER_PAYMENT_STATUSES)[number];
+
+export const DASHBOARD_ORDER_PAYMENT_METHODS = ['cod', 'card'] as const;
+export type DashboardOrderPaymentMethod = (typeof DASHBOARD_ORDER_PAYMENT_METHODS)[number];
+
+/** Human labels for the dashboard. */
+export const ORDER_STATUS_LABELS: Readonly<Record<DashboardOrderStatus, string>> = {
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+  processing: 'Processing',
+  dispatched: 'Dispatched',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+  returned: 'Returned',
+};
+
+export const ORDER_PAYMENT_STATUS_LABELS: Readonly<Record<DashboardOrderPaymentStatus, string>> = {
+  unpaid: 'Unpaid',
+  collected: 'Collected',
+};
+
+export const ORDER_PAYMENT_METHOD_LABELS: Readonly<Record<DashboardOrderPaymentMethod, string>> = {
+  cod: 'Cash on delivery',
+  card: 'Card',
+};
+
+export const ORDER_LIST_DEFAULT_LIMIT = 20;
+export const ORDER_LIST_MAX_LIMIT = 100;
+export const ORDER_LIST_MAX_PAGE = 100000;
+/** Search text is trimmed and cut to this many characters before it becomes a regex (D-070). */
+export const ORDER_SEARCH_MAX_LENGTH = 40;
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A calendar day, YYYY-MM-DD. 2026-02-30 is refused. */
+export const orderListDaySchema = z
+  .string()
+  .regex(DAY_PATTERN, { message: 'Use the format YYYY-MM-DD.', abort: true })
+  .refine((value) => {
+    const [y, m, d] = value.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+  }, 'This is not a real date.');
+
+/**
+ * GET /api/orders query. from and to are inclusive days in Pakistan time (UTC+05:00). q is trimmed and cut, not refused,
+ * when it is longer than ORDER_SEARCH_MAX_LENGTH (D-070). limit above the maximum is capped; a non-integer or a value
+ * below 1 is refused. Not strict: the legacy where, sort and depth parameters may come along.
+ */
+export const dashboardOrderListQuerySchema = z
+  .object({
+    status: z.enum(DASHBOARD_ORDER_STATUSES).optional(),
+    from: orderListDaySchema.optional(),
+    to: orderListDaySchema.optional(),
+    q: z
+      .string()
+      .transform((value) => value.trim().slice(0, ORDER_SEARCH_MAX_LENGTH).trim())
+      .optional(),
+    page: z.coerce.number().int().min(1).max(ORDER_LIST_MAX_PAGE).default(1),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .transform((value) => Math.min(value, ORDER_LIST_MAX_LIMIT))
+      .default(ORDER_LIST_DEFAULT_LIMIT),
+  })
+  .refine((query) => query.from === undefined || query.to === undefined || query.from <= query.to, {
+    message: 'from must be on or before to.',
+    path: ['to'],
+  });
+
+/** One row of the seller's order list. */
+export const dashboardOrderListItemSchema = z.object({
+  id: z.string().min(1),
+  orderId: z.string().min(1),
+  status: z.enum(DASHBOARD_ORDER_DISPLAY_STATUSES),
+  /** Null only for an order written before checkout recorded a method. */
+  paymentMethod: z.enum(DASHBOARD_ORDER_PAYMENT_METHODS).nullable(),
+  paymentStatus: z.enum(DASHBOARD_ORDER_PAYMENT_STATUSES),
+  customerName: z.string().nullable(),
+  phone: z.string().nullable(),
+  city: z.string().nullable(),
+  total: z.number().min(0),
+  itemCount: z.number().int().min(0),
+  courier: z.string().nullable(),
+  trackingNumber: z.string().nullable(),
+  createdAt: z.string().min(1),
+});
+
+/** Orders per status for the tabs: same store, dates and search as the list, without its status filter. */
+export const dashboardOrderCountsSchema = z.object({
+  all: z.number().int().min(0),
+  pending: z.number().int().min(0),
+  confirmed: z.number().int().min(0),
+  processing: z.number().int().min(0),
+  dispatched: z.number().int().min(0),
+  delivered: z.number().int().min(0),
+  cancelled: z.number().int().min(0),
+  returned: z.number().int().min(0),
+});
+
+/** The list envelope every dashboard list uses, plus the counts. */
+export const dashboardOrderListResponseSchema = z.object({
+  docs: z.array(dashboardOrderListItemSchema),
+  totalDocs: z.number().int().min(0),
+  totalPages: z.number().int().min(0),
+  page: z.number().int().min(1),
+  limit: z.number().int().min(1),
+  hasNextPage: z.boolean(),
+  hasPrevPage: z.boolean(),
+  counts: dashboardOrderCountsSchema,
+});
+
+export const dashboardOrderItemSchema = z.object({
+  productTitle: z.string(),
+  variantTitle: z.string(),
+  sku: z.string().nullable(),
+  unitPrice: z.number().min(0),
+  quantity: z.number().int().min(1),
+  lineTotal: z.number().min(0),
+  /** D-066: whether placement took these units from stock. null for an order placed before the flag existed. */
+  stockDeducted: z.boolean().nullable(),
+});
+
+export const dashboardOrderStatusChangeSchema = z.object({
+  from: z.enum(DASHBOARD_ORDER_STATUSES),
+  to: z.enum(DASHBOARD_ORDER_STATUSES),
+  /** The user id of whoever made the change. */
+  by: z.string().nullable(),
+  at: z.string().min(1),
+  note: z.string().nullable(),
+});
+
+export const dashboardOrderNoteSchema = z.object({
+  id: z.string().nullable(),
+  text: z.string(),
+  by: z.string().nullable(),
+  at: z.string().min(1),
+});
+
+/** What a history entry records. Written by newer code; older entries have none and it is derived (order-timeline). */
+export const ORDER_HISTORY_KINDS = ['status', 'tracking', 'payment', 'stock'] as const;
+export type OrderHistoryKind = (typeof ORDER_HISTORY_KINDS)[number];
+
+export const ORDER_TIMELINE_KINDS = ['placed', ...ORDER_HISTORY_KINDS, 'note'] as const;
+export type OrderTimelineKind = (typeof ORDER_TIMELINE_KINDS)[number];
+
+/** One line of the order timeline (order-timeline buildOrderTimeline). No user ids. */
+export const dashboardOrderTimelineEntrySchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(ORDER_TIMELINE_KINDS),
+  at: z.string().min(1),
+  title: z.string().min(1),
+  detail: z.string().nullable(),
+});
+export type DashboardOrderTimelineEntry = z.output<typeof dashboardOrderTimelineEntrySchema>;
+
+/** One order as the seller's detail page reads it. statusHistory and notes are newest first. */
+export const dashboardOrderDetailSchema = z.object({
+  id: z.string().min(1),
+  orderId: z.string().min(1),
+  status: z.enum(DASHBOARD_ORDER_DISPLAY_STATUSES),
+  paymentMethod: z.enum(DASHBOARD_ORDER_PAYMENT_METHODS).nullable(),
+  paymentStatus: z.enum(DASHBOARD_ORDER_PAYMENT_STATUSES),
+  collectedAt: z.string().nullable(),
+  collectedAmount: z.number().min(0).nullable(),
+  customerName: z.string().nullable(),
+  phone: z.string().nullable(),
+  address: z.string().nullable(),
+  city: z.string().nullable(),
+  items: z.array(dashboardOrderItemSchema),
+  subtotal: z.number().min(0),
+  deliveryCharges: z.number().min(0),
+  total: z.number().min(0),
+  courier: z.string().nullable(),
+  trackingNumber: z.string().nullable(),
+  trackingUrl: z.string().nullable(),
+  statusHistory: z.array(dashboardOrderStatusChangeSchema),
+  notes: z.array(dashboardOrderNoteSchema),
+  cancelledAt: z.string().nullable(),
+  cancelReason: z.string().nullable(),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+  /** The statuses the order may move to next (order-flow nextStatuses of the stored status), so no UI hard-codes the flow. */
+  allowedNext: z.array(z.enum(DASHBOARD_ORDER_STATUSES)),
+  /** True while the order may still be cancelled (order-flow cancelRefusal of the stored status is null). */
+  canCancel: z.boolean(),
+  /** True while the order is dispatched: its courier and tracking can be edited (OB-4). */
+  canEditTracking: z.boolean(),
+  /** True for a COD order that is unpaid and dispatched or delivered (OB-5a). */
+  canMarkCollected: z.boolean(),
+  /** The order placed, every history entry and every note, newest first (OB-5a). */
+  timeline: z.array(dashboardOrderTimelineEntrySchema),
+});
+
+// EP-02 OB-2: POST /api/orders/:id/transition.
+
+// The same limits as packages/db-schemas/src/models/order.ts (ORDER_STATUS_NOTE_MAX, ORDER_COURIER_MAX,
+// ORDER_TRACKING_NUMBER_MAX, ORDER_TRACKING_URL_MAX). Contracts does not depend on db-schemas, so the numbers are repeated.
+export const ORDER_STATUS_NOTE_MAX = 500;
+export const ORDER_COURIER_MAX = 60;
+export const ORDER_TRACKING_NUMBER_MAX = 64;
+export const ORDER_TRACKING_URL_MAX = 500;
+
+/** Only these may come with a move to dispatched; courier and trackingNumber are required for it (OB-4, D-064). */
+export const ORDER_DISPATCH_FIELDS = ['courier', 'trackingNumber', 'trackingUrl'] as const;
+
+// EP-02 OB-4: the couriers the dashboard suggests. The stored courier is a free name ("Other" lets the seller type any),
+// so the list is not an enum.
+export const COURIERS = ['TCS', 'Leopards', 'M&P', 'Trax', 'PostEx', 'BlueEx', 'Call Courier', 'Pakistan Post', 'Other'] as const;
+export type CourierOption = (typeof COURIERS)[number];
+
+/** What a seller may send. Stricter than what the Order model can hold (ORDER_COURIER_MAX, ORDER_TRACKING_NUMBER_MAX). */
+export const COURIER_NAME_MIN = 2;
+export const COURIER_NAME_MAX = 40;
+export const TRACKING_NUMBER_MAX = 60;
+
+const HTTP_URL = /^https?:\/\//i;
+
+export const courierNameSchema = z.string().trim().min(COURIER_NAME_MIN).max(COURIER_NAME_MAX);
+export const trackingNumberSchema = z.string().trim().min(1).max(TRACKING_NUMBER_MAX);
+export const trackingUrlSchema = z
+  .string()
+  .trim()
+  .max(ORDER_TRACKING_URL_MAX)
+  .regex(HTTP_URL, 'The tracking link must start with http:// or https://.');
+
+/**
+ * The transition request. Not strict: unknown keys are dropped, so they are neither stored nor checked by the policy.
+ * note: trimmed, at most 500 characters; an empty note is the same as none.
+ */
+export const orderTransitionRequestSchema = z
+  .object({
+    status: z.enum(DASHBOARD_ORDER_STATUSES),
+    note: z.string().trim().max(ORDER_STATUS_NOTE_MAX).nullish(),
+    courier: courierNameSchema.optional(),
+    trackingNumber: trackingNumberSchema.optional(),
+    trackingUrl: trackingUrlSchema.optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.status === 'dispatched') {
+      // D-064: a dispatch names the courier and the tracking number.
+      if (body.courier === undefined) ctx.addIssue({ code: 'custom', path: ['courier'], message: 'A dispatch needs the courier.' });
+      if (body.trackingNumber === undefined) {
+        ctx.addIssue({ code: 'custom', path: ['trackingNumber'], message: 'A dispatch needs the tracking number.' });
+      }
+      return;
+    }
+    for (const field of ORDER_DISPATCH_FIELDS) {
+      if (body[field] !== undefined) {
+        ctx.addIssue({ code: 'custom', path: [field], message: field + ' can only be sent with status dispatched.' });
+      }
+    }
+  });
+
+export type OrderTransitionRequestInput = z.input<typeof orderTransitionRequestSchema>;
+export type OrderTransitionRequest = z.output<typeof orderTransitionRequestSchema>;
+
+/** 200 from the transition endpoint. changed is false when the order already had the status (nothing was written). */
+export const orderTransitionResponseSchema = z.object({
+  changed: z.boolean(),
+  order: dashboardOrderDetailSchema,
+});
+export type OrderTransitionResponse = z.output<typeof orderTransitionResponseSchema>;
+
+export type DashboardOrderListQueryInput = z.input<typeof dashboardOrderListQuerySchema>;
+export type DashboardOrderListQuery = z.output<typeof dashboardOrderListQuerySchema>;
+export type DashboardOrderListItem = z.output<typeof dashboardOrderListItemSchema>;
+export type DashboardOrderCounts = z.output<typeof dashboardOrderCountsSchema>;
+export type DashboardOrderListResponse = z.output<typeof dashboardOrderListResponseSchema>;
+export type DashboardOrderItem = z.output<typeof dashboardOrderItemSchema>;
+export type DashboardOrderStatusChange = z.output<typeof dashboardOrderStatusChangeSchema>;
+export type DashboardOrderNote = z.output<typeof dashboardOrderNoteSchema>;
+export type DashboardOrderDetail = z.output<typeof dashboardOrderDetailSchema>;
+
+// EP-02 OB-3: POST /api/orders/:id/cancel (D-064, D-066).
+
+export const ORDER_CANCEL_REASON_MIN = 3;
+/** The seller's reason. The Order model allows up to 500 (ORDER_CANCEL_REASON_MAX); the request keeps it short. */
+export const ORDER_CANCEL_REQUEST_REASON_MAX = 200;
+
+/** The reasons the dashboard offers. The request takes any text; these are only the suggested ones. */
+export const ORDER_CANCEL_REASON_OPTIONS = [
+  'Customer asked to cancel',
+  'Customer unreachable',
+  'Out of stock',
+  'Wrong or fake order',
+] as const;
+
+/** Not strict: unknown keys are dropped, so they are neither stored nor checked by the policy. */
+export const orderCancelRequestSchema = z.object({
+  reason: z.string().trim().min(ORDER_CANCEL_REASON_MIN).max(ORDER_CANCEL_REQUEST_REASON_MAX),
+  note: z.string().trim().max(ORDER_STATUS_NOTE_MAX).nullish(),
+});
+
+export type OrderCancelRequestInput = z.input<typeof orderCancelRequestSchema>;
+export type OrderCancelRequest = z.output<typeof orderCancelRequestSchema>;
+
+/** Why a line's stock did not go back. */
+export const ORDER_STOCK_SKIP_REASONS = ['not_deducted', 'not_tracked', 'product_deleted', 'variant_deleted'] as const;
+export type OrderStockSkipReason = (typeof ORDER_STOCK_SKIP_REASONS)[number];
+
+export const orderStockRestoreSchema = z.object({
+  restored: z.array(z.object({ name: z.string(), sku: z.string().nullable(), qty: z.number().int().min(1) })),
+  skipped: z.array(z.object({ name: z.string(), why: z.enum(ORDER_STOCK_SKIP_REASONS) })),
+  failed: z.array(z.object({ name: z.string() })),
+});
+export type OrderStockRestore = z.output<typeof orderStockRestoreSchema>;
+
+/** 200 from the cancel endpoint. */
+export const orderCancelResponseSchema = z.object({
+  order: dashboardOrderDetailSchema,
+  stockRestore: orderStockRestoreSchema,
+});
+export type OrderCancelResponse = z.output<typeof orderCancelResponseSchema>;
+
+// EP-02 OB-4: POST /api/orders/:id/tracking, editing the courier and tracking of a dispatched order.
+
+export const ORDER_TRACKING_FIELDS = ORDER_DISPATCH_FIELDS;
+
+/**
+ * At least one field. trackingUrl may be null to clear the link. Not strict: unknown keys are dropped, so they are neither
+ * stored nor checked by the policy.
+ */
+export const orderTrackingRequestSchema = z
+  .object({
+    courier: courierNameSchema.optional(),
+    trackingNumber: trackingNumberSchema.optional(),
+    trackingUrl: trackingUrlSchema.nullable().optional(),
+  })
+  .refine((body) => body.courier !== undefined || body.trackingNumber !== undefined || body.trackingUrl !== undefined, {
+    message: 'Send at least one of courier, trackingNumber or trackingUrl.',
+  });
+
+export type OrderTrackingRequestInput = z.input<typeof orderTrackingRequestSchema>;
+export type OrderTrackingRequest = z.output<typeof orderTrackingRequestSchema>;
+
+/** 200 from the tracking endpoint. changed is false when every sent value was already stored (nothing written). */
+export const orderTrackingResponseSchema = z.object({
+  changed: z.boolean(),
+  order: dashboardOrderDetailSchema,
+});
+export type OrderTrackingResponse = z.output<typeof orderTrackingResponseSchema>;
+
+// EP-02 OB-5a: POST /api/orders/:id/payment (COD collected).
+
+/** True when the number has at most two decimals. Compared in hundredths, so 19.99 is not lost to floating point. */
+const hasTwoDecimalsAtMost = (value: number): boolean => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6;
+
+/**
+ * { amount? }. Left out, it means the order total; sent, it must equal the total (partial collection is not in this epic).
+ * Not strict: unknown keys are dropped.
+ */
+export const orderPaymentRequestSchema = z.object({
+  amount: z.number().positive().refine(hasTwoDecimalsAtMost, 'The amount can have at most 2 decimals.').optional(),
+});
+export type OrderPaymentRequest = z.output<typeof orderPaymentRequestSchema>;
+
+/** 200 from the payment endpoint. changed is false when the order was already collected (nothing written). */
+export const orderPaymentResponseSchema = z.object({
+  changed: z.boolean(),
+  order: dashboardOrderDetailSchema,
+});
+export type OrderPaymentResponse = z.output<typeof orderPaymentResponseSchema>;
+
+// EP-02 OB-5a: POST /api/orders/:id/notes (internal seller notes, never shown to the customer).
+
+/** What a seller may send. The Order model can hold more (ORDER_NOTE_MAX); the request keeps a note short. */
+export const ORDER_NOTE_TEXT_MAX = 500;
+/** Enforced inside the write. */
+export const ORDER_NOTES_MAX_COUNT = 100;
+
+export const orderNoteRequestSchema = z.object({
+  text: z.string().trim().min(1).max(ORDER_NOTE_TEXT_MAX),
+});
+export type OrderNoteRequest = z.output<typeof orderNoteRequestSchema>;
+
+export const orderNoteResponseSchema = z.object({ order: dashboardOrderDetailSchema });
+export type OrderNoteResponse = z.output<typeof orderNoteResponseSchema>;
+
+// EP-02 OB-5b: GET /api/orders/print, the data behind the shipping label, the packing slip and bulk print. Seller only: it
+// holds the customer's phone and address.
+
+export const ORDER_PRINT_MAX_IDS = 50;
+
+/**
+ * The cash the courier must collect: the order total for a COD order not collected yet; 0 for a collected COD order, any
+ * other method, or a missing method. Rounded to 2 decimals.
+ */
+export function labelCodAmount(order: { paymentMethod?: unknown; paymentStatus?: unknown; total?: unknown }): number {
+  if (order.paymentMethod !== 'cod' || order.paymentStatus === 'collected') return 0;
+  if (typeof order.total !== 'number' || !Number.isFinite(order.total) || order.total <= 0) return 0;
+  return Math.round((order.total + Number.EPSILON) * 100) / 100;
+}
+
+export const ORDER_PRINT_SKIP_REASONS = ['not_found', 'cancelled', 'returned'] as const;
+export type OrderPrintSkipReason = (typeof ORDER_PRINT_SKIP_REASONS)[number];
+
+export const orderPrintItemSchema = z
+  .object({
+    title: z.string(),
+    /** null for a product's Default variant. */
+    variantTitle: z.string().nullable(),
+    sku: z.string().nullable(),
+    qty: z.number().int().min(1),
+  })
+  .strict();
+
+export const orderPrintSheetSchema = z
+  .object({
+    id: z.string().min(1),
+    orderId: z.string().min(1),
+    createdAt: z.string().min(1),
+    /** A plain string: one order with a corrupt status must not fail a whole batch of labels. */
+    status: z.string(),
+    customerName: z.string().nullable(),
+    phone: z.string().nullable(),
+    address: z.string().nullable(),
+    city: z.string().nullable(),
+    items: z.array(orderPrintItemSchema),
+    paymentMethod: z.enum(DASHBOARD_ORDER_PAYMENT_METHODS).nullable(),
+    paymentStatus: z.enum(DASHBOARD_ORDER_PAYMENT_STATUSES),
+    codAmount: z.number().min(0),
+    courier: z.string().nullable(),
+    trackingNumber: z.string().nullable(),
+  })
+  .strict();
+
+/** Strict at every level: a field added on the server by mistake fails the parse instead of reaching a printout. */
+export const orderPrintResponseSchema = z
+  .object({
+    store: z.object({ name: z.string() }).strict(),
+    orders: z.array(orderPrintSheetSchema),
+    skipped: z.array(z.object({ id: z.string().min(1), reason: z.enum(ORDER_PRINT_SKIP_REASONS) }).strict()),
+  })
+  .strict();
+
+export type OrderPrintSheet = z.output<typeof orderPrintSheetSchema>;
+export type OrderPrintResponse = z.output<typeof orderPrintResponseSchema>;

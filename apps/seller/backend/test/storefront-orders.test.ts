@@ -243,6 +243,7 @@ const line = (id: string, title: string, unitPrice: number, quantity: number) =>
   sku: null,
   unitPrice,
   quantity,
+  stockDeducted: true,
 });
 
 test('creates an order: server totals, stock taken, customer and key saved, contract-valid, uncached', async () => {
@@ -830,7 +831,7 @@ test('the variant decides the price and the stock, and the order line snapshots 
   assert.equal(units(TOP_M), 3);
   assert.equal(units(TOP_S), 2, 'the other size is untouched');
   assert.deepEqual(orders[0].items, [
-    { productId: TOP, variantId: TOP_M, productTitle: 'Lawn top', variantTitle: 'M', sku: 'TOP-M', unitPrice: 1200, quantity: 2 },
+    { productId: TOP, variantId: TOP_M, productTitle: 'Lawn top', variantTitle: 'M', sku: 'TOP-M', unitPrice: 1200, quantity: 2, stockDeducted: true },
   ]);
 });
 
@@ -883,4 +884,41 @@ test('order lookup carries the variant and never the sku', async () => {
   const { data } = storefrontOrderLookupResponseSchema.parse(JSON.parse(raw));
   assert.equal(data.items[0].variantId, TOP_M);
   assert.equal(data.items[0].variantTitle, 'M');
+});
+
+/* ------------------------------- EP-02 OB-3: what placement took (D-066) ------------------------------- */
+
+test('each saved line records whether its stock was deducted: tracked true, untracked false', async () => {
+  addSizedTop();
+  const res = await order({ lines: [{ productId: TOP, variantId: TOP_M, qty: 1 }, { productId: TOP, variantId: TOP_FREE, qty: 4 }] });
+  assert.equal(res.status, 201);
+  const byVariant = new Map(orders[0].items.map((item: any) => [item.variantId, item.stockDeducted]));
+  assert.equal(byVariant.get(TOP_M), true);
+  assert.equal(byVariant.get(TOP_FREE), false);
+});
+
+test('the placement stock movement carries the id the order is saved with', async () => {
+  const res = await order();
+  assert.equal(res.status, 201);
+  assert.equal(movements.length, 1);
+  assert.ok(orders[0]._id, 'the order was saved with an id');
+  assert.equal(String(movements[0].orderId), String(orders[0]._id));
+});
+
+test('when saving fails, only the deducted lines are given back, and the release movement names the same order id', async () => {
+  addSizedTop();
+  createError = new Error('disk full');
+  const original = console.error;
+  console.error = () => {};
+  try {
+    const res = await order({ lines: [{ productId: TOP, variantId: TOP_M, qty: 2 }, { productId: TOP, variantId: TOP_FREE, qty: 3 }] });
+    assert.equal(res.status, 500);
+  } finally {
+    console.error = original;
+  }
+  assert.equal(units(TOP_M), 5);
+  assert.equal(units(TOP_FREE), 0);
+  assert.deepEqual(movements.map((m) => m.reason), ['storefront_order', 'storefront_order_released']);
+  assert.ok(movements[0].orderId);
+  assert.equal(String(movements[1].orderId), String(movements[0].orderId));
 });

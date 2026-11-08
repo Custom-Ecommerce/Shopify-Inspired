@@ -266,8 +266,9 @@ check("a broken store lookup and an unreachable backend are both unavailable to 
   });
   reset();
   backend.next = "down";
+  // CO-03: a backend that never answered a placement is "outcome unknown", so the checkout re-checks instead of saying failed.
   await assert.rejects(client.submitOrder({ idempotencyKey: KEY, customer, lines }), (error) => {
-    return error instanceof TransportUnavailableError && error.reason === "http" && error.upstreamStatus === 503;
+    return error instanceof TransportUnavailableError && error.reason === "network" && error.upstreamStatus === 504;
   });
 });
 

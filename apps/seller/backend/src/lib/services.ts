@@ -41,6 +41,8 @@ import * as compatNs from '@markaz/api-compat';
 const compat: typeof compatNs = unwrapCjs(compatNs);
 export const listEnvelope = compat.listEnvelope;
 export const assertCan = auth.assertCan;
+// EP-02: which policy row guards each order action (D-067).
+export const ORDER_ACTIONS = auth.ORDER_ACTIONS;
 export const PUBLIC_CATEGORY_READABLE_FIELDS = auth.PUBLIC_CATEGORY_READABLE_FIELDS;
 export const SELLER_STORE_READABLE_FIELDS = auth.SELLER_STORE_READABLE_FIELDS;
 export const Discount = db.Discount;

@@ -10,6 +10,7 @@ import { toCheckoutFailure } from "./checkout-failure";
 import type { CheckoutFailure } from "./checkout-failure";
 import { useOrderTransport } from "./context";
 import { useCart } from "./use-cart";
+import { placeOrderWithCheck } from "./place-order";
 
 export type { CheckoutFailure } from "./checkout-failure";
 
@@ -20,6 +21,8 @@ export interface UseCheckoutResult {
   /** Shown after the first submit attempt, then kept live as the shopper edits. */
   errors: CheckoutFieldErrors;
   status: CheckoutStatus;
+  /** True while a placement that got no answer is being checked. status stays "submitting" meanwhile. */
+  isChecking: boolean;
   failure: CheckoutFailure | null;
   /** Set once the server accepts the order. The theme navigates to the confirmation when it appears. */
   orderId: string | null;
@@ -57,6 +60,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
   const [attempted, setAttempted] = useState(false);
   const [status, setStatus] = useState<CheckoutStatus>("editing");
   const [failure, setFailure] = useState<CheckoutFailure | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const inFlight = useRef(false);
   const attempt = useRef<Attempt | null>(null);
@@ -99,11 +103,11 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
     setStatus("submitting");
     setFailure(null);
     try {
-      const placed = await transport.submitOrder({
-        idempotencyKey,
-        customer: submission,
-        lines: payloadLines,
-      });
+      const placed = await placeOrderWithCheck(
+        transport,
+        { idempotencyKey, customer: submission, lines: payloadLines },
+        () => setIsChecking(true),
+      );
       attempt.current = null;
       clear();
       setOrderId(placed.orderId);
@@ -113,6 +117,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
       setStatus("error");
     } finally {
       inFlight.current = false;
+      setIsChecking(false);
     }
   }, [values, lines, isHydrated, clear, transport]);
 
@@ -120,6 +125,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
     values,
     errors,
     status,
+    isChecking,
     failure,
     orderId,
     isCartReady: isHydrated,

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useDashboardFetch } from "@/lib/hooks/use-dashboard-fetch";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { refusalMessage } from "@/lib/product-actions";
+import { stockReasonLabel, stockStatusLabel } from "@/lib/format";
 import { RefreshButton } from "@/components/dashboard/shared/RefreshButton";
 import { PageHeader } from "@/components/dashboard/shared/PageHeader";
 import { SectionCard } from "@/components/dashboard/shared/SectionCard";
@@ -56,7 +57,7 @@ function StockHistory({ row, onClose }: { row: Row; onClose: () => void }) {
     { header: "When", render: (entry) => new Date(entry.changedAt).toLocaleString() },
     { header: "Change", render: (entry) => <span className="font-mono">{entry.delta > 0 ? `+${entry.delta}` : entry.delta}</span> },
     { header: "Stock", render: (entry) => <span className="font-mono">{entry.previousQuantity} → {entry.quantity}</span> },
-    { header: "Reason", render: (entry) => entry.reason },
+    { header: "Reason", render: (entry) => stockReasonLabel(entry.reason) },
     { header: "By", render: (entry) => (entry.actor ? "You" : "Order") },
   ];
 
@@ -108,6 +109,12 @@ export default function InventoryPage() {
   const [reason, setReason] = useState(DEFAULT_REASON);
   const [saving, setSaving] = useState(false);
   const [historyOf, setHistoryOf] = useState<Row | null>(null);
+  // What the adjust call just answered, shown until the list has been read again, so the status never lags the save.
+  const [justSaved, setJustSaved] = useState<Record<string, { quantity: number; availability: string }>>({});
+
+  useEffect(() => {
+    setJustSaved({});
+  }, [data]);
 
   const rows = useMemo<Row[]>(
     () => (data?.docs ?? []).flatMap((product) => product.variants.map((variant) => ({ product, variant }))),
@@ -149,12 +156,17 @@ export default function InventoryPage() {
       } else {
         const outcome = body as InventoryAdjustResponse;
         const failedIds = new Set<string>();
+        const applied: Record<string, { quantity: number; availability: string }> = {};
         for (const result of outcome.results) {
-          if (result.ok) continue;
+          if (result.ok) {
+            applied[result.variantId] = { quantity: result.quantity, availability: result.availability };
+            continue;
+          }
           failedIds.add(result.variantId);
           const row = rows.find(({ variant }) => variant.id === result.variantId);
           toast.error(`${row?.product.title ?? "A variant"}: ${result.message}`);
         }
+        setJustSaved(applied);
         toast.success(`Updated ${outcome.succeeded} of ${outcome.results.length}.`);
         // A refused line keeps what the seller typed, so it can be corrected.
         setCounts((current) => Object.fromEntries(Object.entries(current).filter(([id]) => failedIds.has(id))));
@@ -216,7 +228,7 @@ export default function InventoryPage() {
             step={1}
             className="h-8 w-24 font-mono"
             aria-label={`Quantity of ${variant.title}`}
-            value={counts[variant.id] ?? String(variant.stockQuantity)}
+            value={counts[variant.id] ?? String(justSaved[variant.id]?.quantity ?? variant.stockQuantity)}
             onChange={(e) => setCounts((current) => ({ ...current, [variant.id]: e.target.value }))}
           />
         ) : (
@@ -239,7 +251,13 @@ export default function InventoryPage() {
         />
       ),
     },
-    { header: "Status", render: ({ variant }) => <StatusBadge status={variant.availability} /> },
+    {
+      header: "Status",
+      render: ({ variant }) => {
+        const availability = justSaved[variant.id]?.availability ?? variant.availability;
+        return <StatusBadge status={availability} label={stockStatusLabel(availability)} />;
+      },
+    },
     {
       header: "",
       render: (row) => (

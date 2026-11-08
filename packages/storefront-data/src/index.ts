@@ -32,6 +32,8 @@ export type {
   StockStatus,
   StorefrontOrder,
   StorefrontOrderItem,
+  StorefrontOrderTracking,
+  StorefrontOrderTrackingDates,
   StorefrontTransport,
   TransportKind,
 } from "./transport/types";

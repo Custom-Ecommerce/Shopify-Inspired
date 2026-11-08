@@ -1,4 +1,4 @@
-import { OrderRejectedError } from "../transport/errors";
+import { OrderRejectedError, OrderUnconfirmedError } from "../transport/errors";
 import type { OrderRejection } from "../transport/types";
 
 /**
@@ -15,7 +15,9 @@ export type CheckoutFailure =
   | { kind: "rate_limited"; retryAfterSeconds: number | null }
   | { kind: "invalid_request"; message: string }
   | { kind: "store_inactive" }
-  | { kind: "unavailable" };
+  | { kind: "unavailable" }
+  /** No clear answer even after checking with the same key. Trying again cannot place a second order (CO-03). */
+  | { kind: "unconfirmed" };
 
 type CartLineRef = { productId: string; title: string };
 
@@ -31,6 +33,7 @@ export function cartTitle(lines: readonly CartLineRef[], productId: string | und
  * OrderRejection without a case here does not compile.
  */
 export function toCheckoutFailure(error: unknown, lines: readonly CartLineRef[]): CheckoutFailure {
+  if (error instanceof OrderUnconfirmedError) return { kind: "unconfirmed" };
   if (!(error instanceof OrderRejectedError)) return { kind: "unavailable" };
   const rejection: OrderRejection = error.rejection;
   switch (rejection.code) {

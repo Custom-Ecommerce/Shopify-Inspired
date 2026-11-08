@@ -81,6 +81,23 @@ export const PUBLIC_PRODUCT_READABLE_FIELDS = [
 'deliveryCharge', 'avgRating', 'reviewCount', 'seoTitle', 'seoDescription', 'seoImage',
 ] as const;
 
+/**
+ * EP-02: each order action and the (operation, row) that guards it. Routes call
+ * assertCan(actor, ORDER_ACTIONS.cancel.operation, ORDER_ACTIONS.cancel.collection, fields) and then scope the order
+ * to the verified store.
+ */
+export const ORDER_ACTIONS = {
+view: { operation: 'read', collection: 'orderView' },
+transition: { operation: 'update', collection: 'orderTransition' },
+cancel: { operation: 'update', collection: 'orderCancel' },
+note: { operation: 'create', collection: 'orderNotes' },
+payment: { operation: 'update', collection: 'orderPayment' },
+print: { operation: 'read', collection: 'orderPrint' },
+// EP-02 OB-4: editing courier and tracking of a dispatched order.
+tracking: { operation: 'update', collection: 'orderTracking' },
+} as const satisfies Record<string, { operation: Operation; collection: string }>;
+export type OrderAction = keyof typeof ORDER_ACTIONS;
+
 export const POLICY_MATRIX: Readonly<Record<string, CollectionPolicy>> = {
 stores: {
 read: {
@@ -191,6 +208,68 @@ delete: { actors: [], fields: {} },
 productBulk: {
 read: { actors: ['seller'], fields: { seller: '*' } },
 create: { actors: ['seller'], fields: { seller: '*' } },
+update: { actors: [], fields: {} },
+delete: { actors: [], fields: {} },
+},
+
+// EP-02 order actions, one row each, in the style of productLifecycle and inventory. Only the store owner (actor
+// 'seller') acts on orders in this epic; which store, the route decides (the order is read with { _id, store } for the
+// verified store, so another store's order is a 404). Admin and system have no row here (fail-closed). The older
+// 'orders' row further down (B10.4) is left as it was. The field lists name what the client may supply; statusHistory,
+// notes[].by, the timestamps and every other derived field are written by the server only.
+//   view       read    list, detail, per-status counts
+//   transition update  confirm, processing, dispatch (courier and tracking), delivered, and a tracking edit after dispatch; note is the optional history note (OB-2)
+//   cancel     update  cancel with a reason and an optional history note (OB-3: the request keys reason, note); the
+//                      status, cancelReason, cancelledAt and the stock restore are the server's
+//   note       create  add an internal note; read lists them
+//   payment    update  mark COD collected with the amount
+//   print      read    shipping label, packing slip, bulk print
+orderView: {
+read: { actors: ['seller'], fields: { seller: '*' } },
+create: { actors: [], fields: {} },
+update: { actors: [], fields: {} },
+delete: { actors: [], fields: {} },
+},
+
+orderTransition: {
+read: { actors: [], fields: {} },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['status', 'note', 'courier', 'trackingNumber', 'trackingUrl'] } },
+delete: { actors: [], fields: {} },
+},
+
+orderCancel: {
+read: { actors: [], fields: {} },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['reason', 'note'] } },
+delete: { actors: [], fields: {} },
+},
+
+orderNotes: {
+read: { actors: ['seller'], fields: { seller: '*' } },
+create: { actors: ['seller'], fields: { seller: ['text'] } },
+update: { actors: [], fields: {} },
+delete: { actors: [], fields: {} },
+},
+
+orderPayment: {
+read: { actors: [], fields: {} },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['amount'] } },
+delete: { actors: [], fields: {} },
+},
+
+// EP-02 OB-4: the tracking edit after dispatch (POST /api/orders/:id/tracking). Store owner only; admin and system denied.
+orderTracking: {
+read: { actors: [], fields: {} },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['courier', 'trackingNumber', 'trackingUrl'] } },
+delete: { actors: [], fields: {} },
+},
+
+orderPrint: {
+read: { actors: ['seller'], fields: { seller: '*' } },
+create: { actors: [], fields: {} },
 update: { actors: [], fields: {} },
 delete: { actors: [], fields: {} },
 },

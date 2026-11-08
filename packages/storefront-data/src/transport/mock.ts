@@ -3,6 +3,7 @@ import type {
   CartQuoteInput,
   CartQuoteLine,
   OrderLookupInput,
+  StorefrontOrderTracking,
   StorefrontOrder,
   StorefrontCategory,
   StorefrontOrderItem,
@@ -348,6 +349,29 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     return clone(order);
   }
 
+  /** Mock of POST /orders/track. The same matching as lookupOrder; the demo's orders never leave pending. */
+  async function trackOrder(input: OrderLookupInput): Promise<StorefrontOrderTracking | null> {
+    const order = await lookupOrder(input);
+    if (!order) return null;
+    return {
+      orderId: order.orderId,
+      status: order.status,
+      createdAt: order.createdAt,
+      dates: {
+        pending: order.status === "cancelled" ? null : order.createdAt,
+        confirmed: null,
+        processing: null,
+        dispatched: null,
+        delivered: null,
+        cancelled: null,
+        returned: null,
+      },
+      courier: null,
+      trackingNumber: null,
+      trackingUrl: null,
+    };
+  }
+
 
   /** Like the backend: only categories that hold a product, in a fixed order. */
   async function listCategories(): Promise<StorefrontCategory[]> {
@@ -377,7 +401,18 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     return { items: items.slice((page - 1) * limit, page * limit).map(toSummary), page, totalPages };
   }
 
-  return { kind: "mock", getProducts, getProductsByIds, listCategories, listProducts, getProduct, quoteCart, submitOrder, lookupOrder };
+  return {
+    kind: "mock",
+    getProducts,
+    getProductsByIds,
+    listCategories,
+    listProducts,
+    getProduct,
+    quoteCart,
+    submitOrder,
+    lookupOrder,
+    trackOrder,
+  };
 }
 
 const defaultTransport = createMockTransport({ products: DEFAULT_MOCK_PRODUCTS });

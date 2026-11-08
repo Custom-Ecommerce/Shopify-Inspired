@@ -147,6 +147,32 @@ export interface StorefrontOrder {
   items: StorefrontOrderItem[];
 }
 
+/** The first time an order reached each status (EP-02 OB-4). null when it never did. */
+export interface StorefrontOrderTrackingDates {
+  pending: string | null;
+  confirmed: string | null;
+  processing: string | null;
+  dispatched: string | null;
+  delivered: string | null;
+  cancelled: string | null;
+  returned: string | null;
+}
+
+/**
+ * Customer tracking (D-069). Only the parcel's journey: no name, phone, address, items, totals or ids. Mirrors
+ * storefrontOrderTrackingSchema in @markaz/contracts. A cancelled order has no dates and no courier.
+ */
+export interface StorefrontOrderTracking {
+  orderId: string;
+  status: OrderStatus;
+  createdAt: string;
+  dates: StorefrontOrderTrackingDates;
+  /** Only while dispatched or delivered. */
+  courier: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+}
+
 export interface OrderLookupInput {
   orderId: string;
   /** E.164, or a local Pakistani mobile format. The server normalises before it compares. */
@@ -224,6 +250,8 @@ export interface OrderTransport {
   submitOrder(payload: SubmitOrderPayload): Promise<SubmitOrderResult>;
   /** Resolves to null when no order matches both the id and the phone. Refusals reject with OrderRejectedError. */
   lookupOrder(input: OrderLookupInput): Promise<StorefrontOrder | null>;
+  /** Customer tracking (D-069): the parcel's journey only. null when no order matches both the id and the phone. */
+  trackOrder(input: OrderLookupInput): Promise<StorefrontOrderTracking | null>;
   /** The Live products among these ids, at most 48 per call. An id with no Live product is simply absent from the answer. */
   getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]>;
 }

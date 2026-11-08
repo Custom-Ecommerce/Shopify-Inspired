@@ -100,3 +100,21 @@ export const { storefrontCartQuoteRequestSchema, storefrontCartQuoteResponseSche
 
 // PB-7: bulk import and duplicate.
 export const { PRODUCT_CSV_COLUMNS, PRODUCT_IMPORT_MAX_BYTES, PRODUCT_IMPORT_MAX_ROWS, PRODUCT_TITLE_MAX } = contracts;
+
+// EP-02 OB-1b: the seller dashboard order list and detail.
+export const { DASHBOARD_ORDER_STATUSES, dashboardOrderListQuerySchema, orderListDaySchema } = contracts;
+
+// EP-02 OB-2: the order status workflow and the transition request.
+export const { canTransition, nextStatuses, transitionRefusal, ORDER_TRANSITION_REFUSAL_MESSAGES, orderTransitionRequestSchema } = contracts;
+
+// EP-02 OB-3: cancel.
+export const { canCancel, cancelRefusal, ORDER_CANCEL_REFUSAL_MESSAGES, orderCancelRequestSchema } = contracts;
+
+// EP-02 OB-4: the tracking edit and customer tracking.
+export const { orderTrackingRequestSchema, storefrontOrderTrackingSchema, storefrontOrderTrackingResponseSchema } = contracts;
+
+// EP-02 OB-5a: payment, notes and the timeline.
+export const { buildOrderTimeline, canMarkCollected, orderNoteRequestSchema, orderPaymentRequestSchema, paymentRefusal } = contracts;
+
+// EP-02 OB-5b: print data.
+export const { labelCodAmount, ORDER_PRINT_MAX_IDS, orderPrintResponseSchema } = contracts;

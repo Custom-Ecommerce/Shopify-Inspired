@@ -35,6 +35,8 @@ function failureMessage(f: CheckoutFailure): string {
       return f.message;
     case "payment_method_unavailable":
       return "Cash on delivery is not available for this store.";
+    case "unconfirmed":
+      return "We could not confirm your order. Please try again; you will not be charged twice.";
     case "idempotency_conflict":
     case "unavailable":
     default:
@@ -92,6 +94,9 @@ export function useStilettoCheckout() {
     deliveryCharges,
     grandTotal,
     isSubmitting: checkout.status === "submitting" || checkout.status === "success",
+    isChecking: checkout.isChecking,
+    /** The retry reuses the same order and so the same idempotency key. */
+    canRetryUnconfirmed: checkout.failure?.kind === "unconfirmed",
     orderError: validationError ?? failure,
     submit,
   };

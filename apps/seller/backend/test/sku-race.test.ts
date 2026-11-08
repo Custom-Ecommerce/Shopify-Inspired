@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { duplicateProduct } from '@/lib/product-duplicate';
 import { ProductVariantError, isSkuDuplicateError, withSkuGuard } from '@/lib/product-variants';
-import { handleProductError, productPatchSet } from '@/lib/products';
+import { ProductRequestError, handleProductError, productPatchSet } from '@/lib/products';
 import { Product } from '@/lib/services';
 
 // GAP 5: the unique (store, skus) index decides a race between two writers. These tests stand in for the database by
@@ -145,8 +145,67 @@ test('duplicate retries with the next -COPY SKU when another writer took the fir
   assert.equal((creates[0].variants as Array<{ sku: string }>)[0].sku, 'KURTA-COPY-2');
 });
 
-test('duplicate answers 409 SKU_TAKEN when every attempt loses the race', async () => {
-  clashesLeft = 10;
-  await assert.rejects(duplicateProduct(STORE, SOURCE), (err: unknown) => err instanceof ProductVariantError && err.status === 409 && err.code === 'SKU_TAKEN');
+test('duplicate answers a clear 409 PRODUCT_DUPLICATE_BUSY, not SKU_TAKEN, when every attempt loses the race', async () => {
+  clashesLeft = 50;
+  await assert.rejects(duplicateProduct(STORE, SOURCE), (err: unknown) => err instanceof ProductRequestError && err.status === 409 && err.code === 'PRODUCT_DUPLICATE_BUSY' && /try again/i.test(err.message));
   assert.equal(creates.length, 0);
+});
+
+test('duplicate does not retry a failure that is not a lost race', async () => {
+  let calls = 0;
+  stub.create = async () => {
+    calls += 1;
+    throw new Error('disk full');
+  };
+  await assert.rejects(duplicateProduct(STORE, SOURCE), /disk full/);
+  assert.equal(calls, 1);
+});
+
+test('four parallel duplicates all succeed, each with its own slug and SKU', async () => {
+  const slugs = new Set(['kurta']);
+  const turn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+  stub.find = (filter) => {
+    const q: Chain = {
+      select: () => q,
+      lean: async () => {
+        await turn();
+        const wantedSlugs = (filter.slug as { $in: string[] } | undefined)?.$in;
+        if (wantedSlugs) return wantedSlugs.filter((slug) => slugs.has(slug)).map((slug) => ({ slug }));
+        const wanted = ((filter['variants.sku'] ?? filter.skus) as { $in: string[] } | undefined)?.$in ?? [];
+        return held.filter((sku) => wanted.includes(sku)).map((sku) => ({ skus: [sku], variants: [{ sku }] }));
+      },
+    };
+    return q;
+  };
+  stub.create = async (doc) => {
+    await turn();
+    // The check and the insert are one step, as a unique index makes them.
+    const sku = (doc.variants as Array<{ sku: string }>)[0].sku;
+    if (slugs.has(doc.slug as string)) throw slugClash();
+    if (held.includes(sku)) throw skuClash(sku);
+    slugs.add(doc.slug as string);
+    held.push(sku);
+    creates.push(doc);
+    return { _id: '65a0000000000000000000f' + creates.length };
+  };
+
+  const ids = await Promise.all(Array.from({ length: 4 }, () => duplicateProduct(STORE, SOURCE)));
+
+  assert.equal(new Set(ids).size, 4);
+  assert.equal(new Set(creates.map((doc) => doc.slug)).size, 4);
+  assert.equal(new Set(creates.map((doc) => (doc.variants as Array<{ sku: string }>)[0].sku)).size, 4);
+});
+
+test('a SKU taken between choosing it and the variant check is a lost race, and is retried', async () => {
+  let reads = 0;
+  stub.find = (filter) => {
+    const wanted = ((filter['variants.sku'] ?? filter.skus) as { $in: string[] } | undefined)?.$in;
+    if (!wanted) return chain([]);
+    reads += 1;
+    // The second read is the check inside prepareProductVariants: the chosen SKU has just been taken.
+    if (reads === 2) held.push('KURTA-COPY');
+    return chain(held.filter((sku) => wanted.includes(sku)).map((sku) => ({ skus: [sku], variants: [{ sku }] })));
+  };
+  await duplicateProduct(STORE, SOURCE);
+  assert.equal((creates[0].variants as Array<{ sku: string }>)[0].sku, 'KURTA-COPY-2');
 });

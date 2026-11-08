@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { PREVIEW_CREDENTIAL_HEADER } from "@markaz/platform-kit/preview";
-import { OrderRejectedError, TransportUnavailableError } from "./errors";
+import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
 import type {
   CartQuote,
@@ -10,6 +10,7 @@ import type {
   OrderTransport,
   StorefrontCategory,
   StorefrontOrder,
+  StorefrontOrderTracking,
   StorefrontProductDetail,
   StorefrontProductSummary,
   StorefrontTransport,
@@ -21,6 +22,7 @@ import {
   WireErrorEnvelope,
   WireOrderCreated,
   WireOrderLookup,
+  WireOrderTrackingEnvelope,
   WireCategoryList,
   WireProductDetailEnvelope,
   WireProductList,
@@ -40,6 +42,13 @@ export const DEFAULT_REMOTE_TIMEOUT_MS = 4000;
 export const DEFAULT_BFF_TIMEOUT_MS = 10000;
 
 /**
+ * Placing an order writes stock and the order, so it gets longer than a read. The backend hop is shorter than the browser
+ * hop, so the BFF can still answer the browser when the backend does not answer it.
+ */
+export const DEFAULT_SUBMIT_REMOTE_TIMEOUT_MS = 20000;
+export const DEFAULT_SUBMIT_BFF_TIMEOUT_MS = 25000;
+
+/**
  * "http" (the default) calls the seller backend. "stub" never touches the network: every call rejects with
  * not_implemented. Use stub only for a storefront that runs without a seller backend.
  */
@@ -52,6 +61,8 @@ export interface RemoteTransportOptions {
   storeId: string;
   mode?: RemoteMode;
   timeoutMs?: number;
+  /** Timeout for placing an order. Defaults to DEFAULT_SUBMIT_REMOTE_TIMEOUT_MS. */
+  submitTimeoutMs?: number;
   /** Injected in tests. Defaults to the platform fetch. */
   fetchImpl?: typeof fetch;
   /**
@@ -70,6 +81,8 @@ export interface BffTransportOptions {
   /** Same-origin prefix. Defaults to BFF_BASE_PATH, which keeps every call on the store's own host. */
   basePath?: string;
   timeoutMs?: number;
+  /** Timeout for placing an order. Defaults to DEFAULT_SUBMIT_BFF_TIMEOUT_MS. */
+  submitTimeoutMs?: number;
   /** Injected in tests. Defaults to the platform fetch. */
   fetchImpl?: typeof fetch;
 }
@@ -84,6 +97,8 @@ interface ExchangeRequest {
   headers?: Record<string, string>;
   /** Reads may retry once after a network failure. Writes never do: the caller retries with its key. */
   retry: boolean;
+  /** Overrides the exchanger's timeout for this call. */
+  timeoutMs?: number;
 }
 
 type Exchanger = (method: "GET" | "POST", path: string, request: ExchangeRequest) => Promise<Exchange>;
@@ -213,7 +228,7 @@ function makeExchanger(options: {
             ...request.headers,
           },
           body: request.body === undefined ? undefined : JSON.stringify(request.body),
-          signal: AbortSignal.timeout(options.timeoutMs),
+          signal: AbortSignal.timeout(request.timeoutMs ?? options.timeoutMs),
           cache: "no-store",
         });
         const body: unknown = await response.json().catch(() => undefined);
@@ -230,7 +245,7 @@ function makeExchanger(options: {
  * The order operations, over any exchanger. The paths are the same on the seller backend (under a store) and on the
  * BFF (under /api/storefront), so one implementation serves both, and the error mapping cannot drift between them.
  */
-function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): OrderTransport {
+function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submitTimeoutMs: number): OrderTransport {
   return {
     async quoteCart(input: CartQuoteInput): Promise<CartQuote> {
       requireHttp();
@@ -245,7 +260,12 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): Order
         body: { customer: payload.customer, lines: payload.lines },
         headers: { "idempotency-key": payload.idempotencyKey },
         retry: false,
+        timeoutMs: submitTimeoutMs,
       });
+      // A gateway error with no body, or the BFF saying the backend never answered: the order may have been saved.
+      if (result.status >= 500 && (result.body === undefined || errorCode(result.body) === ORDER_OUTCOME_UNKNOWN_CODE)) {
+        throw new TransportUnavailableError("network", "The order placement got no clear answer.", result.status);
+      }
       throwIfRefused(result);
       return unwrap(result, WireOrderCreated, "order").data;
     },
@@ -259,6 +279,17 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): Order
       if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
       throwIfRefused(result);
       return unwrap(result, WireOrderLookup, "order lookup").data;
+    },
+
+    async trackOrder(input: OrderLookupInput): Promise<StorefrontOrderTracking | null> {
+      requireHttp();
+      const result = await exchange("POST", "/orders/track", {
+        body: { orderId: input.orderId, phone: input.phone },
+        retry: true,
+      });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfRefused(result);
+      return unwrap(result, WireOrderTrackingEnvelope, "order tracking").data;
     },
 
     async getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]> {
@@ -278,7 +309,8 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): Order
  *   GET  /products/:slug        product detail; 404 PRODUCT_NOT_FOUND becomes null
  *   POST /cart/quote            price a cart without moving stock
  *   POST /orders                create order, with an Idempotency-Key header; refusals become OrderRejectedError
- *   POST /orders/lookup         order tracking by id and phone; 404 ORDER_NOT_FOUND becomes null
+ *   POST /orders/lookup         the shopper's order by id and phone; 404 ORDER_NOT_FOUND becomes null
+ *   POST /orders/track          customer tracking by id and phone (journey only); 404 ORDER_NOT_FOUND becomes null
  *   GET  /products?ids=         the Live products among these ids
  *
  * Reads retry once, and only when fetch itself fails. HTTP responses are never retried. Writes are never retried
@@ -305,13 +337,14 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     }
   };
 
-  const orders = makeOrderTransport(exchange, requireHttp);
+  const orders = makeOrderTransport(exchange, requireHttp, options.submitTimeoutMs ?? DEFAULT_SUBMIT_REMOTE_TIMEOUT_MS);
 
   return {
     kind: "remote",
     quoteCart: orders.quoteCart,
     submitOrder: orders.submitOrder,
     lookupOrder: orders.lookupOrder,
+    trackOrder: orders.trackOrder,
     getProductsByIds: orders.getProductsByIds,
 
     async getProducts(): Promise<StorefrontProductSummary[]> {
@@ -359,6 +392,6 @@ export function createBffTransport(options: BffTransportOptions = {}): OrderTran
     timeoutMs: options.timeoutMs ?? DEFAULT_BFF_TIMEOUT_MS,
     fetchImpl: options.fetchImpl ?? defaultFetch,
   });
-  return makeOrderTransport(exchange, () => undefined);
+  return makeOrderTransport(exchange, () => undefined, options.submitTimeoutMs ?? DEFAULT_SUBMIT_BFF_TIMEOUT_MS);
 }
 /* @theme-integration-patch:remote */

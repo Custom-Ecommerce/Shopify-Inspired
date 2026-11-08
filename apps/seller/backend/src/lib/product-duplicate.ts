@@ -2,7 +2,7 @@ import type { Types } from 'mongoose';
 import { PRODUCT_SLUG_MAX, PRODUCT_TITLE_MAX } from '@/lib/contracts';
 import { takenDown } from '@/lib/product-lifecycle';
 import { isDuplicateKeyError } from '@/lib/http';
-import { isSkuDuplicateError, prepareProductVariants, skuTakenFromDuplicate } from '@/lib/product-variants';
+import { ProductVariantError, prepareProductVariants } from '@/lib/product-variants';
 import { ProductRequestError, productNotFound, type VariantRow } from '@/lib/products';
 import { Product } from '@/lib/services';
 
@@ -10,7 +10,18 @@ const SKU_MAX = 64;
 const COPY_ATTEMPTS = 50;
 const COPY_SUFFIX = ' (Copy)';
 /** How many times a copy is tried when another writer takes its slug or SKU first. */
-const DUPLICATE_WRITE_ATTEMPTS = 3;
+const DUPLICATE_WRITE_ATTEMPTS = 8;
+/** The most a retry waits per attempt so far. Random, so writers that clashed do not clash again in step. */
+const RETRY_JITTER_MS = 25;
+
+const retryPause = (attempt: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, 5 + Math.random() * RETRY_JITTER_MS * attempt));
+
+/**
+ * Another writer got there first. Either the unique index refused the create (E11000), or the SKU check inside
+ * prepareProductVariants saw a SKU taken after freeSkus chose it. Both mean the same thing: read again.
+ */
+const lostRace = (err: unknown): boolean => isDuplicateKeyError(err) || (err instanceof ProductVariantError && err.code === 'SKU_TAKEN');
 
 interface SourceProduct {
   title: string;
@@ -92,9 +103,9 @@ export async function duplicateProduct(storeId: string, productId: string): Prom
   if (source.moderation) throw takenDown(source.moderation.reason);
   if (source.isDemo === true) throw new ProductRequestError(422, 'PRODUCT_DEMO_NOT_DUPLICABLE', 'This is the sample product. Edit it first, then duplicate it.');
 
-  // The free slug and SKUs are read, then written. A writer that takes one in between makes the create fail on a unique
-  // index (E11000); reading again then finds the next -copy / -COPY candidate. After the last attempt the refusal stands:
-  // 409 SKU_TAKEN for a SKU, 409 PRODUCT_SLUG_TAKEN for a slug (handleProductError).
+  // The free slug and SKUs are read, then written. A writer that takes one in between loses the race (see lostRace);
+  // reading again, after a short random pause, finds the next -copy / -COPY candidate. If every attempt loses, the seller
+  // gets 409 PRODUCT_DUPLICATE_BUSY: the SKU belongs to no other product they could change, so SKU_TAKEN would mislead.
   for (let attempt = 1; ; attempt += 1) {
     try {
       const [slug, skus] = await Promise.all([freeSlug(storeId, source.slug), freeSkus(storeId, source.variants)]);
@@ -143,10 +154,11 @@ export async function duplicateProduct(storeId: string, productId: string): Prom
       });
       return String(created._id);
     } catch (err) {
-      if (!isDuplicateKeyError(err) || attempt >= DUPLICATE_WRITE_ATTEMPTS) {
-        if (isSkuDuplicateError(err)) throw skuTakenFromDuplicate(err);
-        throw err;
+      if (!lostRace(err)) throw err;
+      if (attempt >= DUPLICATE_WRITE_ATTEMPTS) {
+        throw new ProductRequestError(409, 'PRODUCT_DUPLICATE_BUSY', 'Too many copies of this product were being made at once. Please try again.');
       }
+      await retryPause(attempt);
     }
   }
 }
