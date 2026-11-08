@@ -307,3 +307,16 @@ test('print response: parses a full response and rejects an extra key at every l
   assert.equal(orderPrintResponseSchema.safeParse({ ...body, orders: [{ ...sheet, items: [{ ...item, unitPrice: 1 }] }] }).success, false);
   assert.equal(orderPrintResponseSchema.safeParse({ ...body, skipped: [{ id: 'x', reason: 'gone' }] }).success, false);
 });
+
+// EP-02 OB-6: a stored status outside the seven.
+
+test('dashboard shapes accept unknown as a status to show, but a request or filter never does', () => {
+  const item = {
+    id: '65a000000000000000000005', orderId: 'ORD-1', status: 'unknown', paymentMethod: 'cod', paymentStatus: 'unpaid',
+    customerName: null, phone: null, city: null, total: 1, itemCount: 1, courier: null, trackingNumber: null, createdAt: '2026-11-01T10:00:00.000Z',
+  };
+  assert.equal(dashboardOrderListItemSchema.safeParse(item).success, true);
+  assert.deepEqual(failingPaths(dashboardOrderListItemSchema.safeParse({ ...item, status: 'shipped' })), ['status']);
+  assert.deepEqual(failingPaths(dashboardOrderListQuerySchema.safeParse({ status: 'unknown' })), ['status']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'unknown' })), ['status']);
+});

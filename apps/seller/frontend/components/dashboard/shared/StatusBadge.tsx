@@ -68,6 +68,7 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
   delivered: "Delivered",
   cancelled: "Cancelled",
   returned: "Returned",
+  unknown: "Unknown status",
 };
 
 export const PAYMENT_STATUS_LABEL: Record<string, string> = {

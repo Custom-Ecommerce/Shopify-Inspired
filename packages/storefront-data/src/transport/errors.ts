@@ -32,6 +32,17 @@ export class TransportUnavailableError extends Error {
   }
 }
 
+/** The BFF's code when the backend did not answer an order placement: the order may or may not have been saved. */
+export const ORDER_OUTCOME_UNKNOWN_CODE = "ORDER_OUTCOME_UNKNOWN";
+
+/** Placement timed out and the check with the same idempotency key could not reach the server either (CO-03). */
+export class OrderUnconfirmedError extends Error {
+  constructor() {
+    super("The order could not be confirmed.");
+    this.name = "OrderUnconfirmedError";
+  }
+}
+
 /** Configuration that is invalid or unsafe, for example mock data requested in production. */
 export class TransportConfigError extends Error {
   constructor(message: string) {

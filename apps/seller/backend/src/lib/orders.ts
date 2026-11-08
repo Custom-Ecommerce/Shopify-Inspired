@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
 import type {
   DashboardOrderCounts,
+  DashboardOrderDisplayStatus,
   DashboardOrderDetail,
   DashboardOrderListItem,
   DashboardOrderListQuery,
@@ -263,8 +264,9 @@ function iso(value: unknown): string | null {
 const isStatus = (value: unknown): value is DashboardOrderStatus =>
   typeof value === 'string' && (DASHBOARD_ORDER_STATUSES as readonly string[]).includes(value);
 
-function status(value: unknown): DashboardOrderStatus {
-  return isStatus(value) ? value : 'pending';
+/** A stored value outside the seven is shown as unknown. It must not look like an order waiting to be confirmed. */
+function status(value: unknown): DashboardOrderDisplayStatus {
+  return isStatus(value) ? value : 'unknown';
 }
 
 function paymentMethod(value: unknown): DashboardOrderPaymentMethod | null {
@@ -335,7 +337,7 @@ export function toDashboardOrderListItem(doc: unknown): DashboardOrderListItem {
 
 /**
  * The detail page's order, allowlisted the same way. statusHistory and notes are newest first. allowedNext comes from the
- * stored status as it is, not from the mapped one: a corrupt status shows as pending but has no legal moves.
+ * stored status as it is, and a corrupt status shows as unknown and has no legal moves.
  */
 export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
   const row = plainRow(doc);

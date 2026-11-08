@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { resolveStorePage } from "@/lib/resolve-store-page";
 import { storeHref } from "@/lib/store-routes";
+import { formatRs as money } from "@/lib/format";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,7 +91,6 @@ async function fetchOrders(token: string, storeId: string, filters: OrderFilters
   }
 }
 
-const money = (amount: number): string => `PKR ${amount.toLocaleString()}`;
 
 const shortDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Karachi" });

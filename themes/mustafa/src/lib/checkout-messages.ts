@@ -58,6 +58,8 @@ export function failureCopy(failure: CheckoutFailure): string {
       return "This store is not accepting orders right now.";
     case "unavailable":
       return "We could not place your order. Please try again.";
+    case "unconfirmed":
+      return "We could not confirm your order. Please try again; you will not be charged twice.";
   }
 }
 

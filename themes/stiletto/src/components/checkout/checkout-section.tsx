@@ -234,7 +234,7 @@ export function CheckoutSection({
   logoSrc = "/theme-assets/stiletto/logo/logo.png",
 }: CheckoutSectionProps) {
   const { cartItems, subtotal } = useCartContext();
-  const { deliveryCharges, grandTotal, isSubmitting, orderError, submit } = useStilettoCheckout();
+  const { deliveryCharges, grandTotal, isSubmitting, isChecking, canRetryUnconfirmed, orderError, submit } = useStilettoCheckout();
 
   const [whatsapp, setWhatsapp] = useState("");
   const [notes, setNotes] = useState("");
@@ -547,7 +547,7 @@ export function CheckoutSection({
                   disabled={isSubmitting || cartItems.length === 0}
                   className="w-full h-11 bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans text-xs uppercase tracking-[0.15em] font-bold rounded-xl hover:bg-(--surface-elevated)/90 transition-all disabled:opacity-50"
                 >
-                  {isSubmitting ? "Processing Order..." : "Place Order (COD)"}
+                  {isChecking ? "We are checking your order…" : isSubmitting ? "Processing Order..." : canRetryUnconfirmed ? "Try Again" : "Place Order (COD)"}
                 </Button>
 
                 <div className="flex items-center justify-center gap-2 text-[10px] text-(--text-inverse)/40">

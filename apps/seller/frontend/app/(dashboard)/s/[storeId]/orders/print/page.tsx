@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { storeHref } from "@/lib/store-routes";
+import { formatRs as money } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
@@ -22,8 +23,6 @@ const SKIP_WORDS: Record<OrderPrintResponse["skipped"][number]["reason"], string
   cancelled: "cancelled",
   returned: "returned",
 };
-
-const money = (amount: number): string => `Rs. ${amount.toLocaleString()}`;
 
 const shortDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Karachi" });

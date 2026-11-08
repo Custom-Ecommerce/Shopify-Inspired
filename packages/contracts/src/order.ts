@@ -50,6 +50,10 @@ export type Order = z.infer<typeof orderSchema>;
 export const DASHBOARD_ORDER_STATUSES = STOREFRONT_ORDER_STATUSES;
 export type DashboardOrderStatus = (typeof DASHBOARD_ORDER_STATUSES)[number];
 
+/** What the dashboard reads. 'unknown' stands for a stored value outside the seven; it is never accepted as input. */
+export const DASHBOARD_ORDER_DISPLAY_STATUSES = [...DASHBOARD_ORDER_STATUSES, 'unknown'] as const;
+export type DashboardOrderDisplayStatus = (typeof DASHBOARD_ORDER_DISPLAY_STATUSES)[number];
+
 /** COD only in EP-02 (US07). An order written before EP-02 has no payment status and reads as unpaid. */
 export const DASHBOARD_ORDER_PAYMENT_STATUSES = ['unpaid', 'collected'] as const;
 export type DashboardOrderPaymentStatus = (typeof DASHBOARD_ORDER_PAYMENT_STATUSES)[number];
@@ -127,7 +131,7 @@ export const dashboardOrderListQuerySchema = z
 export const dashboardOrderListItemSchema = z.object({
   id: z.string().min(1),
   orderId: z.string().min(1),
-  status: z.enum(DASHBOARD_ORDER_STATUSES),
+  status: z.enum(DASHBOARD_ORDER_DISPLAY_STATUSES),
   /** Null only for an order written before checkout recorded a method. */
   paymentMethod: z.enum(DASHBOARD_ORDER_PAYMENT_METHODS).nullable(),
   paymentStatus: z.enum(DASHBOARD_ORDER_PAYMENT_STATUSES),
@@ -213,7 +217,7 @@ export type DashboardOrderTimelineEntry = z.output<typeof dashboardOrderTimeline
 export const dashboardOrderDetailSchema = z.object({
   id: z.string().min(1),
   orderId: z.string().min(1),
-  status: z.enum(DASHBOARD_ORDER_STATUSES),
+  status: z.enum(DASHBOARD_ORDER_DISPLAY_STATUSES),
   paymentMethod: z.enum(DASHBOARD_ORDER_PAYMENT_METHODS).nullable(),
   paymentStatus: z.enum(DASHBOARD_ORDER_PAYMENT_STATUSES),
   collectedAt: z.string().nullable(),

@@ -64,9 +64,9 @@ export function ProductsView() {
       key: "product",
       header: "Product",
       cell: (product) => (
-        // max-w-xs: truncate only shortens text inside a bounded box. Unbounded, a long title widened the table at about
-        // 1024 px until the "Delete permanently" action was pushed out of view.
-        <div className="flex min-w-0 max-w-xs flex-col">
+        // truncate only shortens text inside a bounded box, and a truncated cell cannot shrink below that box. Narrow until
+        // xl: at 1024 px with the sidebar, a wider one pushed the actions out of view.
+        <div className="flex min-w-0 max-w-44 flex-col xl:max-w-xs">
           <span className="truncate font-medium">{product.title}</span>
           <span className="truncate text-xs text-muted-foreground">{product.slug}</span>
         </div>
@@ -77,7 +77,7 @@ export function ProductsView() {
       header: "Store",
       className: "hidden md:table-cell",
       cell: (product) => (
-        <button type="button" className="truncate text-left text-primary underline-offset-4 hover:underline" onClick={() => go({ ...state, storeId: product.storeId, page: 1 })}>
+        <button type="button" className="block max-w-32 truncate text-left text-primary underline-offset-4 hover:underline xl:max-w-48" onClick={() => go({ ...state, storeId: product.storeId, page: 1 })}>
           {product.storeName ?? product.storeId}
         </button>
       ),
@@ -94,12 +94,13 @@ export function ProductsView() {
         </div>
       ),
     },
-    { key: "updated", header: "Updated", className: "hidden lg:table-cell", cell: (product) => <span className="text-muted-foreground">{formatRelative(product.updatedAt)}</span> },
+    { key: "updated", header: "Updated", className: "hidden xl:table-cell", cell: (product) => <span className="text-muted-foreground">{formatRelative(product.updatedAt)}</span> },
     {
       key: "actions",
       header: "Actions",
       cell: (product) => (
-        <div className="flex flex-wrap gap-1">
+        // Stacked until xl, so the column is only as wide as its widest button. They stay real buttons, in tab order.
+        <div className="flex flex-col items-stretch gap-1 xl:flex-row xl:flex-wrap xl:items-center">
           {availableModerationActions(product).map((action) => (
             <Button key={action} variant="outline" size="sm" onClick={() => setIntent({ action, product })}>
               {MODERATION_COPY[action].button}

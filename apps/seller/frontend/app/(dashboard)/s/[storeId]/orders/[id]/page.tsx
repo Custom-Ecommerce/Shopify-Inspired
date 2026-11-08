@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { storeHref } from "@/lib/store-routes";
+import { formatRs as money } from "@/lib/format";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,8 +61,6 @@ interface ActionError {
   /** The move to try again, for errors that are worth retrying as they are. */
   retry: string | null;
 }
-
-const money = (amount: number): string => `PKR ${amount.toLocaleString()}`;
 
 const dateTime = (iso: string): string =>
   new Date(iso).toLocaleString("en-PK", {
@@ -685,7 +684,7 @@ function MarkCollectedDialog({
       </Button>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Collected Rs. {order.total.toLocaleString()} in cash from the customer?</AlertDialogTitle>
+          <AlertDialogTitle>Collected {money(order.total)} in cash from the customer?</AlertDialogTitle>
           <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
         </AlertDialogHeader>
         {error ? (

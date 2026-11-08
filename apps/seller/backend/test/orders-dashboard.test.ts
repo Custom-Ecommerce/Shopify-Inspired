@@ -551,3 +551,20 @@ test('orders mapper: a hydrated document and a lean row map the same way', () =>
   assert.deepEqual(fromHydrated.statusHistory, []);
   assert.equal('idempotencyKey' in fromHydrated, false);
 });
+
+test('orders: a stored status outside the seven reads as unknown, never as pending, in the list and the detail', async () => {
+  orders = [order(1, { status: 'shipped' })];
+  const { status, body } = await listJson('/api/orders');
+  assert.equal(status, 200);
+  assert.equal(dashboardOrderListResponseSchema.safeParse(body).success, true);
+  assert.equal(body.docs[0].status, 'unknown');
+  assert.equal(body.counts.pending, 0, 'the tabs do not count it as pending');
+  assert.equal(body.counts.all, 1);
+
+  const res = await detailGET(get('/api/orders/' + oid(1)), params(oid(1)));
+  const detail = (await res.json()) as any;
+  assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
+  assert.equal(detail.status, 'unknown');
+  assert.deepEqual(detail.allowedNext, []);
+  assert.equal(detail.canCancel, false);
+});
