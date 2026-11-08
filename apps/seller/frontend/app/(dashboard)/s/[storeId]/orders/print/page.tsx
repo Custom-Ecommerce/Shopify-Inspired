@@ -62,7 +62,8 @@ function pageStyles(mode: PrintMode): string {
 .ps-notes { border: 0.3mm solid #000; min-height: 35mm; padding: 2mm; }
 .ps-scroll { overflow-x: auto; max-width: 100%; }
 
-@page { size: ${mode === "label" ? "A6" : "A4"}; margin: 0; }
+/* A6 is written in millimetres because Chromium drops "size: A6" as invalid. */
+@page { size: ${mode === "label" ? "105mm 148mm" : "A4"}; margin: 0; }
 
 @media print {
   html, body { background: #fff !important; }
