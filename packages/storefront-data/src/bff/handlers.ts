@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MAX_LINE_QTY } from "../domain/cart";
 import { OrderRejectedError, TransportUnavailableError } from "../transport/errors";
 import type { OrderRejection, OrderTransport } from "../transport/types";
+import { FAVOURITES_PAGE_SIZE } from "../domain/favourites";
 
 /*
  * The BFF: the same-origin endpoints a storefront's browser code calls. They run on the storefront server, so the seller
@@ -36,6 +37,8 @@ export interface BffRoutes {
   quote(request: Request, context: BffRouteContext): Promise<Response>;
   submit(request: Request, context: BffRouteContext): Promise<Response>;
   lookup(request: Request, context: BffRouteContext): Promise<Response>;
+  /** The Live products behind a browser's favourites: GET ?ids=a,b. Public data, so it has no origin gate. */
+  products(request: Request, context: BffRouteContext): Promise<Response>;
 }
 
 /** A real checkout is a few hundred bytes. Anything past this is not one. Matches the backend's cap. */
@@ -47,6 +50,7 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 const lineSchema = z.object({
   productId: z.string().trim().min(1).max(64),
+  variantId: z.string().trim().min(1).max(64).optional(),
   qty: z.number(),
 });
 
@@ -112,6 +116,27 @@ export function rejectionToEnvelope(rejection: OrderRejection): {
         status: 422,
         code: "UNKNOWN_PRODUCT",
         message: "A product in the order is not available.",
+        extra: withProduct(rejection.productId),
+      };
+    case "product_unavailable":
+      return {
+        status: 422,
+        code: "PRODUCT_UNAVAILABLE",
+        message: "A product in the order is no longer for sale.",
+        extra: withProduct(rejection.productId),
+      };
+    case "variant_required":
+      return {
+        status: 422,
+        code: "VARIANT_REQUIRED",
+        message: "Choose a variant of this product.",
+        extra: withProduct(rejection.productId),
+      };
+    case "unknown_variant":
+      return {
+        status: 422,
+        code: "UNKNOWN_VARIANT",
+        message: "A variant in the order is not available.",
         extra: withProduct(rejection.productId),
       };
     case "out_of_stock":
@@ -264,8 +289,36 @@ async function handle<T>(
   }
 }
 
+/** Only what could be a product id reaches the backend, which then keeps only real ObjectIds. */
+const PRODUCT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+function requestedIds(request: Request): string[] {
+  const raw = new URL(request.url).searchParams.get("ids") ?? "";
+  return raw.split(",").filter((id) => PRODUCT_ID.test(id)).slice(0, FAVOURITES_PAGE_SIZE);
+}
+
+async function products(request: Request, context: BffRouteContext, deps: BffDeps): Promise<Response> {
+  if (context.tenantKey === null) return errorResponse(404, "STORE_NOT_FOUND", "Store not found.");
+  const lookup = await deps.lookupStore(context.tenantKey, context.clientIp);
+  if (lookup.outcome === "not-found") return errorResponse(404, "STORE_NOT_FOUND", "Store not found.");
+  if (lookup.outcome === "inactive") return errorResponse(403, "STORE_NOT_ACTIVE", "This store is not available.");
+  if (lookup.outcome === "error") return errorResponse(503, "STOREFRONT_UNAVAILABLE", "Storefront data is temporarily unavailable.");
+  try {
+    const data = await lookup.transport.getProductsByIds(requestedIds(request));
+    return jsonResponse(200, { data, page: 1, totalPages: data.length > 0 ? 1 : 0, totalDocs: data.length, limit: FAVOURITES_PAGE_SIZE });
+  } catch (error) {
+    if (error instanceof TransportUnavailableError) {
+      return errorResponse(503, "STOREFRONT_UNAVAILABLE", "Storefront data is temporarily unavailable.");
+    }
+    console.error("[storefront-bff] unhandled error", error);
+    return errorResponse(500, "INTERNAL_ERROR", "Internal server error");
+  }
+}
+
 export function createBffRoutes(deps: BffDeps): BffRoutes {
   return {
+    products: (request, context) => products(request, context, deps),
+
     quote: (request, context) =>
       handle(request, context, quoteBody, deps, { needsIdempotencyKey: false }, async (transport, input) => ({
         kind: "data",

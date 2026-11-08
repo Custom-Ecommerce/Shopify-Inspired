@@ -7,6 +7,8 @@ import Link from "next/link";
 import { productCardDictionary } from "../../constants/dictionary";
 import { productCardExitVariants } from "../../lib/animations";
 import { Button } from "../primitives/button";
+import { FavouriteButton } from "./FavouriteButton";
+import { PreviewLabel } from "./PreviewLabel";
 
 import "swiper/css";
 import "swiper/css/pagination";
@@ -44,6 +46,8 @@ export interface ProductCardProps {
   product: NormalizedProduct;
   index: number;
   variant: ProductCardVariant;
+  /** Fills its grid cell instead of keeping a carousel width. */
+  fill?: boolean;
 }
 
 /**
@@ -68,7 +72,7 @@ function isRenderableCssColor(value: string): boolean {
   return standardCssColors.has(val);
 }
 
-export function ProductCard({ product, index, variant }: ProductCardProps) {
+export function ProductCard({ product, index, variant, fill = false }: ProductCardProps) {
   const tokens = variantClasses[variant];
   const isShowcase = variant === "showcase";
 
@@ -85,9 +89,11 @@ export function ProductCard({ product, index, variant }: ProductCardProps) {
       exit={!isShowcase ? "exit" : undefined}
       viewport={isShowcase ? { once: true } : undefined}
       transition={{ duration: 0.3, delay: index * (isShowcase ? 0.1 : 0.05) }}
-      className="snap-start shrink-0 w-[60vw] md:w-[28vw] lg:w-[22%] max-w-[320px] flex flex-col group cursor-pointer"
+      className={`${fill ? "w-full" : "snap-start shrink-0 w-[60vw] md:w-[28vw] lg:w-[22%] max-w-[320px]"} flex flex-col group cursor-pointer`}
     >
       <div className={`relative w-full aspect-[3/4] ${tokens.imageBg} rounded-xl overflow-hidden mb-5`}>
+        <PreviewLabel label={product.previewLabel} className="absolute top-3 left-3 z-20" />
+        <FavouriteButton productId={product.id} title={title} previewLabel={product.previewLabel} className="absolute top-3 right-3 z-20" />
         <Swiper
           modules={[Pagination]}
           pagination={{ clickable: true }}
@@ -148,6 +154,9 @@ export function ProductCard({ product, index, variant }: ProductCardProps) {
         <p className={`font-sans text-[15px] md:text-[16px] ${tokens.title} mb-1 text-primary`}>
           {price}
         </p>
+        {product.stockTone === "negative" ? (
+          <p className={`font-sans text-[12px] md:text-[13px] ${tokens.muted} mb-1`}>{product.stockLabel}</p>
+        ) : null}
         <p className={`font-sans text-[12px] md:text-[13px] ${tokens.muted} mb-4 text-primary`}>
           {variantsInfo}
         </p>

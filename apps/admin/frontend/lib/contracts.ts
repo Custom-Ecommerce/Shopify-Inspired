@@ -35,25 +35,6 @@ export type {
 } from "@markaz/contracts";
 
 export const { adminLedgerListSchema, adminCommissionRatesSchema, adminSubscriptionPlanListSchema } = contracts;
-export const {
-  adminCategorySchema,
-  adminCategoryListSchema,
-  adminCategoryCreateRequestSchema,
-  adminCategoryUpdateRequestSchema,
-  adminCategoryDeleteResponseSchema,
-  ADMIN_CATEGORY_NAME_MAX,
-  ADMIN_CATEGORY_SLUG_MAX,
-  ADMIN_CATEGORY_DESCRIPTION_MAX,
-  ADMIN_CATEGORY_ORDER_MAX,
-  ADMIN_CATEGORY_SLUG_PATTERN,
-} = contracts;
-export type {
-  AdminCategory,
-  AdminCategoryList,
-  AdminCategoryCreateRequest,
-  AdminCategoryUpdateRequest,
-  AdminCategoryDeleteResponse,
-} from "@markaz/contracts";
 export type {
   AdminLedgerEntry,
   AdminLedgerList,
@@ -81,6 +62,19 @@ export type {
   AdminSettingsUpdateRequest,
   AdminSettingsUpdateResponse,
 } from "@markaz/contracts";
+
+export const {
+  moderationProductListSchema,
+  moderationProductSchema,
+  moderationPermanentDeleteResponseSchema,
+  moderationTakedownRequestSchema,
+  moderationRestoreRequestSchema,
+  moderationDeleteRequestSchema,
+  moderationPermanentDeleteRequestSchema,
+  MODERATION_REASON_MIN,
+  MODERATION_REASON_MAX,
+} = contracts;
+export type { ModerationProduct, ModerationProductList, ModerationPermanentDeleteResponse, ModerationStatus } from "@markaz/contracts";
 
 export const { adminOverviewSchema, ADMIN_OVERVIEW_NEW_SELLER_DAYS } = contracts;
 export type { AdminOverview } from "@markaz/contracts";

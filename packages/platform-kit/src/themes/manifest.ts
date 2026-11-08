@@ -101,8 +101,19 @@ export type ThemeSlug = (typeof THEME_MANIFEST)[number]["slug"];
 
 export const THEME_SLUGS: readonly ThemeSlug[] = THEME_MANIFEST.map((entry) => entry.slug);
 
-/** Theme new stores start with. Must be an `available` entry (checked by invariants). */
+/**
+ * The fallback theme: what a store renders with when it has no theme set, or its theme is unknown, archived or not
+ * installed. Stores created before D-059 have no theme set and keep rendering with this, so it is not changed. Must be an
+ * `available` entry (checked by invariants).
+ */
 export const DEFAULT_THEME_SLUG: ThemeSlug = "mustafa";
+
+/**
+ * The theme a NEW store is created with (D-059): written to `storefront.activeTheme` when the store is provisioned. All
+ * EP-01 theme work (variant selector, gallery video, favourites, preview banner) is in Stiletto, and Mustafa shows a
+ * multi-variant product as sold out. Must be an `available` entry with an installed package.
+ */
+export const NEW_STORE_THEME_SLUG: ThemeSlug = "stiletto";
 
 const THEME_SLUG_SET: ReadonlySet<string> = new Set<string>(THEME_SLUGS);
 

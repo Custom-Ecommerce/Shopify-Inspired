@@ -1,13 +1,13 @@
-import type { StorefrontProductSummary } from "../transport/types";
+import type { StorefrontCategory, StorefrontProductSummary } from "../transport/types";
 import { storePaths } from "./paths";
 import type { ProductCardVM } from "./product-card";
 
-/** A category as a shopper navigates it. Derived from products: the seller backend has no categories endpoint. */
+/** A category as a shopper navigates it. The list and its order are the seller's; the counts come from the catalogue. */
 export interface CategoryVM {
   id: string;
   slug: string;
   name: string;
-  /** The primary image of the first product in the category, or null when none has one. */
+  /** The category's banner, else the primary image of its first product, else null. */
   image: { url: string; alt: string } | null;
   productCount: number;
   href: string;
@@ -19,26 +19,19 @@ export interface StoreChromeVM {
   products: ProductCardVM[];
 }
 
-/** Unique categories of a product list, in first-seen order. */
-export function deriveCategories(products: StorefrontProductSummary[]): CategoryVM[] {
-  const byId = new Map<string, CategoryVM>();
-  for (const product of products) {
-    for (const category of product.categories) {
-      const existing = byId.get(category.id);
-      if (existing) {
-        existing.productCount += 1;
-        if (existing.image === null && product.primaryImage) existing.image = { url: product.primaryImage.url, alt: category.name };
-        continue;
-      }
-      byId.set(category.id, {
-        id: category.id,
-        slug: category.slug,
-        name: category.name,
-        image: product.primaryImage ? { url: product.primaryImage.url, alt: category.name } : null,
-        productCount: 1,
-        href: storePaths.collection(category.slug),
-      });
-    }
-  }
-  return [...byId.values()];
+/** The store's categories, in the order given, each with what the product list says about it. */
+export function toCategoryVMs(categories: StorefrontCategory[], products: StorefrontProductSummary[]): CategoryVM[] {
+  return categories.map((category) => {
+    const held = products.filter((product) => product.categories.some((c) => c.id === category.id));
+    const pictured = held.find((product) => product.primaryImage)?.primaryImage ?? null;
+    const url = category.bannerUrl ?? pictured?.url ?? null;
+    return {
+      id: category.id,
+      slug: category.slug,
+      name: category.name,
+      image: url ? { url, alt: category.name } : null,
+      productCount: held.length,
+      href: storePaths.collection(category.slug),
+    };
+  });
 }

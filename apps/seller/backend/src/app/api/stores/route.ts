@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { z } from 'zod';
-import { SELLER_STORE_READABLE_FIELDS, assertCan } from '@markaz/auth';
-import { Store } from '@markaz/db-schemas';
+import { STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from '@markaz/platform-kit/reservation';
 import { authenticate } from '@/lib/auth';
+import { seedStoreDemoData } from '@/lib/demo-data';
 import { HttpError, handleRouteError, isDuplicateKeyError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
+import { SELLER_STORE_READABLE_FIELDS, Store, assertCan } from '@/lib/services';
+import { newStoreStorefront } from '@/lib/store-defaults';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,8 +22,8 @@ const createStoreSchema = z
     slug: z
       .string()
       .trim()
-      .min(2)
-      .max(63)
+      .min(STORE_SLUG_MIN_LENGTH)
+      .max(STORE_SLUG_MAX_LENGTH)
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'slug may only contain lowercase letters, digits and single hyphens'),
     owner: z.string().optional(),
   })
@@ -137,11 +139,14 @@ export async function POST(request: NextRequest): Promise<Response> {
         slug: input.slug,
         owner: ownerId,
         status: 'pending',
+        storefront: newStoreStorefront(),
       });
     } catch (err) {
       if (isDuplicateKeyError(err)) throw new HttpError(409, 'A store with this slug already exists');
       throw err;
     }
+
+    await seedStoreDemoData(String(created._id));
 
     return NextResponse.json(
       {

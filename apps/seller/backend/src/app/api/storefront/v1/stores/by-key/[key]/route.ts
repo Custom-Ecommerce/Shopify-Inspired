@@ -2,13 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { connectSellerDb } from '@/lib/mongo';
 import { Store } from '@/lib/services';
-import {
-  PUBLIC_CACHE_HEADERS,
-  databaseUnavailable,
-  handleStorefrontError,
-  storeNotFound,
-} from '@/lib/storefront/errors';
+import { PUBLIC_CACHE_HEADERS, databaseUnavailable, storeNotFound } from '@/lib/storefront/errors';
+import { PREVIEW_RESPONSE_HEADERS, isPreviewRequest, storefrontFailure } from '@/lib/storefront/preview-request';
 import { toStorefrontStoreDto, type StoreRow } from '@/lib/storefront/store-dto';
+import { servesStore } from '@/lib/storefront/store-guard';
 import { buildStoreLookup, parseLookupBy } from '@/lib/storefront/store-key';
 
 export const runtime = 'nodejs';
@@ -22,10 +19,12 @@ type InactiveStatus = 'pending' | 'suspended' | 'archived';
  * Public: no session. Resolves a store by slug, internal handle, or verified custom domain.
  *   200 { data: <store> }                  the store is active
  *   200 { data: { status } }               the store exists but is pending, suspended, or archived (nothing else is exposed)
+ *   200 { data: <store>, preview: true }   the preview credential is good for this store, and it is active or pending
  *   404 STORE_NOT_FOUND                    unknown or malformed key, or a domain that is not verified
  *   400 INVALID_REQUEST                    ?by= is not one of slug, handle, domain
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ key: string }> }): Promise<Response> {
+  let preview = false;
   try {
     const { key } = await context.params;
     const by = parseLookupBy(request.nextUrl.searchParams.get('by'));
@@ -40,12 +39,18 @@ export async function GET(request: NextRequest, context: { params: Promise<{ key
     const store = (await (Store as any).findOne(lookup.filter).lean()) as (StoreRow & { status: string }) | null;
     if (!store) throw storeNotFound();
 
+    preview = servesStore(store.status, true) && (await isPreviewRequest(request, String(store._id)));
+    if (preview) {
+      const status = store.status === 'pending' ? 'pending' : 'active';
+      return NextResponse.json({ data: await toStorefrontStoreDto(store, status), preview: true }, { headers: PREVIEW_RESPONSE_HEADERS });
+    }
+
     if (store.status !== 'active') {
       return NextResponse.json({ data: { status: store.status as InactiveStatus } }, { headers: PUBLIC_CACHE_HEADERS });
     }
 
     return NextResponse.json({ data: await toStorefrontStoreDto(store) }, { headers: PUBLIC_CACHE_HEADERS });
   } catch (err) {
-    return handleStorefrontError(err);
+    return storefrontFailure(err, preview);
   }
 }

@@ -39,7 +39,11 @@ function simulateOutage(): void {
 
 /** Applies the equality filters the route sends, so an unpublished or foreign product is genuinely not found. */
 function matches(row: Record<string, any>, filter: Record<string, any>): boolean {
-  return Object.entries(filter).every(([k, v]) => String(row[k]) === String(v));
+  return Object.entries(filter).every(([k, v]) => {
+    if (v === null) return (row[k] ?? null) === null;
+    if (typeof v === 'object' && '$ne' in v) return row[k] !== v.$ne;
+    return String(row[k]) === String(v);
+  });
 }
 
 beforeEach(() => {
@@ -90,10 +94,25 @@ function product(overrides: Record<string, any> = {}) {
     store: STORE_ID,
     slug: 'blue-shirt',
     title: 'Blue shirt',
-    price: 1500,
-    originalPrice: 1800,
-    stockStatus: 'in_stock',
+    minPrice: 1500,
+    variants: [
+      {
+        _id: '65a0000000000000000000e1',
+        title: 'Default',
+        sku: 'SECRET-SKU',
+        barcode: 'SECRET-BARCODE',
+        price: 1500,
+        compareAtPrice: 1800,
+        trackQuantity: true,
+        stockQuantity: 7,
+        lowStockThreshold: null,
+        optionValues: [],
+        imageId: null,
+        position: 0,
+      },
+    ],
     isPublished: true,
+    isDemo: false,
     categories: [{ _id: '65a0000000000000000000c1', slug: 'shirts', name: 'Shirts' }, null],
     media: [
       { _id: 'm1', url: 'https://res.cloudinary.com/demo/a.jpg', alt: 'Front' },
@@ -128,8 +147,22 @@ test('returns the full detail and it matches the storefront wire schema', async 
     title: 'Blue shirt',
     currency: 'PKR',
     price: 1500,
-    originalPrice: 1800,
+    compareAtPrice: 1800,
     stockStatus: 'in_stock',
+    defaultVariantId: '65a0000000000000000000e1',
+    hasVariants: false,
+    options: [],
+    variants: [
+      {
+        id: '65a0000000000000000000e1',
+        title: 'Default',
+        price: 1500,
+        compareAtPrice: 1800,
+        availability: 'in_stock',
+        optionValues: [],
+        imageId: null,
+      },
+    ],
     primaryImage: { url: 'https://res.cloudinary.com/demo/a.jpg', alt: 'Front' },
     categories: [{ id: '65a0000000000000000000c1', slug: 'shirts', name: 'Shirts' }],
     avgRating: 4.5,
@@ -138,9 +171,10 @@ test('returns the full detail and it matches the storefront wire schema', async 
     highlights: ['Cotton', 'Machine washable'],
     // The dangling media entry is dropped; an image with no alt falls back to the title.
     images: [
-      { url: 'https://res.cloudinary.com/demo/a.jpg', alt: 'Front' },
-      { url: 'https://res.cloudinary.com/demo/b.jpg', alt: 'Blue shirt' },
+      { id: 'm1', url: 'https://res.cloudinary.com/demo/a.jpg', alt: 'Front' },
+      { id: 'm2', url: 'https://res.cloudinary.com/demo/b.jpg', alt: 'Blue shirt' },
     ],
+    videos: [],
     seo: { title: 'Buy the blue shirt', description: null, imageUrl: 'https://res.cloudinary.com/demo/seo.jpg' },
     tags: ['summer'],
     categorySlugs: ['shirts'],
@@ -152,12 +186,12 @@ test('the query is store-scoped and published-only, and never selects stock coun
   storeRow = activeStore();
   products = [product()];
   await get(STORE_ID, 'blue-shirt');
-  assert.deepEqual(rec.filter, { store: STORE_ID, slug: 'blue-shirt', isPublished: true });
+  assert.deepEqual(rec.filter, { store: STORE_ID, slug: 'blue-shirt', isPublished: true, isDemo: { $ne: true }, deletedAt: null, moderation: null });
   for (const hidden of ['stockQuantity', 'reservedQuantity', 'stockHistory', 'store', 'viewCount', 'lowStockThreshold']) {
     assert.equal(hidden in rec.projection, false, hidden + ' must not be selected');
   }
   const body = JSON.stringify(await (await get(STORE_ID, 'blue-shirt')).json());
-  for (const hidden of ['stockQuantity', 'reservedQuantity', '"store"']) assert.equal(body.includes(hidden), false, hidden);
+  for (const hidden of ['stockQuantity', 'trackQuantity', 'SECRET-SKU', 'SECRET-BARCODE', '"store"']) assert.equal(body.includes(hidden), false, hidden);
 });
 
 test("a product's own delivery charge wins over the store rate, and 0 means free", async () => {
@@ -166,6 +200,26 @@ test("a product's own delivery charge wins over the store rate, and 0 means free
   assert.equal((await (await get(STORE_ID, 'blue-shirt')).json()).data.deliveryCharge, 90);
   products = [product({ deliveryCharge: 0 })];
   assert.equal((await (await get(STORE_ID, 'blue-shirt')).json()).data.deliveryCharge, 0);
+});
+
+test('videos come back in order, a dangling one is dropped, and a missing poster is null', async () => {
+  storeRow = activeStore();
+  products = [
+    product({
+      videos: [
+        { _id: 'v2', url: 'https://res.cloudinary.com/demo/video/b.mp4', posterUrl: 'https://res.cloudinary.com/demo/video/b.jpg', duration: 42 },
+        null,
+        { _id: 'v1', url: 'https://res.cloudinary.com/demo/video/a.mp4' },
+      ],
+    }),
+  ];
+  const res = await get(STORE_ID, 'blue-shirt');
+  const { data } = storefrontProductDetailResponseSchema.parse(await res.json());
+  assert.deepEqual(data.videos, [
+    { id: 'v2', url: 'https://res.cloudinary.com/demo/video/b.mp4', posterUrl: 'https://res.cloudinary.com/demo/video/b.jpg', duration: 42 },
+    { id: 'v1', url: 'https://res.cloudinary.com/demo/video/a.mp4', posterUrl: null, duration: null },
+  ]);
+  assert.equal('videos' in rec.projection, true);
 });
 
 test('a product with no images and no description still validates', async () => {
@@ -195,6 +249,26 @@ test('an unpublished product is indistinguishable from a missing one', async () 
   const res = await get(STORE_ID, 'blue-shirt');
   assert.equal(res.status, 404);
   assert.equal((await res.json()).error.code, 'PRODUCT_NOT_FOUND');
+});
+
+test('a demo product and a trashed product are not found, and a demo row with no flag at all is still served as not demo', async () => {
+  storeRow = activeStore();
+  products = [product({ isDemo: true })];
+  assert.equal((await get(STORE_ID, 'blue-shirt')).status, 404);
+  products = [product({ deletedAt: new Date() })];
+  assert.equal((await get(STORE_ID, 'blue-shirt')).status, 404);
+  products = [product({ isDemo: undefined })];
+  assert.equal((await get(STORE_ID, 'blue-shirt')).status, 200);
+});
+
+test('an out-of-stock product set to hide keeps its product page: only lists hide it', async () => {
+  storeRow = activeStore();
+  const sold = product({ hideWhenOutOfStock: true });
+  sold.variants[0].stockQuantity = 0;
+  products = [sold];
+  const res = await get(STORE_ID, 'blue-shirt');
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).data.stockStatus, 'out_of_stock');
 });
 
 test("another store's product is not served under this store", async () => {

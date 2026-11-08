@@ -1,8 +1,11 @@
 /* patch_session_fix: shared workspace helpers (kept out of route files; Next only allows route exports there) */
+import { STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from '@markaz/platform-kit/reservation';
 import { HttpError } from '@/lib/http';
 import type { AuthContext } from '@/lib/auth';
+import { seedStoreDemoData } from '@/lib/demo-data';
 import { connectSellerDb } from '@/lib/mongo';
 import { Store, User } from '@/lib/services';
+import { newStoreStorefront } from '@/lib/store-defaults';
 
 export type WorkspaceStoreStatus = 'pending' | 'active' | 'suspended' | 'archived';
 
@@ -42,9 +45,17 @@ export function slugify(name: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 50)
+    .slice(0, STORE_SLUG_MAX_LENGTH)
     .replace(/-+$/g, '');
-  return base.length >= 2 ? base : 'store';
+  return base.length >= STORE_SLUG_MIN_LENGTH ? base : 'store';
+}
+
+const SLUG_SUFFIX_LENGTH = 4;
+
+/** The base cut so that '-' and the suffix still fit the limit, for the retry after a slug is taken. */
+export function slugWithSuffix(base: string, suffix: string): string {
+  const room = STORE_SLUG_MAX_LENGTH - 1 - SLUG_SUFFIX_LENGTH;
+  return base.slice(0, room).replace(/-+$/g, '') + '-' + suffix.slice(0, SLUG_SUFFIX_LENGTH);
 }
 
 function iso(value: unknown): string | null {
@@ -154,9 +165,10 @@ export async function provisionStore(ctx: AuthContext, rawName: unknown): Promis
 
   const base = slugify(name);
   for (let attempt = 0; attempt < 6; attempt++) {
-    const slug = attempt === 0 ? base : (base.slice(0, 56) + '-' + Math.random().toString(36).slice(2, 6));
+    const slug = attempt === 0 ? base : slugWithSuffix(base, Math.random().toString(36).slice(2).padEnd(SLUG_SUFFIX_LENGTH, '0'));
     try {
-      const created = await Store.create({ name, slug, owner: ctx.userObjectId, status: newStoreStatus() });
+      const created = await Store.create({ name, slug, owner: ctx.userObjectId, status: newStoreStatus(), storefront: newStoreStorefront() });
+      await seedStoreDemoData(String(created._id));
       return {
         ok: true,
         store: { id: String(created._id), name: String(created.name), slug: String(created.slug), status: String(created.status) },

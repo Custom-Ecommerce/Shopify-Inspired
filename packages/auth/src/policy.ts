@@ -3,10 +3,9 @@
 //
 // Allowlists are taken from the Payload access blocks in the reference
 // (apps/admin/src/collections/*.ts and globals/*.ts). Anything not declared
-// here is denied. Collections that are seller-owned (products, orders,
-// discounts, reviews, returns, storeArticles, referrals, media,
-// broadcastLogs, customers) are deliberately NOT declared yet: can() throws
-// PolicyConfigError for them until B5 completion captures their field lists.
+// here is denied. Seller-owned collections that are still undeclared
+// (broadcastLogs, customers) make can() throw PolicyConfigError until their
+// field lists are captured.
 
 export type Actor = 'admin' | 'seller' | 'system' | 'public';
 export type Operation = 'read' | 'create' | 'update' | 'delete';
@@ -61,6 +60,25 @@ export const ADMIN_LEDGER_READABLE_FIELDS = [
 // Payload PlatformSettings: settingsRevision has update access false, so it is excluded.
 export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
 'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote',
+] as const;
+
+// What a seller may set on a category of their store. store and isDemo are never client-writable.
+export const SELLER_CATEGORY_WRITABLE_FIELDS = ['name', 'slug', 'order', 'description'] as const;
+
+// What an anonymous storefront may read of a category.
+export const PUBLIC_CATEGORY_READABLE_FIELDS = ['name', 'slug', 'order', 'description', 'banner'] as const;
+
+// What a seller may set on a product of their store. store, isPublished, isDemo and every derived field (minPrice,
+// ratings, counts) are never client-writable. Stock of an existing variant has its own rule: see D-034.
+export const SELLER_PRODUCT_WRITABLE_FIELDS = [
+'title', 'slug', 'description', 'highlights', 'tags', 'categories', 'media', 'videos', 'options', 'variants',
+'deliveryCharge', 'isFeatured', 'hideWhenOutOfStock', 'seoTitle', 'seoDescription', 'seoImage',
+] as const;
+
+// What an anonymous storefront may read of a published product.
+export const PUBLIC_PRODUCT_READABLE_FIELDS = [
+'title', 'slug', 'description', 'highlights', 'tags', 'categories', 'media', 'videos', 'options', 'variants', 'minPrice',
+'deliveryCharge', 'avgRating', 'reviewCount', 'seoTitle', 'seoDescription', 'seoImage',
 ] as const;
 
 export const POLICY_MATRIX: Readonly<Record<string, CollectionPolicy>> = {
@@ -126,11 +144,82 @@ update: { actors: [], fields: '*' },
 delete: { actors: [], fields: '*' },
 },
 
+// Categories belong to one store. A seller manages their own; which store that is, the route decides. Admin may only
+// read (D-006), and the storefront reads the public fields. Everything else is denied, system included.
 categories: {
-read: { actors: ['public', 'admin', 'system', 'seller'], fields: '*' },
-create: { actors: ['admin', 'system'], fields: '*' },
-update: { actors: ['admin', 'system'], fields: '*' },
-delete: { actors: ['admin', 'system'], fields: '*' },
+read: {
+actors: ['seller', 'admin', 'public'],
+fields: { seller: '*', admin: '*', public: PUBLIC_CATEGORY_READABLE_FIELDS },
+},
+create: { actors: ['seller'], fields: { seller: SELLER_CATEGORY_WRITABLE_FIELDS } },
+update: { actors: ['seller'], fields: { seller: SELLER_CATEGORY_WRITABLE_FIELDS } },
+delete: { actors: ['seller'], fields: { seller: '*' } },
+},
+
+// Products belong to one store. A seller manages their own; which store that is, the route decides. Admin may only
+// read for now (D-002: moderation arrives with its own routes), and the storefront reads published products.
+products: {
+read: {
+actors: ['seller', 'admin', 'public'],
+fields: { seller: '*', admin: '*', public: PUBLIC_PRODUCT_READABLE_FIELDS },
+},
+create: { actors: ['seller'], fields: { seller: SELLER_PRODUCT_WRITABLE_FIELDS } },
+update: { actors: ['seller'], fields: { seller: SELLER_PRODUCT_WRITABLE_FIELDS } },
+delete: { actors: ['seller'], fields: { seller: '*' } },
+},
+
+// What happens to a product as a whole, kept apart from the edits above so isPublished stays out of a PATCH. update is
+// publish, unpublish and restore. delete is the permanent delete: a seller's from trash, system's from the retention job.
+productLifecycle: {
+read: { actors: [], fields: {} },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['isPublished', 'deletedAt'] } },
+delete: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
+},
+
+// Stock of existing variants (D-034). update is the adjust endpoint, the only way that stock changes; read is the
+// inventory list and the stock history. A movement is never edited or removed.
+inventory: {
+read: { actors: ['seller'], fields: { seller: '*' } },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['stockQuantity'] } },
+delete: { actors: [], fields: {} },
+},
+
+// Bulk import and export of a store's products. Only the owner: an admin reads products through moderation, and never
+// writes them (D-002). read is the export, create is the import, which also updates what it matches.
+productBulk: {
+read: { actors: ['seller'], fields: { seller: '*' } },
+create: { actors: ['seller'], fields: { seller: '*' } },
+update: { actors: [], fields: {} },
+delete: { actors: [], fields: {} },
+},
+
+// Admin moderation of products (D-002, D-026). read is the cross-store list, update is takedown and restore, delete is the
+// admin delete and the permanent delete. It is a row of its own so an admin still cannot edit a product (products above).
+productModeration: {
+read: { actors: ['admin'], fields: { admin: '*' } },
+create: { actors: [], fields: {} },
+update: { actors: ['admin'], fields: { admin: '*' } },
+delete: { actors: ['admin'], fields: { admin: '*' } },
+},
+
+// A preview link of a store (D-018, D-019). create is the click on "Preview store". Only the store's owner previews in
+// this epic (D-042), so an admin has no row here even though an admin can read the store. Nothing else exists to do to a
+// link: it is signed, not stored.
+storePreview: {
+read: { actors: [], fields: {} },
+create: { actors: ['seller'], fields: { seller: '*' } },
+update: { actors: [], fields: {} },
+delete: { actors: [], fields: {} },
+},
+
+// Reviews of permanently deleted products (D-014, A-004). Only the delete step writes them, and nobody changes them.
+archivedReviews: {
+read: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
+create: { actors: ['system'], fields: { system: '*' } },
+update: { actors: [], fields: {} },
+delete: { actors: [], fields: {} },
 },
 
 subscriptionPlans: {
@@ -197,15 +286,9 @@ Object.assign(POLICY_MATRIX, {
   },
 });
 
-// B10.3 declarations. Categories are read-only for sellers, as in Payload (ID-26). A seller may create a media
-// record for their store, supplying alt only (ID-23). Update stays with the system; delete with admin and system.
+// B10.3 declarations. A seller may create a media record for their store, supplying alt only (ID-23). Update stays
+// with the system; delete with admin and system.
 Object.assign(POLICY_MATRIX, {
-  categories: {
-    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
-    create: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
-    update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
-    delete: { actors: ['admin', 'system'], fields: '*' },
-  },
   media: {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
     create: { actors: ['system', 'seller'], fields: { system: '*', seller: ['alt'] } },

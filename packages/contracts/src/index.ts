@@ -1,6 +1,7 @@
 export * from './object-id';
 export * from './store';
 export * from './user';
+export * from './money';
 export * from './product';
 export * from './order';
 export * from './store-article';
@@ -23,6 +24,10 @@ export * from './media';
 
 // B10.4: analytics.
 export * from './analytics';
+// PB-7: bulk import and export of products.
+export * from './product-import';
+// PB-7: admin product moderation.
+export * from './moderation';
 // AF1: admin console store endpoints.
 export * from './admin-store';
 
@@ -31,9 +36,6 @@ export * from './admin-ops';
 
 // AF2: admin console commission ledger, store commission rates, and subscription plans.
 export * from './admin-commerce';
-
-// AF3: admin console catalogue (categories).
-export * from './admin-catalogue';
 
 // AF4: admin console platform settings.
 export * from './admin-settings';

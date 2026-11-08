@@ -41,8 +41,6 @@ export async function resolveOwnedStoreId(
   ctx: AuthContext,
   where: Record<string, unknown> | null,
 ): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const StoreModel = Store as any;
   const header = request.headers.get('x-store-id')?.trim() ?? '';
   const fromWhere = storeEqualsOf(where) ?? '';
   if (header !== '' && fromWhere !== '' && header !== fromWhere) throw new HttpError(403, 'Store mismatch');
@@ -50,14 +48,14 @@ export async function resolveOwnedStoreId(
   const candidate = header !== '' ? header : fromWhere;
   if (candidate === '') {
     if (ctx.actor !== 'seller') throw new HttpError(400, 'A store is required');
-    const first = (await StoreModel.findOne({ owner: ctx.userObjectId }).sort({ createdAt: 1 }).select('_id').lean()) as { _id: unknown } | null;
+    const first = (await Store.findOne({ owner: ctx.userObjectId }).sort({ createdAt: 1 }).select('_id').lean()) as unknown as { _id: unknown } | null;
     if (!first) throw new HttpError(404, 'No store is linked to this account');
     return String(first._id);
   }
 
   if (!mongoose.isValidObjectId(candidate)) throw new HttpError(403, 'Store does not belong to this account');
   if (ctx.actor === 'seller') {
-    const owned = await StoreModel.exists({ _id: candidate, owner: ctx.userObjectId });
+    const owned = await Store.exists({ _id: candidate, owner: ctx.userObjectId });
     if (!owned) throw new HttpError(403, 'Store does not belong to this account');
   }
   return candidate;

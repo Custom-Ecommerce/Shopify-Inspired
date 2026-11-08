@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { CatalogPageProps } from "@markaz/storefront-theme-kit";
+import type { CatalogPageProps } from "@markaz/storefront-data";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -14,12 +14,7 @@ export function CatalogPage(props: CatalogPageProps) {
   const store = (props as any).store;
   const storePaths = (props as any).storePaths ?? (props as any).paths ?? {};
 
-  const rawProducts: any[] =
-    (props as any).products ??
-    (props as any).catalog?.products ??
-    (props as any).catalog?.items ??
-    (props as any).items ??
-    [];
+  const rawProducts = props.data.status === "ok" ? props.data.products : [];
 
   const rawCategories: any[] =
     (props as any).categories ?? (props as any).catalog?.categories ?? [];
@@ -340,9 +335,6 @@ export function CatalogPage(props: CatalogPageProps) {
                 <ProductCard
                   key={product.id ?? product.slug}
                   product={product}
-                  store={store}
-                  storePaths={storePaths}
-                  paths={storePaths}
                 />
               ))}
             </div>

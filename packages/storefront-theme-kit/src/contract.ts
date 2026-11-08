@@ -38,6 +38,7 @@ export interface ThemeModule {
     Collections?: ComponentType<VM.CollectionsPageProps>;
     Collection?: ComponentType<VM.CollectionPageProps>;
     Feedback?: ComponentType<VM.FeedbackPageProps>;
+    Favourites?: ComponentType<VM.FavouritesPageProps>;
   };
   /** Set to have the container load the store's catalogue once and pass it to Layout as `chrome`. */
   wantsChrome?: boolean;

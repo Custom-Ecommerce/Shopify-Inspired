@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client/index.ts",
-    "./server": "./src/server/index.ts"
+    "./server": "./src/server/index.ts",
+    "./preview": "./src/preview.ts"
   },
   "scripts": {
     "type-check": "tsc --noEmit"

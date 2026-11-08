@@ -183,7 +183,7 @@ export function CartDrawer(props: CartDrawerProps) {
                             {item.title}
                           </h3>
                           <p className="text-[11px] text-[var(--nav-mobile-text)]/60 mt-0.5">
-                            Size: {item.size || "N/A"} | Color: {item.color || "N/A"}
+                            {item.variantTitle ?? `Size: ${item.size || "N/A"} | Color: ${item.color || "N/A"}`}
                           </p>
 
                           <p className="font-sans text-[22px] font-bold text-[var(--nav-mobile-text)] mt-1">

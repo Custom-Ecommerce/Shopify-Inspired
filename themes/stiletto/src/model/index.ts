@@ -40,6 +40,11 @@ export interface NormalizedProduct {
   tags: string[];
   price: string;
   images: string[];
+  /** The same images with their alt text, in the seller's order. The first is the primary. */
+  gallery?: { id?: string | null; url: string; alt: string }[];
+  /** What the product page says about stock. */
+  stockLabel?: string;
+  stockTone?: "positive" | "negative";
   sizes: string[];
   colors: string[];
   variantsInfo: string;
@@ -53,6 +58,8 @@ export interface NormalizedProduct {
   metafields?: Array<{ id?: string; key?: string; value: string }>;
   specs?: NormalizedProductSpec[];
   reviews: ReviewItem[];
+  /** Only in a seller's preview: the data layer's tag for this product. */
+  previewLabel?: string | null;
 }
 
 export interface NormalizedCategory {

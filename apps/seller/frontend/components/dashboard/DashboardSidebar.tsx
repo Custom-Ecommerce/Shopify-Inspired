@@ -14,6 +14,7 @@ import {
   SidebarGroupLabel,
   SidebarGroupContent,
 } from "@/components/ui/sidebar";
+import { PreviewStoreButton } from "@/components/dashboard/PreviewStoreButton";
 import { UserMenu } from "@/components/dashboard/UserMenu";
 import { StoreSwitcher } from "@/components/dashboard/StoreSwitcher";
 import { BrandMark } from "@/components/shared/BrandMark";
@@ -23,6 +24,7 @@ import { storeBasePath } from "@/lib/store-routes";
 import {
   LayoutDashboard,
   Package,
+  FolderTree,
   ShoppingCart,
   Archive,
   Star,
@@ -43,7 +45,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 /**
  * Single source of truth for navigation.
  * Used by DashboardSidebar and DashboardBreadcrumb (import from here).
- * Blueprint §4.3: 4 groups, 15 destinations exactly.
+ * Blueprint §4.3: 4 groups, plus Categories (EP-01) for 16 destinations.
  *
  * `href`s are STORE-RELATIVE (e.g. "/orders"); they are resolved to
  * `/s/<storeId>/orders` with the store-aware `href()` helper at render time.
@@ -54,6 +56,7 @@ export const NAV_GROUPS = [
     links: [
       { href: "/", label: "Overview", icon: LayoutDashboard, exact: true },
       { href: "/products", label: "Products", icon: Package },
+      { href: "/categories", label: "Categories", icon: FolderTree },
       { href: "/orders", label: "Orders", icon: ShoppingCart },
       { href: "/inventory", label: "Inventory", icon: Archive },
       { href: "/returns", label: "Returns", icon: RotateCcw },
@@ -170,6 +173,11 @@ export function DashboardSidebar() {
 
       <SidebarFooter className="px-2 pb-3">
         <SidebarMenu className="gap-2">
+          {activeStore && (
+            <SidebarMenuItem>
+              <PreviewStoreButton />
+            </SidebarMenuItem>
+          )}
           {/* "View My Store": outlined external CTA (blueprint §4.3) */}
           {activeStore && (
             <SidebarMenuItem>

@@ -8,11 +8,14 @@ import {
   StoreNotFoundError,
 } from "@/lib/api/errors";
 import type { StorefrontStore } from "@/lib/api/schemas";
+import { requestPreviewToken } from "@/lib/preview";
 
 /**
  * Result of resolving a tenant key to a store.
  *
- * - `ok`          the store exists and is active.
+ * - `ok`          the store exists and is active, or this is a preview the backend
+ *                 accepted. `previewToken` is set only then: it is the credential
+ *                 for the transport, and must never reach a client component.
  * - `not-found`   no such store (or a key that cannot be one).
  * - `unavailable` the store exists but is not serving; `status` is its state
  *                 (`pending`, `suspended`, `archived`).
@@ -21,7 +24,7 @@ import type { StorefrontStore } from "@/lib/api/schemas";
  *                 should not cache or treat it as "not found".
  */
 export type ResolveStoreResult =
-  | { outcome: "ok"; store: StorefrontStore }
+  | { outcome: "ok"; store: StorefrontStore; previewToken: string | null }
   | { outcome: "not-found" }
   | { outcome: "unavailable"; status: string }
   | { outcome: "error"; error: unknown };
@@ -36,8 +39,11 @@ export type ResolveStoreResult =
 export const resolveStore = cache(
   async (key: string, by: "slug" | "handle"): Promise<ResolveStoreResult> => {
     try {
-      const result = await fetchStoreByKey(key, by);
-      if (result.kind === "active") return { outcome: "ok", store: result.store };
+      const token = await requestPreviewToken();
+      const result = await fetchStoreByKey(key, by, token);
+      if (result.kind === "active") {
+        return { outcome: "ok", store: result.store, previewToken: result.preview ? token : null };
+      }
       return { outcome: "unavailable", status: result.status };
     } catch (error) {
       if (error instanceof StoreNotFoundError) return { outcome: "not-found" };

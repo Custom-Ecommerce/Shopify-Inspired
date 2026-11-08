@@ -25,8 +25,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Order not found');
 
     const storeId = await resolveOwnedStoreId(request, ctx, null);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const row = await (Order as any).findOne({ _id: id, store: storeId }).lean();
+    const row = await Order.findOne({ _id: id, store: storeId }).lean();
     if (!row) throw new HttpError(404, 'Order not found');
 
     return NextResponse.json(publicOrder(plainDoc(row)), { headers: { 'Cache-Control': 'no-store' } });

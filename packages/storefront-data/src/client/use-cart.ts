@@ -3,14 +3,29 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { toCartVM } from "../view-models/cart";
 import type { CartVM } from "../view-models/cart";
+import type { Money } from "../domain/money";
 import type { ProductCardVM } from "../view-models/product-card";
 import { useCartStoreApi } from "./context";
 
-export type CartableProductVM = Pick<ProductCardVM, "id" | "slug" | "title" | "image" | "price">;
+export type CartableProductVM = Pick<
+  ProductCardVM,
+  "id" | "slug" | "title" | "image" | "price" | "defaultVariantId" | "hasVariants"
+>;
+
+/** The variant a shopper chose. Not needed for a product with one variant. */
+export interface CartableVariantVM {
+  id: string;
+  title: string;
+  price: Money;
+}
 
 export interface UseCartResult extends CartVM {
   isHydrated: boolean;
-  add: (product: CartableProductVM, qty?: number) => void;
+  /**
+   * Adds a product. A product with one variant needs nothing more. A product with several needs the variant the shopper
+   * chose: without one nothing is added and this answers false, because a shopper must never get a size they did not pick.
+   */
+  add: (product: CartableProductVM, qty?: number, variant?: CartableVariantVM) => boolean;
   /** Sets one line's quantity. Below 1 removes the line. Quantities are capped at MAX_LINE_QTY. */
   setQty: (lineId: string, qty: number) => void;
   remove: (lineId: string) => void;
@@ -42,17 +57,21 @@ export function useCart(): UseCartResult {
   const view = useMemo(() => toCartVM(lines), [lines]);
 
   const add = useCallback(
-    (product: CartableProductVM, qty = 1) => {
+    (product: CartableProductVM, qty = 1, variant?: CartableVariantVM) => {
+      if (!variant && product.hasVariants) return false;
       addLine(
         {
           id: product.id,
+          variantId: variant?.id ?? product.defaultVariantId,
+          variantTitle: variant?.title ?? null,
           slug: product.slug,
           title: product.title,
           image: product.image,
-          unitPrice: product.price.amount,
+          unitPrice: (variant?.price ?? product.price).amount,
         },
         qty,
       );
+      return true;
     },
     [addLine],
   );

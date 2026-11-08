@@ -42,33 +42,20 @@ async function countOrders(
   return data.totalDocs;
 }
 
-async function countTotalProducts(token: string, storeId: string): Promise<number> {
-  const where = encodeURIComponent(
-    JSON.stringify({ store: { equals: storeId } })
-  );
-  const res = await fetch(
-    `${PAYLOAD_API_URL}/api/products?where=${where}&limit=1&depth=0`,
-    { headers: storeHeaders(token, storeId), cache: "no-store" }
-  );
+async function countProducts(token: string, storeId: string, query: string): Promise<number> {
+  const res = await fetch(`${PAYLOAD_API_URL}/api/products?limit=1${query}`, {
+    headers: storeHeaders(token, storeId),
+    cache: "no-store",
+  });
   if (!res.ok) return 0;
   const data = await res.json();
   return data.totalDocs ?? 0;
 }
 
-async function countLowStockProducts(token: string, storeId: string): Promise<number> {
-  const where = encodeURIComponent(
-    JSON.stringify({
-      and: [{ store: { equals: storeId } }, { stockQuantity: { less_than_equal: 5 } }],
-    })
-  );
-  const res = await fetch(
-    `${PAYLOAD_API_URL}/api/products?where=${where}&limit=1&depth=0`,
-    { headers: storeHeaders(token, storeId), cache: "no-store" }
-  );
-  if (!res.ok) return 0;
-  const data = await res.json();
-  return data.totalDocs ?? 0;
-}
+const countTotalProducts = (token: string, storeId: string): Promise<number> => countProducts(token, storeId, "");
+
+const countLowStockProducts = (token: string, storeId: string): Promise<number> =>
+  countProducts(token, storeId, "&stock=low");
 
 async function revenueThisMonth(
   token: string,

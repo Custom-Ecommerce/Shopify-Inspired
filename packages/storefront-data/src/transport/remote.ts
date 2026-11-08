@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { PREVIEW_CREDENTIAL_HEADER } from "@markaz/platform-kit/preview";
 import { OrderRejectedError, TransportUnavailableError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
 import type {
@@ -7,6 +8,7 @@ import type {
   OrderLookupInput,
   OrderRejection,
   OrderTransport,
+  StorefrontCategory,
   StorefrontOrder,
   StorefrontProductDetail,
   StorefrontProductSummary,
@@ -19,6 +21,7 @@ import {
   WireErrorEnvelope,
   WireOrderCreated,
   WireOrderLookup,
+  WireCategoryList,
   WireProductDetailEnvelope,
   WireProductList,
   WireRefusal,
@@ -56,6 +59,11 @@ export interface RemoteTransportOptions {
    * shopper and not to the storefront server. Omit it for calls that are not made on a shopper's behalf.
    */
   clientIp?: string | null;
+  /**
+   * A preview the backend accepted for this store. Sent as a header on every call, never in a URL. Every call here is
+   * already no-store, so a preview answer has no cache entry at all. A credential: never log it.
+   */
+  previewToken?: string | null;
 }
 
 export interface BffTransportOptions {
@@ -140,6 +148,12 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
       return { code: "invalid_quantity", productId };
     case "UNKNOWN_PRODUCT":
       return { code: "unknown_product", productId };
+    case "PRODUCT_UNAVAILABLE":
+      return { code: "product_unavailable", productId };
+    case "VARIANT_REQUIRED":
+      return { code: "variant_required", productId };
+    case "UNKNOWN_VARIANT":
+      return { code: "unknown_variant", productId };
     case "OUT_OF_STOCK":
       return { code: "out_of_stock", productId };
     case "PAYMENT_METHOD_UNAVAILABLE":
@@ -152,6 +166,9 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
       return { code: "invalid_request", message: message ?? "Invalid request." };
     case "STORE_NOT_ACTIVE":
       return { code: "store_inactive" };
+    // Reads as an invalid request, whose message every theme already shows, so no theme needs a new case.
+    case "PREVIEW_ORDER_BLOCKED":
+      return { code: "invalid_request", message: message ?? "This is a preview, so no order was placed." };
     default:
       return null;
   }
@@ -176,9 +193,11 @@ function makeExchanger(options: {
   timeoutMs: number;
   fetchImpl: typeof fetch;
   clientIp?: string | null;
+  previewToken?: string | null;
 }): Exchanger {
   const forwarded: Record<string, string> =
     options.clientIp && options.clientIp !== "unknown" ? { "x-forwarded-for": options.clientIp } : {};
+  if (options.previewToken) forwarded[PREVIEW_CREDENTIAL_HEADER] = options.previewToken;
 
   return async (method, path, request) => {
     const attempts = request.retry ? 2 : 1;
@@ -241,6 +260,13 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): Order
       throwIfRefused(result);
       return unwrap(result, WireOrderLookup, "order lookup").data;
     },
+
+    async getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]> {
+      requireHttp();
+      if (ids.length === 0) return [];
+      const result = await exchange("GET", "/products?ids=" + ids.map(encodeURIComponent).join(","), { retry: true });
+      return unwrap(result, WireProductList, "product list").data;
+    },
   };
 }
 
@@ -253,6 +279,7 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): Order
  *   POST /cart/quote            price a cart without moving stock
  *   POST /orders                create order, with an Idempotency-Key header; refusals become OrderRejectedError
  *   POST /orders/lookup         order tracking by id and phone; 404 ORDER_NOT_FOUND becomes null
+ *   GET  /products?ids=         the Live products among these ids
  *
  * Reads retry once, and only when fetch itself fails. HTTP responses are never retried. Writes are never retried
  * automatically: the caller retries with the same idempotency key.
@@ -266,6 +293,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     timeoutMs: options.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,
     fetchImpl: options.fetchImpl ?? defaultFetch,
     clientIp: options.clientIp,
+    previewToken: options.previewToken,
   });
 
   const requireHttp = (): void => {
@@ -284,11 +312,18 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     quoteCart: orders.quoteCart,
     submitOrder: orders.submitOrder,
     lookupOrder: orders.lookupOrder,
+    getProductsByIds: orders.getProductsByIds,
 
     async getProducts(): Promise<StorefrontProductSummary[]> {
       requireHttp();
       const result = await exchange("GET", "/products", { retry: true });
       return unwrap(result, WireProductList, "product list").data;
+    },
+
+    async listCategories(): Promise<StorefrontCategory[]> {
+      requireHttp();
+      const result = await exchange("GET", "/categories", { retry: true });
+      return unwrap(result, WireCategoryList, "category list").data;
     },
 
     async listProducts(query: ProductQuery = {}): Promise<ProductListPage> {

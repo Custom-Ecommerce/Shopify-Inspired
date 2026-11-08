@@ -6,6 +6,9 @@ import type { Money } from "../domain/money";
 export interface CartLineVM {
   id: string;
   productId: string;
+  variantId: string;
+  /** Null for a product with no options, so a theme shows no "Default" label. */
+  variantTitle: string | null;
   slug: string;
   title: string;
   image: { url: string; alt: string } | null;
@@ -26,6 +29,8 @@ export function toCartVM(lines: CartLine[]): CartVM {
     lines: lines.map((line) => ({
       id: line.id,
       productId: line.productId,
+      variantId: line.variantId,
+      variantTitle: line.variantTitle,
       slug: line.slug,
       title: line.title,
       image: line.image,

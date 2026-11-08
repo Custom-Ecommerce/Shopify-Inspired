@@ -23,8 +23,9 @@ export const SYNC_TARGETS = SYNC_SOURCES;
 export type SyncTarget = SyncSource;
 
 /**
- * Entities that carry the v2 envelope. `category` and `commissionLedger`
- * adopt it after the store flows are stable (§7.2.1) and are added then.
+ * Entities that carry the v2 envelope. `commissionLedger` adopts it after the
+ * store flows are stable (§7.2.1) and is added then. Categories are owned by
+ * one store on the seller side (D-006), so they are never replicated.
  */
 export const SYNC_ENTITIES = ["store", "seller", "platform"] as const;
 export type SyncEntity = (typeof SYNC_ENTITIES)[number];

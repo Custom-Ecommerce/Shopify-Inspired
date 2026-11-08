@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { assertCan, signSession, User, Category, Media } from '@/lib/services';
+import { assertCan, signSession, Store, User, Category, Media } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { signParams } from '@/lib/cloudinary';
+import { assertStoreMedia } from '@/lib/products';
 
 const SECRET = 'x'.repeat(40);
 const USER = '65a000000000000000000001';
@@ -15,10 +16,12 @@ const MEDIA1 = '65a0000000000000000000f1';
 const MEDIA_OTHER = '65a0000000000000000000f2';
 const CAT_A = '65a0000000000000000000c1';
 const CAT_B = '65a0000000000000000000c2';
+const CAT_OTHER = '65a0000000000000000000c3';
 
 const CategoryModel = Category as any;
 const MediaModel = Media as any;
 const UserModel = User as any;
+const StoreModel = Store as unknown as { findOne: () => unknown };
 
 let categories: Array<Record<string, any>> = [];
 let media: Array<Record<string, any>> = [];
@@ -65,6 +68,7 @@ function installStubs(): () => void {
     mCount: MediaModel.countDocuments,
     mCreate: MediaModel.create,
     uFindById: UserModel.findById,
+    sFindOne: StoreModel.findOne,
   };
   (mongoose as any).connect = async () => mongoose;
   CategoryModel.find = (filter: any) => query(categories.filter((r) => matches(r, filter)));
@@ -77,6 +81,7 @@ function installStubs(): () => void {
     return row;
   };
   UserModel.findById = () => ({ select: () => ({ lean: async () => ({ store: STORE }) }) });
+  StoreModel.findOne = () => query([{ _id: STORE }], true);
   return () => {
     (mongoose as any).connect = originals.connect;
     CategoryModel.find = originals.cFind;
@@ -85,14 +90,16 @@ function installStubs(): () => void {
     MediaModel.countDocuments = originals.mCount;
     MediaModel.create = originals.mCreate;
     UserModel.findById = originals.uFindById;
+    StoreModel.findOne = originals.sFindOne;
   };
 }
 
 function seed() {
   const now = '2026-10-01T00:00:00.000Z';
   categories = [
-    { _id: CAT_A, name: 'Tops', slug: 'tops', order: 1, createdAt: now, updatedAt: now },
-    { _id: CAT_B, name: 'Bottoms', slug: 'bottoms', order: 2, createdAt: now, updatedAt: now },
+    { _id: CAT_A, store: STORE, name: 'Tops', slug: 'tops', order: 1, createdAt: now, updatedAt: now },
+    { _id: CAT_B, store: STORE, name: 'Bottoms', slug: 'bottoms', order: 2, createdAt: now, updatedAt: now },
+    { _id: CAT_OTHER, store: OTHER_STORE, name: 'Hats', slug: 'hats', order: 0, createdAt: now, updatedAt: now },
   ];
   media = [
     { _id: MEDIA1, store: STORE, alt: 'Shirt front', url: 'https://res.cloudinary.com/demo/image/upload/v1/markaz/a.jpg', cloudinaryPublicId: 'markaz/a', cloudinaryResourceType: 'image', createdAt: now, updatedAt: now },
@@ -106,13 +113,13 @@ function authed(method: string, url: string, body?: unknown, bearer = token): Ne
   return new NextRequest(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
 }
 
-function multipart(file: Blob | null, alt: string | null): NextRequest {
+function multipart(file: Blob | null, alt: string | null, storeHeader?: string): NextRequest {
   const form = new FormData();
   if (file) form.append('file', file, 'a.png');
   if (alt !== null) form.append('alt', alt);
   return new NextRequest('http://seller.test/api/media', {
     method: 'POST',
-    headers: { authorization: 'Bearer ' + token },
+    headers: { authorization: 'Bearer ' + token, ...(storeHeader ? { 'x-store-id': storeHeader } : {}) },
     body: form,
   });
 }
@@ -126,7 +133,7 @@ test('categories require a session: no token is refused with 401', async () => {
   assert.equal(response.status, 401);
 });
 
-test('the category list returns the platform categories in order, in the list envelope', async () => {
+test('the category list returns only the categories of the seller store, in the list envelope', async () => {
   seed();
   const restore = installStubs();
   try {
@@ -231,14 +238,57 @@ test('an image upload is signed, stored under the seller store, and answered wit
   }
 });
 
+test('media follows x-store-id: an upload for a second store lands there, and that store may use it', async () => {
+  seed();
+  const restore = installStubs();
+  const StoreExists = Store as unknown as { exists: (filter: { _id: string }) => Promise<unknown> };
+  const savedExists = StoreExists.exists;
+  const savedCount = MediaModel.countDocuments;
+  StoreExists.exists = async (filter) => (filter._id === OTHER_STORE ? { _id: filter._id } : null);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ secure_url: 'https://res.cloudinary.com/demo/n.png', public_id: 'n', resource_type: 'image', width: 1, height: 1, bytes: 1 }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as any;
+  try {
+    const response = await mediaPOST(multipart(image('image/png'), 'Second store', OTHER_STORE));
+    assert.equal(response.status, 201);
+    const body = (await response.json()) as { id: string; store: string };
+    assert.equal(body.store, OTHER_STORE);
+
+    MediaModel.countDocuments = async (filter: { store: string; _id: { $in: string[] } }) =>
+      media.filter((row) => row.store === filter.store && filter._id.$in.includes(String(row._id))).length;
+    await assertStoreMedia(OTHER_STORE, [body.id]);
+    await assert.rejects(assertStoreMedia(STORE, [body.id]), /Choose images from this store/);
+    MediaModel.countDocuments = savedCount;
+
+    const list = await mediaGET(
+      new NextRequest('http://seller.test/api/media', { headers: { authorization: 'Bearer ' + token, 'x-store-id': OTHER_STORE } }),
+    );
+    assert.equal(list.status, 200);
+    const listed = (await list.json()) as { docs: Array<{ store: string }> };
+    assert.ok(listed.docs.length > 0);
+    assert.ok(listed.docs.every((doc) => doc.store === OTHER_STORE));
+
+    StoreExists.exists = async () => null;
+    assert.equal((await mediaPOST(multipart(image('image/png'), 'Not mine', OTHER_STORE))).status, 403);
+  } finally {
+    globalThis.fetch = originalFetch;
+    StoreExists.exists = savedExists;
+    restore();
+  }
+});
+
 test('the upload signature is SHA-1 over the sorted parameters and the secret', () => {
   const expected = createHash('sha1').update('folder=markaz&timestamp=1700000000' + 'secret').digest('hex');
   assert.equal(signParams({ timestamp: '1700000000', folder: 'markaz' }, 'secret'), expected);
 });
 
-test('the policy: sellers read categories but cannot write them; they may create media with alt only', () => {
+test('the policy: sellers manage named category fields only; they may create media with alt only', () => {
   assert.doesNotThrow(() => assertCan('seller', 'read', 'categories'));
-  assert.throws(() => assertCan('seller', 'create', 'categories'));
+  assert.doesNotThrow(() => assertCan('seller', 'create', 'categories', ['name']));
+  assert.throws(() => assertCan('seller', 'create', 'categories', ['store']));
   assert.doesNotThrow(() => assertCan('seller', 'create', 'media', ['alt']));
   assert.throws(() => assertCan('seller', 'create', 'media', ['url']));
 });

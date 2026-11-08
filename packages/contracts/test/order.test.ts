@@ -19,7 +19,7 @@ function order(overrides: Record<string, unknown> = {}) {
     phone: '03001234567',
     city: 'Karachi',
     address: 'Block 5',
-    items: [{ productId: 'p1', productTitle: 'Shirt', unitPrice: 1200, quantity: 2 }],
+    items: [{ productId: 'p1', variantId: 'v1', productTitle: 'Shirt', variantTitle: 'Default', unitPrice: 1200, quantity: 2 }],
     subtotal: 2400,
     deliveryCharges: 200,
     total: 2600,
@@ -39,7 +39,7 @@ test('a missing total is reported against total', () => {
 });
 
 test('a zero quantity is reported against the line quantity', () => {
-  const bad = order({ items: [{ productId: 'p1', productTitle: 'Shirt', unitPrice: 1200, quantity: 0 }] });
+  const bad = order({ items: [{ productId: 'p1', variantId: 'v1', productTitle: 'Shirt', variantTitle: 'Default', unitPrice: 1200, quantity: 0 }] });
   assert.deepEqual(failingPaths(orderSchema.safeParse(bad)), ['items.0.quantity']);
 });
 

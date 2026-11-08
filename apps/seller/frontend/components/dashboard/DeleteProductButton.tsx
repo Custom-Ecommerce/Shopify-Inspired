@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
+import { refusalMessage } from "@/lib/product-actions";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -15,29 +16,54 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+/** demo: gone at once. trash: recoverable for a year. permanent: from trash, gone for good. */
+export type DeleteMode = "demo" | "trash" | "permanent";
+
+const COPY: Record<DeleteMode, { label: string; title: string; action: string; after: string }> = {
+  demo: {
+    label: "Delete",
+    title: "Delete sample product?",
+    action: "This will permanently delete",
+    after: "This can't be undone.",
+  },
+  trash: {
+    label: "Delete",
+    title: "Move to trash?",
+    action: "This takes off your store and moves to trash:",
+    after: "You can restore it from Trash for 365 days.",
+  },
+  permanent: {
+    label: "Delete forever",
+    title: "Delete forever?",
+    action: "This will permanently delete",
+    after: "This can't be undone. Its reviews are archived, and past orders keep their details.",
+  },
+};
+
 export function DeleteProductButton({
   productId,
   productTitle,
+  mode,
 }: {
   productId: string;
   productTitle: string;
+  mode: DeleteMode;
 }) {
   const storeFetch = useStoreFetch();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const copy = COPY[mode];
 
   async function handleDelete() {
     setDeleting(true);
     setError(null);
     try {
-      const res = await storeFetch(`/api/dashboard/products/${productId}`, {
-        method: "DELETE",
-      });
+      const query = mode === "permanent" ? "?permanent=true" : "";
+      const res = await storeFetch(`/api/dashboard/products/${productId}${query}`, { method: "DELETE" });
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setError(data?.error ?? "Could not delete this product.");
+        setError(refusalMessage(await res.json().catch(() => null), "Could not delete this product."));
         return;
       }
       setOpen(false);
@@ -57,15 +83,15 @@ export function DeleteProductButton({
         className="h-auto p-0 text-xs text-destructive"
         onClick={() => setOpen(true)}
       >
-        Delete
+        {copy.label}
       </Button>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete product?</AlertDialogTitle>
+          <AlertDialogTitle>{copy.title}</AlertDialogTitle>
           <AlertDialogDescription>
-            This will permanently delete{" "}
-            <span className="font-medium text-foreground">{productTitle}</span>.
-            This can&apos;t be undone.
+            {copy.action}{" "}
+            <span className="font-medium text-foreground">{productTitle}</span>.{" "}
+            {copy.after}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error && <p className="px-1 text-xs text-destructive">{error}</p>}
@@ -76,7 +102,7 @@ export function DeleteProductButton({
             onClick={handleDelete}
             disabled={deleting}
           >
-            {deleting ? "Deleting…" : "Delete"}
+            {deleting ? "Deleting…" : copy.label}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

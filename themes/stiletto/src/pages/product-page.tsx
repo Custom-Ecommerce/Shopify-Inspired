@@ -13,7 +13,7 @@ export function ProductPage({ slug, product }: ProductPageProps) {
   const { content, categories } = useStilettoChrome();
   const { products } = useStoreData();
   const mapped = useMemo(() => (product ? toStilettoProduct(product, content.sampleReviews) : null), [product, content.sampleReviews]);
-  if (!mapped) return <UnavailablePage message="We could not load this product just now. Please try again in a moment." />;
+  if (!product || !mapped) return <UnavailablePage message="We could not load this product just now. Please try again in a moment." />;
   return (
     <div className="min-h-screen bg-[var(--featured-bg,#FAF9F6)]">
       <StilettoHeader />
@@ -21,6 +21,7 @@ export function ProductPage({ slug, product }: ProductPageProps) {
       <main className="relative pt-20 md:pt-20">
         <ProductDetailView
           product={mapped}
+          detail={product}
           allProducts={products}
           categories={categories}
           reviews={mapped.reviews}

@@ -20,6 +20,8 @@ export interface CartItem {
   numericPrice: number;
   image: string;
   quantity: number;
+  /** The chosen variant, for a product that has several. */
+  variantTitle?: string;
   size?: string;
   color?: string;
   pack?: string;
@@ -66,6 +68,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         numericPrice: line.unitPrice.amount,
         image: line.image?.url ?? PLACEHOLDER_IMAGE,
         quantity: line.qty,
+        variantTitle: line.variantTitle ?? undefined,
       })),
     [cart.lines],
   );
@@ -75,7 +78,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addToCart = useCallback<CartContextValue["addToCart"]>(
     (item) => {
       // As before, adding something already in the cart opens the cart and leaves the quantity alone.
-      const isAlreadyInCart = lines.some((line) => line.id === (item.productId ?? item.lineId));
+      const isAlreadyInCart = lines.some((line) => line.id === item.lineId);
       if (!isAlreadyInCart) {
         add(
           {
@@ -84,8 +87,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
             title: item.title,
             image: item.image ? { url: item.image, alt: item.title } : null,
             price: toMoney(parseNumericPrice(item.price)),
+            // The adapter gives each product its variant id as the line id.
+            defaultVariantId: item.lineId,
+            hasVariants: false,
           },
           item.quantity,
+          item.variantTitle
+            ? { id: item.lineId, title: item.variantTitle, price: toMoney(parseNumericPrice(item.price)) }
+            : undefined,
         );
       }
       setIsCartOpen(true);

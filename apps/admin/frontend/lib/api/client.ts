@@ -25,18 +25,16 @@ import { syncStateToQuery, type SyncListState } from "@/lib/sync";
 import { listStateToQuery, type StoreListState } from "@/lib/stores";
 import { ledgerStateToQuery, ratesStateToQuery, type CommissionListState } from "@/lib/commission";
 import { subscriptionStateToQuery, type SubscriptionListState } from "@/lib/subscriptions";
-import {
-  adminCategoryDeleteResponseSchema,
-  adminCategoryListSchema,
-  adminCategorySchema,
-  type AdminCategory,
-  type AdminCategoryCreateRequest,
-  type AdminCategoryDeleteResponse,
-  type AdminCategoryList,
-  type AdminCategoryUpdateRequest,
-} from "@/lib/contracts";
-import { categoryStateToQuery, type CategoryListState } from "@/lib/categories";
 import { adminOverviewSchema, type AdminOverview } from "@/lib/contracts";
+import {
+  moderationPermanentDeleteResponseSchema,
+  moderationProductListSchema,
+  moderationProductSchema,
+  type ModerationPermanentDeleteResponse,
+  type ModerationProduct,
+  type ModerationProductList,
+} from "@/lib/contracts";
+import { productStateToQuery, type ModerationAction, type ProductListState } from "@/lib/products";
 import {
   adminPlatformSettingsSchema,
   adminSettingsUpdateResponseSchema,
@@ -107,6 +105,18 @@ export function changeStoreStatus(id: string, input: StoreStatusChangeRequest): 
   });
 }
 
+export function listModerationProducts(state: ProductListState, signal?: AbortSignal): Promise<ModerationProductList> {
+  return call("/api/products?" + productStateToQuery(state, true), moderationProductListSchema as Parser<ModerationProductList>, { signal });
+}
+
+/** One moderation action. A restore carries no reason. */
+export function runModerationAction(action: ModerationAction, productId: string, reason: string): Promise<ModerationProduct | ModerationPermanentDeleteResponse> {
+  const init = { method: "POST", body: JSON.stringify(action === "restore" ? { productId } : { productId, reason }) };
+  const url = "/api/products/" + action;
+  if (action === "permanent-delete") return call(url, moderationPermanentDeleteResponseSchema as Parser<ModerationPermanentDeleteResponse>, init);
+  return call(url, moderationProductSchema as Parser<ModerationProduct>, init);
+}
+
 export function listSellers(state: SellerListState, signal?: AbortSignal): Promise<AdminSellerListEnvelope> {
   return call("/api/sellers?" + sellerStateToQuery(state, true), adminSellerListEnvelopeSchema as Parser<AdminSellerListEnvelope>, { signal });
 }
@@ -125,24 +135,6 @@ export function listCommissionLedger(state: CommissionListState, signal?: AbortS
 
 export function listCommissionRates(state: CommissionListState, signal?: AbortSignal): Promise<AdminCommissionRates> {
   return call("/api/commission/rates?" + ratesStateToQuery(state, true), adminCommissionRatesSchema as Parser<AdminCommissionRates>, { signal });
-}
-
-export function listCategories(state: CategoryListState, signal?: AbortSignal): Promise<AdminCategoryList> {
-  return call("/api/categories?" + categoryStateToQuery(state, true), adminCategoryListSchema as Parser<AdminCategoryList>, { signal });
-}
-
-const pickCategory = (payload: unknown): unknown => (payload as { category?: unknown } | null)?.category;
-
-export function createCategory(input: AdminCategoryCreateRequest): Promise<AdminCategory> {
-  return call("/api/categories", adminCategorySchema as Parser<AdminCategory>, { method: "POST", body: JSON.stringify(input) }, pickCategory);
-}
-
-export function updateCategory(id: string, input: AdminCategoryUpdateRequest): Promise<AdminCategory> {
-  return call("/api/categories/" + encodeURIComponent(id), adminCategorySchema as Parser<AdminCategory>, { method: "PATCH", body: JSON.stringify(input) }, pickCategory);
-}
-
-export function deleteCategory(id: string): Promise<AdminCategoryDeleteResponse> {
-  return call("/api/categories/" + encodeURIComponent(id), adminCategoryDeleteResponseSchema as Parser<AdminCategoryDeleteResponse>, { method: "DELETE" });
 }
 
 export function listSubscriptionPlans(state: SubscriptionListState, signal?: AbortSignal): Promise<AdminSubscriptionPlanList> {

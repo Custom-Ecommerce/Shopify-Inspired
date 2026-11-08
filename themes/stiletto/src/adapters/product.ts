@@ -26,16 +26,17 @@ function textToHtml(text: string): string {
     .join("");
 }
 
-/** View-model to the product shape Stiletto's components were built for. Sizes, colours and packs are empty: the SaaS has no variants. */
+/** View-model to the product shape Stiletto's components were built for. The product page reads variants from the view-model itself. */
 export function toStilettoProduct(source: Source, reviews: ReviewItem[] = []): NormalizedProduct {
   const detail = isDetail(source) ? source : null;
   const images = detail && detail.gallery.length > 0 ? detail.gallery.map((g) => g.url) : source.image ? [source.image.url] : [PLACEHOLDER_IMAGE];
+  const gallery = detail && detail.gallery.length > 0 ? detail.gallery : images.map((url) => ({ url, alt: source.title }));
   const categories = source.categories ?? [];
   const tags = [...new Set([...(detail?.tags ?? []), ...categories.flatMap((c) => [c.name, c.slug])])];
   const variant: NormalizedVariant = {
-    id: source.id,
+    id: source.defaultVariantId,
     title: "Default",
-    availableForSale: source.stock.status !== "out_of_stock",
+    availableForSale: source.availability !== "out_of_stock",
     price: { amount: moneyString(source.price.amount), currencyCode: "PKR" },
     compareAtPrice: source.compareAt ? { amount: moneyString(source.compareAt.amount), currencyCode: "PKR" } : null,
     selectedOptions: [],
@@ -47,8 +48,11 @@ export function toStilettoProduct(source: Source, reviews: ReviewItem[] = []): N
     title: source.title,
     productType: categories[0]?.name ?? "",
     tags,
-    price: formatCurrency(moneyString(source.price.amount), "PKR"),
+    price: (source.priceFrom ? "From " : "") + formatCurrency(moneyString(source.price.amount), "PKR"),
     images,
+    gallery,
+    stockLabel: source.stock.label,
+    stockTone: source.availability === "out_of_stock" ? "negative" : "positive",
     sizes: [],
     colors: [],
     variantsInfo: "",
@@ -62,6 +66,7 @@ export function toStilettoProduct(source: Source, reviews: ReviewItem[] = []): N
     metafields: [],
     specs: [],
     reviews,
+    previewLabel: source.previewLabel,
   };
 }
 

@@ -20,8 +20,9 @@ function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
+/** Whole rupees (D-004): a store's settings are not validated yet, so a decimal is rounded where it is read. */
 function amount(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 }
 
 const HEX_ID = /^[0-9a-fA-F]{24}$/;
@@ -36,8 +37,11 @@ async function mediaUrl(ref: unknown, storeId: unknown): Promise<string | null> 
   return row ? text(row.url) : null;
 }
 
-/** Projects an ACTIVE store to the storefront contract. The result is validated before it leaves. */
-export async function toStorefrontStoreDto(store: StoreRow) {
+/**
+ * Projects an ACTIVE store to the storefront contract. The result is validated before it leaves. Only a preview the
+ * backend accepted passes another status, for a pending store (A-012).
+ */
+export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | 'pending' = 'active') {
   const sf = record(store.storefront);
   const pay = record(store.paymentSettings);
   const [logoUrl, seoImageUrl] = await Promise.all([mediaUrl(sf.logo, store._id), mediaUrl(sf.seoImage, store._id)]);
@@ -47,7 +51,7 @@ export async function toStorefrontStoreDto(store: StoreRow) {
     slug: store.slug,
     internalHandle: store.internalHandle ?? null,
     name: store.name,
-    status: 'active',
+    status,
     isThemeDemo: store.isThemeDemo === true,
     branding: {
       logoUrl,

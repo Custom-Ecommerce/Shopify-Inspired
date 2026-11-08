@@ -21,7 +21,10 @@ export interface UseCartQuoteResult {
 export function useCartQuote(): UseCartQuoteResult {
   const transport = useOrderTransport();
   const { lines, isHydrated } = useCart();
-  const requested = useMemo(() => lines.map((line) => ({ productId: line.productId, qty: line.qty })), [lines]);
+  const requested = useMemo(
+    () => lines.map((line) => ({ productId: line.productId, variantId: line.variantId, qty: line.qty })),
+    [lines],
+  );
   // Keyed on the serialised lines, so an unchanged cart is not quoted again.
   const key = JSON.stringify(requested);
   const [state, setState] = useState<UseCartQuoteResult>({ status: "idle", quote: null });

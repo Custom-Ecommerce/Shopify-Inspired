@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_THEME_SLUG,
+  NEW_STORE_THEME_SLUG,
   THEME_MANIFEST,
   THEME_OPTIONS,
   THEME_SLUGS,
@@ -35,6 +36,11 @@ describe("theme manifest", () => {
   it("marks mustafa as the free default", () => {
     assert.equal(DEFAULT_THEME_SLUG, "mustafa");
     assert.equal(getThemeEntry("mustafa")?.tier, "free");
+  });
+
+  it("creates new stores with Stiletto, an available theme (D-059)", () => {
+    assert.equal(NEW_STORE_THEME_SLUG, "stiletto");
+    assert.equal(getThemeEntry(NEW_STORE_THEME_SLUG)?.status, "available");
   });
 
   it("keeps legacy themes selectable but out of the gallery", () => {

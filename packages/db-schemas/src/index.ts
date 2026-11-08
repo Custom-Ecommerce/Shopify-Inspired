@@ -25,3 +25,6 @@ export * from './models/order';
 export * from './billing/ports-impl';
 // Track B: the catalog the storefront API reads.
 export * from './models/product';
+export * from './models/stock-movement';
+// PB-4: what is kept of a review after its product is permanently deleted.
+export * from './models/archived-review';

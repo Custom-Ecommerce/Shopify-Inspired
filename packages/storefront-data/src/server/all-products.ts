@@ -8,7 +8,7 @@ export interface AllProductsOptions {
 
 /**
  * The whole catalogue, up to maxPages pages of limit products. Used where a theme groups products by category, builds a
- * menu or searches. A store larger than the cap is truncated: it needs a categories endpoint on the backend.
+ * menu or searches. A store larger than the cap is truncated.
  * A transport without paging answers with its single list.
  */
 export async function loadAllProducts(

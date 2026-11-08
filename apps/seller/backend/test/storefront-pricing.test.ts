@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeTotals, roundMoney } from '../src/lib/storefront/pricing';
-import { statusAfterRelease, statusAfterReserve } from '../src/lib/storefront/stock';
 import { generateOrderId, normalizeOrderId } from '../src/lib/storefront/order-id';
 
 const store = { deliveryRate: 250, freeDeliveryThreshold: 5000 };
@@ -42,18 +41,6 @@ test('a null or zero threshold means the store has no free-delivery offer', () =
 test('float noise is rounded away', () => {
   assert.equal(roundMoney(0.1 + 0.2), 0.3);
   assert.equal(computeTotals([{ unitPrice: 0.1, qty: 3, deliveryCharge: 0 }], store).total, 0.3);
-});
-
-test('stock status moves down on reserve and up on release, never against a manual choice', () => {
-  assert.equal(statusAfterReserve({ stockQuantity: 0, stockStatus: 'in_stock' }), 'out_of_stock');
-  assert.equal(statusAfterReserve({ stockQuantity: 3, stockStatus: 'in_stock', lowStockThreshold: 5 }), 'low_stock');
-  assert.equal(statusAfterReserve({ stockQuantity: 30, stockStatus: 'in_stock', lowStockThreshold: 5 }), null);
-  assert.equal(statusAfterReserve({ stockQuantity: 3, stockStatus: 'in_stock' }), null);
-
-  assert.equal(statusAfterRelease({ stockQuantity: 1, stockStatus: 'out_of_stock' }), 'in_stock');
-  assert.equal(statusAfterRelease({ stockQuantity: 1, stockStatus: 'out_of_stock', lowStockThreshold: 5 }), 'low_stock');
-  assert.equal(statusAfterRelease({ stockQuantity: 30, stockStatus: 'low_stock', lowStockThreshold: 5 }), 'in_stock');
-  assert.equal(statusAfterRelease({ stockQuantity: 0, stockStatus: 'out_of_stock' }), null);
 });
 
 test('order ids are prefixed, unambiguous, and normalised from hand-typed input', () => {

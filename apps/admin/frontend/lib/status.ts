@@ -9,6 +9,8 @@ export const STATUS_TONES: Record<string, Tone> = {
   pending: "warning",
   suspended: "danger",
   archived: "neutral",
+  live: "success",
+  takedown: "danger",
   sent: "success",
   settled: "success",
   dead: "danger",

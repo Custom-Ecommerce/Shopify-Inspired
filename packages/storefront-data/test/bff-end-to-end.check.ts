@@ -19,6 +19,7 @@ const SITE = "http://mustafa.localhost:3000";
 const BACKEND = "http://seller.test";
 const STORE_ID = "65a000000000000000000001";
 const PRODUCT_ID = "65a0000000000000000000aa";
+const VARIANT_ID = "65a0000000000000000000bb";
 const SHOPPER_IP = "203.0.113.7";
 const KEY = "checkout-key-0001";
 const PHONE = "+923001234567";
@@ -101,13 +102,13 @@ const orderBody = {
     phone: PHONE,
     city: null,
     address: "House 1, Street 2, Karachi",
-    items: [{ productId: PRODUCT_ID, title: "Cotton Kurta", unitPrice: 1000, qty: 2, lineTotal: 2000 }],
+    items: [{ productId: PRODUCT_ID, variantId: VARIANT_ID, title: "Cotton Kurta", variantTitle: "Default", unitPrice: 1000, qty: 2, lineTotal: 2000 }],
   },
 };
 
 const quoteBody = {
   data: {
-    lines: [{ productId: PRODUCT_ID, title: "Cotton Kurta", unitPrice: 1000, qty: 2, lineTotal: 2000, issue: null, availableQty: 10 }],
+    lines: [{ productId: PRODUCT_ID, variantId: VARIANT_ID, title: "Cotton Kurta", variantTitle: "Default", unitPrice: 1000, qty: 2, lineTotal: 2000, issue: null, availableQty: 10 }],
     subtotal: 2000,
     deliveryCharges: 200,
     total: 2200,

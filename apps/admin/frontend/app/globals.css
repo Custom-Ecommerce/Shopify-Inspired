@@ -27,6 +27,11 @@
   --accent-foreground: oklch(0 0 0);
   --destructive: oklch(0.6368 0.2078 25.3313);
   --destructive-foreground: oklch(1.0000 0 0);
+  /* --success and --warning feed --color-success / --color-warning below. They were missing, so every success and warning pill (Live, Active, Pending) had no background or dot colour (GAP 13). */
+  --success: oklch(0.5960 0.1270 163.2250);
+  --success-foreground: oklch(1.0000 0 0);
+  --warning: oklch(0.6660 0.1790 58.3180);
+  --warning-foreground: oklch(0 0 0);
   --border: oklch(0.8699 0 0);
   --input: oklch(0.8699 0 0);
   --ring: oklch(0.8677 0.0735 7.0855);
@@ -91,6 +96,10 @@
   --accent-foreground: oklch(0 0 0);
   --destructive: oklch(0.6368 0.2078 25.3313);
   --destructive-foreground: oklch(1.0000 0 0);
+  --success: oklch(0.7650 0.1770 163.2230);
+  --success-foreground: oklch(0 0 0);
+  --warning: oklch(0.8280 0.1890 84.4290);
+  --warning-foreground: oklch(0 0 0);
   --border: oklch(0.3867 0 0);
   --input: oklch(0.3867 0 0);
   --ring: oklch(0.8027 0.1355 349.2347);

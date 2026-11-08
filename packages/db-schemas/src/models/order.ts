@@ -26,7 +26,11 @@ export const ORDER_STATUSES = [
  */
 export interface IOrderLine {
   productId: string;
+  variantId: string;
   productTitle: string;
+  /** "Default" for a product with no options. */
+  variantTitle: string;
+  sku?: string | null;
   unitPrice: number;
   quantity: number;
 }
@@ -77,7 +81,10 @@ const OrderSchema = new Schema<IOrder>(
       type: [
         {
           productId: { type: String, required: true },
+          variantId: { type: String, required: true },
           productTitle: { type: String, required: true },
+          variantTitle: { type: String, required: true },
+          sku: { type: String, default: null },
           unitPrice: { type: Number, required: true, min: 0 },
           quantity: { type: Number, required: true, min: 1 },
         },

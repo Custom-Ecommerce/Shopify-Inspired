@@ -157,12 +157,14 @@ export function getReservedDisposition(label: string): ReservedDisposition | und
   return ENTRY_BY_LABEL.get(label)?.disposition;
 }
 
+/** The one limit on a store slug. A slug is a DNS label on the storefront, so store creation, the storefront middleware and
+ * the revalidate tags all read these: a slug that one accepts and another refuses is a store that answers 404. */
 export const STORE_SLUG_MIN_LENGTH = 3;
 export const STORE_SLUG_MAX_LENGTH = 30;
 const STORE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const STORE_SLUG_FORMAT_MESSAGE =
-  "Slug must be 3-30 characters, lowercase letters/numbers/hyphens only, no leading or trailing hyphen.";
+  `Slug must be ${STORE_SLUG_MIN_LENGTH}-${STORE_SLUG_MAX_LENGTH} characters, lowercase letters/numbers/hyphens only, no leading or trailing hyphen.`;
 
 export type StoreSlugCheck =
   | { readonly ok: true }

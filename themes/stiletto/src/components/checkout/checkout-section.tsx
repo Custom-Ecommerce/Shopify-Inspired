@@ -485,7 +485,7 @@ export function CheckoutSection({
                                 {item.title}
                               </h4>
                               <p className="text-[11px] text-(--text-inverse)/50 mt-0.5">
-                                Qty: {item.quantity} {item.size ? `| Size: ${item.size}` : ""}
+                                Qty: {item.quantity} {item.variantTitle ? `| ${item.variantTitle}` : item.size ? `| Size: ${item.size}` : ""}
                               </p>
                             </div>
 

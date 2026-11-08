@@ -41,7 +41,9 @@ export default function DashboardStorePage() {
     whatsappNumber: store?.storefront?.whatsappNumber ?? "",
     deliveryRate: store?.storefront?.deliveryRate ?? 0,
     freeDeliveryThreshold: store?.storefront?.freeDeliveryThreshold ?? 5000,
-    activeTheme: store?.storefront?.activeTheme ?? "perfecto",
+    // A store with no theme set renders with the storefront's fallback, Mustafa, so that is what it shows. New stores are
+    // created with Stiletto (D-059). Theme ids are the storefront registry's (packages/platform-kit/src/themes/manifest.ts).
+    activeTheme: store?.storefront?.activeTheme ?? "mustafa",
     logo:
       typeof store?.storefront?.logo === "object"
         ? (store.storefront.logo?.id ?? null)
@@ -291,8 +293,8 @@ export default function DashboardStorePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="perfecto">Perfecto</SelectItem>
-                <SelectItem value="minimal">Minimal</SelectItem>
+                <SelectItem value="stiletto">Stiletto</SelectItem>
+                <SelectItem value="mustafa">Mustafa</SelectItem>
               </SelectContent>
             </Select>
           </div>

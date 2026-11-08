@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { ThemeLayoutProps } from "@markaz/storefront-theme-kit";
+import type { StoreLayoutProps } from "@markaz/storefront-theme-kit";
 import { MiniCart } from "../components/mini-cart";
 import { MobileNav } from "../components/mobile-nav";
 import { SearchBar } from "../components/search-bar";
@@ -15,7 +15,7 @@ const ANNOUNCEMENTS = [
   "100% farm-fresh produce sourced daily from local growers",
 ];
 
-export function Header(props: ThemeLayoutProps) {
+export function Header(props: StoreLayoutProps) {
   const store = (props as any).store;
   const storePaths = (props as any).storePaths ?? (props as any).paths ?? {};
   const navigation = (props as any).navigation;

@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import type { ThemeLayoutProps } from "@markaz/storefront-theme-kit";
+import type { StoreLayoutProps } from "@markaz/storefront-theme-kit";
 import { Header } from "./header";
 import { Footer } from "./footer";
 
-export function Layout(props: ThemeLayoutProps) {
+export function Layout(props: StoreLayoutProps) {
   const { children } = props;
 
   return (

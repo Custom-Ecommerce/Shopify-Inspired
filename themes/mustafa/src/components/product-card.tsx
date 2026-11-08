@@ -5,111 +5,28 @@ import Link from "next/link";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { buttonVariants } from "./ui/button";
-import { useCart } from "@markaz/storefront-data";
+import { storePaths, useCart } from "@markaz/storefront-data";
+import type { ProductCardVM } from "@markaz/storefront-data";
 
-function formatMoneySafe(amount: number, currency = "PKR"): string {
-  try {
-    return new Intl.NumberFormat("en-PK", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  } catch {
-    return `${currency} ${amount.toLocaleString()}`;
-  }
-}
-
-export function ProductCard(props: Record<string, any>) {
-  const { product, store, storePaths, paths, href } = props;
-  const { addItem } = useCart();
+export function ProductCard({ product }: { product: ProductCardVM }) {
+  const { add, isHydrated } = useCart();
   const [justAdded, setJustAdded] = React.useState(false);
 
-  if (!product) return null;
-
-  const resolvedPaths = storePaths ?? paths ?? {};
-  const slug = product.slug ?? product.id ?? "";
-  const productUrl =
-    href ??
-    (typeof resolvedPaths.product === "function"
-      ? resolvedPaths.product(slug)
-      : typeof resolvedPaths.productDetail === "function"
-        ? resolvedPaths.productDetail(slug)
-        : `${resolvedPaths.catalog ?? resolvedPaths.products ?? "/products"}/${slug}`);
-
-  const currency = store?.currency ?? product.currency ?? "PKR";
-
-  const priceValue: number =
-    typeof product.price === "number"
-      ? product.price
-      : typeof product.price?.amount === "number"
-        ? product.price.amount
-        : Number(product.price ?? 0);
-
-  const compareAtValue: number | null =
-    typeof product.compareAtPrice === "number"
-      ? product.compareAtPrice
-      : typeof product.compareAtPrice?.amount === "number"
-        ? product.compareAtPrice.amount
-        : typeof product.originalPrice === "number"
-          ? product.originalPrice
-          : null;
-
-  const hasDiscount =
-    compareAtValue !== null && compareAtValue > priceValue && priceValue > 0;
-
-  const discountPct = hasDiscount
-    ? Math.round(((compareAtValue - priceValue) / compareAtValue) * 100)
-    : 0;
-
-  const isOutOfStock =
-    product.inStock === false ||
-    product.stockStatus === "out_of_stock" ||
-    product.stockStatus === "OUT_OF_STOCK" ||
-    (typeof product.stockQuantity === "number" && product.stockQuantity <= 0);
-
-  const primaryImage =
-    product.imageUrl ||
-    product.thumbnailUrl ||
-    product.image ||
-    (Array.isArray(product.images) &&
-      (typeof product.images[0] === "string"
-        ? product.images[0]
-        : product.images[0]?.url)) ||
-    null;
-
-  const displayPrice =
-    product.priceFormatted ??
-    product.formattedPrice ??
-    formatMoneySafe(priceValue, currency);
-
-  const displayCompareAt =
-    compareAtValue !== null
-      ? product.compareAtPriceFormatted ??
-        product.formattedCompareAtPrice ??
-        formatMoneySafe(compareAtValue, currency)
-      : null;
+  const productUrl = storePaths.product(product.slug);
+  const isOutOfStock = product.stock.status === "out_of_stock";
+  const hasDiscount = product.compareAt !== null;
+  const discountPct = product.discountPercent;
+  const primaryImage = product.image?.url ?? null;
+  const displayPrice = product.price.formatted;
+  const displayCompareAt = product.compareAt?.formatted ?? null;
 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (isOutOfStock) return;
-    try {
-      addItem(
-        {
-          productId: product.id ?? slug,
-          slug,
-          title: product.title,
-          price: priceValue,
-          imageUrl: primaryImage ?? undefined,
-        } as any,
-        1
-      );
-      setJustAdded(true);
-      window.setTimeout(() => setJustAdded(false), 1600);
-    } catch {
-      // Fallback navigation if cart context differs
-      window.location.href = productUrl;
-    }
+    add(product, 1);
+    setJustAdded(true);
+    window.setTimeout(() => setJustAdded(false), 1600);
   };
 
   return (
@@ -190,7 +107,7 @@ export function ProductCard(props: Record<string, any>) {
               ★★★★★
             </span>
             <span className="text-[var(--mu-color-ink-muted)]">
-              ({product.reviewCount ?? 12})
+              ({product.rating?.count ?? 12})
             </span>
           </div>
         </div>
@@ -199,7 +116,7 @@ export function ProductCard(props: Record<string, any>) {
         <div className="pt-2 relative z-10">
           <button
             type="button"
-            disabled={isOutOfStock}
+            disabled={isOutOfStock || !isHydrated}
             onClick={handleQuickAdd}
             className={buttonVariants({
               variant: "outline",

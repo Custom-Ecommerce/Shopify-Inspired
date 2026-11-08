@@ -5,6 +5,8 @@ import * as contractsNs from '@markaz/contracts';
 // receiver and digest routes do, so the ES module test runner and the Next bundler agree.
 const contracts = unwrapCjs(contractsNs) as typeof contractsNs;
 
+export const { MEDIA_VIDEO_FORMATS, MEDIA_VIDEO_MAX_BYTES, MEDIA_VIDEO_MAX_SECONDS, MEDIA_VIDEO_MIME_TYPES } = contracts;
+
 export const {
   objectIdSchema,
   loginRequestSchema,
@@ -22,6 +24,15 @@ export const { returnStatusUpdateSchema, RETURN_TRANSITIONS } = contracts;
 
 // B10.3 contracts: media.
 export const { mediaUploadFieldsSchema } = contracts;
+
+// PB-7: admin moderation.
+export const {
+  moderationDeleteRequestSchema,
+  moderationPermanentDeleteRequestSchema,
+  moderationProductListQuerySchema,
+  moderationRestoreRequestSchema,
+  moderationTakedownRequestSchema,
+} = contracts;
 
 // B10.4 contracts: analytics periods and the article option sets.
 export const { ANALYTICS_PERIODS, ARTICLE_TYPES, ARTICLE_STATUSES } = contracts;
@@ -59,3 +70,33 @@ export const {
   storefrontOrderSchema,
   storefrontOrderLookupResponseSchema,
 } = contracts;
+
+// Product options and variants: the write contract and the title rule.
+export const { productVariantsInputSchema, variantTitle } = contracts;
+
+// The seller's product CRUD contracts.
+export const {
+  PRODUCT_DEFAULT_VARIANT_FIELDS,
+  PRODUCT_LIST_SORTS,
+  PRODUCT_LIST_STATUSES,
+  PRODUCT_SLUG_MAX,
+  PRODUCT_TRASH_RETENTION_DAYS,
+  inventoryAdjustRequestSchema,
+  productCreateRequestSchema,
+  productUpdateRequestSchema,
+} = contracts;
+
+// Store categories: the seller's CRUD contracts and the public storefront list.
+export const {
+  CATEGORY_ORDER_MAX,
+  CATEGORY_SLUG_MAX,
+  categoryCreateRequestSchema,
+  categoryUpdateRequestSchema,
+  storefrontCategoryListResponseSchema,
+} = contracts;
+
+// Cart quote contracts.
+export const { storefrontCartQuoteRequestSchema, storefrontCartQuoteResponseSchema } = contracts;
+
+// PB-7: bulk import and duplicate.
+export const { PRODUCT_CSV_COLUMNS, PRODUCT_IMPORT_MAX_BYTES, PRODUCT_IMPORT_MAX_ROWS, PRODUCT_TITLE_MAX } = contracts;

@@ -88,7 +88,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
 
     // Retries of the same order reuse one key. Any change to the order gets a fresh key.
     const submission = validation.data;
-    const payloadLines = lines.map((line) => ({ productId: line.productId, qty: line.qty }));
+    const payloadLines = lines.map((line) => ({ productId: line.productId, variantId: line.variantId, qty: line.qty }));
     const signature = JSON.stringify({ customer: submission, lines: payloadLines });
     if (!attempt.current || attempt.current.signature !== signature) {
       attempt.current = { signature, key: newIdempotencyKey() };

@@ -2,7 +2,7 @@ import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { Order, Product, Store } from '@/lib/services';
+import { Order, Product, StockMovement, Store } from '@/lib/services';
 import { storefrontOrderCreatedResponseSchema, storefrontOrderLookupResponseSchema } from '@/lib/contracts';
 import { resetRateLimits } from '../src/lib/storefront/rate-limit';
 
@@ -12,11 +12,14 @@ const SHIRT = '65a0000000000000000000b1';
 const MUG = '65a0000000000000000000b2';
 const DRAFT = '65a0000000000000000000b3';
 const FOREIGN = '65a0000000000000000000b4';
+const DEMO = '65a0000000000000000000b5';
+const TRASHED = '65a0000000000000000000b6';
 const GHOST = '65a0000000000000000000ff';
 
 const StoreModel = Store as any;
 const ProductModel = Product as any;
 const OrderModel = Order as any;
+const MovementModel = StockMovement as unknown as { create: (doc: Record<string, unknown>) => Promise<unknown> };
 
 let createPOST: (r: NextRequest, c: any) => Promise<Response>;
 let lookupPOST: (r: NextRequest, c: any) => Promise<Response>;
@@ -32,6 +35,7 @@ before(async () => {
 let storeRow: Record<string, any> | null;
 let products: Map<string, Record<string, any>>;
 let orders: Array<Record<string, any>>;
+let movements: Array<Record<string, unknown>>;
 let reads: { staleOrderReads: number; afterProductFind?: () => void };
 let createError: Error | null;
 let connectFails: boolean;
@@ -56,9 +60,12 @@ beforeEach(() => {
       product(MUG, { title: 'Mug', price: 400, stockQuantity: 3, deliveryCharge: 100 }),
       product(DRAFT, { title: 'Draft', price: 100, stockQuantity: 5, isPublished: false }),
       product(FOREIGN, { title: 'Foreign', price: 100, stockQuantity: 5, store: OTHER_STORE_ID }),
+      product(DEMO, { title: 'Demo', price: 100, stockQuantity: 5, isDemo: true }),
+      product(TRASHED, { title: 'Trashed', price: 100, stockQuantity: 5, deletedAt: new Date() }),
     ].map((p) => [p._id, p]),
   );
   orders = [];
+  movements = [];
   reads = { staleOrderReads: 0 };
   createError = null;
   connectFails = false;
@@ -68,7 +75,8 @@ beforeEach(() => {
     sFindById: StoreModel.findById,
     pFind: ProductModel.find,
     pFOAU: ProductModel.findOneAndUpdate,
-    pUpdateOne: ProductModel.updateOne,
+    pExists: ProductModel.exists,
+    mCreate: MovementModel.create,
     oFindOne: OrderModel.findOne,
     oCreate: OrderModel.create,
   };
@@ -89,8 +97,8 @@ beforeEach(() => {
       lean: async () => {
         const rows = ids
           .map((id) => products.get(id.toLowerCase()))
-          .filter((p): p is Record<string, any> => !!p && String(p.store) === String(filter.store) && p.isPublished === filter.isPublished)
-          .map((p) => ({ ...p }));
+          .filter((p): p is Record<string, any> => !!p && String(p.store) === String(filter.store))
+          .map((p) => structuredClone(p));
         reads.afterProductFind?.();
         return rows;
       },
@@ -98,30 +106,38 @@ beforeEach(() => {
     return q;
   };
 
-  // The conditional write: matches only while stock minus reserved still covers the quantity.
-  ProductModel.findOneAndUpdate = (filter: any, update: any) => {
-    const q: any = {
+  // The conditional write: matches only while that one variant still covers the quantity.
+  const matchVariant = (filter: VariantFilter): Record<string, unknown> | null => {
+    const p = products.get(String(filter._id).toLowerCase());
+    if (!p || String(p.store) !== String(filter.store)) return null;
+    if (filter.isPublished !== undefined && p.isPublished !== filter.isPublished) return null;
+    if (filter.deletedAt === null && p.deletedAt) return null;
+    if (filter.isDemo !== undefined && p.isDemo === true) return null;
+    const wanted = filter.variants.$elemMatch;
+    const variant: Record<string, unknown> | undefined = p.variants.find(
+      (candidate: Record<string, unknown>) => String(candidate._id).toLowerCase() === wanted._id.toLowerCase(),
+    );
+    if (!variant) return null;
+    if (wanted.trackQuantity !== undefined && variant.trackQuantity !== wanted.trackQuantity) return null;
+    if (wanted.stockQuantity && Number(variant.stockQuantity) < wanted.stockQuantity.$gte) return null;
+    return variant;
+  };
+  ProductModel.findOneAndUpdate = (filter: VariantFilter, update: { $inc: Record<string, number> }) => {
+    const q: { select: () => typeof q; lean: () => Promise<unknown> } = {
       select: () => q,
       lean: async () => {
-        const p = products.get(String(filter._id).toLowerCase());
-        if (!p || String(p.store) !== String(filter.store)) return null;
-        if (filter.isPublished !== undefined && p.isPublished !== filter.isPublished) return null;
-        if (filter.stockStatus?.$ne && p.stockStatus === filter.stockStatus.$ne) return null;
-        if (filter.$expr) {
-          const needed = filter.$expr.$gte[1];
-          if (p.stockQuantity - (p.reservedQuantity ?? 0) < needed) return null;
-        }
-        p.stockQuantity += update.$inc.stockQuantity;
-        return { stockQuantity: p.stockQuantity, stockStatus: p.stockStatus, lowStockThreshold: p.lowStockThreshold ?? null };
+        const variant = matchVariant(filter);
+        if (!variant) return null;
+        variant.stockQuantity = Number(variant.stockQuantity) + update.$inc['variants.$.stockQuantity'];
+        return { variants: products.get(String(filter._id).toLowerCase())!.variants };
       },
     };
     return q;
   };
-  ProductModel.updateOne = async (filter: any, update: any) => {
-    const p = products.get(String(filter._id).toLowerCase());
-    if (!p) return;
-    if (update.$set?.stockStatus) p.stockStatus = update.$set.stockStatus;
-    if (update.$push?.stockHistory) p.stockHistory = [...(p.stockHistory ?? []), update.$push.stockHistory];
+  ProductModel.exists = async (filter: VariantFilter) => matchVariant(filter);
+  MovementModel.create = async (doc) => {
+    movements.push(doc);
+    return doc;
   };
 
   OrderModel.findOne = (filter: any) => {
@@ -157,7 +173,8 @@ beforeEach(() => {
     StoreModel.findById = saved.sFindById;
     ProductModel.find = saved.pFind;
     ProductModel.findOneAndUpdate = saved.pFOAU;
-    ProductModel.updateOne = saved.pUpdateOne;
+    ProductModel.exists = saved.pExists;
+    MovementModel.create = saved.mCreate;
     OrderModel.findOne = saved.oFindOne;
     OrderModel.create = saved.oCreate;
   };
@@ -174,9 +191,26 @@ function activeStore(sf: Record<string, any> = {}, pay: Record<string, any> = {}
   };
 }
 
-function product(id: string, overrides: Record<string, any>) {
-  return { _id: id, store: STORE_ID, isPublished: true, stockStatus: 'in_stock', reservedQuantity: 0, stockHistory: [], ...overrides };
+interface VariantFilter {
+  _id: string;
+  store: string;
+  isPublished?: boolean;
+  isDemo?: { $ne: boolean };
+  deletedAt?: null;
+  variants: { $elemMatch: { _id: string; trackQuantity?: boolean; stockQuantity?: { $gte: number } } };
 }
+
+const VARIANT_OF: Record<string, string> = {};
+
+/** Every fixture is a product with one Default variant unless it brings its own variants. */
+function product(id: string, { price, stockQuantity, ...overrides }: Record<string, unknown>) {
+  const variantId = id.slice(0, -2) + 'e' + id.slice(-1);
+  VARIANT_OF[id] = variantId;
+  const defaults = { _id: variantId, title: 'Default', sku: null, price, trackQuantity: true, stockQuantity, lowStockThreshold: null };
+  return { _id: id, store: STORE_ID, isPublished: true, variants: [defaults], ...overrides };
+}
+
+const variant = (id: string): Record<string, unknown> => products.get(id)!.variants[0];
 
 const CUSTOMER = { customerName: 'Sara Khan', phone: '0300 1234567', address: 'House 12, Street 4, Block 5' };
 let keySeq = 0;
@@ -197,9 +231,19 @@ const order = (body: Record<string, any> = {}, headers: Record<string, string> =
 
 const lookup = (body: unknown, headers: Record<string, string> = {}, id = STORE_ID) => post(lookupPOST, id, '/orders/lookup', body, headers);
 
-const stock = (id: string) => products.get(id)!.stockQuantity as number;
+const stock = (id: string) => variant(id).stockQuantity as number;
 
 /* ------------------------------------------- create ------------------------------------------- */
+
+const line = (id: string, title: string, unitPrice: number, quantity: number) => ({
+  productId: id,
+  variantId: VARIANT_OF[id],
+  productTitle: title,
+  variantTitle: 'Default',
+  sku: null,
+  unitPrice,
+  quantity,
+});
 
 test('creates an order: server totals, stock taken, customer and key saved, contract-valid, uncached', async () => {
   const key = newKey();
@@ -230,7 +274,7 @@ test('creates an order: server totals, stock taken, customer and key saved, cont
   assert.equal(saved.paymentMethod, 'cod');
   assert.ok(saved.orderGroupId);
   assert.ok(saved.requestFingerprint);
-  assert.deepEqual(saved.items, [{ productId: SHIRT, productTitle: 'Blue shirt', unitPrice: 1500, quantity: 2 }]);
+  assert.deepEqual(saved.items, [line(SHIRT, 'Blue shirt', 1500, 2)]);
 });
 
 test('the Idempotency-Key header is accepted, and so is body.idempotencyKey', async () => {
@@ -265,7 +309,7 @@ test('prices and totals sent by the client are ignored: the catalog decides', as
 });
 
 test('a price change between cart and checkout is honoured at checkout price', async () => {
-  products.get(SHIRT)!.price = 1700;
+  variant(SHIRT).price = 1700;
   const { data } = await (await order()).json();
   assert.equal(data.subtotal, 3400);
 });
@@ -290,24 +334,26 @@ test('delivery: free at the threshold, product charge applies to a small order',
 test('the same product on two lines is one line with the summed quantity', async () => {
   const res = await order({ lines: [{ productId: SHIRT, qty: 2 }, { productId: SHIRT.toUpperCase(), qty: 3 }] });
   assert.equal(res.status, 201);
-  assert.deepEqual(orders[0].items, [{ productId: SHIRT, productTitle: 'Blue shirt', unitPrice: 1500, quantity: 5 }]);
+  assert.deepEqual(orders[0].items, [line(SHIRT, 'Blue shirt', 1500, 5)]);
   assert.equal(stock(SHIRT), 5);
 });
 
-test('stock history records the sale', async () => {
+test('a stock movement records the sale', async () => {
   await order();
-  const history = products.get(SHIRT)!.stockHistory;
-  assert.equal(history.length, 1);
-  assert.equal(history[0].reason, 'storefront_order');
-  assert.equal(history[0].quantity, 8);
-  assert.equal(history[0].previousQuantity, 10);
+  assert.equal(movements.length, 1);
+  assert.equal(movements[0].reason, 'storefront_order');
+  assert.equal(movements[0].quantity, 8);
+  assert.equal(movements[0].previousQuantity, 10);
+  assert.equal(movements[0].delta, -2);
+  assert.equal(movements[0].variantId, VARIANT_OF[SHIRT]);
+  assert.equal(String(movements[0].store), STORE_ID);
 });
 
-test('taking the last units marks the product out of stock', async () => {
+test('taking the last units leaves the next shopper out of stock', async () => {
   const res = await order({ lines: [{ productId: MUG, qty: 3 }] });
   assert.equal(res.status, 201);
   assert.equal(stock(MUG), 0);
-  assert.equal(products.get(MUG)!.stockStatus, 'out_of_stock');
+  assert.equal((await order({ lines: [{ productId: MUG, qty: 1 }] })).status, 409);
 });
 
 /* ---------------------------------------- idempotency ---------------------------------------- */
@@ -330,7 +376,7 @@ test('a retry with the same key returns the first order: 200, replay header, no 
 test('a replay does not re-price: it returns the original total even after a price change', async () => {
   const key = newKey();
   const a = await (await order({}, { 'idempotency-key': key })).json();
-  products.get(SHIRT)!.price = 9999;
+  variant(SHIRT).price = 9999;
   const b = await (await order({}, { 'idempotency-key': key })).json();
   assert.equal(b.data.total, a.data.total);
 });
@@ -402,19 +448,6 @@ test('asking for more than is available is 409 OUT_OF_STOCK with the product, an
   assert.equal(stock(MUG), 3);
 });
 
-test('reserved units are not for sale', async () => {
-  products.get(MUG)!.reservedQuantity = 2;
-  assert.equal((await order({ lines: [{ productId: MUG, qty: 2 }] })).status, 409);
-  assert.equal((await order({ lines: [{ productId: MUG, qty: 1 }] })).status, 201);
-});
-
-test('a product marked out of stock cannot be ordered even if a count remains', async () => {
-  products.get(SHIRT)!.stockStatus = 'out_of_stock';
-  const res = await order();
-  assert.equal(res.status, 409);
-  assert.equal((await res.json()).productId, SHIRT);
-});
-
 test('the first problem line is the one reported', async () => {
   const res = await order({ lines: [{ productId: SHIRT, qty: 1 }, { productId: MUG, qty: 50 }] });
   assert.equal((await res.json()).productId, MUG);
@@ -424,7 +457,7 @@ test('the first problem line is the one reported', async () => {
 test('losing a stock race on a later line gives back the lines already taken', async () => {
   // The pre-check passes, then someone else buys every mug before this order reserves them.
   reads.afterProductFind = () => {
-    products.get(MUG)!.stockQuantity = 0;
+    variant(MUG).stockQuantity = 0;
   };
   const res = await order({ lines: [{ productId: SHIRT, qty: 2 }, { productId: MUG, qty: 1 }] });
   assert.equal(res.status, 409);
@@ -462,8 +495,41 @@ test('if saving the order fails, the stock is given back and the client gets a 5
 
 /* ---------------------------------------- bad products ---------------------------------------- */
 
-test('an unknown, unpublished, foreign, or malformed product id is 422 UNKNOWN_PRODUCT', async () => {
-  for (const productId of [GHOST, DRAFT, FOREIGN, 'not-an-object-id']) {
+test('a draft, an unedited demo and a trashed product are 422 PRODUCT_UNAVAILABLE, and no stock moves (D-037)', async () => {
+  for (const productId of [DRAFT, DEMO, TRASHED]) {
+    const res = await order({ lines: [{ productId: SHIRT, qty: 1 }, { productId, qty: 1 }] });
+    assert.equal(res.status, 422, productId);
+    const body = await res.json();
+    assert.equal(body.error.code, 'PRODUCT_UNAVAILABLE');
+    assert.equal(body.productId, productId);
+  }
+  assert.equal(orders.length, 0);
+  assert.equal(variant(SHIRT).stockQuantity, 10);
+});
+
+test('a product trashed after the order was priced is refused at the stock write, and earlier lines are given back', async () => {
+  reads.afterProductFind = () => {
+    products.get(MUG)!.deletedAt = new Date();
+  };
+  const res = await order({ lines: [{ productId: SHIRT, qty: 1 }, { productId: MUG, qty: 1 }] });
+  assert.equal(res.status, 422);
+  assert.equal((await res.json()).error.code, 'PRODUCT_UNAVAILABLE');
+  assert.equal(orders.length, 0);
+  assert.equal(variant(SHIRT).stockQuantity, 10);
+});
+
+test('an order keeps its own snapshot after the product is gone from the catalog', async () => {
+  assert.equal((await order({ lines: [{ productId: SHIRT, qty: 1 }] })).status, 201);
+  products.delete(SHIRT);
+  const item = orders[0].items[0];
+  assert.equal(item.productTitle, 'Blue shirt');
+  assert.equal(item.variantTitle, 'Default');
+  assert.equal(item.unitPrice, 1500);
+  assert.equal(item.quantity, 1);
+});
+
+test('an unknown, foreign, or malformed product id is 422 UNKNOWN_PRODUCT', async () => {
+  for (const productId of [GHOST, FOREIGN, 'not-an-object-id']) {
     const res = await order({ lines: [{ productId, qty: 1 }] });
     assert.equal(res.status, 422, productId);
     const body = await res.json();
@@ -609,7 +675,9 @@ test('lookup returns the order for the right order id and phone, in any phone fo
     assert.equal(body.data.total, 3250);
     assert.equal(body.data.customerName, 'Sara Khan');
     assert.equal(body.data.city, 'Lahore');
-    assert.deepEqual(body.data.items, [{ productId: SHIRT, title: 'Blue shirt', unitPrice: 1500, qty: 2, lineTotal: 3000 }]);
+    assert.deepEqual(body.data.items, [
+      { productId: SHIRT, variantId: VARIANT_OF[SHIRT], title: 'Blue shirt', variantTitle: 'Default', unitPrice: 1500, qty: 2, lineTotal: 3000 },
+    ]);
   }
 });
 
@@ -653,7 +721,7 @@ test('an older order with a local-format phone can still be tracked', async () =
     phone: '0300-1234567',
     customerName: 'Old Customer',
     address: 'Somewhere in town',
-    items: [{ productId: 'p9', productTitle: 'Old thing', unitPrice: 500, quantity: 1 }],
+    items: [{ productId: 'p9', variantId: 'v9', productTitle: 'Old thing', variantTitle: 'Default', unitPrice: 500, quantity: 1 }],
     subtotal: 500,
     deliveryCharges: 0,
     total: 500,
@@ -698,4 +766,121 @@ test('lookup follows the store rules: malformed id 404, inactive 403, outage 503
   simulateOutage();
   connectFails = true;
   assert.equal((await lookup({ orderId: 'ORD-AAAAAAAA', phone: '03001234567' })).status, 503);
+});
+
+/* ------------------------------------------ variants ------------------------------------------ */
+
+const TOP = '65a0000000000000000000b5';
+const TOP_S = '65a0000000000000000000e7';
+const TOP_M = '65a0000000000000000000e8';
+const TOP_FREE = '65a0000000000000000000e9';
+
+function addSizedTop(deliveryCharge: number | null = null): void {
+  const size = (id: string, title: string, price: number, stockQuantity: number, trackQuantity = true) => ({
+    _id: id,
+    title,
+    sku: 'TOP-' + title,
+    price,
+    trackQuantity,
+    stockQuantity,
+    lowStockThreshold: null,
+  });
+  products.set(
+    TOP,
+    product(TOP, {
+      title: 'Lawn top',
+      deliveryCharge,
+      variants: [size(TOP_S, 'S', 1000, 2), size(TOP_M, 'M', 1200, 5), size(TOP_FREE, 'Free', 900, 0, false)],
+    }),
+  );
+}
+
+const units = (id: string): number =>
+  products.get(TOP)!.variants.find((candidate: { _id: string }) => candidate._id === id).stockQuantity;
+
+test('a product with several variants needs a variantId: 422 VARIANT_REQUIRED, and nothing moves', async () => {
+  addSizedTop();
+  const res = await order({ lines: [{ productId: TOP, qty: 1 }] });
+  assert.equal(res.status, 422);
+  const body = await res.json();
+  assert.equal(body.error.code, 'VARIANT_REQUIRED');
+  assert.equal(body.productId, TOP);
+  assert.equal(orders.length, 0);
+  assert.equal(units(TOP_S), 2);
+});
+
+test('a product with one variant may leave variantId out, and the server resolves the Default', async () => {
+  const res = await order({ lines: [{ productId: SHIRT, qty: 1 }] });
+  assert.equal(res.status, 201);
+  assert.equal(orders[0].items[0].variantId, VARIANT_OF[SHIRT]);
+  assert.equal(orders[0].items[0].variantTitle, 'Default');
+});
+
+test('naming the Default variant and leaving it out are one line, so stock is judged once', async () => {
+  const res = await order({ lines: [{ productId: MUG, qty: 2 }, { productId: MUG, variantId: VARIANT_OF[MUG], qty: 2 }] });
+  assert.equal(res.status, 409, '4 mugs asked for, 3 in stock');
+  assert.equal(stock(MUG), 3);
+});
+
+test('the variant decides the price and the stock, and the order line snapshots it', async () => {
+  addSizedTop();
+  const res = await order({ lines: [{ productId: TOP, variantId: TOP_M, qty: 2 }] });
+  assert.equal(res.status, 201);
+  assert.equal((await res.json()).data.subtotal, 2400);
+  assert.equal(units(TOP_M), 3);
+  assert.equal(units(TOP_S), 2, 'the other size is untouched');
+  assert.deepEqual(orders[0].items, [
+    { productId: TOP, variantId: TOP_M, productTitle: 'Lawn top', variantTitle: 'M', sku: 'TOP-M', unitPrice: 1200, quantity: 2 },
+  ]);
+});
+
+test('two variants of one product are two lines', async () => {
+  addSizedTop();
+  const res = await order({ lines: [{ productId: TOP, variantId: TOP_S, qty: 1 }, { productId: TOP, variantId: TOP_M, qty: 1 }] });
+  assert.equal(res.status, 201);
+  assert.equal(orders[0].items.length, 2);
+  assert.equal(orders[0].subtotal, 2200);
+});
+
+test('a variant of another product, or a malformed one, is 422 UNKNOWN_VARIANT', async () => {
+  addSizedTop();
+  for (const variantId of [VARIANT_OF[SHIRT], '65a0000000000000000000ff', 'nope']) {
+    const res = await order({ lines: [{ productId: TOP, variantId, qty: 1 }] });
+    assert.equal(res.status, 422, variantId);
+    assert.equal((await res.json()).error.code, 'UNKNOWN_VARIANT');
+  }
+  assert.equal(orders.length, 0);
+});
+
+test('stock is judged per variant: S can run out while M is still for sale', async () => {
+  addSizedTop();
+  assert.equal((await order({ lines: [{ productId: TOP, variantId: TOP_S, qty: 3 }] })).status, 409);
+  assert.equal((await order({ lines: [{ productId: TOP, variantId: TOP_M, qty: 3 }] })).status, 201);
+});
+
+test('a variant that does not track quantity sells without limit and is never decremented', async () => {
+  addSizedTop();
+  const res = await order({ lines: [{ productId: TOP, variantId: TOP_FREE, qty: 50 }] });
+  assert.equal(res.status, 201);
+  assert.equal(units(TOP_FREE), 0);
+  assert.equal(movements.length, 0);
+});
+
+test('a product delivery override is charged once however many of its variants are ordered', async () => {
+  addSizedTop(400);
+  const res = await order({ lines: [{ productId: TOP, variantId: TOP_S, qty: 1 }, { productId: TOP, variantId: TOP_M, qty: 1 }] });
+  const { data } = await res.json();
+  assert.equal(data.deliveryCharges, 400, 'the override, once, not the store rate and not the sum');
+  assert.equal(data.total, 2600);
+});
+
+test('order lookup carries the variant and never the sku', async () => {
+  addSizedTop();
+  const placed = await (await order({ lines: [{ productId: TOP, variantId: TOP_M, qty: 1 }] })).json();
+  const res = await lookup({ orderId: placed.data.orderId, phone: CUSTOMER.phone });
+  const raw = await res.text();
+  assert.equal(raw.includes('TOP-M'), false);
+  const { data } = storefrontOrderLookupResponseSchema.parse(JSON.parse(raw));
+  assert.equal(data.items[0].variantId, TOP_M);
+  assert.equal(data.items[0].variantTitle, 'M');
 });

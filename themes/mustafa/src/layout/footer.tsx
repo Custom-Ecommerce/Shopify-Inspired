@@ -1,6 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
-import type { ThemeLayoutProps } from "@markaz/storefront-theme-kit";
+import type { StoreLayoutProps } from "@markaz/storefront-theme-kit";
 
 const USP_ITEMS = [
   {
@@ -21,7 +21,7 @@ const USP_ITEMS = [
   },
 ];
 
-export function Footer(props: ThemeLayoutProps) {
+export function Footer(props: StoreLayoutProps) {
   const store = (props as any).store;
   const storePaths = (props as any).storePaths ?? (props as any).paths ?? {};
   const navigation = (props as any).navigation;

@@ -14,7 +14,11 @@ export type StorefrontErrorCode =
   | 'OUT_OF_STOCK'
   | 'PAYMENT_METHOD_UNAVAILABLE'
   | 'IDEMPOTENCY_CONFLICT'
-  | 'RATE_LIMITED';
+  | 'RATE_LIMITED'
+  | 'VARIANT_REQUIRED'
+  | 'UNKNOWN_VARIANT'
+  | 'PRODUCT_UNAVAILABLE'
+  | 'PREVIEW_ORDER_BLOCKED';
 
 /** Carries the storefront error envelope: { error: { code, message }, ...extra }. */
 export class StorefrontHttpError extends Error {
@@ -48,6 +52,14 @@ export function handleStorefrontError(err: unknown): NextResponse {
   console.error('[seller-backend] unhandled storefront route error', err);
   return storefrontError(new StorefrontHttpError(500, 'INTERNAL_ERROR', 'Internal server error'));
 }
+
+/** The product exists but is not for sale: a draft, an unedited demo, or in trash (D-037). */
+export const productUnavailable = (productId: string): StorefrontHttpError =>
+  new StorefrontHttpError(422, 'PRODUCT_UNAVAILABLE', 'A product in the order is no longer for sale.', { productId });
+
+/** An order sent from a seller's preview. Nothing is saved and no stock moves. */
+export const previewOrderBlocked = (): StorefrontHttpError =>
+  new StorefrontHttpError(422, 'PREVIEW_ORDER_BLOCKED', 'This is a preview, so no order was placed. Exit preview to use the live store.');
 
 export const storeNotFound = (): StorefrontHttpError =>
   new StorefrontHttpError(404, 'STORE_NOT_FOUND', 'Store not found.');

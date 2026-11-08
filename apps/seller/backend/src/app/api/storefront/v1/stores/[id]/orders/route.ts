@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { storefrontOrderCreatedResponseSchema } from '@/lib/contracts';
-import {
-  PRIVATE_NO_STORE_HEADERS,
-  StorefrontHttpError,
-  handleStorefrontError,
-} from '@/lib/storefront/errors';
+import { PRIVATE_NO_STORE_HEADERS, StorefrontHttpError, previewOrderBlocked } from '@/lib/storefront/errors';
 import { toOrderCreatedDto } from '@/lib/storefront/order-dto';
 import { parseCreateOrderRequest, readJsonBody } from '@/lib/storefront/order-request';
 import { placeOrder } from '@/lib/storefront/order-service';
+import { carriesPreviewCredential, storefrontFailure } from '@/lib/storefront/preview-request';
 import { ORDER_CREATE_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
 
@@ -30,11 +27,16 @@ export const dynamic = 'force-dynamic';
  *   400 INVALID_REQUEST | EMPTY_ORDER | INVALID_QUANTITY | PAYMENT_METHOD_UNAVAILABLE
  *   404 STORE_NOT_FOUND    403 STORE_NOT_ACTIVE
  *   409 OUT_OF_STOCK (productId)   409 IDEMPOTENCY_CONFLICT (the key was used for a different order)
+ *   422 VARIANT_REQUIRED (productId)  a product with several variants and no variantId
+ *   422 UNKNOWN_VARIANT (productId)   the variantId is not a variant of that product
  *   422 UNKNOWN_PRODUCT (productId)   unknown, other store, or unpublished
+ *   422 PREVIEW_ORDER_BLOCKED   the request carries a preview credential, good or not: nothing is read or saved
  *   429 RATE_LIMITED       503 STOREFRONT_UNAVAILABLE
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
+  const preview = carriesPreviewCredential(request);
   try {
+    if (preview) throw previewOrderBlocked();
     const { id } = await context.params;
     assertStoreId(id);
     enforceRateLimit(ORDER_CREATE_LIMIT, id, request.headers);
@@ -58,6 +60,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       headers: replayed ? { ...PRIVATE_NO_STORE_HEADERS, 'Idempotent-Replayed': 'true' } : PRIVATE_NO_STORE_HEADERS,
     });
   } catch (err) {
-    return handleStorefrontError(err);
+    return storefrontFailure(err, preview);
   }
 }

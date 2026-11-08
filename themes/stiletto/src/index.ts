@@ -15,6 +15,7 @@ import { UnavailablePage } from "./pages/unavailable-page";
 import { CollectionsPage } from "./pages/collections-page";
 import { CollectionPage } from "./pages/collection-page";
 import { FeedbackPage } from "./pages/feedback-page";
+import { FavouritesPage } from "./pages/favourites-page";
 import { demo } from "./demo";
 
 export const manifest = defineThemeManifest({
@@ -41,6 +42,7 @@ const theme = defineTheme({
     Collections: CollectionsPage,
     Collection: CollectionPage,
     Feedback: FeedbackPage,
+    Favourites: FavouritesPage,
   },
   wantsChrome: true,
   demo,

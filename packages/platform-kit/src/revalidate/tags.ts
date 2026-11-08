@@ -6,13 +6,15 @@
  * Pure, no I/O.
  */
 
+import { STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from "../reservation";
+
 export const REVALIDATE_PATH = "/api/revalidate";
 export const REVALIDATE_SECRET_HEADER = "x-revalidate-secret";
 export const REVALIDATE_MAX_TAGS = 50;
 export const REVALIDATE_MAX_TAG_LENGTH = 200;
 
 const OBJECT_ID = "[a-zA-Z0-9_-]{1,64}";
-const STORE_SLUG = "[a-z0-9-]{3,30}";
+const STORE_SLUG = `[a-z0-9-]{${STORE_SLUG_MIN_LENGTH},${STORE_SLUG_MAX_LENGTH}}`;
 const STORE_KEY = "[a-z0-9-]{3,64}";
 
 const ALLOWED_TAG_PATTERNS: readonly RegExp[] = [
