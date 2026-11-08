@@ -47,12 +47,8 @@ const ACTION_LABEL: Record<string, string> = {
   delivered: "Mark as delivered",
 };
 
-/** Moves that ask first. OB-4 replaces the dispatch question with the courier form. */
+/** Moves that ask first. Dispatch has its own courier form (OB-4). */
 const CONFIRM_COPY: Record<string, { title: string; description: string }> = {
-  dispatched: {
-    title: "Mark this order as dispatched?",
-    description: "Do this once the parcel has left with the courier. The order cannot go back to processing.",
-  },
   delivered: {
     title: "Mark this order as delivered?",
     description: "Do this once the customer has received the parcel. This is the last step of the order.",
@@ -94,6 +90,357 @@ function DetailSkeleton() {
       <Skeleton className="h-40 w-full rounded-2xl" />
       <Skeleton className="h-32 w-full rounded-2xl" />
     </div>
+  );
+}
+
+// EP-02 OB-4: courier and tracking. The list matches COURIERS in @markaz/contracts (types-only import here); "Other" lets
+// the seller type any courier name. The limits match the transition and tracking request schemas.
+const COURIER_OPTIONS = ["TCS", "Leopards", "M&P", "Trax", "PostEx", "BlueEx", "Call Courier", "Pakistan Post", "Other"] as const;
+const OTHER_COURIER = "Other";
+const COURIER_MIN = 2;
+const COURIER_MAX = 40;
+const TRACKING_MAX = 60;
+const URL_MAX = 500;
+const NOTE_MAX = 500;
+const HTTP_URL = /^https?:\/\//i;
+
+type TrackingFieldName = "courier" | "trackingNumber" | "trackingUrl" | "note";
+type FieldErrors = Partial<Record<TrackingFieldName, string>>;
+
+interface CourierFormValues {
+  choice: string;
+  otherName: string;
+  trackingNumber: string;
+  trackingUrl: string;
+}
+
+function courierFormFrom(order: DashboardOrderDetail | null): CourierFormValues {
+  const courier = order?.courier ?? "";
+  const known = (COURIER_OPTIONS as readonly string[]).includes(courier) && courier !== OTHER_COURIER;
+  return {
+    choice: courier === "" ? COURIER_OPTIONS[0] : known ? courier : OTHER_COURIER,
+    otherName: courier !== "" && !known ? courier : "",
+    trackingNumber: order?.trackingNumber ?? "",
+    trackingUrl: order?.trackingUrl ?? "",
+  };
+}
+
+const courierOf = (values: CourierFormValues): string => (values.choice === OTHER_COURIER ? values.otherName.trim() : values.choice);
+
+/** The same rules the server applies, checked first so the seller sees them next to the field. */
+function checkCourierForm(values: CourierFormValues): FieldErrors {
+  const errors: FieldErrors = {};
+  const courier = courierOf(values);
+  if (courier.length < COURIER_MIN || courier.length > COURIER_MAX) errors.courier = `Enter the courier name (${COURIER_MIN} to ${COURIER_MAX} characters).`;
+  const tracking = values.trackingNumber.trim();
+  if (tracking.length < 1 || tracking.length > TRACKING_MAX) errors.trackingNumber = `Enter the tracking number (up to ${TRACKING_MAX} characters).`;
+  const url = values.trackingUrl.trim();
+  if (url !== "" && (!HTTP_URL.test(url) || url.length > URL_MAX)) errors.trackingUrl = "The tracking link must start with http:// or https://.";
+  return errors;
+}
+
+/** The field a 400 names (the proxy keeps the backend's errors in details), with its message. */
+async function readFieldError(res: Response): Promise<{ field: TrackingFieldName | null; message: string }> {
+  const data = (await res.json().catch(() => null)) as { error?: string; details?: Array<{ field?: string | null; message?: string }> } | null;
+  const first = Array.isArray(data?.details) ? data?.details[0] : undefined;
+  const field = first?.field;
+  const known = field === "courier" || field === "trackingNumber" || field === "trackingUrl" || field === "note";
+  return { field: known ? field : null, message: first?.message ?? data?.error ?? "Check the details and try again." };
+}
+
+const FIELD_CLASS = "h-11 w-full rounded-md border border-input bg-transparent px-2 text-sm sm:h-9";
+
+function FieldError({ message }: { message?: string }) {
+  return message ? <span className="text-xs text-destructive">{message}</span> : null;
+}
+
+/** Courier select (with "Other" text), tracking number and tracking link. Shared by the dispatch and edit dialogs. */
+function CourierFields({
+  values,
+  errors,
+  disabled,
+  onChange,
+}: {
+  values: CourierFormValues;
+  errors: FieldErrors;
+  disabled: boolean;
+  onChange: (next: CourierFormValues) => void;
+}) {
+  return (
+    <>
+      <label className="flex flex-col gap-1">
+        <span className="font-medium">Courier</span>
+        <select
+          value={values.choice}
+          onChange={(event) => onChange({ ...values, choice: event.target.value })}
+          disabled={disabled}
+          className={FIELD_CLASS}
+          aria-invalid={errors.courier ? true : undefined}
+        >
+          {COURIER_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      {values.choice === OTHER_COURIER ? (
+        <label className="flex flex-col gap-1">
+          <span className="font-medium">Courier name</span>
+          <input
+            value={values.otherName}
+            onChange={(event) => onChange({ ...values, otherName: event.target.value })}
+            maxLength={COURIER_MAX}
+            disabled={disabled}
+            className={FIELD_CLASS}
+            aria-invalid={errors.courier ? true : undefined}
+          />
+        </label>
+      ) : null}
+      <FieldError message={errors.courier} />
+      <label className="flex flex-col gap-1">
+        <span className="font-medium">Tracking number</span>
+        <input
+          value={values.trackingNumber}
+          onChange={(event) => onChange({ ...values, trackingNumber: event.target.value })}
+          maxLength={TRACKING_MAX}
+          disabled={disabled}
+          required
+          className={`${FIELD_CLASS} font-mono`}
+          aria-invalid={errors.trackingNumber ? true : undefined}
+        />
+        <FieldError message={errors.trackingNumber} />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="font-medium">
+          Tracking link <span className="font-normal text-muted-foreground">(optional)</span>
+        </span>
+        <input
+          type="url"
+          inputMode="url"
+          value={values.trackingUrl}
+          onChange={(event) => onChange({ ...values, trackingUrl: event.target.value })}
+          maxLength={URL_MAX}
+          placeholder="https://"
+          disabled={disabled}
+          className={FIELD_CLASS}
+          aria-invalid={errors.trackingUrl ? true : undefined}
+        />
+        <FieldError message={errors.trackingUrl} />
+      </label>
+    </>
+  );
+}
+
+/** The dispatch form (OB-4): courier, tracking number, optional link and note, sent through the transition proxy. */
+function DispatchDialog({
+  order,
+  open,
+  onOpenChange,
+  onDone,
+  onConflict,
+}: {
+  order: DashboardOrderDetail;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDone: () => Promise<void>;
+  onConflict: () => Promise<void>;
+}) {
+  const storeFetch = useStoreFetch();
+  const [values, setValues] = useState<CourierFormValues>(() => courierFormFrom(null));
+  const [note, setNote] = useState("");
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [failure, setFailure] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setValues(courierFormFrom(order));
+    setNote("");
+    setErrors({});
+    setFailure(null);
+  }, [open, order]);
+
+  async function submit(): Promise<void> {
+    const found = checkCourierForm(values);
+    if (note.trim().length > NOTE_MAX) found.note = `The note can be at most ${NOTE_MAX} characters.`;
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+    setSubmitting(true);
+    setFailure(null);
+    try {
+      const url = values.trackingUrl.trim();
+      const res = await storeFetch(`/api/dashboard/orders/${order.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "dispatched",
+          courier: courierOf(values),
+          trackingNumber: values.trackingNumber.trim(),
+          ...(url ? { trackingUrl: url } : {}),
+          ...(note.trim() ? { note: note.trim() } : {}),
+        }),
+      });
+      if (res.ok) {
+        onOpenChange(false);
+        await onDone();
+        return;
+      }
+      if (res.status === 400) {
+        const { field, message } = await readFieldError(res);
+        if (field) setErrors({ [field]: message });
+        else setFailure(message);
+        return;
+      }
+      if (res.status === 409 || res.status === 422) {
+        onOpenChange(false);
+        await onConflict();
+        return;
+      }
+      setFailure("Could not save the dispatch. Check your connection and try again.");
+    } catch {
+      setFailure("Could not save the dispatch. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={(next) => (!next && !submitting ? onOpenChange(false) : undefined)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Mark as dispatched</AlertDialogTitle>
+          <AlertDialogDescription>Do this once the parcel has left with the courier. The order cannot go back to processing.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
+          <CourierFields values={values} errors={errors} disabled={submitting} onChange={setValues} />
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">
+              Note <span className="font-normal text-muted-foreground">(optional, for your team)</span>
+            </span>
+            <Textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={NOTE_MAX} disabled={submitting} />
+            <FieldError message={errors.note} />
+          </label>
+          {failure ? (
+            <p role="alert" className="text-destructive">
+              {failure}
+            </p>
+          ) : null}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="h-11 w-full sm:h-9 sm:w-auto" disabled={submitting}>
+            Not yet
+          </AlertDialogCancel>
+          <AlertDialogAction className="h-11 w-full sm:h-9 sm:w-auto" disabled={submitting} onClick={() => void submit()}>
+            {submitting ? "Saving…" : "Mark as dispatched"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/** "Edit tracking" on a dispatched order (OB-4). Sends only what changed; clearing the link sends null. */
+function EditTrackingDialog({
+  order,
+  onDone,
+  onConflict,
+}: {
+  order: DashboardOrderDetail;
+  onDone: () => Promise<void>;
+  onConflict: () => Promise<void>;
+}) {
+  const storeFetch = useStoreFetch();
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<CourierFormValues>(() => courierFormFrom(order));
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [failure, setFailure] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function openDialog(): void {
+    setValues(courierFormFrom(order));
+    setErrors({});
+    setFailure(null);
+    setOpen(true);
+  }
+
+  async function submit(): Promise<void> {
+    const found = checkCourierForm(values);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+
+    const changes: Record<string, string | null> = {};
+    const courier = courierOf(values);
+    const tracking = values.trackingNumber.trim();
+    const url = values.trackingUrl.trim();
+    if (courier !== (order.courier ?? "")) changes.courier = courier;
+    if (tracking !== (order.trackingNumber ?? "")) changes.trackingNumber = tracking;
+    if (url !== (order.trackingUrl ?? "")) changes.trackingUrl = url === "" ? null : url;
+    if (Object.keys(changes).length === 0) {
+      setOpen(false);
+      return;
+    }
+
+    setSubmitting(true);
+    setFailure(null);
+    try {
+      const res = await storeFetch(`/api/dashboard/orders/${order.id}/tracking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+      if (res.ok) {
+        setOpen(false);
+        await onDone();
+        return;
+      }
+      if (res.status === 400) {
+        const { field, message } = await readFieldError(res);
+        if (field) setErrors({ [field]: message });
+        else setFailure(message);
+        return;
+      }
+      if (res.status === 409 || res.status === 422) {
+        setOpen(false);
+        await onConflict();
+        return;
+      }
+      setFailure("Could not save the tracking. Check your connection and try again.");
+    } catch {
+      setFailure("Could not save the tracking. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={(next) => (!next && !submitting ? setOpen(false) : undefined)}>
+      <Button variant="clay-soft" className="h-11 w-full sm:h-9 sm:w-auto" onClick={openDialog}>
+        Edit tracking
+      </Button>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Edit tracking</AlertDialogTitle>
+          <AlertDialogDescription>The change is saved in the order history.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="flex min-w-0 flex-col gap-3 text-sm">
+          <CourierFields values={values} errors={errors} disabled={submitting} onChange={setValues} />
+          {failure ? (
+            <p role="alert" className="text-destructive">
+              {failure}
+            </p>
+          ) : null}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="h-11 w-full sm:h-9 sm:w-auto" disabled={submitting}>
+            Close
+          </AlertDialogCancel>
+          <AlertDialogAction className="h-11 w-full sm:h-9 sm:w-auto" disabled={submitting} onClick={() => void submit()}>
+            {submitting ? "Saving…" : "Save tracking"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -285,6 +632,8 @@ export default function OrderDetailPage() {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ActionError | null>(null);
   const [stockNotice, setStockNotice] = useState<string | null>(null);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [confirmNote, setConfirmNote] = useState("");
 
   /** Reads the order. A quiet refresh (after an action) keeps the page on screen instead of showing the skeleton. */
   const fetchOrder = useCallback(
@@ -332,14 +681,14 @@ export default function OrderDetailPage() {
   useEffect(load, [load]);
 
   /** Sends one move, then always reads the order again from the server (no optimistic update). */
-  async function runTransition(target: string): Promise<void> {
+  async function runTransition(target: string, note?: string): Promise<void> {
     setRunning(target);
     setActionError(null);
     try {
       const res = await storeFetch(`/api/dashboard/orders/${params.id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: target }),
+        body: JSON.stringify({ status: target, ...(note && note.trim() ? { note: note.trim().slice(0, NOTE_MAX) } : {}) }),
       });
       if (res.status === 409 || res.status === 422) {
         setActionError({
@@ -359,8 +708,29 @@ export default function OrderDetailPage() {
   }
 
   function startTransition(target: string): void {
-    if (CONFIRM_COPY[target]) setConfirming(target);
-    else void runTransition(target);
+    if (target === "dispatched") {
+      setDispatchOpen(true);
+      return;
+    }
+    if (CONFIRM_COPY[target]) {
+      setConfirmNote("");
+      setConfirming(target);
+    } else void runTransition(target);
+  }
+
+  /** After a dispatch or a tracking edit: read the order again quietly. */
+  async function handleSaved(): Promise<void> {
+    setActionError(null);
+    await fetchOrder(true);
+  }
+
+  /** 409 or 422 from the dispatch or the tracking edit: the order moved on elsewhere. */
+  async function handleChangedElsewhere(): Promise<void> {
+    setActionError({
+      message: "This order was changed by someone else or in another tab, so nothing was saved. It has been refreshed; check its status.",
+      retry: null,
+    });
+    await fetchOrder(true);
   }
 
   const backLink = (
@@ -468,6 +838,12 @@ export default function OrderDetailPage() {
             <AlertDialogTitle>{confirming ? CONFIRM_COPY[confirming]?.title : ""}</AlertDialogTitle>
             <AlertDialogDescription>{confirming ? CONFIRM_COPY[confirming]?.description : ""}</AlertDialogDescription>
           </AlertDialogHeader>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">
+              Note <span className="font-normal text-muted-foreground">(optional, for your team)</span>
+            </span>
+            <Textarea value={confirmNote} onChange={(event) => setConfirmNote(event.target.value)} maxLength={NOTE_MAX} disabled={running !== null} />
+          </label>
           <AlertDialogFooter>
             <AlertDialogCancel className="h-11 w-full sm:h-9 sm:w-auto" disabled={running !== null}>
               Not yet
@@ -475,13 +851,21 @@ export default function OrderDetailPage() {
             <AlertDialogAction
               className="h-11 w-full sm:h-9 sm:w-auto"
               disabled={running !== null}
-              onClick={() => confirming && void runTransition(confirming)}
+              onClick={() => confirming && void runTransition(confirming, confirmNote)}
             >
               {running !== null ? "Saving…" : confirming ? ACTION_LABEL[confirming] : ""}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DispatchDialog
+        order={order}
+        open={dispatchOpen}
+        onOpenChange={setDispatchOpen}
+        onDone={handleSaved}
+        onConflict={handleChangedElsewhere}
+      />
 
       <Card>
         <CardHeader>
@@ -550,12 +934,15 @@ export default function OrderDetailPage() {
         </CardContent>
       </Card>
 
-      {order.courier || order.trackingNumber || order.trackingUrl ? (
+      {order.courier || order.trackingNumber || order.trackingUrl || order.canEditTracking ? (
         <Card>
           <CardHeader>
             <CardTitle>Courier and tracking</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm">
+            {order.canEditTracking && !order.courier && !order.trackingNumber ? (
+              <p className="text-muted-foreground">No courier or tracking number saved yet.</p>
+            ) : null}
             {order.courier ? <Row label="Courier">{order.courier}</Row> : null}
             {order.trackingNumber ? (
               <Row label="Tracking number">
@@ -568,6 +955,11 @@ export default function OrderDetailPage() {
                   Open tracking page
                 </a>
               </Row>
+            ) : null}
+            {order.canEditTracking ? (
+              <div className="pt-1">
+                <EditTrackingDialog order={order} onDone={handleSaved} onConflict={handleChangedElsewhere} />
+              </div>
             ) : null}
           </CardContent>
         </Card>

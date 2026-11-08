@@ -232,8 +232,8 @@ assert.equal(can(actor, 'delete', 'archivedReviews'), false, actor);
 
 // EP-02 OB-1a: order actions.
 
-const ORDER_ACTION_NAMES = ['view', 'transition', 'cancel', 'note', 'payment', 'print'] as const;
-const ORDER_ROWS = ['orderView', 'orderTransition', 'orderCancel', 'orderNotes', 'orderPayment', 'orderPrint'] as const;
+const ORDER_ACTION_NAMES = ['view', 'transition', 'cancel', 'note', 'payment', 'print', 'tracking'] as const;
+const ORDER_ROWS = ['orderView', 'orderTransition', 'orderCancel', 'orderNotes', 'orderPayment', 'orderPrint', 'orderTracking'] as const;
 
 /** The fields a seller would send for each action; read actions send none. */
 const ORDER_ACTION_FIELDS: Record<(typeof ORDER_ACTION_NAMES)[number], readonly string[] | undefined> = {
@@ -243,6 +243,7 @@ cancel: ['reason', 'note'],
 note: ['text'],
 payment: ['paymentStatus', 'collectedAmount'],
 print: undefined,
+tracking: ['courier', 'trackingNumber', 'trackingUrl'],
 };
 
 const orderCan = (actor: string, action: (typeof ORDER_ACTION_NAMES)[number], fields = ORDER_ACTION_FIELDS[action]) =>
@@ -361,4 +362,20 @@ for (const actor of ['admin', 'system', 'public'] as const) {
 assert.equal(can(actor, 'update', 'orderCancel', ['reason']), false, actor);
 }
 assert.equal(can('seller', 'update', 'orderCancel'), false);
+});
+
+test('orderTracking (OB-4): the seller edits courier, tracking number and link only; everyone else is denied', () => {
+assert.deepEqual(ORDER_ACTIONS.tracking, { operation: 'update', collection: 'orderTracking' });
+assert.equal(can('seller', 'update', 'orderTracking', ['courier', 'trackingNumber', 'trackingUrl']), true);
+assert.equal(can('seller', 'update', 'orderTracking', ['trackingUrl']), true);
+for (const field of ['status', 'note', 'statusHistory', 'store', 'cancelReason']) {
+assert.equal(can('seller', 'update', 'orderTracking', ['courier', field]), false, field);
+}
+for (const actor of ['admin', 'system', 'public'] as const) {
+assert.equal(can(actor, 'update', 'orderTracking', ['courier']), false, actor);
+}
+for (const operation of ['read', 'create', 'delete'] as const) {
+assert.equal(can('seller', operation, 'orderTracking', ['courier']), false, operation);
+}
+assert.equal(can('seller', 'update', 'orderTracking'), false);
 });

@@ -10,6 +10,7 @@ import type {
   OrderTransport,
   StorefrontCategory,
   StorefrontOrder,
+  StorefrontOrderTracking,
   StorefrontProductDetail,
   StorefrontProductSummary,
   StorefrontTransport,
@@ -21,6 +22,7 @@ import {
   WireErrorEnvelope,
   WireOrderCreated,
   WireOrderLookup,
+  WireOrderTrackingEnvelope,
   WireCategoryList,
   WireProductDetailEnvelope,
   WireProductList,
@@ -261,6 +263,17 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): Order
       return unwrap(result, WireOrderLookup, "order lookup").data;
     },
 
+    async trackOrder(input: OrderLookupInput): Promise<StorefrontOrderTracking | null> {
+      requireHttp();
+      const result = await exchange("POST", "/orders/track", {
+        body: { orderId: input.orderId, phone: input.phone },
+        retry: true,
+      });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfRefused(result);
+      return unwrap(result, WireOrderTrackingEnvelope, "order tracking").data;
+    },
+
     async getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]> {
       requireHttp();
       if (ids.length === 0) return [];
@@ -278,7 +291,8 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void): Order
  *   GET  /products/:slug        product detail; 404 PRODUCT_NOT_FOUND becomes null
  *   POST /cart/quote            price a cart without moving stock
  *   POST /orders                create order, with an Idempotency-Key header; refusals become OrderRejectedError
- *   POST /orders/lookup         order tracking by id and phone; 404 ORDER_NOT_FOUND becomes null
+ *   POST /orders/lookup         the shopper's order by id and phone; 404 ORDER_NOT_FOUND becomes null
+ *   POST /orders/track          customer tracking by id and phone (journey only); 404 ORDER_NOT_FOUND becomes null
  *   GET  /products?ids=         the Live products among these ids
  *
  * Reads retry once, and only when fetch itself fails. HTTP responses are never retried. Writes are never retried
@@ -312,6 +326,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     quoteCart: orders.quoteCart,
     submitOrder: orders.submitOrder,
     lookupOrder: orders.lookupOrder,
+    trackOrder: orders.trackOrder,
     getProductsByIds: orders.getProductsByIds,
 
     async getProducts(): Promise<StorefrontProductSummary[]> {

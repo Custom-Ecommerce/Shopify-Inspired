@@ -300,6 +300,43 @@ export const storefrontOrderSchema = storefrontOrderCreatedSchema.extend({
 
 export const storefrontOrderLookupResponseSchema = z.object({ data: storefrontOrderSchema });
 
+// EP-02 OB-4 (D-069): customer tracking. POST /orders/track with the same { orderId, phone } body as the lookup. Only what a
+// parcel's journey needs: no name, phone, address, city, items, totals, notes, cancel reason, payment or internal ids.
+// Strict, so a field added on the server by mistake fails the parse instead of reaching a shopper.
+
+const trackingDate = z.string().min(1).nullable();
+
+/** The first time the order reached each status. null when it never did (or when it is unknown). */
+export const storefrontOrderTrackingDatesSchema = z
+  .object({
+    pending: trackingDate,
+    confirmed: trackingDate,
+    processing: trackingDate,
+    dispatched: trackingDate,
+    delivered: trackingDate,
+    cancelled: trackingDate,
+    returned: trackingDate,
+  })
+  .strict();
+
+export const storefrontOrderTrackingSchema = z
+  .object({
+    orderId: z.string().min(1),
+    status: z.enum(STOREFRONT_ORDER_STATUSES),
+    createdAt: z.string().min(1),
+    dates: storefrontOrderTrackingDatesSchema,
+    /** Only while dispatched or delivered; null otherwise. */
+    courier: z.string().nullable(),
+    trackingNumber: z.string().nullable(),
+    trackingUrl: z.string().nullable(),
+  })
+  .strict();
+
+export const storefrontOrderTrackingResponseSchema = z.object({ data: storefrontOrderTrackingSchema }).strict();
+
+export type StorefrontOrderTrackingDates = z.output<typeof storefrontOrderTrackingDatesSchema>;
+export type StorefrontOrderTracking = z.output<typeof storefrontOrderTrackingSchema>;
+
 /** Cart quote. The request carries product ids and quantities only; the response is priced by the server. */
 export const storefrontCartQuoteRequestSchema = z.object({
   lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),

@@ -18,7 +18,12 @@ import {
   orderCancelRequestSchema,
   orderCancelResponseSchema,
   ORDER_CANCEL_REASON_OPTIONS,
+  COURIERS,
+  COURIER_NAME_MAX,
+  TRACKING_NUMBER_MAX,
+  orderTrackingRequestSchema,
 } from '../src/order';
+import { storefrontOrderTrackingResponseSchema, storefrontOrderTrackingSchema } from '../src/storefront';
 import { failingPaths } from './helpers';
 
 const NOW = '2026-10-01T00:00:00.000Z';
@@ -110,7 +115,7 @@ test('dashboard list item and detail parse, and unknown keys are stripped', () =
     subtotal: 2400, deliveryCharges: 200, total: 2600, courier: null, trackingNumber: null, trackingUrl: null,
     statusHistory: [{ from: 'pending', to: 'confirmed', by: null, at: NOW_ISO, note: null }],
     notes: [{ id: null, text: 'Call first', by: null, at: NOW_ISO }],
-    cancelledAt: null, cancelReason: null, createdAt: NOW_ISO, updatedAt: NOW_ISO, allowedNext: ['processing'], canCancel: true,
+    cancelledAt: null, cancelReason: null, createdAt: NOW_ISO, updatedAt: NOW_ISO, allowedNext: ['processing'], canCancel: true, canEditTracking: false,
   };
   assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
   assert.deepEqual(failingPaths(dashboardOrderDetailSchema.safeParse({ ...detail, paymentStatus: 'paid' })), ['paymentStatus']);
@@ -130,20 +135,22 @@ test('transition request: bad values are reported against their field', () => {
   assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({})), ['status']);
   assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'shipped' })), ['status']);
   assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'confirmed', note: 'x'.repeat(ORDER_STATUS_NOTE_MAX + 1) })), ['note']);
-  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched', courier: 'x'.repeat(61) })), ['courier']);
-  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched', trackingNumber: 'x'.repeat(65) })), ['trackingNumber']);
-  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched', trackingUrl: 'ftp://x.test/1' })), ['trackingUrl']);
-  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched', trackingUrl: 'javascript:alert(1)' })), ['trackingUrl']);
+  // OB-4: a dispatch must name courier and tracking number, so each case sends the other required field.
+  const dispatch = { status: 'dispatched', courier: 'TCS', trackingNumber: '123' };
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ ...dispatch, courier: 'x'.repeat(61) })), ['courier']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ ...dispatch, trackingNumber: 'x'.repeat(65) })), ['trackingNumber']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ ...dispatch, trackingUrl: 'ftp://x.test/1' })), ['trackingUrl']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ ...dispatch, trackingUrl: 'javascript:alert(1)' })), ['trackingUrl']);
 });
 
-test('transition request: courier and tracking are accepted only with dispatched, and not required yet', () => {
+test('transition request: courier and tracking are accepted only with dispatched, and required for it (OB-4)', () => {
   const dispatch = orderTransitionRequestSchema.parse({
     status: 'dispatched', courier: ' TCS ', trackingNumber: ' 123 ', trackingUrl: 'https://tcs.test/track/123',
   });
   assert.equal(dispatch.courier, 'TCS');
   assert.equal(dispatch.trackingNumber, '123');
-  // OB-4 makes courier and tracking number required for dispatch; until then a bare dispatch is valid.
-  assert.equal(orderTransitionRequestSchema.safeParse({ status: 'dispatched' }).success, true);
+  // OB-4 (D-064): a dispatch without courier or tracking number is refused on that field.
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched' })), ['courier', 'trackingNumber']);
   for (const field of ['courier', 'trackingNumber', 'trackingUrl']) {
     const value = field === 'trackingUrl' ? 'https://tcs.test/1' : 'TCS';
     assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'confirmed', [field]: value })), [field], field);
@@ -183,4 +190,54 @@ test('cancel request: unknown keys are dropped; the response pairs the detail wi
   };
   assert.deepEqual(failingPaths(orderCancelResponseSchema.safeParse({ order: {}, stockRestore })).includes('order.id'), true);
   assert.deepEqual(failingPaths(orderCancelResponseSchema.safeParse({ order: {}, stockRestore: { ...stockRestore, skipped: [{ name: 'x', why: 'gone' }] } })).includes('stockRestore.skipped.0.why'), true);
+});
+
+// EP-02 OB-4: couriers, dispatch rules, the tracking edit and customer tracking.
+
+test('couriers: the suggested list, and any trimmed name of 2 to 40 characters is accepted', () => {
+  assert.deepEqual([...COURIERS], ['TCS', 'Leopards', 'M&P', 'Trax', 'PostEx', 'BlueEx', 'Call Courier', 'Pakistan Post', 'Other']);
+  const base = { status: 'dispatched', trackingNumber: 'T1' };
+  for (const courier of COURIERS) assert.equal(orderTransitionRequestSchema.safeParse({ ...base, courier }).success, true, courier);
+  assert.equal(orderTransitionRequestSchema.parse({ ...base, courier: '  Swift Riders  ' }).courier, 'Swift Riders');
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ ...base, courier: ' X ' })), ['courier']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ ...base, courier: 'x'.repeat(COURIER_NAME_MAX + 1) })), ['courier']);
+  assert.equal(orderTransitionRequestSchema.safeParse({ ...base, courier: 'x'.repeat(COURIER_NAME_MAX) }).success, true);
+});
+
+test('dispatch: tracking number 1 to 60 characters; a missing courier or tracking number names its field', () => {
+  const base = { status: 'dispatched', courier: 'TCS' };
+  assert.equal(orderTransitionRequestSchema.safeParse({ ...base, trackingNumber: 'x'.repeat(TRACKING_NUMBER_MAX) }).success, true);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ ...base, trackingNumber: 'x'.repeat(TRACKING_NUMBER_MAX + 1) })), ['trackingNumber']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ ...base, trackingNumber: '   ' })), ['trackingNumber']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse(base)), ['trackingNumber']);
+  assert.deepEqual(failingPaths(orderTransitionRequestSchema.safeParse({ status: 'dispatched', trackingNumber: '1' })), ['courier']);
+});
+
+test('tracking edit request: at least one field, the same rules, and null clears the link', () => {
+  assert.equal(orderTrackingRequestSchema.parse({ trackingNumber: ' 99 ' }).trackingNumber, '99');
+  assert.equal(orderTrackingRequestSchema.parse({ trackingUrl: null }).trackingUrl, null);
+  assert.equal(orderTrackingRequestSchema.safeParse({}).success, false);
+  assert.equal(orderTrackingRequestSchema.safeParse({ store: 'x' }).success, false, 'unknown keys alone are not a change');
+  assert.deepEqual(failingPaths(orderTrackingRequestSchema.safeParse({ courier: 'x' })), ['courier']);
+  assert.deepEqual(failingPaths(orderTrackingRequestSchema.safeParse({ trackingUrl: 'javascript:alert(1)' })), ['trackingUrl']);
+  assert.deepEqual(Object.keys(orderTrackingRequestSchema.parse({ courier: 'TCS', status: 'delivered' })), ['courier']);
+});
+
+test('customer tracking: the response holds exactly the allowed keys, and an extra key fails', () => {
+  const data = {
+    orderId: 'ORD-ABCD2345',
+    status: 'dispatched',
+    createdAt: '2026-11-01T10:00:00.000Z',
+    dates: { pending: '2026-11-01T10:00:00.000Z', confirmed: null, processing: null, dispatched: '2026-11-03T10:00:00.000Z', delivered: null, cancelled: null, returned: null },
+    courier: 'TCS',
+    trackingNumber: '123',
+    trackingUrl: null,
+  };
+  assert.equal(storefrontOrderTrackingResponseSchema.safeParse({ data }).success, true);
+  assert.deepEqual(Object.keys(storefrontOrderTrackingSchema.shape).sort(), ['courier', 'createdAt', 'dates', 'orderId', 'status', 'trackingNumber', 'trackingUrl']);
+  for (const extra of ['customerName', 'phone', 'address', 'city', 'items', 'total', 'notes', 'cancelReason', 'paymentStatus', 'id', 'idempotencyKey']) {
+    assert.equal(storefrontOrderTrackingSchema.safeParse({ ...data, [extra]: 'x' }).success, false, extra);
+  }
+  assert.equal(storefrontOrderTrackingSchema.safeParse({ ...data, dates: { ...data.dates, shipped: null } }).success, false);
+  assert.equal(storefrontOrderTrackingResponseSchema.safeParse({ data, extra: 1 }).success, false);
 });

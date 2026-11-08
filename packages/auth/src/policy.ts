@@ -93,6 +93,8 @@ cancel: { operation: 'update', collection: 'orderCancel' },
 note: { operation: 'create', collection: 'orderNotes' },
 payment: { operation: 'update', collection: 'orderPayment' },
 print: { operation: 'read', collection: 'orderPrint' },
+// EP-02 OB-4: editing courier and tracking of a dispatched order.
+tracking: { operation: 'update', collection: 'orderTracking' },
 } as const satisfies Record<string, { operation: Operation; collection: string }>;
 export type OrderAction = keyof typeof ORDER_ACTIONS;
 
@@ -254,6 +256,14 @@ orderPayment: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
 update: { actors: ['seller'], fields: { seller: ['paymentStatus', 'collectedAmount'] } },
+delete: { actors: [], fields: {} },
+},
+
+// EP-02 OB-4: the tracking edit after dispatch (POST /api/orders/:id/tracking). Store owner only; admin and system denied.
+orderTracking: {
+read: { actors: [], fields: {} },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['courier', 'trackingNumber', 'trackingUrl'] } },
 delete: { actors: [], fields: {} },
 },
 

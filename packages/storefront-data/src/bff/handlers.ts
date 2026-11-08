@@ -37,6 +37,8 @@ export interface BffRoutes {
   quote(request: Request, context: BffRouteContext): Promise<Response>;
   submit(request: Request, context: BffRouteContext): Promise<Response>;
   lookup(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Customer tracking (EP-02 OB-4, D-069): the same body and gates as lookup, the journey-only answer. */
+  track(request: Request, context: BffRouteContext): Promise<Response>;
   /** The Live products behind a browser's favourites: GET ?ids=a,b. Public data, so it has no origin gate. */
   products(request: Request, context: BffRouteContext): Promise<Response>;
 }
@@ -340,6 +342,15 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
           return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
         }
         return { kind: "data", status: 200, data: order };
+      }),
+
+    track: (request, context) =>
+      handle(request, context, lookupBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        const tracking = await transport.trackOrder({ orderId: input.orderId, phone: input.phone });
+        if (tracking === null) {
+          return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
+        }
+        return { kind: "data", status: 200, data: tracking };
       }),
   };
 }

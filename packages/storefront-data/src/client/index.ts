@@ -12,6 +12,8 @@ export { useCheckout } from "./use-checkout";
 export type { CheckoutFailure, CheckoutStatus, UseCheckoutResult } from "./use-checkout";
 export { useOrderLookup } from "./use-order-lookup";
 export type { OrderLookupFailure, OrderLookupStatus, UseOrderLookupResult } from "./use-order-lookup";
+export { useOrderTracking } from "./use-order-tracking";
+export type { UseOrderTrackingResult } from "./use-order-tracking";
 export { StorefrontProvider } from "./provider";
 export { useOrderTransport } from "./context";
 export type { CartQuoteLineVM, CartQuoteVM } from "../view-models/cart-quote";

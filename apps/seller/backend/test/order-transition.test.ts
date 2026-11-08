@@ -34,6 +34,10 @@ const LEGAL: ReadonlyArray<[string, string]> = [
 ];
 const isLegal = (from: string, to: string): boolean => LEGAL.some(([f, t]) => f === from && t === to);
 
+// OB-4 (D-064): a move to dispatched must name the courier and the tracking number.
+const DISPATCH = { courier: 'TCS', trackingNumber: 'TCS-1001' };
+const bodyFor = (to: string, extra: Record<string, unknown> = {}) => ({ status: to, ...(to === 'dispatched' ? DISPATCH : {}), ...extra });
+
 const stores = [
   { _id: STORE_A, owner: USER_A },
   { _id: STORE_B, owner: USER_B },
@@ -256,7 +260,7 @@ test('transition: each of the four legal steps moves the order and writes exactl
     audits = [];
     seedOrder(from);
     const before = Date.now();
-    const { status, body, headers } = await postJson(ORDER_A, { status: to, note: '  step ' + to + '  ' });
+    const { status, body, headers } = await postJson(ORDER_A, bodyFor(to, { note: '  step ' + to + '  ' }));
     assert.equal(status, 200, from + ' -> ' + to);
     assert.equal(headers.get('cache-control'), 'no-store');
     assert.equal(orderTransitionResponseSchema.safeParse(body).success, true);
@@ -299,7 +303,7 @@ test('transition: every illegal pair answers 422 with the code, from, to and all
       if (from === to || isLegal(from, to)) continue;
       orders = [];
       seedOrder(from);
-      const { status, body } = await postJson(ORDER_A, { status: to });
+      const { status, body } = await postJson(ORDER_A, bodyFor(to));
       assert.equal(status, 422, from + ' -> ' + to);
       const error = body.errors[0];
       assert.equal(error.code, 'ORDER_TRANSITION_ILLEGAL', from + ' -> ' + to);
@@ -323,7 +327,7 @@ test('transition: going backwards and skipping a step are refused with their rea
   assert.equal(back.body.errors[0].reason, 'backwards');
   orders = [];
   seedOrder('pending');
-  const skip = await postJson(ORDER_A, { status: 'dispatched' });
+  const skip = await postJson(ORDER_A, bodyFor('dispatched'));
   assert.equal(skip.status, 422);
   assert.equal(skip.body.errors[0].reason, 'skips_step');
 });
@@ -430,7 +434,7 @@ test('transition: unknown keys in the body are ignored, never stored', async () 
   assert.equal(stored().statusHistory.length, 1);
 });
 
-test('transition: dispatch stores courier, tracking number and link; dispatch without them is accepted for now', async () => {
+test('transition: dispatch stores courier, tracking number and link; dispatch without them is refused (OB-4)', async () => {
   seedOrder('processing');
   const res = await postJson(ORDER_A, {
     status: 'dispatched', courier: ' TCS ', trackingNumber: ' 7788 ', trackingUrl: 'https://tcs.test/track/7788', note: 'Handed over',
@@ -442,13 +446,40 @@ test('transition: dispatch stores courier, tracking number and link; dispatch wi
   assert.equal(res.body.order.courier, 'TCS');
   assert.equal(res.body.order.trackingNumber, '7788');
 
-  // OB-4 makes courier and tracking number required for dispatch. Until then a bare dispatch is a legal move.
+  // OB-4 (D-064): a dispatch without courier and tracking number is refused on the courier field, and nothing moves.
   orders = [];
   seedOrder('processing');
   const bare = await postJson(ORDER_A, { status: 'dispatched' });
-  assert.equal(bare.status, 200);
-  assert.equal(stored().status, 'dispatched');
+  assert.equal(bare.status, 400);
+  assert.equal(bare.body.errors[0].code, 'ORDER_BODY_INVALID');
+  assert.equal(bare.body.errors[0].field, 'courier');
+  assert.equal(stored().status, 'processing');
   assert.equal(stored().courier, undefined);
+});
+
+test('transition (OB-4): dispatch without a courier, without a tracking number, with a bad link or a long name is 400', async () => {
+  seedOrder('processing');
+  const cases: Array<[Record<string, unknown>, string]> = [
+    [{ status: 'dispatched', trackingNumber: 'T1' }, 'courier'],
+    [{ status: 'dispatched', courier: 'TCS' }, 'trackingNumber'],
+    [{ status: 'dispatched', courier: 'TCS', trackingNumber: '   ' }, 'trackingNumber'],
+    [{ ...DISPATCH, status: 'dispatched', trackingUrl: 'ftp://tcs.test/1' }, 'trackingUrl'],
+    [{ ...DISPATCH, status: 'dispatched', trackingUrl: 'javascript:alert(1)' }, 'trackingUrl'],
+    [{ ...DISPATCH, status: 'dispatched', courier: 'x'.repeat(41) }, 'courier'],
+    [{ ...DISPATCH, status: 'dispatched', courier: 'X' }, 'courier'],
+    [{ ...DISPATCH, status: 'dispatched', trackingNumber: 'x'.repeat(61) }, 'trackingNumber'],
+  ];
+  for (const [body, field] of cases) {
+    const res = await postJson(ORDER_A, body);
+    assert.equal(res.status, 400, JSON.stringify(body));
+    assert.equal(res.body.errors[0].field, field, JSON.stringify(body));
+  }
+  assert.equal(stored().status, 'processing');
+  assert.equal(writes, 0);
+  // A courier name from outside the suggested list is fine.
+  const other = await postJson(ORDER_A, { status: 'dispatched', courier: 'Swift Riders', trackingNumber: 'SR-9' });
+  assert.equal(other.status, 200);
+  assert.equal(stored().courier, 'Swift Riders');
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -458,7 +489,7 @@ test('transition: an order whose product was taken down or trashed still moves o
   // Every Product and StockMovement method throws in these tests, so any product read would fail the request.
   seedOrder('pending');
   for (const to of ['confirmed', 'processing', 'dispatched', 'delivered']) {
-    const res = await postJson(ORDER_A, { status: to });
+    const res = await postJson(ORDER_A, bodyFor(to));
     assert.equal(res.status, 200, to);
   }
   assert.equal(stored().status, 'delivered');

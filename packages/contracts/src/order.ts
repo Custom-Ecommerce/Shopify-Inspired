@@ -222,6 +222,8 @@ export const dashboardOrderDetailSchema = z.object({
   allowedNext: z.array(z.enum(DASHBOARD_ORDER_STATUSES)),
   /** True while the order may still be cancelled (order-flow cancelRefusal of the stored status is null). */
   canCancel: z.boolean(),
+  /** True while the order is dispatched: its courier and tracking can be edited (OB-4). */
+  canEditTracking: z.boolean(),
 });
 
 // EP-02 OB-2: POST /api/orders/:id/transition.
@@ -233,10 +235,28 @@ export const ORDER_COURIER_MAX = 60;
 export const ORDER_TRACKING_NUMBER_MAX = 64;
 export const ORDER_TRACKING_URL_MAX = 500;
 
-/** Only these may come with a move to dispatched. OB-4 makes courier and trackingNumber required for it. */
+/** Only these may come with a move to dispatched; courier and trackingNumber are required for it (OB-4, D-064). */
 export const ORDER_DISPATCH_FIELDS = ['courier', 'trackingNumber', 'trackingUrl'] as const;
 
+// EP-02 OB-4: the couriers the dashboard suggests. The stored courier is a free name ("Other" lets the seller type any),
+// so the list is not an enum.
+export const COURIERS = ['TCS', 'Leopards', 'M&P', 'Trax', 'PostEx', 'BlueEx', 'Call Courier', 'Pakistan Post', 'Other'] as const;
+export type CourierOption = (typeof COURIERS)[number];
+
+/** What a seller may send. Stricter than what the Order model can hold (ORDER_COURIER_MAX, ORDER_TRACKING_NUMBER_MAX). */
+export const COURIER_NAME_MIN = 2;
+export const COURIER_NAME_MAX = 40;
+export const TRACKING_NUMBER_MAX = 60;
+
 const HTTP_URL = /^https?:\/\//i;
+
+export const courierNameSchema = z.string().trim().min(COURIER_NAME_MIN).max(COURIER_NAME_MAX);
+export const trackingNumberSchema = z.string().trim().min(1).max(TRACKING_NUMBER_MAX);
+export const trackingUrlSchema = z
+  .string()
+  .trim()
+  .max(ORDER_TRACKING_URL_MAX)
+  .regex(HTTP_URL, 'The tracking link must start with http:// or https://.');
 
 /**
  * The transition request. Not strict: unknown keys are dropped, so they are neither stored nor checked by the policy.
@@ -246,17 +266,19 @@ export const orderTransitionRequestSchema = z
   .object({
     status: z.enum(DASHBOARD_ORDER_STATUSES),
     note: z.string().trim().max(ORDER_STATUS_NOTE_MAX).nullish(),
-    courier: z.string().trim().min(1).max(ORDER_COURIER_MAX).optional(),
-    trackingNumber: z.string().trim().min(1).max(ORDER_TRACKING_NUMBER_MAX).optional(),
-    trackingUrl: z
-      .string()
-      .trim()
-      .max(ORDER_TRACKING_URL_MAX)
-      .regex(HTTP_URL, 'The tracking link must start with http:// or https://.')
-      .optional(),
+    courier: courierNameSchema.optional(),
+    trackingNumber: trackingNumberSchema.optional(),
+    trackingUrl: trackingUrlSchema.optional(),
   })
   .superRefine((body, ctx) => {
-    if (body.status === 'dispatched') return;
+    if (body.status === 'dispatched') {
+      // D-064: a dispatch names the courier and the tracking number.
+      if (body.courier === undefined) ctx.addIssue({ code: 'custom', path: ['courier'], message: 'A dispatch needs the courier.' });
+      if (body.trackingNumber === undefined) {
+        ctx.addIssue({ code: 'custom', path: ['trackingNumber'], message: 'A dispatch needs the tracking number.' });
+      }
+      return;
+    }
     for (const field of ORDER_DISPATCH_FIELDS) {
       if (body[field] !== undefined) {
         ctx.addIssue({ code: 'custom', path: [field], message: field + ' can only be sent with status dispatched.' });
@@ -324,3 +346,31 @@ export const orderCancelResponseSchema = z.object({
   stockRestore: orderStockRestoreSchema,
 });
 export type OrderCancelResponse = z.output<typeof orderCancelResponseSchema>;
+
+// EP-02 OB-4: POST /api/orders/:id/tracking, editing the courier and tracking of a dispatched order.
+
+export const ORDER_TRACKING_FIELDS = ORDER_DISPATCH_FIELDS;
+
+/**
+ * At least one field. trackingUrl may be null to clear the link. Not strict: unknown keys are dropped, so they are neither
+ * stored nor checked by the policy.
+ */
+export const orderTrackingRequestSchema = z
+  .object({
+    courier: courierNameSchema.optional(),
+    trackingNumber: trackingNumberSchema.optional(),
+    trackingUrl: trackingUrlSchema.nullable().optional(),
+  })
+  .refine((body) => body.courier !== undefined || body.trackingNumber !== undefined || body.trackingUrl !== undefined, {
+    message: 'Send at least one of courier, trackingNumber or trackingUrl.',
+  });
+
+export type OrderTrackingRequestInput = z.input<typeof orderTrackingRequestSchema>;
+export type OrderTrackingRequest = z.output<typeof orderTrackingRequestSchema>;
+
+/** 200 from the tracking endpoint. changed is false when every sent value was already stored (nothing written). */
+export const orderTrackingResponseSchema = z.object({
+  changed: z.boolean(),
+  order: dashboardOrderDetailSchema,
+});
+export type OrderTrackingResponse = z.output<typeof orderTrackingResponseSchema>;

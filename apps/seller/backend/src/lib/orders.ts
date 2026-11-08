@@ -39,7 +39,9 @@ export type OrderErrorCode =
   | 'ORDER_TRANSITION_ILLEGAL'
   | 'ORDER_STATUS_CHANGED'
   // EP-02 OB-3: the cancel endpoint.
-  | 'ORDER_CANCEL_ILLEGAL';
+  | 'ORDER_CANCEL_ILLEGAL'
+  // EP-02 OB-4: the tracking edit.
+  | 'ORDER_TRACKING_ILLEGAL';
 
 export class OrderRequestError extends HttpError {
   readonly code: OrderErrorCode;
@@ -348,5 +350,6 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     updatedAt: iso(row.updatedAt) ?? createdAt,
     allowedNext: nextStatuses(row.status),
     canCancel: canCancel(row.status),
+    canEditTracking: row.status === 'dispatched',
   };
 }

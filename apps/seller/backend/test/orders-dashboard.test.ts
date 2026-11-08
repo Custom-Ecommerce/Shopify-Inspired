@@ -510,7 +510,7 @@ test('orders: the detail shape, with history and notes newest first', async () =
   const detail = (await res.json()) as any;
   assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
   assert.deepEqual(Object.keys(detail).sort(), [
-    'address', 'allowedNext', 'canCancel', 'cancelReason', 'cancelledAt', 'city', 'collectedAmount', 'collectedAt', 'courier', 'createdAt',
+    'address', 'allowedNext', 'canCancel', 'canEditTracking', 'cancelReason', 'cancelledAt', 'city', 'collectedAmount', 'collectedAt', 'courier', 'createdAt',
     'customerName', 'deliveryCharges', 'id', 'items', 'notes', 'orderId', 'paymentMethod', 'paymentStatus', 'phone',
     'status', 'statusHistory', 'subtotal', 'total', 'trackingNumber', 'trackingUrl', 'updatedAt',
   ]);

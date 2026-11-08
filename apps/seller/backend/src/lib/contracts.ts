@@ -109,3 +109,6 @@ export const { canTransition, nextStatuses, transitionRefusal, ORDER_TRANSITION_
 
 // EP-02 OB-3: cancel.
 export const { canCancel, cancelRefusal, ORDER_CANCEL_REFUSAL_MESSAGES, orderCancelRequestSchema } = contracts;
+
+// EP-02 OB-4: the tracking edit and customer tracking.
+export const { orderTrackingRequestSchema, storefrontOrderTrackingSchema, storefrontOrderTrackingResponseSchema } = contracts;
