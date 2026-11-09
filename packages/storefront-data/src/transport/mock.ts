@@ -16,7 +16,7 @@ import type {
 } from "./types";
 import { OrderRejectedError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
-import { normalizePhoneE164 } from "@markaz/platform-kit/phone";
+import { normalizePhoneE164 } from "@markaz/contracts/checkout";
 
 // Hardcoded dummy catalogue. Includes edge cases (no image, discount, out of stock,
 // low stock, no reviews, free delivery, very long title) so themes are exercised from day one.
@@ -275,6 +275,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       lines,
       subtotal,
       deliveryCharges: 0,
+      discount: 0,
       total: subtotal,
       canCheckout: lines.length > 0 && lines.every((line) => line.issue === null),
     };
@@ -329,7 +330,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       updatedAt: now,
       customerName: payload.customer.customerName,
       phone: normalizePhoneE164(payload.customer.phone) ?? payload.customer.phone,
-      city: null,
+      city: payload.customer.city,
       address: payload.customer.address,
       items,
     });

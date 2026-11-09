@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { normalizePhoneE164 } from "@markaz/platform-kit/phone";
+import { normalizePhoneE164 } from "@markaz/contracts/checkout";
 
 export const ORDER_LOOKUP_FIELDS = ["orderId", "phone"] as const;
 export type OrderLookupField = (typeof ORDER_LOOKUP_FIELDS)[number];

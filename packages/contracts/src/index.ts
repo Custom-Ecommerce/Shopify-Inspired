@@ -46,5 +46,7 @@ export * from './admin-settings';
 
 // AF4: admin console overview.
 export * from './admin-overview';
+// EP-03: the checkout contract, also bundled alone for the browser as @markaz/contracts/checkout.
+export * from './checkout';
 // Track B: the public storefront API wire contract.
 export * from './storefront';

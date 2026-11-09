@@ -16,6 +16,7 @@ export interface CartQuoteVM {
   lines: CartQuoteLineVM[];
   subtotal: Money;
   deliveryCharges: Money;
+  discount: Money;
   total: Money;
   canCheckout: boolean;
 }
@@ -32,6 +33,7 @@ export function toCartQuoteVM(quote: CartQuote): CartQuoteVM {
     })),
     subtotal: toMoney(quote.subtotal),
     deliveryCharges: toMoney(quote.deliveryCharges),
+    discount: toMoney(quote.discount),
     total: toMoney(quote.total),
     canCheckout: quote.canCheckout,
   };

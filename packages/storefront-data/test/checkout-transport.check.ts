@@ -20,7 +20,7 @@ const PHONE = "+923001234567";
 
 const payload: SubmitOrderPayload = {
   idempotencyKey: "checkout-key-0001",
-  customer: { customerName: "Ali Raza", phone: PHONE, address: "House 1, Street 2, Karachi" },
+  customer: { customerName: "Ali Raza", phone: PHONE, address: "House 1, Street 2", city: "Karachi" },
   lines: [{ productId: PRODUCT_ID, qty: 2 }],
 };
 
@@ -302,7 +302,7 @@ check("mock: a placed order is found by id and normalised phone, and another pho
   assert.ok(sellable, "the fixtures need one product in stock");
   const placed = await mockTransport.submitOrder({
     idempotencyKey: "mock-key-0001",
-    customer: { customerName: "Ali Raza", phone: PHONE, address: "House 1, Street 2, Karachi" },
+    customer: { customerName: "Ali Raza", phone: PHONE, address: "House 1, Street 2", city: "Karachi" },
     lines: [{ productId: sellable.id, qty: 1 }],
   });
   const found = await mockTransport.lookupOrder({ orderId: placed.orderId, phone: "0300 1234567" });

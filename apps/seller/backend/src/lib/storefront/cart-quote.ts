@@ -1,3 +1,5 @@
+import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from '@markaz/contracts';
+import { toWholeRupees } from '@/lib/contracts';
 import { StorefrontHttpError } from './errors';
 import { computeTotals, roundMoney } from './pricing';
 import type { PricingStore } from './pricing';
@@ -9,7 +11,7 @@ import { availabilityOf, canSupply, resolveVariant, unitsLeft, type CheckoutVari
  * which keeps the total a shopper sees in the cart the total they are charged.
  */
 
-export type QuoteIssue = 'unknown_product' | 'product_unavailable' | 'unknown_variant' | 'out_of_stock' | 'insufficient_stock';
+export type QuoteIssue = StorefrontCartQuoteIssue;
 
 export interface QuoteRequestLine {
   productId: string;
@@ -25,34 +27,16 @@ export interface QuoteCatalogRow {
   variants: CheckoutVariant[];
 }
 
-export interface QuoteLine {
-  productId: string;
-  variantId: string | null;
-  title: string | null;
-  variantTitle: string | null;
-  unitPrice: number | null;
-  qty: number;
-  lineTotal: number | null;
-  issue: QuoteIssue | null;
-  availableQty: number | null;
-}
+export type QuoteLine = StorefrontCartQuoteLine;
 
-export interface CartQuote {
-  lines: QuoteLine[];
-  subtotal: number;
-  deliveryCharges: number;
-  total: number;
-  canCheckout: boolean;
-}
-
-function usablePrice(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
-}
+export type CartQuote = StorefrontCartQuoteDto;
 
 interface ResolvedLine {
   productId: string;
   row: QuoteCatalogRow;
   variant: CheckoutVariant;
+  /** Read from the catalog now, in whole rupees. Nothing the browser sent is involved. */
+  unitPrice: number;
   qty: number;
 }
 
@@ -97,7 +81,8 @@ export function buildCartQuote(
       lines.push(refusal(line, row.title, 'unknown_variant'));
       continue;
     }
-    if (!usablePrice(match.variant.price)) {
+    const unitPrice = toWholeRupees(match.variant.price);
+    if (unitPrice === null) {
       lines.push(refusal(line, null, 'unknown_product'));
       continue;
     }
@@ -107,38 +92,32 @@ export function buildCartQuote(
       existing.qty += line.qty;
       continue;
     }
-    const entry: ResolvedLine = { productId: line.productId, row, variant: match.variant, qty: line.qty };
+    const entry: ResolvedLine = { productId: line.productId, row, variant: match.variant, unitPrice, qty: line.qty };
     resolved.set(key, entry);
     lines.push(entry);
   }
 
   const priced = lines.map((line): QuoteLine => {
     if (!('variant' in line)) return line;
-    const { productId, row, variant, qty } = line;
+    const { productId, row, variant, unitPrice, qty } = line;
     const base = {
       productId,
       variantId: String(variant._id),
       title: row.title,
       variantTitle: variant.title,
-      unitPrice: variant.price,
+      unitPrice,
       qty,
       availableQty: unitsLeft(variant),
     };
     if (availabilityOf(variant) === 'out_of_stock') return { ...base, lineTotal: null, issue: 'out_of_stock' };
     if (!canSupply(variant, qty)) return { ...base, lineTotal: null, issue: 'insufficient_stock' };
-    pricing.push({ unitPrice: variant.price, qty, deliveryCharge: row.deliveryCharge });
-    return { ...base, lineTotal: roundMoney(variant.price * qty), issue: null };
+    pricing.push({ unitPrice, qty, deliveryCharge: row.deliveryCharge });
+    return { ...base, lineTotal: roundMoney(unitPrice * qty), issue: null };
   });
 
   const totals = computeTotals(pricing, store);
   const canCheckout = priced.length > 0 && priced.every((line) => line.issue === null);
-  return {
-    lines: priced,
-    subtotal: totals.subtotal,
-    deliveryCharges: totals.deliveryCharges,
-    total: totals.total,
-    canCheckout,
-  };
+  return { ...totals, lines: priced, canCheckout };
 }
 
 function refusal(line: QuoteRequestLine, title: string | null, issue: QuoteIssue): QuoteLine {

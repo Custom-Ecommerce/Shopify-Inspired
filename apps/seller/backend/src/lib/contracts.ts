@@ -98,6 +98,9 @@ export const {
 // Cart quote contracts.
 export const { storefrontCartQuoteRequestSchema, storefrontCartQuoteResponseSchema } = contracts;
 
+// EP-03 CB-1: the one phone rule and the one way a catalog number becomes a price.
+export const { normalizePhoneE164, toWholeRupees } = contracts;
+
 // PB-7: bulk import and duplicate.
 export const { PRODUCT_CSV_COLUMNS, PRODUCT_IMPORT_MAX_BYTES, PRODUCT_IMPORT_MAX_ROWS, PRODUCT_TITLE_MAX } = contracts;
 

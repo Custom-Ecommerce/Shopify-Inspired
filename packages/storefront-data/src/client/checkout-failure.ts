@@ -1,3 +1,5 @@
+import { CHECKOUT_FIELDS } from "../domain/checkout";
+import type { CheckoutField } from "../domain/checkout";
 import { OrderRejectedError, OrderUnconfirmedError } from "../transport/errors";
 import type { OrderRejection } from "../transport/types";
 
@@ -25,6 +27,20 @@ type CartLineRef = { productId: string; title: string };
 export function cartTitle(lines: readonly CartLineRef[], productId: string | undefined): string | null {
   if (productId === undefined) return null;
   return lines.find((line) => line.productId === productId)?.title ?? null;
+}
+
+/**
+ * The server's refusal of one of the form's fields, or null when the failure is about something else. The server words
+ * it as "customer.phone: Enter a valid...", so this is what lets a theme put the message beside the right box.
+ */
+export function checkoutServerFieldError(failure: CheckoutFailure | null): { field: CheckoutField; message: string } | null {
+  if (failure === null || failure.kind !== "invalid_request") return null;
+  const match = /^customer\.(\w+):\s*(.+)$/.exec(failure.message.trim());
+  if (match === null) return null;
+  const field = CHECKOUT_FIELDS.find((name) => name === match[1]);
+  if (field === undefined) return null;
+  const text = match[2] ?? "";
+  return { field, message: text.charAt(0).toUpperCase() + text.slice(1) };
 }
 
 /**

@@ -6,13 +6,12 @@
  *   - `./reservation`  reserved host labels and the slug check
  *   - `./themes`       theme manifest (slugs, tiers, status, default)
  *   - `./revalidate`   storefront cache-tag contract and request builder
- *   - `./access`, `./store-context`, `./sync-schemas`, `./hmac`, `./phone`
+ *   - `./access`, `./store-context`, `./sync-schemas`, `./hmac`
  */
 export * from "./access";
 export * from "./store-context";
 export * from "./sync-schemas";
 export * from "./hmac";
-export * from "./phone";
 export * from "./reservation";
 export * from "./themes";
 export * from "./revalidate";

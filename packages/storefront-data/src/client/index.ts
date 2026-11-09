@@ -9,6 +9,7 @@ export type { CartQuoteStatus, UseCartQuoteResult } from "./use-cart-quote";
 export { useFavouriteProducts, useFavourites } from "./use-favourites";
 export type { FavouriteProductsStatus, UseFavouriteProductsResult, UseFavouritesResult } from "./use-favourites";
 export { useCheckout } from "./use-checkout";
+export { checkoutServerFieldError } from "./checkout-failure";
 export type { CheckoutFailure, CheckoutStatus, UseCheckoutResult } from "./use-checkout";
 export { useOrderLookup } from "./use-order-lookup";
 export type { OrderLookupFailure, OrderLookupStatus, UseOrderLookupResult } from "./use-order-lookup";

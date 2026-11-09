@@ -12,7 +12,7 @@ test('subtotal is price times quantity, summed', () => {
 
 test('a product with no charge of its own pays the store default rate', () => {
   const t = computeTotals([{ unitPrice: 1000, qty: 1, deliveryCharge: null }], store);
-  assert.deepEqual(t, { subtotal: 1000, deliveryCharges: 250, total: 1250 });
+  assert.deepEqual(t, { subtotal: 1000, deliveryCharges: 250, discount: 0, total: 1250 });
 });
 
 test('a product charge overrides the store rate, including a free-delivery product at 0', () => {

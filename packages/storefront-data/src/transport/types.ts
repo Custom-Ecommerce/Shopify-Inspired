@@ -93,6 +93,9 @@ export interface CheckoutCustomer {
   /** E.164, for example +923001234567. Any Pakistani mobile format is accepted; the server normalises it. */
   phone: string;
   address: string;
+  city: string;
+  email?: string | null;
+  note?: string | null;
 }
 
 export interface SubmitOrderLine {
@@ -194,8 +197,10 @@ export type OrderRejection =
   | { code: "payment_method_unavailable" }
   | { code: "idempotency_conflict" }
   | { code: "rate_limited"; retryAfterSeconds: number | null }
-  | { code: "invalid_request"; message: string }
+  | { code: "invalid_request"; message: string; field?: string }
   | { code: "store_inactive" };
+
+import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from "@markaz/contracts/checkout";
 
 /** Which adapter produced the data. Lets callers and logs say which source they got. */
 export type TransportKind = "mock" | "remote";
@@ -211,33 +216,12 @@ export interface CartQuoteInput {
 }
 
 /** Why a cart line cannot be bought as it stands. */
-export type CartQuoteIssue = "unknown_product" | "product_unavailable" | "unknown_variant" | "out_of_stock" | "insufficient_stock";
+export type CartQuoteIssue = StorefrontCartQuoteIssue;
 
-export interface CartQuoteLine {
-  productId: string;
-  /** Null when the variant could not be resolved. */
-  variantId: string | null;
-  /** Null when the product is unknown to this store. */
-  title: string | null;
-  variantTitle: string | null;
-  unitPrice: number | null;
-  qty: number;
-  /** Null for a line that cannot be bought. */
-  lineTotal: number | null;
-  issue: CartQuoteIssue | null;
-  /** Units that can still be bought, when the server knows them. Null for unknown products. */
-  availableQty: number | null;
-}
+export type CartQuoteLine = StorefrontCartQuoteLine;
 
-/** The server's priced view of a cart. Totals cover only the lines that can be bought. */
-export interface CartQuote {
-  lines: CartQuoteLine[];
-  subtotal: number;
-  deliveryCharges: number;
-  total: number;
-  /** True when there is at least one line and every line can be bought. */
-  canCheckout: boolean;
-}
+/** The server's priced view of a cart, as the shared contract defines it. Totals cover only the lines that can be bought. */
+export type CartQuote = StorefrontCartQuoteDto;
 
 /**
  * The order-side operations. A browser reaches them through the same-origin BFF, and the storefront server reaches

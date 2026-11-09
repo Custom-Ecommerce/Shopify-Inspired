@@ -14,6 +14,7 @@ export interface CustomAttribute {
 export interface CartItem {
   lineId: string;
   productId?: string;
+  variantId?: string;
   handle?: string;
   title: string;
   price: string;
@@ -62,6 +63,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       cart.lines.map((line) => ({
         lineId: line.id,
         productId: line.productId,
+        variantId: line.variantId,
         handle: line.slug,
         title: line.title,
         price: String(line.unitPrice.amount),

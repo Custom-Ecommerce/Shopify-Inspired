@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { STOCK_STATUSES } from './stock-status';
+import { STOREFRONT_ORDER_MAX_LINES, storefrontCheckoutCustomerSchema, storefrontOrderLineRequestSchema } from './checkout';
 
 /**
  * Storefront wire contract (Track B). The seller backend serves these shapes under
@@ -182,9 +183,6 @@ export type StorefrontProductListResponse = z.infer<typeof storefrontProductList
 /** A product slug is one path segment: no whitespace, no slashes. Anything else cannot be a product. */
 export const STOREFRONT_PRODUCT_SLUG_PATTERN = /^[^\s/\\]{1,200}$/;
 export const STOREFRONT_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
-export const STOREFRONT_ORDER_MAX_LINES = 50;
-export const STOREFRONT_ORDER_MAX_QTY = 99;
-
 export const STOREFRONT_PAYMENT_METHODS = ['cod', 'card'] as const;
 export type StorefrontPaymentMethod = (typeof STOREFRONT_PAYMENT_METHODS)[number];
 
@@ -233,25 +231,6 @@ export const storefrontProductDetailSchema = storefrontProductSummarySchema.exte
 });
 
 export const storefrontProductDetailResponseSchema = z.object({ data: storefrontProductDetailSchema });
-
-export const storefrontCheckoutCustomerSchema = z.object({
-  customerName: z.string().trim().min(2).max(80),
-  /** Normalised to E.164 by the server; any Pakistani mobile format is accepted. */
-  phone: z.string().trim().min(1).max(32),
-  address: z.string().trim().min(10).max(300),
-  city: z.string().trim().min(2).max(60).nullish(),
-});
-
-/**
- * One cart line. qty is only checked as a number here: the range and integer rules live in the handler so a
- * bad quantity is reported as INVALID_QUANTITY with the offending productId, not as a generic schema error.
- */
-export const storefrontOrderLineRequestSchema = z.object({
-  productId: z.string().trim().min(1).max(64),
-  /** May be left out only for a product with exactly one variant. Otherwise the answer is 422 VARIANT_REQUIRED. */
-  variantId: z.string().trim().min(1).max(64).optional(),
-  qty: z.number(),
-});
 
 export const storefrontCreateOrderRequestSchema = z.object({
   /** Also accepted as the Idempotency-Key header, which wins when both are present. */
@@ -336,38 +315,6 @@ export const storefrontOrderTrackingResponseSchema = z.object({ data: storefront
 
 export type StorefrontOrderTrackingDates = z.output<typeof storefrontOrderTrackingDatesSchema>;
 export type StorefrontOrderTracking = z.output<typeof storefrontOrderTrackingSchema>;
-
-/** Cart quote. The request carries product ids and quantities only; the response is priced by the server. */
-export const storefrontCartQuoteRequestSchema = z.object({
-  lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
-});
-
-export const storefrontCartQuoteIssueSchema = z.enum(['unknown_product', 'product_unavailable', 'unknown_variant', 'out_of_stock', 'insufficient_stock']);
-
-export const storefrontCartQuoteLineSchema = z.object({
-  productId: z.string(),
-  variantId: z.string().nullable(),
-  title: z.string().nullable(),
-  variantTitle: z.string().nullable(),
-  unitPrice: price.nullable(),
-  qty: z.number().int(),
-  lineTotal: price.nullable(),
-  issue: storefrontCartQuoteIssueSchema.nullable(),
-  availableQty: z.number().int().nonnegative().nullable(),
-});
-
-export const storefrontCartQuoteSchema = z.object({
-  lines: z.array(storefrontCartQuoteLineSchema),
-  subtotal: price,
-  deliveryCharges: price,
-  total: price,
-  canCheckout: z.boolean(),
-});
-
-export const storefrontCartQuoteResponseSchema = z.object({ data: storefrontCartQuoteSchema });
-
-export type StorefrontCartQuoteDto = z.infer<typeof storefrontCartQuoteSchema>;
-
 
 export type StorefrontProductDetailDto = z.infer<typeof storefrontProductDetailSchema>;
 export type StorefrontCreateOrderRequest = z.infer<typeof storefrontCreateOrderRequestSchema>;

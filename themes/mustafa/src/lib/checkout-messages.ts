@@ -1,7 +1,7 @@
 import type { CheckoutFailure } from "@markaz/storefront-data/client";
 
 /** The customer fields the checkout form owns. The server names the same keys in its messages. */
-export type CheckoutFormField = "customerName" | "phone" | "address";
+export type CheckoutFormField = "customerName" | "phone" | "address" | "city";
 
 export interface ServerFieldError {
   field: CheckoutFormField;
@@ -9,7 +9,7 @@ export interface ServerFieldError {
   message: string;
 }
 
-const CUSTOMER_FIELD = /^customer\.(customerName|phone|address):\s*(.+)$/;
+const CUSTOMER_FIELD = /^customer\.(customerName|phone|address|city):\s*(.+)$/;
 
 function capitalise(text: string): string {
   return text.length > 0 ? text.charAt(0).toUpperCase() + text.slice(1) : text;

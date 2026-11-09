@@ -95,7 +95,7 @@ async function checkTransport(): Promise<void> {
   await preview.getProduct("x").catch(() => undefined);
   await preview.quoteCart({ lines: [] }).catch(() => undefined);
   await preview
-    .submitOrder({ idempotencyKey: "key-00001", customer: { customerName: "A", phone: "1", address: "x" }, lines: [] })
+    .submitOrder({ idempotencyKey: "key-00001", customer: { customerName: "A", phone: "1", address: "x", city: "K" }, lines: [] })
     .catch(() => undefined);
 
   assert.equal(calls.length, 6);

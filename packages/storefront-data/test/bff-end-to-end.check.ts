@@ -85,7 +85,7 @@ const browserFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 
 const client = createBffTransport({ basePath: "/api/storefront", fetchImpl: browserFetch });
 
-const customer = { customerName: "Ali Raza", phone: PHONE, address: "House 1, Street 2, Karachi" };
+const customer = { customerName: "Ali Raza", phone: PHONE, address: "House 1, Street 2", city: "Karachi" };
 const lines = [{ productId: PRODUCT_ID, qty: 2 }];
 
 const orderBody = {
@@ -150,7 +150,7 @@ check("an order travels end to end, carrying the idempotency key and no prices",
   const [call] = backend.calls;
   assert.equal(call.path, "/api/storefront/v1/stores/" + STORE_ID + "/orders");
   assert.equal(call.headers["idempotency-key"], KEY);
-  assert.deepEqual(call.body, { customer, lines });
+  assert.deepEqual(call.body, { customer: { ...customer, email: null, note: null }, lines });
 });
 
 check("an out-of-stock refusal reaches the checkout with the product named", async () => {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import { isDuplicateKeyError } from '@/lib/http';
+import { toWholeRupees } from '@/lib/contracts';
 import { Order, Product } from '@/lib/services';
 import { StorefrontHttpError, productUnavailable } from '@/lib/storefront/errors';
 import { isLiveProduct, type LiveFlags } from '@/lib/storefront/live-product';
@@ -103,9 +104,9 @@ async function priceOrder(storeId: string, commerce: StoreCommerce, request: Par
     if (match.kind === 'unknown_variant') throw unknownVariant(line.productId);
 
     const { variant } = match;
-    if (typeof variant.price !== 'number' || !Number.isFinite(variant.price) || variant.price < 0) {
-      throw unknownProduct(line.productId);
-    }
+    // The same rule as the quote, so the price a shopper saw is the price they are charged.
+    const unitPrice = toWholeRupees(variant.price);
+    if (unitPrice === null) throw unknownProduct(line.productId);
 
     const variantId = String(variant._id).toLowerCase();
     const key = line.productId + '|' + variantId;
@@ -120,7 +121,7 @@ async function priceOrder(storeId: string, commerce: StoreCommerce, request: Par
       title: row.title,
       variantTitle: variant.title,
       sku: variant.sku ?? null,
-      unitPrice: variant.price,
+      unitPrice,
       qty: line.qty,
       deliveryCharge: typeof row.deliveryCharge === 'number' ? row.deliveryCharge : null,
       variant,
@@ -193,6 +194,8 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       phone: request.customer.phone,
       address: request.customer.address,
       city: request.customer.city,
+      customerEmail: request.customer.email,
+      customerNote: request.customer.note,
       items: lines.map((l, i) => ({
         productId: l.productId,
         variantId: l.variantId,

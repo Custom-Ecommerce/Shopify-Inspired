@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  STOREFRONT_ORDER_MAX_LINES,
+  storefrontCartQuoteRequestSchema,
+  storefrontCheckoutCustomerSchema,
+  storefrontOrderLineRequestSchema,
+} from "@markaz/contracts/checkout";
 import { MAX_LINE_QTY } from "../domain/cart";
 import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError } from "../transport/errors";
 import type { OrderRejection, OrderTransport } from "../transport/types";
@@ -50,23 +56,13 @@ export const BFF_MAX_BODY_BYTES = 32 * 1024;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
-const lineSchema = z.object({
-  productId: z.string().trim().min(1).max(64),
-  variantId: z.string().trim().min(1).max(64).optional(),
-  qty: z.number(),
-});
+/** Unknown keys are stripped by these schemas, so a price or a total in the body never reaches the backend. */
+const quoteBody = storefrontCartQuoteRequestSchema;
 
-const quoteBody = z.object({
-  lines: z.array(lineSchema).max(50),
-});
-
+/** The checkout form's own schema. The customer that goes on is its output: the phone in E.164 and the text cleaned. */
 const submitBody = z.object({
-  customer: z.object({
-    customerName: z.string().trim().min(2).max(80),
-    phone: z.string().trim().min(1).max(32),
-    address: z.string().trim().min(10).max(300),
-  }),
-  lines: z.array(lineSchema).max(50),
+  customer: storefrontCheckoutCustomerSchema,
+  lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
 });
 
 const lookupBody = z.object({
@@ -170,7 +166,7 @@ export function rejectionToEnvelope(rejection: OrderRejection): {
         extra: rejection.retryAfterSeconds === null ? {} : { retryAfterSeconds: rejection.retryAfterSeconds },
       };
     case "invalid_request":
-      return { status: 400, code: "INVALID_REQUEST", message: rejection.message, extra: {} };
+      return { status: 400, code: "INVALID_REQUEST", message: rejection.message, extra: rejection.field ? { field: rejection.field } : {} };
     case "store_inactive":
       return { status: 403, code: "STORE_NOT_ACTIVE", message: "This store is not available.", extra: {} };
     default: {
@@ -204,11 +200,13 @@ function isJson(request: Request): boolean {
   return (request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json");
 }
 
-function firstIssue(error: z.ZodError): string {
+/** The refusal for a bad body: the first problem as "path: message", and the path again as `field`, as the backend sends it. */
+function invalidBody(error: z.ZodError): Response {
   const issue = error.issues[0];
-  if (!issue) return "Invalid request.";
-  const path = issue.path.map(String).join(".");
-  return path ? path + ": " + issue.message : issue.message;
+  if (!issue) return errorResponse(400, "INVALID_REQUEST", "Invalid request.");
+  const field = issue.path.map(String).join(".");
+  if (field === "") return errorResponse(400, "INVALID_REQUEST", issue.message);
+  return errorResponse(400, "INVALID_REQUEST", field + ": " + issue.message, { field });
 }
 
 type ReadBody = { ok: true; value: unknown } | { ok: false; response: Response };
@@ -272,7 +270,7 @@ async function handle<T>(
   const body = await readJson(request);
   if (!body.ok) return body.response;
   const parsed = schema.safeParse(body.value);
-  if (!parsed.success) return errorResponse(400, "INVALID_REQUEST", firstIssue(parsed.error));
+  if (!parsed.success) return invalidBody(parsed.error);
 
   try {
     const outcome = await run(lookup.transport, parsed.data, idempotencyKey);

@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./checkout": "./src/checkout.ts"
+  },
   "scripts": {
     "build": "tsc",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",

@@ -1,42 +1,28 @@
-import { z } from "zod";
-import { normalizePhoneE164 } from "@markaz/platform-kit/phone";
+import { CHECKOUT_FIELDS, storefrontCheckoutCustomerSchema } from "@markaz/contracts/checkout";
+import type { CheckoutCustomer, CheckoutField } from "@markaz/contracts/checkout";
 
-export const CHECKOUT_FIELDS = ["customerName", "phone", "address"] as const;
-export type CheckoutField = (typeof CHECKOUT_FIELDS)[number];
+export { CHECKOUT_FIELDS };
+export type { CheckoutField };
 
+/** What the form holds: every box as the shopper typed it. */
 export interface CheckoutValues {
   customerName: string;
   phone: string;
   address: string;
+  city: string;
+  email?: string;
+  note?: string;
 }
 
 export type CheckoutFieldErrors = Partial<Record<CheckoutField, string>>;
 
-export const EMPTY_CHECKOUT_VALUES: CheckoutValues = { customerName: "", phone: "", address: "" };
+export const EMPTY_CHECKOUT_VALUES: CheckoutValues = { customerName: "", phone: "", address: "", city: "", email: "", note: "" };
 
-/**
- * Guest checkout rules. Pure, so the hook and the tests run the same code. The phone is
- * normalised to E.164 on the way out, so the server never sees local formats.
- */
-export const checkoutFormSchema = z.object({
-  customerName: z
-    .string()
-    .trim()
-    .min(2, "Enter your full name")
-    .max(80, "Name is too long"),
-  phone: z
-    .string()
-    .trim()
-    .refine((value) => normalizePhoneE164(value) !== null, "Enter a valid mobile number, for example 0300 1234567")
-    .transform((value) => normalizePhoneE164(value) ?? value),
-  address: z
-    .string()
-    .trim()
-    .min(10, "Enter your full delivery address")
-    .max(300, "Address is too long"),
-});
+/** The guest checkout rules: the contract's schema, the same one the BFF and the seller backend run. */
+export const checkoutFormSchema = storefrontCheckoutCustomerSchema;
 
-export type CheckoutSubmission = z.infer<typeof checkoutFormSchema>;
+/** What the server receives: the phone in E.164 and the text cleaned. */
+export type CheckoutSubmission = CheckoutCustomer;
 
 export type CheckoutValidation =
   | { ok: true; data: CheckoutSubmission }

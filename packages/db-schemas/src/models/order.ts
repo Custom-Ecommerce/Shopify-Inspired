@@ -92,6 +92,10 @@ export interface IOrder extends Document {
   phone?: string | null;
   address?: string | null;
   city?: string | null;
+  /** Optional, from checkout. Null on every order written before EP-03. */
+  customerEmail?: string | null;
+  /** The shopper's own note from checkout. Not the seller's internal notes below. */
+  customerNote?: string | null;
   items: IOrderLine[];
   subtotal: number;
   deliveryCharges: number;
@@ -156,6 +160,8 @@ const OrderSchema = new Schema<IOrder>(
     phone: { type: String, trim: true, maxlength: 32, default: null },
     address: { type: String, trim: true, maxlength: 300, default: null },
     city: { type: String, trim: true, maxlength: 60, default: null },
+    customerEmail: { type: String, trim: true, maxlength: 254, default: null },
+    customerNote: { type: String, trim: true, maxlength: 500, default: null },
     items: {
       type: [
         {

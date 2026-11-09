@@ -1,14 +1,13 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { storefrontOrderTrackingResponseSchema } from '@/lib/contracts';
+import { normalizePhoneE164, storefrontOrderTrackingResponseSchema } from '@/lib/contracts';
 import { Order } from '@/lib/services';
 import { PRIVATE_NO_STORE_HEADERS, StorefrontHttpError, handleStorefrontError } from '@/lib/storefront/errors';
 import { toOrderTrackingDto, type OrderTrackingRow } from '@/lib/storefront/order-dto';
 import { parseLookupRequest, readJsonBody } from '@/lib/storefront/order-request';
 import { ORDER_LOOKUP_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
-import { normalizePhoneE164 } from '@markaz/platform-kit/phone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

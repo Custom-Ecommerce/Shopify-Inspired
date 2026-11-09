@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/storefront/v1/stores/:id/orders
  *
- * Public guest checkout. Body: { customer: { customerName, phone, address, city? }, lines: [{ productId, qty }],
+ * Public guest checkout. Body: { customer: { customerName, phone, address, city, email?, note? }, lines: [{ productId, qty }],
  * paymentMethod? }, with the retry key in the Idempotency-Key header (or body.idempotencyKey).
  *
  * The server prices the order itself from the catalog: the body has no prices, and any that are sent are
@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic';
  *   201 { data }   order created
  *   200 { data }   the same Idempotency-Key was already used for this order: the first order is returned
  *                  (header Idempotent-Replayed: true), nothing new is saved and no stock moves
- *   400 INVALID_REQUEST | EMPTY_ORDER | INVALID_QUANTITY | PAYMENT_METHOD_UNAVAILABLE
+ *   400 INVALID_REQUEST | EMPTY_ORDER | INVALID_QUANTITY | PAYMENT_METHOD_UNAVAILABLE. A bad input also names its `field`, e.g. customer.phone
  *   404 STORE_NOT_FOUND    403 STORE_NOT_ACTIVE
  *   409 OUT_OF_STOCK (productId)   409 IDEMPOTENCY_CONFLICT (the key was used for a different order)
  *   422 VARIANT_REQUIRED (productId)  a product with several variants and no variantId

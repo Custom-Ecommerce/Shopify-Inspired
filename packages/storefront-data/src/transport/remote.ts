@@ -155,7 +155,7 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
   const parsed = WireRefusal.safeParse(body);
   if (!parsed.success) return null;
   const { code, message } = parsed.data.error;
-  const { productId, retryAfterSeconds } = parsed.data;
+  const { productId, retryAfterSeconds, field } = parsed.data;
   switch (code) {
     case "EMPTY_ORDER":
       return { code: "empty_order" };
@@ -178,7 +178,7 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
     case "RATE_LIMITED":
       return { code: "rate_limited", retryAfterSeconds: retryAfterSeconds ?? null };
     case "INVALID_REQUEST":
-      return { code: "invalid_request", message: message ?? "Invalid request." };
+      return { code: "invalid_request", message: message ?? "Invalid request.", ...(field === undefined ? {} : { field }) };
     case "STORE_NOT_ACTIVE":
       return { code: "store_inactive" };
     // Reads as an invalid request, whose message every theme already shows, so no theme needs a new case.

@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
  * shopper can ask as often as the cart changes. A preview may ask on a pending store; draft and sample lines stay unbuyable.
  *
  *   200 { data }   the priced cart; lines that cannot be bought carry an issue and are left out of the totals
- *   400 INVALID_REQUEST | INVALID_QUANTITY
+ *   400 INVALID_REQUEST | INVALID_QUANTITY, naming the `field`. An empty cart is 200 with no lines and canCheckout false
  *   422 VARIANT_REQUIRED   a product with several variants and no variantId
  *   404 STORE_NOT_FOUND    403 STORE_NOT_ACTIVE
  *   429 RATE_LIMITED       503 STOREFRONT_UNAVAILABLE

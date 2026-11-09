@@ -3,6 +3,8 @@
 import type { AddressDetails } from "../../model";
 import { paths } from "../../adapters/paths";
 import { useStilettoCheckout } from "../../adapters/checkout";
+import { firstErrorBox } from "../../adapters/checkout-fields";
+import type { StilettoCheckoutField, StilettoFieldErrors } from "../../adapters/checkout-fields";
 import {
   AlertCircle,
   ArrowLeft,
@@ -20,7 +22,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "../../shared/components/primitives/button";
 import { parseNumericPrice, useCartContext } from "../../shared/context/CartContext";
 
@@ -49,6 +51,24 @@ const inputBaseClasses =
 const labelBaseClasses =
   "text-xs text-(--text-primary)/70 tracking-wider uppercase font-medium";
 
+const inputErrorClasses = "border-[var(--status-error-text)] focus:border-[var(--status-error-text)]";
+
+/** The element id of the box a message belongs to. Only the shipping address carries messages. */
+const fieldElementId = (field: StilettoCheckoutField): string => {
+  if (field === "whatsapp") return "checkout-whatsapp";
+  if (field === "notes") return "order-notes";
+  return `shipping-${field}`;
+};
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} role="alert" className="text-[11px] text-[var(--status-error-text)]">
+      {message}
+    </p>
+  );
+}
+
 /**
  * Reusable set of address input fields (First/Last name, Street Address,
  * Apartment, City, Zip, Phone, Country). Rendered once for the Shipping
@@ -60,9 +80,11 @@ interface AddressFieldsProps {
   idPrefix: string;
   values: AddressDetails;
   onChange: (field: keyof AddressDetails, value: string) => void;
+  /** Messages for this address's boxes. The billing address is not sent, so it has none. */
+  errors?: StilettoFieldErrors;
 }
 
-function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
+function AddressFields({ idPrefix, values, onChange, errors = {} }: AddressFieldsProps) {
   const handleChange =
     (field: keyof AddressDetails) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,9 +108,12 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
               placeholder="First name"
               value={values.firstName}
               onChange={handleChange("firstName")}
-              className={inputBaseClasses}
+              aria-invalid={errors.firstName ? true : undefined}
+              aria-describedby={errors.firstName ? `${idPrefix}-firstName-error` : undefined}
+              className={errors.firstName ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
             />
           </div>
+          <FieldError id={`${idPrefix}-firstName-error`} message={errors.firstName} />
         </div>
 
         <div className="space-y-1.5">
@@ -105,9 +130,12 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
               placeholder="Last name"
               value={values.lastName}
               onChange={handleChange("lastName")}
-              className={inputBaseClasses}
+              aria-invalid={errors.lastName ? true : undefined}
+              aria-describedby={errors.lastName ? `${idPrefix}-lastName-error` : undefined}
+              className={errors.lastName ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
             />
           </div>
+          <FieldError id={`${idPrefix}-lastName-error`} message={errors.lastName} />
         </div>
       </div>
 
@@ -125,9 +153,12 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
             placeholder="House/Apartment #, Street name, Area"
             value={values.address1}
             onChange={handleChange("address1")}
-            className={inputBaseClasses}
+            aria-invalid={errors.address1 ? true : undefined}
+            aria-describedby={errors.address1 ? `${idPrefix}-address1-error` : undefined}
+            className={errors.address1 ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
           />
         </div>
+        <FieldError id={`${idPrefix}-address1-error`} message={errors.address1} />
       </div>
 
       <div className="space-y-1.5">
@@ -163,9 +194,12 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
               placeholder="Karachi, Lahore, etc."
               value={values.city}
               onChange={handleChange("city")}
-              className={inputBaseClasses}
+              aria-invalid={errors.city ? true : undefined}
+              aria-describedby={errors.city ? `${idPrefix}-city-error` : undefined}
+              className={errors.city ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
             />
           </div>
+          <FieldError id={`${idPrefix}-city-error`} message={errors.city} />
         </div>
 
         <div className="space-y-1.5">
@@ -202,9 +236,14 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
               placeholder="e.g. 0300 1234567"
               value={values.phone}
               onChange={handleChange("phone")}
-              className={inputBaseClasses}
+              inputMode="tel"
+              autoComplete="tel"
+              aria-invalid={errors.phone ? true : undefined}
+              aria-describedby={errors.phone ? `${idPrefix}-phone-error` : undefined}
+              className={errors.phone ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
             />
           </div>
+          <FieldError id={`${idPrefix}-phone-error`} message={errors.phone} />
         </div>
 
         <div className="space-y-1.5">
@@ -233,8 +272,21 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
 export function CheckoutSection({
   logoSrc = "/theme-assets/stiletto/logo/logo.png",
 }: CheckoutSectionProps) {
-  const { cartItems, subtotal } = useCartContext();
-  const { deliveryCharges, grandTotal, isSubmitting, isChecking, canRetryUnconfirmed, orderError, submit } = useStilettoCheckout();
+  const { cartItems } = useCartContext();
+  const {
+    subtotal,
+    deliveryCharges,
+    grandTotal,
+    lineTotalOf,
+    isSubmitting,
+    isChecking,
+    canRetryUnconfirmed,
+    orderError,
+    fieldErrors,
+    focusTick,
+    clearFieldError,
+    submit,
+  } = useStilettoCheckout();
 
   const [whatsapp, setWhatsapp] = useState("");
   const [notes, setNotes] = useState("");
@@ -248,11 +300,24 @@ export function CheckoutSection({
   const [sameAsShipping, setSameAsShipping] = useState(true);
 
 
+  // Moves to the first box with a message, which on a phone can be a long way above the button.
+  useEffect(() => {
+    if (focusTick === 0) return;
+    const first = firstErrorBox(fieldErrors);
+    if (first) document.getElementById(fieldElementId(first))?.focus();
+    // Only when new messages appear, not each time one is cleared.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTick]);
+
   const handleShippingAddressChange = (
     field: keyof AddressDetails,
     value: string
   ) => {
     setShippingAddress((prev) => ({ ...prev, [field]: value }));
+    if (field === "firstName" || field === "lastName" || field === "address1" || field === "city" || field === "phone") {
+      clearFieldError(field);
+    }
+    if (field === "address2" || field === "zip") clearFieldError("address1");
   };
 
   const handleBillingAddressChange = (
@@ -265,6 +330,9 @@ export function CheckoutSection({
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // A second press while the order is on its way does nothing: the button is disabled and useCheckout refuses it too.
+    if (isSubmitting) return;
+
     if (cartItems.length === 0) {
       alert("Your cart is empty!");
       return;
@@ -274,7 +342,7 @@ export function CheckoutSection({
   };
 
   return (
-    <div data-source="partial" data-source-note="Cart, delivery charges and totals are live. Email, billing address and notes are shown but not stored." data-section="checkout" className="min-h-screen bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans flex flex-col">
+    <div data-source="partial" data-source-note="Cart, delivery charges and totals are live. The billing address is shown but not stored." data-section="checkout" className="min-h-screen bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans flex flex-col">
       {/* Black Navbar Header */}
       <div className="bg-[var(--surface-inverse)] text-[var(--text-inverse)] border-b border-[var(--surface-inverse)] sticky top-0 z-30 shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -308,6 +376,7 @@ export function CheckoutSection({
       {/* Main Content Area */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8 w-full flex-1">
         <form
+          noValidate
           onSubmit={handleOrderSubmit}
           className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch h-full lg:h-[calc(100vh-140px)]"
         >
@@ -322,21 +391,31 @@ export function CheckoutSection({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs text-(--text-primary)/70 tracking-wider uppercase font-medium">
+                <label htmlFor="checkout-whatsapp" className="text-xs text-(--text-primary)/70 tracking-wider uppercase font-medium">
                   Active WhatsApp Number *
                 </label>
                 <div className="relative flex items-center">
                   <MessageSquare className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
                   <input
+                    id="checkout-whatsapp"
                     type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
                     name="whatsapp"
                     required
                     placeholder="e.g. 0300 1234567"
                     value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value)}
-                    className="w-full h-11 bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl pl-10 pr-4 text-sm text-[var(--text-primary)] placeholder:text-(--text-primary)/30 focus:outline-none focus:border-(--surface-inverse)/40 transition-colors"
+                    onChange={(e) => {
+                      setWhatsapp(e.target.value);
+                      clearFieldError("whatsapp");
+                      clearFieldError("phone");
+                    }}
+                    aria-invalid={fieldErrors.whatsapp ? true : undefined}
+                    aria-describedby={fieldErrors.whatsapp ? "checkout-whatsapp-error" : undefined}
+                    className={fieldErrors.whatsapp ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
                   />
                 </div>
+                <FieldError id="checkout-whatsapp-error" message={fieldErrors.whatsapp} />
                 <p className="text-[11px] text-(--text-primary)/50">
                   Order status & dispatch updates will be sent to this WhatsApp number.
                 </p>
@@ -355,6 +434,7 @@ export function CheckoutSection({
                 idPrefix="shipping"
                 values={shippingAddress}
                 onChange={handleShippingAddressChange}
+                errors={fieldErrors}
               />
             </div>
 
@@ -405,9 +485,15 @@ export function CheckoutSection({
                 rows={3}
                 placeholder="Delivery instructions, landmark, or anything else we should know"
                 value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-(--text-primary)/30 focus:outline-none focus:border-(--surface-inverse)/40 transition-colors resize-none"
+                onChange={(e) => {
+                  setNotes(e.target.value);
+                  clearFieldError("notes");
+                }}
+                aria-invalid={fieldErrors.notes ? true : undefined}
+                aria-describedby={fieldErrors.notes ? "order-notes-error" : undefined}
+                className={`w-full bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-(--text-primary)/30 focus:outline-none focus:border-(--surface-inverse)/40 transition-colors resize-none ${fieldErrors.notes ? inputErrorClasses : ""}`}
               />
+              <FieldError id="order-notes-error" message={fieldErrors.notes} />
             </div>
 
             <div className="space-y-4">
@@ -460,7 +546,8 @@ export function CheckoutSection({
                   <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-3.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent]">
                     {cartItems.map((item) => {
                       const itemUnitPrice = item.numericPrice || parseNumericPrice(item.price);
-                      const itemTotalPrice = itemUnitPrice * item.quantity;
+                      // The server's line total once it has answered; the cart's own price can be out of date.
+                      const itemTotalPrice = lineTotalOf(item.productId, item.variantId) ?? itemUnitPrice * item.quantity;
                       const itemHandle = (item as { handle?: string }).handle;
                       const productHref = itemHandle ? paths.product(itemHandle) : "#";
 
