@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import type { OrderTransitionRequest } from '@markaz/contracts';
 import { authenticate, type AuthContext } from '@/lib/auth';
-import { canTransition, nextStatuses, orderTransitionRequestSchema, transitionRefusal, ORDER_TRANSITION_REFUSAL_MESSAGES } from '@/lib/contracts';
+import { canTransition, cardPaymentPending, nextStatuses, orderTransitionRequestSchema, transitionRefusal, ORDER_TRANSITION_REFUSAL_MESSAGES } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -19,6 +19,8 @@ interface StoredOrder {
   _id: unknown;
   orderId?: string;
   status?: unknown;
+  paymentMethod?: unknown;
+  paymentStatus?: unknown;
 }
 
 const notFound = (): HttpError => new HttpError(404, 'Order not found');
@@ -77,6 +79,7 @@ async function audit(ctx: AuthContext, storeId: string, row: StoredOrder, from: 
  *   401 no session   403 admin, or a store the seller does not own   404 bad id, unknown, or another store's order
  *   409 ORDER_STATUS_CHANGED { status, allowedNext }      the order changed between the read and the write
  *   422 ORDER_TRANSITION_ILLEGAL { from, to, allowedNext, reason }
+ *   422 PAYMENT_PENDING   a card order that has not been paid cannot be dispatched
  *
  * The write is one findOneAndUpdate filtered on { _id, store, status: from }: a compare-and-set, so two parallel requests can
  * never both move the order or add two history entries.
@@ -114,6 +117,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         reason ? ORDER_TRANSITION_REFUSAL_MESSAGES[reason] : 'This status change is not allowed.',
         { from, to, allowedNext: nextStatuses(from), reason },
       );
+    }
+
+    if (to === 'dispatched' && cardPaymentPending(current)) {
+      throw new OrderRequestError(422, 'PAYMENT_PENDING', 'This card order has not been paid yet, so it cannot be dispatched.', { from, to });
     }
 
     const set: Record<string, unknown> = { status: to };

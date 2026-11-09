@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { boxForField, firstErrorBox, stilettoFieldErrors, toCheckoutValues } from "../src/adapters/checkout-fields";
 import type { StilettoCheckoutInput } from "../src/adapters/checkout-fields";
+import { paymentLine } from "../src/adapters/last-order";
 
 const input = (shipping: Partial<StilettoCheckoutInput["shippingAddress"]> = {}, rest: Partial<StilettoCheckoutInput> = {}): StilettoCheckoutInput => ({
   whatsapp: "0300 1234567",
@@ -87,6 +88,15 @@ check("the first message is the one highest on the page", () => {
   assert.equal(firstErrorBox({ city: "x", whatsapp: "y" }), "whatsapp");
   assert.equal(firstErrorBox({ notes: "x", lastName: "y" }), "lastName");
   assert.equal(firstErrorBox({}), null);
+});
+
+check("the order page says what is true about payment", () => {
+  assert.equal(paymentLine("cod", null, null), "Cash on Delivery (Pending)");
+  assert.equal(paymentLine("card", "paid", "pending"), "Paid");
+  assert.equal(paymentLine("card", "unpaid", "pending"), "Awaiting payment");
+  assert.equal(paymentLine("card", null, null), "Awaiting payment");
+  assert.equal(paymentLine("card", "unpaid", "cancelled"), "Payment not completed");
+  assert.equal(paymentLine(undefined, null, null), null);
 });
 
 for (const [name, run] of checks) {

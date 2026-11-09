@@ -292,6 +292,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     if (replay) return { ...replay };
 
     if (payload.lines.length === 0) throw new OrderRejectedError({ code: "empty_order" });
+    if (payload.paymentMethod === "card") throw new OrderRejectedError({ code: "payment_method_unavailable" });
     if (payload.discountCode) throw new OrderRejectedError({ code: "discount_rejected", reason: "unknown", message: discountRefusalMessage("unknown") });
 
     const items: StorefrontOrderItem[] = [];
@@ -327,6 +328,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       orderId,
       status: "pending",
       paymentMethod: "cod",
+      paymentStatus: "unpaid",
       subtotal: total,
       deliveryCharges: 0,
       discount: 0,

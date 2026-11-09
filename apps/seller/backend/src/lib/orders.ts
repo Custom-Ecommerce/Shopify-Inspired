@@ -19,6 +19,7 @@ import {
   ORDER_PRINT_MAX_IDS,
   canCancel,
   canMarkCollected,
+  cardPaymentPending,
   DASHBOARD_ORDER_STATUSES,
   dashboardOrderListQuerySchema,
   nextStatuses,
@@ -46,6 +47,8 @@ export type OrderErrorCode =
   | 'ORDER_STATUS_CHANGED'
   // EP-02 OB-3: the cancel endpoint.
   | 'ORDER_CANCEL_ILLEGAL'
+  // A card order that has not been paid cannot be dispatched (D-082).
+  | 'PAYMENT_PENDING'
   // EP-02 OB-4: the tracking edit.
   | 'ORDER_TRACKING_ILLEGAL'
   // EP-02 OB-5a: payment and notes.
@@ -275,7 +278,7 @@ function paymentMethod(value: unknown): DashboardOrderPaymentMethod | null {
 
 /** Missing (an order written before EP-02) reads as unpaid. */
 function paymentStatus(value: unknown): DashboardOrderPaymentStatus {
-  return value === 'collected' ? 'collected' : 'unpaid';
+  return value === 'collected' || value === 'paid' ? value : 'unpaid';
 }
 
 /** Money in whole PKR with no floating-point noise. */
@@ -352,6 +355,8 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     paymentStatus: paymentStatus(row.paymentStatus),
     collectedAt: iso(row.collectedAt),
     collectedAmount: numOrNull(row.collectedAmount),
+    paidAt: iso(row.paidAt),
+    stripeSessionId: text(row.stripeSessionId),
     customerName: text(row.customerName),
     phone: text(row.phone),
     address: text(row.address),
@@ -384,7 +389,7 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     cancelReason: text(row.cancelReason),
     createdAt,
     updatedAt: iso(row.updatedAt) ?? createdAt,
-    allowedNext: nextStatuses(row.status),
+    allowedNext: nextStatuses(row.status).filter((next) => !(next === 'dispatched' && cardPaymentPending(row))),
     canCancel: canCancel(row.status),
     canEditTracking: row.status === 'dispatched',
     canMarkCollected: canMarkCollected(row),

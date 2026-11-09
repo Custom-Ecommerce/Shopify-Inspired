@@ -241,7 +241,8 @@ delete: { actors: [], fields: {} },
 orderCancel: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
-update: { actors: ['seller'], fields: { seller: ['reason', 'note'] } },
+// system: a Stripe event cancelling an unpaid card order (D-082).
+update: { actors: ['seller', 'system'], fields: { seller: ['reason', 'note'], system: ['reason', 'note'] } },
 delete: { actors: [], fields: {} },
 },
 
@@ -255,7 +256,8 @@ delete: { actors: [], fields: {} },
 orderPayment: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
-update: { actors: ['seller'], fields: { seller: ['amount'] } },
+// system: a Stripe event marking a card order paid (D-082).
+update: { actors: ['seller', 'system'], fields: { seller: ['amount'], system: ['paymentStatus', 'paidAt'] } },
 delete: { actors: [], fields: {} },
 },
 

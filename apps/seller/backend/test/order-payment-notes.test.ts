@@ -331,10 +331,10 @@ test('payment: before dispatch is 422 before_dispatch; a closed order is 422 ord
   assert.equal(writes, 0);
 });
 
-test('payment: only COD; a card order or one with no method is 422 PAYMENT_NOT_COD', async () => {
-  for (const paymentMethod of ['card', undefined]) {
+test('payment: only COD; a card order, paid or not, or one with no method is 422 PAYMENT_NOT_COD', async () => {
+  for (const [paymentMethod, paymentStatus] of [['card', 'unpaid'], ['card', 'paid'], [undefined, undefined]]) {
     orders = [];
-    seedOrder('delivered', { paymentMethod });
+    seedOrder('delivered', { paymentMethod, paymentStatus });
     const res = await pay({});
     assert.equal(res.status, 422, String(paymentMethod));
     assert.equal(res.body.errors[0].code, 'PAYMENT_NOT_COD');

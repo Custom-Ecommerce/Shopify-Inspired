@@ -57,6 +57,7 @@ export function failureCopy(failure: CheckoutFailure): string {
     case "store_inactive":
       return "This store is not accepting orders right now.";
     case "discount_rejected":
+    case "payment_not_started":
       return failure.message;
     case "unavailable":
       return "We could not place your order. Please try again.";

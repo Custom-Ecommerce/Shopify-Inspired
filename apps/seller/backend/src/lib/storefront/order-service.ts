@@ -4,6 +4,7 @@ import { isDuplicateKeyError } from '@/lib/http';
 import { discountRefusalMessage, toWholeRupees } from '@/lib/contracts';
 import { revalidateStoreProduct } from '@/lib/revalidate';
 import { Order, Product } from '@/lib/services';
+import { CARD_SESSION_LIFETIME_MS } from '@/lib/storefront/card-config';
 import { claimDiscountUse, findDiscountRule, returnDiscountUse } from '@/lib/storefront/discount-service';
 import { StorefrontHttpError, discountRefused, productUnavailable } from '@/lib/storefront/errors';
 import { isLiveProduct, type LiveFlags } from '@/lib/storefront/live-product';
@@ -232,6 +233,7 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       deliveryCharges: totals.deliveryCharges,
       total: totals.total,
       ...(applied === null ? {} : { discountCode: applied.code, discountAmount: applied.amount, discountSnapshot: applied.snapshot }),
+      ...(request.paymentMethod === 'card' ? { stripeSessionExpiresAt: new Date(Date.now() + CARD_SESSION_LIFETIME_MS) } : {}),
     });
     // Only once the order is saved: until then a failure would give the units back.
     for (const productId of soldOut) revalidateStoreProduct(storeId, productId);

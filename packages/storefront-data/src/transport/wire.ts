@@ -113,6 +113,7 @@ export const WireOrderCreated = z.object({
   data: z.object({
     orderId: z.string().min(1),
     total: z.number().nonnegative(),
+    checkoutUrl: z.string().min(1).nullable().optional(),
   }),
 });
 
@@ -134,6 +135,7 @@ export const WireOrder = z.object({
   orderId: z.string().min(1),
   status: orderStatus,
   paymentMethod,
+  paymentStatus: z.enum(["unpaid", "collected", "paid"]).default("unpaid"),
   subtotal: price,
   deliveryCharges: price,
   discount: price.default(0),

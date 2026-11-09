@@ -116,6 +116,11 @@ export function paymentRefusal(status: unknown): OrderPaymentRefusal | null {
   return status === 'pending' || status === 'confirmed' || status === 'processing' ? 'before_dispatch' : 'order_closed';
 }
 
+/** A card order is paid before it ships. Cash on delivery is not affected. */
+export function cardPaymentPending(order: { paymentMethod?: unknown; paymentStatus?: unknown }): boolean {
+  return order.paymentMethod === 'card' && order.paymentStatus !== 'paid';
+}
+
 /** COD, not collected yet (a missing paymentStatus is unpaid), and dispatched or delivered. */
 export function canMarkCollected(order: { paymentMethod?: unknown; paymentStatus?: unknown; status?: unknown }): boolean {
   return order.paymentMethod === 'cod' && order.paymentStatus !== 'collected' && paymentRefusal(order.status) === null;

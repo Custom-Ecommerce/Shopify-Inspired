@@ -112,17 +112,23 @@ export interface SubmitOrderPayload {
   lines: SubmitOrderLine[];
   /** One code per order. */
   discountCode?: string | null;
+  /** Left out means cash on delivery. */
+  paymentMethod?: PaymentMethod;
 }
 
 export interface SubmitOrderResult {
   orderId: string;
   /** Server-computed total in PKR. */
   total: number;
+  /** Where the shopper pays a card order. */
+  checkoutUrl?: string | null;
 }
 
 export type OrderStatus = "pending" | "confirmed" | "processing" | "dispatched" | "delivered" | "cancelled" | "returned";
 
 export type PaymentMethod = "cod" | "card";
+
+export type PaymentStatus = "unpaid" | "collected" | "paid";
 
 export interface StorefrontOrderItem {
   productId: string;
@@ -140,6 +146,7 @@ export interface StorefrontOrder {
   orderId: string;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
   subtotal: number;
   deliveryCharges: number;
   discount: number;
@@ -202,7 +209,8 @@ export type OrderRejection =
   | { code: "rate_limited"; retryAfterSeconds: number | null }
   | { code: "invalid_request"; message: string; field?: string }
   | { code: "store_inactive" }
-  | { code: "discount_rejected"; reason: string; message: string };
+  | { code: "discount_rejected"; reason: string; message: string }
+  | { code: "payment_not_started"; message: string };
 
 import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from "@markaz/contracts/checkout";
 

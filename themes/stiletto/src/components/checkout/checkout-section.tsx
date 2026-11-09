@@ -69,6 +69,21 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
+function PaymentOption({ selected, title, description, onSelect }: { selected: boolean; title: string; description: string; onSelect: () => void }) {
+  return (
+    <label className="p-4 bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl flex items-start gap-3 cursor-pointer">
+      <input type="radio" name="paymentMethod" checked={selected} onChange={onSelect} className="sr-only" />
+      <span className="mt-0.5 w-4 h-4 rounded-full border-2 border-[var(--surface-inverse)] flex items-center justify-center shrink-0">
+        {selected && <span className="w-2 h-2 rounded-full bg-[var(--surface-inverse)]" />}
+      </span>
+      <span className="space-y-1">
+        <span className="block text-sm font-semibold tracking-wide text-[var(--text-primary)]">{title}</span>
+        <span className="block text-xs text-(--text-primary)/60 leading-relaxed">{description}</span>
+      </span>
+    </label>
+  );
+}
+
 interface DiscountCodeBoxProps {
   storedCode: string | null;
   appliedCode: string | null;
@@ -355,6 +370,7 @@ export function CheckoutSection({
 }: CheckoutSectionProps) {
   const { cartItems } = useCartContext();
   const {
+    cardAvailable,
     subtotal,
     deliveryCharges,
     discount,
@@ -378,6 +394,9 @@ export function CheckoutSection({
 
   const [whatsapp, setWhatsapp] = useState("");
   const [notes, setNotes] = useState("");
+  const [chosenPayment, setChosenPayment] = useState<"cod" | "card">("cod");
+  // Card is hidden when the store cannot take it, so a choice made earlier cannot outlive the option.
+  const paymentMethod = cardAvailable ? chosenPayment : "cod";
 
   const [shippingAddress, setShippingAddress] = useState<AddressDetails>(
     createEmptyAddress()
@@ -426,11 +445,11 @@ export function CheckoutSection({
       return;
     }
 
-    await submit({ whatsapp, shippingAddress, billingAddress, sameAsShipping, notes });
+    await submit({ whatsapp, shippingAddress, billingAddress, sameAsShipping, notes, paymentMethod });
   };
 
   return (
-    <div data-source="partial" data-source-note="Cart, delivery charges and totals are live. The billing address is shown but not stored." data-section="checkout" className="min-h-screen bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans flex flex-col">
+    <div data-source="partial" data-source-note="Cart, delivery charges, totals and payment are live. The billing address is shown but not stored." data-section="checkout" className="min-h-screen bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans flex flex-col">
       {/* Black Navbar Header */}
       <div className="bg-[var(--surface-inverse)] text-[var(--text-inverse)] border-b border-[var(--surface-inverse)] sticky top-0 z-30 shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -592,23 +611,21 @@ export function CheckoutSection({
                 </h2>
               </div>
 
-              <div className="p-4 bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl flex items-start gap-3">
-                <div className="mt-0.5 w-4 h-4 rounded-full border-2 border-[var(--surface-inverse)] flex items-center justify-center shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-[var(--surface-inverse)]" />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tracking-wide text-[var(--text-primary)]">
-                      Cash on Delivery (COD)
-                    </span>
-                    <span className="text-[10px] uppercase font-bold bg-[var(--surface-inverse)] text-[var(--text-inverse)] px-2 py-0.5 rounded">
-                      Default
-                    </span>
-                  </div>
-                  <p className="text-xs text-(--text-primary)/60 leading-relaxed">
-                    Pay in cash when your parcel is delivered to your doorstep. No advance payment required.
-                  </p>
-                </div>
+              <div className="space-y-3">
+                <PaymentOption
+                  selected={paymentMethod === "cod"}
+                  title="Cash on Delivery (COD)"
+                  description="Pay in cash when your parcel is delivered to your doorstep. No advance payment required."
+                  onSelect={() => setChosenPayment("cod")}
+                />
+                {cardAvailable && (
+                  <PaymentOption
+                    selected={paymentMethod === "card"}
+                    title="Credit or Debit Card"
+                    description="You will pay securely on the next page."
+                    onSelect={() => setChosenPayment("card")}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -740,12 +757,12 @@ export function CheckoutSection({
                   disabled={isSubmitting || cartItems.length === 0}
                   className="w-full h-11 bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans text-xs uppercase tracking-[0.15em] font-bold rounded-xl hover:bg-(--surface-elevated)/90 transition-all disabled:opacity-50"
                 >
-                  {isChecking ? "We are checking your order…" : isSubmitting ? "Processing Order..." : canRetryUnconfirmed ? "Try Again" : "Place Order (COD)"}
+                  {isChecking ? "We are checking your order…" : isSubmitting ? "Processing Order..." : canRetryUnconfirmed ? "Try Again" : paymentMethod === "card" ? "Pay with Card" : "Place Order (COD)"}
                 </Button>
 
                 <div className="flex items-center justify-center gap-2 text-[10px] text-(--text-inverse)/40">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>100% Safe & Secure Cash on Delivery</span>
+                  <span>{paymentMethod === "card" ? "Secure card payment by Stripe" : "100% Safe & Secure Cash on Delivery"}</span>
                 </div>
               </div>
             </div>

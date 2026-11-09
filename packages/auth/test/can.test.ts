@@ -270,11 +270,10 @@ assert.equal(orderCan('admin', action), false, action);
 }
 });
 
-test('order actions: system and the public are denied every action', () => {
-for (const actor of ['system', 'public'] as const) {
+test('order actions: the public is denied every action, and system all but a Stripe cancel (D-082)', () => {
 for (const action of ORDER_ACTION_NAMES) {
-assert.equal(orderCan(actor, action), false, actor + ' ' + action);
-}
+assert.equal(orderCan('public', action), false, 'public ' + action);
+if (action !== 'cancel') assert.equal(orderCan('system', action), false, 'system ' + action);
 }
 });
 
@@ -358,7 +357,7 @@ assert.equal(can('seller', 'update', 'orderCancel', ['reason', 'note']), true);
 for (const field of ['cancelReason', 'cancelledAt', 'status', 'stockRestoredAt', 'statusHistory', 'items']) {
 assert.equal(can('seller', 'update', 'orderCancel', ['reason', field]), false, field);
 }
-for (const actor of ['admin', 'system', 'public'] as const) {
+for (const actor of ['admin', 'public'] as const) {
 assert.equal(can(actor, 'update', 'orderCancel', ['reason']), false, actor);
 }
 assert.equal(can('seller', 'update', 'orderCancel'), false);
@@ -408,4 +407,14 @@ assert.equal(can(actor, 'read', 'orderPrint'), false, actor);
 for (const operation of ['create', 'update', 'delete'] as const) {
 assert.equal(can('seller', operation, 'orderPrint', ['status']), false, operation);
 }
+});
+
+test('D-082: a Stripe event acts as system, and may only cancel with a reason or mark a card order paid', () => {
+assert.equal(can('system', 'update', 'orderCancel', ['reason']), true);
+assert.equal(can('system', 'update', 'orderCancel', ['reason', 'note']), true);
+assert.equal(can('system', 'update', 'orderCancel', ['status']), false);
+assert.equal(can('system', 'update', 'orderPayment', ['paymentStatus', 'paidAt']), true);
+assert.equal(can('system', 'update', 'orderPayment', ['amount']), false);
+assert.equal(can('seller', 'update', 'orderPayment', ['paymentStatus']), false);
+assert.equal(can('seller', 'update', 'orderPayment', ['paidAt']), false);
 });

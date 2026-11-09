@@ -33,6 +33,7 @@ export interface OrderTimelineInput {
 
 const TRACKING_PREFIX = 'Tracking updated';
 const PAYMENT_PREFIX = 'COD collected';
+const CARD_PAYMENT_PREFIX = 'Card payment received';
 const STOCK_PREFIX = 'Stock not returned';
 
 const HISTORY_KINDS: readonly string[] = ['status', 'tracking', 'payment', 'stock'];
@@ -43,7 +44,7 @@ export function deriveHistoryKind(entry: Pick<TimelineHistoryInput, 'from' | 'to
   if (entry.from !== entry.to) return 'status';
   const note = entry.note ?? '';
   if (note.startsWith(TRACKING_PREFIX)) return 'tracking';
-  if (note.startsWith(PAYMENT_PREFIX)) return 'payment';
+  if (note.startsWith(PAYMENT_PREFIX) || note.startsWith(CARD_PAYMENT_PREFIX)) return 'payment';
   if (note.startsWith(STOCK_PREFIX)) return 'stock';
   return 'status';
 }
@@ -64,7 +65,10 @@ function historyEntry(entry: TimelineHistoryInput, index: number, cancelReason: 
   const kind = deriveHistoryKind(entry);
   const base = { id: 'history-' + index, kind, at: entry.at };
   if (kind === 'tracking') return { ...base, title: TRACKING_PREFIX, detail: afterPrefix(entry.note, TRACKING_PREFIX) };
-  if (kind === 'payment') return { ...base, title: PAYMENT_PREFIX, detail: afterPrefix(entry.note, PAYMENT_PREFIX) };
+  if (kind === 'payment') {
+    const title = (entry.note ?? '').startsWith(CARD_PAYMENT_PREFIX) ? CARD_PAYMENT_PREFIX : PAYMENT_PREFIX;
+    return { ...base, title, detail: afterPrefix(entry.note, title) };
+  }
   if (kind === 'stock') return { ...base, title: STOCK_PREFIX, detail: afterPrefix(entry.note, STOCK_PREFIX) };
 
   const note = (entry.note ?? '').trim();

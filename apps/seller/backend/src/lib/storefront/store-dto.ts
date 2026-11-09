@@ -1,5 +1,6 @@
 import { storefrontStoreSchema } from '@/lib/contracts';
 import { Media } from '@/lib/services';
+import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
 
 /** A Mongo document as .lean() returns it. Mixed fields stay unknown until read defensively. */
 export interface StoreRow {
@@ -62,9 +63,9 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
     seo: { title: text(sf.seoTitle), description: text(sf.seoDescription), imageUrl: seoImageUrl },
     commerce: {
       currency: 'PKR',
-      // Cash on delivery is on unless the seller turned it off; card is on only when explicitly enabled.
+      // Cash on delivery is on unless the seller turned it off. Card depends on the platform's Stripe keys (A-015).
       codEnabled: pay.codEnabled !== false,
-      cardEnabled: pay.cardEnabled === true,
+      cardEnabled: cardPaymentsAvailable(),
       deliveryRate: amount(sf.deliveryRate) ?? 0,
       freeDeliveryThreshold: amount(sf.freeDeliveryThreshold),
       whatsappNumber: text(sf.whatsappNumber),

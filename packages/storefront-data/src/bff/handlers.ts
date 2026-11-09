@@ -65,6 +65,7 @@ const submitBody = z.object({
   customer: storefrontCheckoutCustomerSchema,
   lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
   discountCode: storefrontDiscountCodeSchema.nullish(),
+  paymentMethod: z.enum(["cod", "card"]).optional(),
 });
 
 const lookupBody = z.object({
@@ -171,6 +172,8 @@ export function rejectionToEnvelope(rejection: OrderRejection): {
       return { status: 400, code: "INVALID_REQUEST", message: rejection.message, extra: rejection.field ? { field: rejection.field } : {} };
     case "store_inactive":
       return { status: 403, code: "STORE_NOT_ACTIVE", message: "This store is not available.", extra: {} };
+    case "payment_not_started":
+      return { status: 502, code: "PAYMENT_NOT_STARTED", message: rejection.message, extra: {} };
     case "discount_rejected":
       return {
         status: rejection.reason === "used_up" ? 409 : 422,
@@ -347,7 +350,7 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
       handle(request, context, submitBody, deps, { needsIdempotencyKey: true, outcomeMayBeUnknown: true }, async (transport, input, key) => ({
         kind: "data",
         status: 201,
-        data: await transport.submitOrder({ idempotencyKey: key, customer: input.customer, lines: input.lines, discountCode: input.discountCode }),
+        data: await transport.submitOrder({ idempotencyKey: key, customer: input.customer, lines: input.lines, discountCode: input.discountCode, paymentMethod: input.paymentMethod }),
       })),
 
     lookup: (request, context) =>

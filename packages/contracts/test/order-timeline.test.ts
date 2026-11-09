@@ -98,3 +98,16 @@ test('timeline: history ids are unique, a note without an id still has one, and 
   assert.equal(JSON.stringify(timeline).includes('65a000000000000000000001'), false);
   for (const entry of timeline) assert.deepEqual(Object.keys(entry).sort(), ['at', 'detail', 'id', 'kind', 'title']);
 });
+
+test('D-082: a card payment is a payment entry under its own title', () => {
+  const timeline = buildOrderTimeline({
+    createdAt: '2026-11-10T10:00:00.000Z',
+    statusHistory: [{ from: 'pending', to: 'pending', at: '2026-11-10T10:05:00.000Z', note: 'Card payment received: Rs. 1,250', kind: 'payment' }],
+    notes: [],
+  });
+  assert.deepEqual(timeline[0], { id: 'history-0', kind: 'payment', at: '2026-11-10T10:05:00.000Z', title: 'Card payment received', detail: 'Rs. 1,250' });
+});
+
+test('D-082: a card payment entry with no stored kind is still read as a payment', () => {
+  assert.equal(deriveHistoryKind({ from: 'pending', to: 'pending', note: 'Card payment received: Rs. 1,250' }), 'payment');
+});

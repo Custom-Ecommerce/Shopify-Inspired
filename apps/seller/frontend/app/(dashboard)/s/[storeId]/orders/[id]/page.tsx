@@ -1125,8 +1125,17 @@ export default function OrderDetailPage() {
         <CardContent className="flex flex-col gap-2 text-sm">
           <Row label="Method">{order.paymentMethod ? PAYMENT_METHOD_LABEL[order.paymentMethod] : "—"}</Row>
           <Row label="Status">
-            <PaymentStatusBadge status={order.paymentStatus} />
+            <PaymentStatusBadge
+              status={order.paymentStatus}
+              label={order.paymentMethod === "card" && order.paymentStatus === "unpaid" ? "Awaiting payment" : undefined}
+            />
           </Row>
+          {order.paidAt ? <Row label="Paid">{dateTime(order.paidAt)}</Row> : null}
+          {order.stripeSessionId ? (
+            <Row label="Session">
+              <span className="font-mono text-xs break-all">{order.stripeSessionId}</span>
+            </Row>
+          ) : null}
           {order.collectedAt ? <Row label="Collected">{dateTime(order.collectedAt)}</Row> : null}
           {order.collectedAmount !== null ? (
             <Row label="Amount collected">

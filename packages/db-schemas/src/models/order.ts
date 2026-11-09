@@ -15,8 +15,8 @@ export const ORDER_STATUSES = [
 ] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
-/** EP-02 US07: cash on delivery only. An order that has no paymentStatus (written before EP-02) reads as unpaid. */
-export const ORDER_PAYMENT_STATUSES = ['unpaid', 'collected'] as const;
+/** collected is cash on delivery (EP-02 US07), paid is a card payment (D-082). An order with no paymentStatus (before EP-02) reads as unpaid. */
+export const ORDER_PAYMENT_STATUSES = ['unpaid', 'collected', 'paid'] as const;
 export type OrderPaymentStatus = (typeof ORDER_PAYMENT_STATUSES)[number];
 
 /** What a history entry records (EP-02 OB-5a). Same values as ORDER_HISTORY_KINDS in @markaz/contracts. */
@@ -61,8 +61,8 @@ export interface IOrderLine {
 export interface IOrderStatusChange {
   from: OrderStatus;
   to: OrderStatus;
-  /** The user who made the change. */
-  by: Types.ObjectId;
+  /** The user who made the change. Null for a system actor, such as a Stripe event. */
+  by: Types.ObjectId | null;
   at: Date;
   note?: string | null;
   /** Written by newer code only. Older entries have none, and the timeline derives it from the entry. */
@@ -120,6 +120,12 @@ export interface IOrder extends Document {
   paymentStatus: OrderPaymentStatus;
   collectedAt?: Date | null;
   collectedAmount?: number | null;
+  /** When a card payment was received. */
+  paidAt?: Date | null;
+  /** The order's one Stripe Checkout Session. */
+  stripeSessionId?: string | null;
+  /** When that session stops being payable. */
+  stripeSessionExpiresAt?: Date | null;
   /** Internal seller notes. Never part of a storefront response. */
   notes: IOrderNote[];
   cancelledAt?: Date | null;
@@ -134,7 +140,8 @@ const OrderStatusChangeSchema = new Schema<IOrderStatusChange>(
   {
     from: { type: String, required: true, enum: [...ORDER_STATUSES] },
     to: { type: String, required: true, enum: [...ORDER_STATUSES] },
-    by: { type: Schema.Types.ObjectId, required: true },
+    // Null for a system actor.
+    by: { type: Schema.Types.ObjectId, default: null },
     at: { type: Date, required: true, default: () => new Date() },
     note: { type: String, trim: true, maxlength: ORDER_STATUS_NOTE_MAX, default: null },
     // No default: a missing kind means the entry predates it.
@@ -211,6 +218,9 @@ const OrderSchema = new Schema<IOrder>(
     paymentStatus: { type: String, required: true, enum: [...ORDER_PAYMENT_STATUSES], default: 'unpaid' },
     collectedAt: { type: Date, default: null },
     collectedAmount: { type: Number, min: 0, default: null },
+    paidAt: { type: Date, default: null },
+    stripeSessionId: { type: String, default: null },
+    stripeSessionExpiresAt: { type: Date, default: null },
     notes: { type: [OrderNoteSchema], default: [] },
     cancelledAt: { type: Date, default: null },
     cancelReason: { type: String, trim: true, maxlength: ORDER_CANCEL_REASON_MAX, default: null },

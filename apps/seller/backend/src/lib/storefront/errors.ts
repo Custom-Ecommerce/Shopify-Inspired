@@ -20,7 +20,8 @@ export type StorefrontErrorCode =
   | 'PRODUCT_UNAVAILABLE'
   | 'PREVIEW_ORDER_BLOCKED'
   | 'DISCOUNT_REJECTED'
-  | 'DISCOUNT_USED_UP';
+  | 'DISCOUNT_USED_UP'
+  | 'PAYMENT_NOT_STARTED';
 
 /** Carries the storefront error envelope: { error: { code, message }, ...extra }. */
 export class StorefrontHttpError extends Error {

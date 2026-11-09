@@ -8,6 +8,8 @@ export interface StilettoCheckoutInput {
   billingAddress: AddressDetails;
   sameAsShipping: boolean;
   notes: string;
+  /** Left out means cash on delivery. */
+  paymentMethod?: "cod" | "card";
 }
 
 /** The boxes of Stiletto's form that can carry a message, top of the page first. */

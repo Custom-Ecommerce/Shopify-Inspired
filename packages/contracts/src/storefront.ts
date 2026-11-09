@@ -54,6 +54,8 @@ export const STOREFRONT_ERROR_CODES = [
   // Discounts (D-080).
   'DISCOUNT_REJECTED',
   'DISCOUNT_USED_UP',
+  // Card payment (D-082).
+  'PAYMENT_NOT_STARTED',
 ] as const;
 export type StorefrontErrorCode = (typeof STOREFRONT_ERROR_CODES)[number];
 
@@ -258,7 +260,12 @@ export const storefrontOrderCreatedSchema = z.object({
 });
 
 /** Superset of the provisional WireOrderCreated ({ data: { orderId, total } }) the storefront already parses. */
-export const storefrontOrderCreatedResponseSchema = z.object({ data: storefrontOrderCreatedSchema });
+export const storefrontOrderCreatedResponseSchema = z.object({
+  data: storefrontOrderCreatedSchema.extend({
+    /** Where the shopper pays a card order. Null for cash on delivery, or when nothing is left to pay. */
+    checkoutUrl: z.string().min(1).nullable().default(null),
+  }),
+});
 
 export const storefrontOrderLookupRequestSchema = z.object({
   orderId: z.string().trim().min(1).max(40),
@@ -281,6 +288,7 @@ export const storefrontOrderSchema = storefrontOrderCreatedSchema.extend({
   city: nullableText,
   address: z.string(),
   discountCode: nullableText.default(null),
+  paymentStatus: z.enum(['unpaid', 'collected', 'paid']).default('unpaid'),
   items: z.array(storefrontOrderItemSchema),
   updatedAt: z.string().min(1),
 });

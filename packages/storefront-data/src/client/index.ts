@@ -16,6 +16,6 @@ export type { OrderLookupFailure, OrderLookupStatus, UseOrderLookupResult } from
 export { useOrderTracking } from "./use-order-tracking";
 export type { UseOrderTrackingResult } from "./use-order-tracking";
 export { StorefrontProvider } from "./provider";
-export { useOrderTransport } from "./context";
+export { useCardAvailable, useOrderTransport } from "./context";
 export type { CartQuoteLineVM, CartQuoteVM } from "../view-models/cart-quote";
 /* @theme-integration-patch:client-index */

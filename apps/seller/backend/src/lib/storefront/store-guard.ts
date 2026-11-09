@@ -1,6 +1,7 @@
 import { objectIdSchema } from '@/lib/contracts';
 import { connectSellerDb } from '@/lib/mongo';
 import { Store } from '@/lib/services';
+import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
 import { StorefrontHttpError, databaseUnavailable, storeNotFound } from '@/lib/storefront/errors';
 
 /** What a store charges and accepts, read defensively from its Mixed settings. */
@@ -37,7 +38,7 @@ export function readStoreCommerce(row: ActiveStoreRow): StoreCommerce {
     deliveryRate: amount(sf.deliveryRate) ?? 0,
     freeDeliveryThreshold: amount(sf.freeDeliveryThreshold),
     codEnabled: pay.codEnabled !== false,
-    cardEnabled: pay.cardEnabled === true,
+    cardEnabled: cardPaymentsAvailable(),
   };
 }
 

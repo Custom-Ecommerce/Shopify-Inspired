@@ -191,6 +191,8 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
       return { code: "invalid_request", message: message ?? "Invalid request.", ...(field === undefined ? {} : { field }) };
     case "STORE_NOT_ACTIVE":
       return { code: "store_inactive" };
+    case "PAYMENT_NOT_STARTED":
+      return { code: "payment_not_started", message: message ?? "The card payment could not be started." };
     case "DISCOUNT_REJECTED":
     case "DISCOUNT_USED_UP":
       return { code: "discount_rejected", reason: code === "DISCOUNT_USED_UP" ? "used_up" : (reason ?? "unknown"), message: message ?? "This code cannot be used." };
@@ -278,7 +280,12 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
     async submitOrder(payload: SubmitOrderPayload): Promise<SubmitOrderResult> {
       requireHttp();
       const result = await exchange("POST", "/orders", {
-        body: { customer: payload.customer, lines: payload.lines, ...(payload.discountCode ? { discountCode: payload.discountCode } : {}) },
+        body: {
+          customer: payload.customer,
+          lines: payload.lines,
+          ...(payload.discountCode ? { discountCode: payload.discountCode } : {}),
+          ...(payload.paymentMethod === "card" ? { paymentMethod: "card" } : {}),
+        },
         headers: { "idempotency-key": payload.idempotencyKey },
         retry: false,
         timeoutMs: submitTimeoutMs,

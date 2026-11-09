@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { createStorefrontCartStore, DEMO_CART_STORE } from "./cart-store";
-import { CartStoreProvider, DEMO_FAVOURITES_STORE, FavouritesStoreProvider, OrderTransportProvider } from "./context";
+import { CardAvailableProvider, CartStoreProvider, DEMO_FAVOURITES_STORE, FavouritesStoreProvider, OrderTransportProvider } from "./context";
 import { createFavouritesStore, favouritesKey } from "../domain/favourites";
 import { createBffTransport } from "../transport/remote";
 import { createMockTransport, mockTransport } from "../transport/mock";
@@ -17,9 +17,12 @@ import type { OrderTransport } from "../transport/types";
 export function StorefrontProvider({
   storeKey,
   demoFixtures,
+  cardEnabled = false,
   children,
 }: {
   storeKey?: string;
+  /** From the store's answer: whether a card payment can be taken. */
+  cardEnabled?: boolean;
   /** A theme's own demo catalogue. Orders placed in the demo are checked against it. Ignored for a live store. */
   demoFixtures?: MockFixtures;
   children: React.ReactNode;
@@ -40,7 +43,9 @@ export function StorefrontProvider({
   return (
     <OrderTransportProvider value={transport}>
       <CartStoreProvider value={cart}>
-        <FavouritesStoreProvider value={favourites}>{children}</FavouritesStoreProvider>
+        <FavouritesStoreProvider value={favourites}>
+          <CardAvailableProvider value={cardEnabled}>{children}</CardAvailableProvider>
+        </FavouritesStoreProvider>
       </CartStoreProvider>
     </OrderTransportProvider>
   );

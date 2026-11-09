@@ -6,6 +6,7 @@ import React, { Suspense, useEffect, useState } from "react";
 import type { OrderConfirmationPageProps } from "@markaz/storefront-data";
 import { paths } from "../adapters/paths";
 import { readLastOrder } from "../adapters/last-order";
+import { useOrderPaymentLine } from "../adapters/order-payment";
 import type { LastOrder } from "../adapters/last-order";
 
 function SuccessContent({ orderId }: { orderId: string }) {
@@ -16,6 +17,7 @@ function SuccessContent({ orderId }: { orderId: string }) {
   const orderName = orderId;
   const amount = summary ? String(summary.total) : "0";
   const whatsapp = summary ? summary.whatsapp : "N/A";
+  const payment = useOrderPaymentLine(summary);
 
   const formattedAmount = `Rs. ${Math.round(Number(amount)).toLocaleString("en-PK")}`;
 
@@ -42,10 +44,12 @@ function SuccessContent({ orderId }: { orderId: string }) {
             <span>Order Reference:</span>
             <span className="font-bold text-white">{orderName}</span>
           </div>
-          <div className="flex justify-between text-white/70">
-            <span>Payment Method:</span>
-            <span className="font-semibold text-white">Cash on Delivery (Pending)</span>
-          </div>
+          {payment && (
+            <div className="flex justify-between text-white/70">
+              <span>Payment:</span>
+              <span className="font-semibold text-white">{payment}</span>
+            </div>
+          )}
           <div className="flex justify-between text-white/70">
             <span>WhatsApp:</span>
             <span className="font-semibold text-white">{whatsapp}</span>

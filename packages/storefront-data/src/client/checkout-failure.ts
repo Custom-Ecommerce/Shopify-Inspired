@@ -19,6 +19,8 @@ export type CheckoutFailure =
   | { kind: "store_inactive" }
   /** The discount code cannot be used. No order was placed. message is written for the shopper. */
   | { kind: "discount_rejected"; reason: string; message: string }
+  /** Stripe could not start the payment and the order was cancelled. A new attempt is a new order. */
+  | { kind: "payment_not_started"; message: string }
   | { kind: "unavailable" }
   /** No clear answer even after checking with the same key. Trying again cannot place a second order (CO-03). */
   | { kind: "unconfirmed" };
@@ -92,6 +94,8 @@ export function toCheckoutFailure(error: unknown, lines: readonly CartLineRef[])
       return { kind: "store_inactive" };
     case "discount_rejected":
       return { kind: "discount_rejected", reason: rejection.reason, message: rejection.message };
+    case "payment_not_started":
+      return { kind: "payment_not_started", message: rejection.message };
     default: {
       const unhandled: never = rejection;
       void unhandled;

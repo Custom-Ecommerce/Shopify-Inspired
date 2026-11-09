@@ -120,7 +120,7 @@ export const { canCancel, cancelRefusal, ORDER_CANCEL_REFUSAL_MESSAGES, orderCan
 export const { orderTrackingRequestSchema, storefrontOrderTrackingSchema, storefrontOrderTrackingResponseSchema } = contracts;
 
 // EP-02 OB-5a: payment, notes and the timeline.
-export const { buildOrderTimeline, canMarkCollected, orderNoteRequestSchema, orderPaymentRequestSchema, paymentRefusal } = contracts;
+export const { buildOrderTimeline, canMarkCollected, cardPaymentPending, orderNoteRequestSchema, orderPaymentRequestSchema, paymentRefusal } = contracts;
 
 // EP-02 OB-5b: print data.
 export const { labelCodAmount, ORDER_PRINT_MAX_IDS, orderPrintResponseSchema } = contracts;

@@ -18,9 +18,17 @@ const CartStoreContext = createContext<CartStore>(DEMO_CART_STORE);
 export const DEMO_FAVOURITES_STORE: FavouritesStore = createFavouritesStore(DEMO_FAVOURITES_KEY);
 const FavouritesStoreContext = createContext<FavouritesStore>(DEMO_FAVOURITES_STORE);
 
+const CardAvailableContext = createContext(false);
+
 export const OrderTransportProvider = OrderTransportContext.Provider;
+export const CardAvailableProvider = CardAvailableContext.Provider;
 export const CartStoreProvider = CartStoreContext.Provider;
 export const FavouritesStoreProvider = FavouritesStoreContext.Provider;
+
+/** Whether this store can take a card payment now. False on the demo. */
+export function useCardAvailable(): boolean {
+  return useContext(CardAvailableContext);
+}
 
 export function useOrderTransport(): OrderTransport {
   return useContext(OrderTransportContext);
