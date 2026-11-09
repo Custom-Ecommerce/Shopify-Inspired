@@ -7,7 +7,7 @@ const invalidQuantity = (productId: string, field: string): StorefrontHttpError 
   new StorefrontHttpError(400, 'INVALID_QUANTITY', 'Quantity must be a whole number from 1 to ' + STOREFRONT_ORDER_MAX_QTY + '.', { productId, field });
 
 /** Validates a quote body. A bad quantity is INVALID_QUANTITY with the product id and field, as on an order, and so is a repeated line that adds up past the limit. */
-export function parseCartQuoteRequest(body: unknown): { lines: QuoteRequestLine[] } {
+export function parseCartQuoteRequest(body: unknown): { lines: QuoteRequestLine[]; discountCode: string | null } {
   const parsed = storefrontCartQuoteRequestSchema.safeParse(body);
   if (!parsed.success) throw invalidBody(parsed.error);
   for (const [index, line] of parsed.data.lines.entries()) {
@@ -17,5 +17,5 @@ export function parseCartQuoteRequest(body: unknown): { lines: QuoteRequestLine[
   for (const line of lines) {
     if (line.qty > STOREFRONT_ORDER_MAX_QTY) throw invalidQuantity(line.productId, 'lines');
   }
-  return { lines };
+  return { lines, discountCode: parsed.data.discountCode || null };
 }

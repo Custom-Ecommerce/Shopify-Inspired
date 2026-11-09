@@ -3,6 +3,7 @@ import {
   STOREFRONT_ORDER_MAX_LINES,
   storefrontCartQuoteRequestSchema,
   storefrontCheckoutCustomerSchema,
+  storefrontDiscountCodeSchema,
   storefrontOrderLineRequestSchema,
 } from "@markaz/contracts/checkout";
 import { MAX_LINE_QTY } from "../domain/cart";
@@ -63,6 +64,7 @@ const quoteBody = storefrontCartQuoteRequestSchema;
 const submitBody = z.object({
   customer: storefrontCheckoutCustomerSchema,
   lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
+  discountCode: storefrontDiscountCodeSchema.nullish(),
 });
 
 const lookupBody = z.object({
@@ -169,6 +171,13 @@ export function rejectionToEnvelope(rejection: OrderRejection): {
       return { status: 400, code: "INVALID_REQUEST", message: rejection.message, extra: rejection.field ? { field: rejection.field } : {} };
     case "store_inactive":
       return { status: 403, code: "STORE_NOT_ACTIVE", message: "This store is not available.", extra: {} };
+    case "discount_rejected":
+      return {
+        status: rejection.reason === "used_up" ? 409 : 422,
+        code: rejection.reason === "used_up" ? "DISCOUNT_USED_UP" : "DISCOUNT_REJECTED",
+        message: rejection.message,
+        extra: { reason: rejection.reason, field: "discountCode" },
+      };
     default: {
       const unhandled: never = rejection;
       void unhandled;
@@ -331,14 +340,14 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
       handle(request, context, quoteBody, deps, { needsIdempotencyKey: false }, async (transport, input) => ({
         kind: "data",
         status: 200,
-        data: await transport.quoteCart({ lines: input.lines }),
+        data: await transport.quoteCart({ lines: input.lines, discountCode: input.discountCode }),
       })),
 
     submit: (request, context) =>
       handle(request, context, submitBody, deps, { needsIdempotencyKey: true, outcomeMayBeUnknown: true }, async (transport, input, key) => ({
         kind: "data",
         status: 201,
-        data: await transport.submitOrder({ idempotencyKey: key, customer: input.customer, lines: input.lines }),
+        data: await transport.submitOrder({ idempotencyKey: key, customer: input.customer, lines: input.lines, discountCode: input.discountCode }),
       })),
 
     lookup: (request, context) =>

@@ -157,6 +157,48 @@ export const storefrontOrderLineRequestSchema = z.object({
   qty: z.number(),
 });
 
+/* ------------------------------------------- discount code ------------------------------------------- */
+
+export const DISCOUNT_CODE_MAX = 40;
+
+/** A code as a shopper sends it. Not case sensitive: every code is stored and compared in capitals (D-080). */
+export const storefrontDiscountCodeSchema = z
+  .string({ error: 'Enter a valid code' })
+  .trim()
+  .max(DISCOUNT_CODE_MAX, 'Enter a valid code')
+  .transform((code) => code.toUpperCase());
+
+export const STOREFRONT_DISCOUNT_REFUSALS = ['unknown', 'inactive', 'not_started', 'expired', 'minimum_not_met', 'used_up', 'not_applicable'] as const;
+export type StorefrontDiscountRefusal = (typeof STOREFRONT_DISCOUNT_REFUSALS)[number];
+
+/** The words a shopper sees. An unknown code and an archived code share 'unknown', so the two cannot be told apart. */
+export function discountRefusalMessage(reason: StorefrontDiscountRefusal, minOrderAmount: number | null = null): string {
+  switch (reason) {
+    case 'unknown':
+      return 'This code is not valid.';
+    case 'inactive':
+      return 'This code is not active right now.';
+    case 'not_started':
+      return 'This code is not active yet.';
+    case 'expired':
+      return 'This code has expired.';
+    case 'minimum_not_met':
+      return minOrderAmount === null
+        ? 'Your order is below the minimum for this code.'
+        : 'Spend at least Rs. ' + minOrderAmount.toLocaleString('en-PK') + ' to use this code.';
+    case 'used_up':
+      return 'This code has been fully used.';
+    case 'not_applicable':
+      return 'This code does not apply to the items in your cart.';
+  }
+}
+
+export const storefrontDiscountErrorSchema = z.object({
+  reason: z.enum(STOREFRONT_DISCOUNT_REFUSALS),
+  message: z.string(),
+});
+export type StorefrontDiscountError = z.output<typeof storefrontDiscountErrorSchema>;
+
 /* ------------------------------------------- quote ------------------------------------------- */
 
 /** Shoppers only ever see whole rupees (D-004). */
@@ -166,6 +208,8 @@ const text = z.string().nullable();
 /** The cart quote request: product ids and quantities only. The answer is priced by the server. */
 export const storefrontCartQuoteRequestSchema = z.object({
   lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
+  /** One code per cart. Empty counts as none. */
+  discountCode: storefrontDiscountCodeSchema.nullish(),
 });
 
 export const STOREFRONT_CART_QUOTE_ISSUES = [
@@ -202,7 +246,7 @@ export const storefrontCartQuoteLineSchema = z.object({
 export const storefrontQuoteTotalsSchema = z.object({
   subtotal: rupees,
   deliveryCharges: rupees,
-  /** Always 0 until discount codes arrive (D-080). Defaulted so a storefront deployed before the backend can still read a quote. */
+  /** Comes off the item subtotal only (D-080). Defaulted so a storefront deployed before the backend can still read a quote. */
   discount: rupees.default(0),
   total: rupees,
 });
@@ -212,6 +256,10 @@ export const storefrontCartQuoteSchema = storefrontQuoteTotalsSchema.extend({
   lines: z.array(storefrontCartQuoteLineSchema),
   /** True when there is at least one line and every line can be bought. */
   canCheckout: z.boolean(),
+  /** The code that made `discount`. Null when none was sent or it was refused. */
+  discountCode: text.default(null),
+  /** Why a code that was sent was refused. The quote still answers, priced without it. */
+  discountError: storefrontDiscountErrorSchema.nullable().default(null),
 });
 
 export const storefrontCartQuoteResponseSchema = z.object({ data: storefrontCartQuoteSchema });

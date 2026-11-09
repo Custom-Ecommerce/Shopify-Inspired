@@ -20,6 +20,8 @@ export interface ParsedOrderRequest {
   /** As the checkout contract outputs it: the phone in E.164 and the text cleaned, ready to store. */
   customer: { customerName: string; phone: string; address: string; city: string; email: string | null; note: string | null };
   paymentMethod: 'cod' | 'card';
+  /** In capitals. Null when the shopper used none. */
+  discountCode: string | null;
   /** Merged by variant: the same variant twice is one line with the summed quantity. Null asks for the only variant. */
   lines: Array<{ productId: string; variantId: string | null; qty: number }>;
 }
@@ -100,13 +102,16 @@ export function parseCreateOrderRequest(body: unknown, headerKey: string | null)
   const customer = input.customer;
   const paymentMethod = input.paymentMethod ?? 'cod';
 
-  return { idempotencyKey, fingerprint: fingerprintOf(customer, paymentMethod, lines), customer, paymentMethod, lines };
+  const discountCode = input.discountCode || null;
+
+  return { idempotencyKey, fingerprint: fingerprintOf(customer, paymentMethod, lines, discountCode), customer, paymentMethod, discountCode, lines };
 }
 
 export function fingerprintOf(
   customer: ParsedOrderRequest['customer'],
   paymentMethod: string,
   lines: ParsedOrderRequest['lines'],
+  discountCode: string | null = null,
 ): string {
   const canonical = JSON.stringify({
     n: customer.customerName,
@@ -116,6 +121,7 @@ export function fingerprintOf(
     // Added only when present, so a retry of an order placed before these fields existed still matches.
     ...(customer.email === null ? {} : { e: customer.email }),
     ...(customer.note === null ? {} : { o: customer.note }),
+    ...(discountCode === null ? {} : { d: discountCode }),
     m: paymentMethod,
     l: lines.map((l) => [l.productId, l.variantId, l.qty] as const).sort((x, y) => (String(x) < String(y) ? -1 : String(x) > String(y) ? 1 : 0)),
   });

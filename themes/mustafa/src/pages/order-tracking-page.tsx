@@ -196,6 +196,12 @@ function OrderDetails({ order }: { order: StorefrontOrder }) {
               <dt className="text-(color:--mu-fg-muted)">Delivery</dt>
               <dd className="tabular-nums">{order.deliveryCharges > 0 ? money(order.deliveryCharges) : "Free"}</dd>
             </div>
+            {order.discount > 0 ? (
+              <div className="flex items-center justify-between">
+                <dt className="text-(color:--mu-fg-muted)">Discount</dt>
+                <dd className="tabular-nums">-{money(order.discount)}</dd>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between pt-2 text-base">
               <dt className="font-semibold">Total</dt>
               <dd className="font-semibold tabular-nums">{money(order.total)}</dd>

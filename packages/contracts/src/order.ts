@@ -229,6 +229,8 @@ export const dashboardOrderDetailSchema = z.object({
   items: z.array(dashboardOrderItemSchema),
   subtotal: z.number().min(0),
   deliveryCharges: z.number().min(0),
+  discountCode: z.string().nullable(),
+  discountAmount: z.number().min(0),
   total: z.number().min(0),
   courier: z.string().nullable(),
   trackingNumber: z.string().nullable(),

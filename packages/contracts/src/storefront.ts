@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { STOCK_STATUSES } from './stock-status';
-import { STOREFRONT_ORDER_MAX_LINES, storefrontCheckoutCustomerSchema, storefrontOrderLineRequestSchema } from './checkout';
+import { STOREFRONT_ORDER_MAX_LINES, storefrontCheckoutCustomerSchema, storefrontDiscountCodeSchema, storefrontOrderLineRequestSchema } from './checkout';
 
 /**
  * Storefront wire contract (Track B). The seller backend serves these shapes under
@@ -51,6 +51,9 @@ export const STOREFRONT_ERROR_CODES = [
   'PRODUCT_UNAVAILABLE',
   // Seller preview: an order sent from a preview is never placed.
   'PREVIEW_ORDER_BLOCKED',
+  // Discounts (D-080).
+  'DISCOUNT_REJECTED',
+  'DISCOUNT_USED_UP',
 ] as const;
 export type StorefrontErrorCode = (typeof STOREFRONT_ERROR_CODES)[number];
 
@@ -238,6 +241,8 @@ export const storefrontCreateOrderRequestSchema = z.object({
   customer: storefrontCheckoutCustomerSchema,
   lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
   paymentMethod: z.enum(STOREFRONT_PAYMENT_METHODS).optional(),
+  /** One code per order. Empty counts as none. */
+  discountCode: storefrontDiscountCodeSchema.nullish(),
 });
 
 export const storefrontOrderCreatedSchema = z.object({
@@ -246,6 +251,8 @@ export const storefrontOrderCreatedSchema = z.object({
   paymentMethod: z.enum(STOREFRONT_PAYMENT_METHODS),
   subtotal: price,
   deliveryCharges: price,
+  /** Rupees taken off the subtotal by a code. */
+  discount: price.default(0),
   total: price,
   createdAt: z.string().min(1),
 });
@@ -273,6 +280,7 @@ export const storefrontOrderSchema = storefrontOrderCreatedSchema.extend({
   phone: z.string(),
   city: nullableText,
   address: z.string(),
+  discountCode: nullableText.default(null),
   items: z.array(storefrontOrderItemSchema),
   updatedAt: z.string().min(1),
 });

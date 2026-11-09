@@ -32,7 +32,7 @@ const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 const IPV6 = /^[0-9a-f:.]{2,45}$/i;
 
 /** An address in one form, or null for anything that is not one: a value here becomes part of a stored key. */
-function cleanAddress(raw: string | null | undefined): string | null {
+export function cleanAddress(raw: string | null | undefined): string | null {
   if (!raw) return null;
   let value = raw.trim();
   if (/^::ffff:/i.test(value)) value = value.slice(7);

@@ -4,13 +4,13 @@ import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
 import { RateLimitCounter, Product, Store } from '@/lib/services';
 import { StorefrontHttpError } from '@/lib/storefront/errors';
+import { signedClientAddressHeaders } from '@markaz/platform-kit/signed-client-address';
 import {
   CART_QUOTE_LIMIT,
   DISCOUNT_CHECK_LIMIT,
   FAVOURITES_LIMIT,
   ORDER_CREATE_LIMIT,
   ORDER_LOOKUP_LIMIT,
-  ORDER_TRACK_LIMIT,
   resetRateLimits,
   type RateLimitRule,
 } from '../src/lib/storefront/rate-limit';
@@ -216,8 +216,59 @@ test('a store that hangs does not hold the customer up for more than a moment', 
   assert.equal(errors.length, 1);
 });
 
-test('every public route has its own limit, and the discount check has its name reserved', () => {
-  const rules = [CART_QUOTE_LIMIT, ORDER_CREATE_LIMIT, ORDER_TRACK_LIMIT, ORDER_LOOKUP_LIMIT, FAVOURITES_LIMIT, DISCOUNT_CHECK_LIMIT];
+/* ------------------------------------------- the signed address ------------------------------------------- */
+
+const SIGNING_SECRET = 's'.repeat(40);
+
+function signedFor(address: string, at: number = Date.now(), secret: string = SIGNING_SECRET): Headers {
+  return new Headers({ 'x-forwarded-for': '10.0.0.1', ...signedClientAddressHeaders(secret, STORE, address, at) });
+}
+
+async function withSigningSecret(run: (limiter: Limiter) => Promise<void>, name: string): Promise<void> {
+  process.env.CLIENT_ADDRESS_SIGNING_SECRET = SIGNING_SECRET;
+  try {
+    await run(await instance(name));
+  } finally {
+    delete process.env.CLIENT_ADDRESS_SIGNING_SECRET;
+  }
+}
+
+test('a valid signature makes each shopper their own client, whatever x-forwarded-for says', () =>
+  withSigningSecret(async ({ enforceRateLimit }) => {
+    for (let i = 0; i < 3; i += 1) await enforceRateLimit(RULE, STORE, signedFor('203.0.113.20'), NOW);
+    await refusal(enforceRateLimit(RULE, STORE, signedFor('203.0.113.20'), NOW));
+    await enforceRateLimit(RULE, STORE, signedFor('203.0.113.21'), NOW);
+    assert.ok([...counters.keys()].every((key) => !key.includes('10.0.0.1')));
+  }, 'signed-valid'));
+
+test('a forged signature cannot choose an address: it falls to the usual resolver', () =>
+  withSigningSecret(async ({ enforceRateLimit }) => {
+    for (let i = 0; i < 3; i += 1) await enforceRateLimit(RULE, STORE, signedFor('203.0.113.' + i, Date.now(), 'f'.repeat(40)), NOW);
+    await refusal(enforceRateLimit(RULE, STORE, signedFor('203.0.113.99', Date.now(), 'f'.repeat(40)), NOW));
+    assert.equal(counters.size, 1);
+    assert.ok([...counters.keys()][0]?.includes('10.0.0.1'));
+  }, 'signed-forged'));
+
+test('an old or replayed signature falls to the usual resolver', () =>
+  withSigningSecret(async ({ enforceRateLimit }) => {
+    await enforceRateLimit(RULE, STORE, signedFor('203.0.113.30', Date.now() - 61_000), NOW);
+    assert.ok([...counters.keys()][0]?.includes('10.0.0.1'));
+  }, 'signed-old'));
+
+test('a request with no signature uses the usual resolver', () =>
+  withSigningSecret(async ({ enforceRateLimit }) => {
+    await enforceRateLimit(RULE, STORE, headersFrom({ 'x-forwarded-for': '203.0.113.40' }), NOW);
+    assert.ok([...counters.keys()][0]?.includes('203.0.113.40'));
+  }, 'signed-missing'));
+
+test('with no secret on the backend a signature is ignored', async () => {
+  const { enforceRateLimit } = await instance('signed-nosecret');
+  await enforceRateLimit(RULE, STORE, signedFor('203.0.113.50'), NOW);
+  assert.ok([...counters.keys()][0]?.includes('10.0.0.1'));
+});
+
+test('every public route has a limit, and lookup and tracking share one', () => {
+  const rules = [CART_QUOTE_LIMIT, ORDER_CREATE_LIMIT, ORDER_LOOKUP_LIMIT, FAVOURITES_LIMIT, DISCOUNT_CHECK_LIMIT];
   assert.equal(new Set(rules.map((rule) => rule.name)).size, rules.length);
   assert.equal(DISCOUNT_CHECK_LIMIT.name, 'discount-check');
   for (const rule of rules) assert.ok(rule.limit > 0 && rule.windowMs > 0);
@@ -231,7 +282,7 @@ const ROUTES: Array<{ name: string; path: string; method: 'POST' | 'GET'; rule: 
   { name: 'cart quote', path: '/cart/quote', method: 'POST', rule: CART_QUOTE_LIMIT, body: { lines: [] }, load: async () => (await import('../src/app/api/storefront/v1/stores/[id]/cart/quote/route')).POST },
   { name: 'order placement', path: '/orders', method: 'POST', rule: ORDER_CREATE_LIMIT, body: {}, load: async () => (await import('../src/app/api/storefront/v1/stores/[id]/orders/route')).POST },
   { name: 'order lookup', path: '/orders/lookup', method: 'POST', rule: ORDER_LOOKUP_LIMIT, body: {}, load: async () => (await import('../src/app/api/storefront/v1/stores/[id]/orders/lookup/route')).POST },
-  { name: 'customer tracking', path: '/orders/track', method: 'POST', rule: ORDER_TRACK_LIMIT, body: {}, load: async () => (await import('../src/app/api/storefront/v1/stores/[id]/orders/track/route')).POST },
+  { name: 'customer tracking', path: '/orders/track', method: 'POST', rule: ORDER_LOOKUP_LIMIT, body: {}, load: async () => (await import('../src/app/api/storefront/v1/stores/[id]/orders/track/route')).POST },
   { name: 'favourites', path: '/products?ids=65a0000000000000000000b1', method: 'GET', rule: FAVOURITES_LIMIT, load: async () => (await import('../src/app/api/storefront/v1/stores/[id]/products/route')).GET },
 ];
 
@@ -279,11 +330,17 @@ test('the catalog list is not limited: the storefront server reads it for every 
   }
 });
 
-test('order lookup and customer tracking count separately', async () => {
+test('order lookup and customer tracking are one count: 10 guesses a minute between them (D-069)', async () => {
   resetRateLimits();
+  assert.equal(ORDER_LOOKUP_LIMIT.limit, 10);
   const track = ROUTES.find((route) => route.name === 'customer tracking')!;
   const lookup = ROUTES.find((route) => route.name === 'order lookup')!;
-  const trackHandler = await track.load();
-  for (let i = 0; i <= ORDER_TRACK_LIMIT.limit; i += 1) await call(trackHandler, track, '203.0.113.91');
-  assert.notEqual((await call(await lookup.load(), lookup, '203.0.113.91')).status, 429);
+  const [trackHandler, lookupHandler] = [await track.load(), await lookup.load()];
+  for (let i = 0; i < 5; i += 1) {
+    assert.notEqual((await call(trackHandler, track, '203.0.113.91')).status, 429, 'tracking ' + i);
+    assert.notEqual((await call(lookupHandler, lookup, '203.0.113.91')).status, 429, 'lookup ' + i);
+  }
+  assert.equal((await call(trackHandler, track, '203.0.113.91')).status, 429);
+  assert.equal((await call(lookupHandler, lookup, '203.0.113.91')).status, 429);
+  assert.notEqual((await call(lookupHandler, lookup, '203.0.113.92')).status, 429, 'another client has its own count');
 });

@@ -14,6 +14,9 @@ export interface CartStoreState {
   // False until the persisted cart has been read. This keeps the server render and the first client render identical,
   // so cart-dependent UI waits for it.
   isHydrated: boolean;
+  /** The shopper's code, kept with the cart until the order is placed or they remove it. */
+  discountCode: string | null;
+  setDiscountCode: (code: string | null) => void;
   addLine: (item: CartableProduct, qty: number) => void;
   /** Sets a line's quantity. A quantity below 1 removes the line. */
   setLineQty: (lineId: string, qty: number) => void;
@@ -22,7 +25,7 @@ export interface CartStoreState {
   markHydrated: () => void;
 }
 
-type PersistedCart = Pick<CartStoreState, "lines">;
+type PersistedCart = Pick<CartStoreState, "lines" | "discountCode">;
 
 function isCartLine(value: unknown): value is CartLine {
   if (typeof value !== "object" || value === null) return false;
@@ -36,6 +39,11 @@ function isCartLine(value: unknown): value is CartLine {
     typeof line.unitPrice === "number" &&
     typeof line.qty === "number"
   );
+}
+
+function readDiscountCode(persisted: unknown): string | null {
+  const code = (persisted as Partial<PersistedCart> | null | undefined)?.discountCode;
+  return typeof code === "string" && code !== "" ? code : null;
 }
 
 // Drops anything that does not look like a cart line, so a corrupt localStorage entry cannot crash render.
@@ -54,18 +62,20 @@ export function createStorefrontCartStore(storageKey: string) {
       (set) => ({
         lines: [],
         isHydrated: false,
+        discountCode: null,
+        setDiscountCode: (code) => set({ discountCode: code }),
         addLine: (item, qty) => set((state) => ({ lines: addCartLine(state.lines, item, qty) })),
         setLineQty: (lineId, qty) => set((state) => ({ lines: setCartLineQty(state.lines, lineId, qty) })),
         removeLine: (lineId) => set((state) => ({ lines: removeCartLine(state.lines, lineId) })),
-        clearLines: () => set({ lines: [] }),
+        clearLines: () => set({ lines: [], discountCode: null }),
         markHydrated: () => set({ isHydrated: true }),
       }),
       {
         name: storageKey,
         version: CART_STORAGE_VERSION,
         storage: createJSONStorage(() => localStorage),
-        partialize: (state): PersistedCart => ({ lines: state.lines }),
-        merge: (persisted, current) => ({ ...current, lines: readLines(persisted) }),
+        partialize: (state): PersistedCart => ({ lines: state.lines, discountCode: state.discountCode }),
+        merge: (persisted, current) => ({ ...current, lines: readLines(persisted), discountCode: readDiscountCode(persisted) }),
         // A version 1 line names no variant, and only the server knows which it would be, so older carts start empty.
         migrate: () => ({ lines: [] }),
         skipHydration: true,

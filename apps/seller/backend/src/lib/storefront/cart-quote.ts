@@ -1,7 +1,7 @@
 import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from '@markaz/contracts';
 import { toWholeRupees } from '@/lib/contracts';
-import { computeTotals, roundMoney } from './pricing';
-import type { PricingStore } from './pricing';
+import { priceCart, roundMoney } from './pricing';
+import type { DiscountRequest, PricingLine, PricingStore } from './pricing';
 import { availabilityOf, canSupply, resolveVariant, unitsLeft, type CheckoutVariant } from './variant';
 
 /*
@@ -55,8 +55,10 @@ export function buildCartQuote(
   catalog: ReadonlyMap<string, QuoteCatalogRow>,
   store: PricingStore,
   unavailable: ReadonlySet<string> = new Set(),
+  discount: DiscountRequest | null = null,
+  now: Date = new Date(),
 ): CartQuote {
-  const pricing: Array<{ unitPrice: number; qty: number; deliveryCharge: number | null }> = [];
+  const pricing: PricingLine[] = [];
 
   // Asking for the Default variant by name and by omission is one variant, so stock is judged once for both.
   const resolved = new Map<string, ResolvedLine>();
@@ -107,13 +109,13 @@ export function buildCartQuote(
     };
     if (availabilityOf(variant) === 'out_of_stock') return { ...base, lineTotal: null, issue: 'out_of_stock' };
     if (!canSupply(variant, qty)) return { ...base, lineTotal: null, issue: 'insufficient_stock' };
-    pricing.push({ unitPrice, qty, deliveryCharge: row.deliveryCharge });
+    pricing.push({ productId, unitPrice, qty, deliveryCharge: row.deliveryCharge });
     return { ...base, lineTotal: roundMoney(unitPrice * qty), issue: null };
   });
 
-  const totals = computeTotals(pricing, store);
+  const { totals, applied, refusal: discountError } = priceCart(pricing, store, discount, now);
   const canCheckout = priced.length > 0 && priced.every((line) => line.issue === null);
-  return { ...totals, lines: priced, canCheckout };
+  return { ...totals, lines: priced, canCheckout, discountCode: applied?.code ?? null, discountError };
 }
 
 function refusal(line: QuoteRequestLine, title: string | null, issue: QuoteIssue): QuoteLine {

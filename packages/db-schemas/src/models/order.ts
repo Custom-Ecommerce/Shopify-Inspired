@@ -100,6 +100,13 @@ export interface IOrder extends Document {
   subtotal: number;
   deliveryCharges: number;
   total: number;
+  /** The code used, and what it took off the subtotal (D-080). One code per order. */
+  discountCode?: string | null;
+  discountAmount?: number;
+  /** The rule as it stood when the order was placed, so later edits or an archive do not rewrite this order. */
+  discountSnapshot?: { discountId: string; type: string; value: number; minOrderAmount: number | null } | null;
+  /** Set once, in the same compare-and-set that cancels the order, so its discount use goes back exactly once (A-017). */
+  discountRestoredAt?: Date;
   /*
    * EP-02 fields. All have defaults, so an order written before EP-02 still loads: a hydrated document gets the
    * defaults, while a .lean() read simply lacks the field and must treat it as the default (no history, no notes,
@@ -181,6 +188,22 @@ const OrderSchema = new Schema<IOrder>(
     subtotal: { type: Number, min: 0, default: 0 },
     deliveryCharges: { type: Number, min: 0, default: 0 },
     total: { type: Number, min: 0, default: 0 },
+    discountCode: { type: String, default: null },
+    discountAmount: { type: Number, min: 0, default: 0 },
+    discountSnapshot: {
+      type: new Schema(
+        {
+          discountId: { type: String, required: true },
+          type: { type: String, required: true },
+          value: { type: Number, required: true },
+          minOrderAmount: { type: Number, default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
+    // No default, like stockRestoredAt: the cancel filter requires it to be absent.
+    discountRestoredAt: { type: Date },
     statusHistory: { type: [OrderStatusChangeSchema], default: [] },
     courier: { type: String, trim: true, maxlength: ORDER_COURIER_MAX, default: null },
     trackingNumber: { type: String, trim: true, maxlength: ORDER_TRACKING_NUMBER_MAX, default: null },

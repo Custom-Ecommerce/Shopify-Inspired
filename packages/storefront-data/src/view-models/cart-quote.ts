@@ -19,6 +19,10 @@ export interface CartQuoteVM {
   discount: Money;
   total: Money;
   canCheckout: boolean;
+  /** The code that made the discount. Null when none was sent or it was refused. */
+  discountCode: string | null;
+  /** The plain reason a code that was sent cannot be used. */
+  discountError: string | null;
 }
 
 /** Formats the server's quote the same way as the cart's own totals, so the two read alike. */
@@ -36,5 +40,7 @@ export function toCartQuoteVM(quote: CartQuote): CartQuoteVM {
     discount: toMoney(quote.discount),
     total: toMoney(quote.total),
     canCheckout: quote.canCheckout,
+    discountCode: quote.discountCode,
+    discountError: quote.discountError?.message ?? null,
   };
 }

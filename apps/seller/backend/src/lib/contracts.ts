@@ -19,6 +19,9 @@ export const {
 // B10.0 contracts for the commerce routes.
 export const { createDiscountSchema, updateDiscountSchema, reviewStatusUpdateSchema } = contracts;
 
+// EP-15: the discount rules and what a shopper is told.
+export const { discountDatesProblem, discountRefusalMessage, discountValueProblem } = contracts;
+
 // B10.2 contracts: returns.
 export const { returnStatusUpdateSchema, RETURN_TRANSITIONS } = contracts;
 

@@ -372,6 +372,8 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     }),
     subtotal: num(row.subtotal),
     deliveryCharges: num(row.deliveryCharges),
+    discountCode: text(row.discountCode),
+    discountAmount: num(row.discountAmount),
     total: num(row.total),
     courier: text(row.courier),
     trackingNumber: text(row.trackingNumber),

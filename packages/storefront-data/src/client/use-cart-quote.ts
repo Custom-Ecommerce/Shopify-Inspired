@@ -20,13 +20,13 @@ export interface UseCartQuoteResult {
  */
 export function useCartQuote(): UseCartQuoteResult {
   const transport = useOrderTransport();
-  const { lines, isHydrated } = useCart();
+  const { lines, isHydrated, discountCode } = useCart();
   const requested = useMemo(
     () => lines.map((line) => ({ productId: line.productId, variantId: line.variantId, qty: line.qty })),
     [lines],
   );
-  // Keyed on the serialised lines, so an unchanged cart is not quoted again.
-  const key = JSON.stringify(requested);
+  // Keyed on the serialised lines and code, so an unchanged cart is not quoted again.
+  const key = JSON.stringify([requested, discountCode]);
   const [state, setState] = useState<UseCartQuoteResult>({ status: "idle", quote: null });
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export function useCartQuote(): UseCartQuoteResult {
     }
     let current = true;
     setState((previous) => ({ status: "loading", quote: previous.quote }));
-    transport.quoteCart({ lines: requested }).then(
+    transport.quoteCart({ lines: requested, discountCode }).then(
       (quote) => {
         if (current) setState({ status: "ready", quote: toCartQuoteVM(quote) });
       },

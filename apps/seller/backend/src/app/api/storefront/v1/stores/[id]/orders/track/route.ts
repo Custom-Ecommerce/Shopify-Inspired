@@ -6,7 +6,7 @@ import { Order } from '@/lib/services';
 import { PRIVATE_NO_STORE_HEADERS, StorefrontHttpError, handleStorefrontError } from '@/lib/storefront/errors';
 import { toOrderTrackingDto, type OrderTrackingRow } from '@/lib/storefront/order-dto';
 import { parseLookupRequest, readJsonBody } from '@/lib/storefront/order-request';
-import { ORDER_TRACK_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
+import { ORDER_LOOKUP_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
 
 export const runtime = 'nodejs';
@@ -29,7 +29,8 @@ function samePhone(a: string, b: string): boolean {
  * courier and tracking while dispatched or delivered. No name, phone, address, city, items, totals, notes, cancel reason,
  * payment or ids. An unknown order, another store's order and a wrong phone all give the same 404 ORDER_NOT_FOUND body.
  *
- * POST, not GET, so the phone never sits in a URL (browser history, proxy and server logs). It has its own rate limit.
+ * POST, not GET, so the phone never sits in a URL (browser history, proxy and server logs). The rate limit is the lookup's
+ * own bucket (ORDER_LOOKUP_LIMIT), shared, so having two endpoints does not double the attempts a client gets (D-069).
  *
  *   200 { data }   400 INVALID_REQUEST   404 ORDER_NOT_FOUND | STORE_NOT_FOUND   403 STORE_NOT_ACTIVE   429 RATE_LIMITED
  */
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   try {
     const { id } = await context.params;
     assertStoreId(id);
-    await enforceRateLimit(ORDER_TRACK_LIMIT, id, request.headers);
+    await enforceRateLimit(ORDER_LOOKUP_LIMIT, id, request.headers);
     const store = await loadActiveStore(id);
 
     const { orderId, phone } = parseLookupRequest(await readJsonBody(request));

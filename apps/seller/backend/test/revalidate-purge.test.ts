@@ -165,6 +165,7 @@ const request = (overrides: Partial<ParsedOrderRequest> = {}): ParsedOrderReques
   fingerprint: 'f',
   customer: { customerName: 'Sara', phone: '+923001234567', address: 'House 12, Street 4', city: 'Karachi', email: null, note: null },
   paymentMethod: 'cod',
+  discountCode: null,
   lines: [{ productId: PRODUCT, variantId: VARIANT, qty: 1 }],
   ...overrides,
 });

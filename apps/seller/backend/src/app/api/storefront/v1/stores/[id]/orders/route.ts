@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * POST /api/storefront/v1/stores/:id/orders
  *
  * Public guest checkout. Body: { customer: { customerName, phone, address, city, email?, note? }, lines: [{ productId, qty }],
- * paymentMethod? }, with the retry key in the Idempotency-Key header (or body.idempotencyKey).
+ * paymentMethod?, discountCode? }, with the retry key in the Idempotency-Key header (or body.idempotencyKey).
  *
  * The server prices the order itself from the catalog: the body has no prices, and any that are sent are
  * ignored. Delivery, totals and stock are all decided here.
@@ -31,6 +31,8 @@ export const dynamic = 'force-dynamic';
  *   422 UNKNOWN_VARIANT (productId)   the variantId is not a variant of that product
  *   422 UNKNOWN_PRODUCT (productId)   unknown, other store, or unpublished
  *   422 PREVIEW_ORDER_BLOCKED   the request carries a preview credential, good or not: nothing is read or saved
+ *   409 DISCOUNT_USED_UP (reason)   the code's last use is gone: no order exists
+ *   422 DISCOUNT_REJECTED (reason)  any other reason the code cannot be used: no order exists
  *   429 RATE_LIMITED       503 STOREFRONT_UNAVAILABLE
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {

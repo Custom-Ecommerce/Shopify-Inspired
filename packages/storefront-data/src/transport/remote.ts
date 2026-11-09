@@ -76,6 +76,8 @@ export interface RemoteTransportOptions {
    * shopper and not to the storefront server. Omit it for calls that are not made on a shopper's behalf.
    */
   clientIp?: string | null;
+  /** Vouches for clientIp. Built on the storefront server, because the secret must not reach this package's browser code. */
+  clientAddressHeaders?: Record<string, string>;
   /**
    * A preview the backend accepted for this store. Sent as a header on every call, never in a URL. With one set every
    * call is no-store, so a preview answer has no cache entry at all. A credential: never log it.
@@ -163,7 +165,7 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
   const parsed = WireRefusal.safeParse(body);
   if (!parsed.success) return null;
   const { code, message } = parsed.data.error;
-  const { productId, retryAfterSeconds, field } = parsed.data;
+  const { productId, retryAfterSeconds, field, reason } = parsed.data;
   switch (code) {
     case "EMPTY_ORDER":
       return { code: "empty_order" };
@@ -189,6 +191,9 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
       return { code: "invalid_request", message: message ?? "Invalid request.", ...(field === undefined ? {} : { field }) };
     case "STORE_NOT_ACTIVE":
       return { code: "store_inactive" };
+    case "DISCOUNT_REJECTED":
+    case "DISCOUNT_USED_UP":
+      return { code: "discount_rejected", reason: code === "DISCOUNT_USED_UP" ? "used_up" : (reason ?? "unknown"), message: message ?? "This code cannot be used." };
     // Reads as an invalid request, whose message every theme already shows, so no theme needs a new case.
     case "PREVIEW_ORDER_BLOCKED":
       return { code: "invalid_request", message: message ?? "This is a preview, so no order was placed." };
@@ -216,10 +221,13 @@ function makeExchanger(options: {
   timeoutMs: number;
   fetchImpl: typeof fetch;
   clientIp?: string | null;
+  clientAddressHeaders?: Record<string, string>;
   previewToken?: string | null;
 }): Exchanger {
-  const forwarded: Record<string, string> =
-    options.clientIp && options.clientIp !== "unknown" ? { "x-forwarded-for": options.clientIp } : {};
+  const forwarded: Record<string, string> = {
+    ...(options.clientIp && options.clientIp !== "unknown" ? { "x-forwarded-for": options.clientIp } : {}),
+    ...options.clientAddressHeaders,
+  };
   if (options.previewToken) forwarded[PREVIEW_CREDENTIAL_HEADER] = options.previewToken;
 
   return async (method, path, request) => {
@@ -261,7 +269,8 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
   return {
     async quoteCart(input: CartQuoteInput): Promise<CartQuote> {
       requireHttp();
-      const result = await exchange("POST", "/cart/quote", { body: { lines: input.lines }, retry: true });
+      const body = { lines: input.lines, ...(input.discountCode ? { discountCode: input.discountCode } : {}) };
+      const result = await exchange("POST", "/cart/quote", { body, retry: true });
       throwIfRefused(result);
       return unwrap(result, WireCartQuoteEnvelope, "cart quote").data;
     },
@@ -269,7 +278,7 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
     async submitOrder(payload: SubmitOrderPayload): Promise<SubmitOrderResult> {
       requireHttp();
       const result = await exchange("POST", "/orders", {
-        body: { customer: payload.customer, lines: payload.lines },
+        body: { customer: payload.customer, lines: payload.lines, ...(payload.discountCode ? { discountCode: payload.discountCode } : {}) },
         headers: { "idempotency-key": payload.idempotencyKey },
         retry: false,
         timeoutMs: submitTimeoutMs,
@@ -338,6 +347,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     timeoutMs: options.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,
     fetchImpl: options.fetchImpl ?? defaultFetch,
     clientIp: options.clientIp,
+    clientAddressHeaders: options.clientAddressHeaders,
     previewToken: options.previewToken,
   });
 

@@ -1,3 +1,4 @@
+import { signedClientAddressHeaders } from "@markaz/platform-kit/signed-client-address";
 import "server-only";
 
 import type { ThemeSlug } from "@markaz/platform-kit/themes";
@@ -119,6 +120,7 @@ export async function resolveOrderTransport(key: string, clientIp: string | null
       storeId: lookup.store.id,
       mode: REMOTE_MODE,
       clientIp,
+      clientAddressHeaders: signedClientAddressHeaders(process.env.CLIENT_ADDRESS_SIGNING_SECRET ?? "", lookup.store.id, clientIp),
       previewToken: lookup.previewToken,
     }),
   };

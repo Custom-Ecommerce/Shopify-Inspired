@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { resolveClientIp } from '@markaz/platform-kit/client-ip';
+import { verifiedClientAddress } from '@markaz/platform-kit/signed-client-address';
 import { isDuplicateKeyError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { RateLimitCounter } from '@/lib/services';
@@ -18,12 +19,12 @@ export interface RateLimitRule {
 }
 
 export const ORDER_CREATE_LIMIT: RateLimitRule = { name: 'order-create', limit: 20, windowMs: 60_000 };
+/** Order lookup and customer tracking count together (D-069), so two endpoints do not double a client's guesses. */
 export const ORDER_LOOKUP_LIMIT: RateLimitRule = { name: 'order-lookup', limit: 10, windowMs: 60_000 };
-export const ORDER_TRACK_LIMIT: RateLimitRule = { name: 'order-track', limit: 10, windowMs: 60_000 };
 export const CART_QUOTE_LIMIT: RateLimitRule = { name: 'cart-quote', limit: 60, windowMs: 60_000 };
 export const FAVOURITES_LIMIT: RateLimitRule = { name: 'favourites', limit: 30, windowMs: 60_000 };
-/** Reserved for the discount-check route, which arrives with CB-3. */
-export const DISCOUNT_CHECK_LIMIT: RateLimitRule = { name: 'discount-check', limit: 10, windowMs: 60_000 };
+/** Quotes that carry a code, on top of the quote's own limit. A cart with a code is quoted again on every change, so this leaves room for that. */
+export const DISCOUNT_CHECK_LIMIT: RateLimitRule = { name: 'discount-check', limit: 20, windowMs: 60_000 };
 
 export interface RateLimitStore {
   /** Adds one to the key's counter, creating it if needed, and returns the new count. */
@@ -87,8 +88,9 @@ function withinTime<T>(work: Promise<T>): Promise<T> {
 
 let warnedNoAddress = false;
 
-function clientKey(headers: Headers): string {
-  const address = resolveClientIp(headers, process.env);
+/** An address the storefront signed comes first. Anything else, a forged signature included, falls to the usual resolver. */
+function clientKey(headers: Headers, storeId: string): string {
+  const address = verifiedClientAddress(headers, process.env.CLIENT_ADDRESS_SIGNING_SECRET ?? '', storeId) ?? resolveClientIp(headers, process.env);
   if (address !== null) return address;
   if (!warnedNoAddress) {
     warnedNoAddress = true;
@@ -101,7 +103,7 @@ function clientKey(headers: Headers): string {
 export async function enforceRateLimit(rule: RateLimitRule, storeId: string, headers: Headers, now: number = Date.now()): Promise<void> {
   const windowStart = Math.floor(now / rule.windowMs) * rule.windowMs;
   const windowEnd = windowStart + rule.windowMs;
-  const key = rule.name + ':' + storeId + ':' + clientKey(headers) + ':' + windowStart;
+  const key = rule.name + ':' + storeId + ':' + clientKey(headers, storeId) + ':' + windowStart;
 
   let count: number;
   try {

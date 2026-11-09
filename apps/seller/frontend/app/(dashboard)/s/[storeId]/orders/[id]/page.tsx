@@ -1094,6 +1094,11 @@ export default function OrderDetailPage() {
             <Row label="Delivery">
               <span className="tabular-nums">{order.deliveryCharges === 0 ? "Free" : money(order.deliveryCharges)}</span>
             </Row>
+            {order.discountAmount > 0 ? (
+              <Row label={order.discountCode ? "Discount (" + order.discountCode + ")" : "Discount"}>
+                <span className="tabular-nums">-{money(order.discountAmount)}</span>
+              </Row>
+            ) : null}
             <Row label="Total">
               <span className="tabular-nums font-semibold">{money(order.total)}</span>
             </Row>

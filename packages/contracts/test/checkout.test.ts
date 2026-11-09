@@ -255,7 +255,7 @@ test('every bad field is reported, so a form can mark them all at once', () => {
 /* ------------------------------------------- quote ------------------------------------------- */
 
 const line = { productId: 'p1', variantId: 'v1', title: 'Shirt', variantTitle: 'Default', unitPrice: 1000, qty: 2, lineTotal: 2000, issue: null, availableQty: 5 };
-const quote = { lines: [line], subtotal: 2000, deliveryCharges: 250, discount: 0, total: 2250, canCheckout: true };
+const quote = { lines: [line], subtotal: 2000, deliveryCharges: 250, discount: 0, total: 2250, canCheckout: true, discountCode: null, discountError: null };
 
 test('the quote carries line prices, subtotal, delivery, discount and total', () => {
   const parsed = storefrontCartQuoteResponseSchema.parse({ data: quote });

@@ -136,6 +136,7 @@ export const WireOrder = z.object({
   paymentMethod,
   subtotal: price,
   deliveryCharges: price,
+  discount: price.default(0),
   total: price,
   createdAt: z.string().min(1),
   customerName: z.string(),
@@ -200,5 +201,7 @@ export const WireRefusal = z.object({
   retryAfterSeconds: z.number().optional(),
   /** The input that was refused, for example customer.phone. */
   field: z.string().optional(),
+  /** Why a discount code was refused. */
+  reason: z.string().optional(),
 });
 /* @theme-integration-patch:wire */

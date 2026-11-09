@@ -467,7 +467,7 @@ test('customer tracking: dates use the first time a status was reached; an old o
   });
 });
 
-test('customer tracking: rate limited per client and store, separately from the order lookup', async () => {
+test('customer tracking: rate limited per client and store, sharing the lookup bucket', async () => {
   seedOrder('confirmed');
   const ip = '198.51.100.20';
   for (let i = 0; i < 10; i += 1) {
@@ -476,9 +476,9 @@ test('customer tracking: rate limited per client and store, separately from the 
   const limited = await track({ orderId: 'ORD-ABCD2345', phone: '0300 1234567' }, STORE_A, ip);
   assert.equal(limited.status, 429);
   assert.equal(limited.body.error.code, 'RATE_LIMITED');
-  // The order lookup has its own count.
+  // The order lookup counts against the same window.
   const lookup = await shopperPost(lookupPOST, STORE_A, { orderId: 'ORD-ABCD2345', phone: '0300 1234567' }, ip);
-  assert.equal(lookup.status, 200);
+  assert.equal(lookup.status, 429);
   // Another client is not affected.
   assert.equal((await track({ orderId: 'ORD-ABCD2345', phone: '0300 1234567' }, STORE_A, '198.51.100.21')).status, 200);
 });

@@ -6,7 +6,8 @@ import { HttpError, handleRouteError, isDuplicateKeyError, parseIntParam } from 
 import { parseBody } from '@/lib/placeholder';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, Discount, listEnvelope } from '@/lib/services';
-import { plainDoc, requireSellerStoreId, toWire } from '@/lib/seller-scope';
+import { resolveOwnedStoreId } from '@/lib/data-plane';
+import { plainDoc, toWire } from '@/lib/seller-scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,18 +18,18 @@ async function requireDatabase(): Promise<void> {
   });
 }
 
-/** GET /api/discounts. The seller's store discounts, newest first, in the list envelope. */
+/** GET /api/discounts?archived=true. The active store's codes, newest first, in the list envelope. Archived ones are listed apart. */
 export async function GET(request: NextRequest): Promise<Response> {
   try {
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'discounts');
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const params = request.nextUrl.searchParams;
     const page = parseIntParam(params.get('page'), 1, 1, 100000);
     const limit = parseIntParam(params.get('limit'), 20, 1, 100);
-    const filter = { store: storeId };
+    const filter = { store: storeId, archivedAt: params.get('archived') === 'true' ? { $ne: null } : null };
 
     const [rows, totalDocs] = await Promise.all([
       Discount.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
@@ -51,12 +52,11 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (!body.ok) return body.response;
     assertCan(ctx.actor, 'create', 'discounts', Object.keys(body.data));
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     try {
       const created = await Discount.create({
         ...body.data,
-        code: body.data.code.toUpperCase(),
         store: storeId,
         usedCount: 0,
       });

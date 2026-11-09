@@ -117,7 +117,7 @@ test('dashboard list item and detail parse, and unknown keys are stripped', () =
     id: item.id, orderId: 'ORD-1', status: 'confirmed', paymentMethod: null, paymentStatus: 'unpaid', collectedAt: null,
     collectedAmount: null, customerName: null, phone: null, address: null, city: null,
     items: [{ productTitle: 'Shirt', variantTitle: 'Default', sku: null, unitPrice: 1200, quantity: 2, lineTotal: 2400, stockDeducted: true }],
-    subtotal: 2400, deliveryCharges: 200, total: 2600, courier: null, trackingNumber: null, trackingUrl: null,
+    subtotal: 2400, deliveryCharges: 200, discountCode: null, discountAmount: 0, total: 2600, courier: null, trackingNumber: null, trackingUrl: null,
     statusHistory: [{ from: 'pending', to: 'confirmed', by: null, at: NOW_ISO, note: null }],
     notes: [{ id: null, text: 'Call first', by: null, at: NOW_ISO }],
     cancelledAt: null, cancelReason: null, createdAt: NOW_ISO, updatedAt: NOW_ISO, allowedNext: ['processing'], canCancel: true, canEditTracking: false, canMarkCollected: false,

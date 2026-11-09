@@ -110,6 +110,8 @@ export interface SubmitOrderPayload {
   customer: CheckoutCustomer;
   /** Prices are not sent. The server prices the order itself. */
   lines: SubmitOrderLine[];
+  /** One code per order. */
+  discountCode?: string | null;
 }
 
 export interface SubmitOrderResult {
@@ -140,6 +142,7 @@ export interface StorefrontOrder {
   paymentMethod: PaymentMethod;
   subtotal: number;
   deliveryCharges: number;
+  discount: number;
   total: number;
   createdAt: string;
   updatedAt: string;
@@ -198,7 +201,8 @@ export type OrderRejection =
   | { code: "idempotency_conflict" }
   | { code: "rate_limited"; retryAfterSeconds: number | null }
   | { code: "invalid_request"; message: string; field?: string }
-  | { code: "store_inactive" };
+  | { code: "store_inactive" }
+  | { code: "discount_rejected"; reason: string; message: string };
 
 import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from "@markaz/contracts/checkout";
 
@@ -213,6 +217,8 @@ export interface CartQuoteLineInput {
 
 export interface CartQuoteInput {
   lines: CartQuoteLineInput[];
+  /** One code per cart. */
+  discountCode?: string | null;
 }
 
 /** Why a cart line cannot be bought as it stands. */

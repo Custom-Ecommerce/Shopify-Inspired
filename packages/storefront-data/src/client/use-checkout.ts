@@ -54,7 +54,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
   const contextTransport = useOrderTransport();
   const transport = transportOverride ?? contextTransport;
   const cart = useCart();
-  const { lines, isHydrated, clear } = cart;
+  const { lines, isHydrated, clear, discountCode } = cart;
 
   const [values, setValues] = useState<CheckoutValues>(EMPTY_CHECKOUT_VALUES);
   const [attempted, setAttempted] = useState(false);
@@ -93,7 +93,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
     // Retries of the same order reuse one key. Any change to the order gets a fresh key.
     const submission = validation.data;
     const payloadLines = lines.map((line) => ({ productId: line.productId, variantId: line.variantId, qty: line.qty }));
-    const signature = JSON.stringify({ customer: submission, lines: payloadLines });
+    const signature = JSON.stringify({ customer: submission, lines: payloadLines, discountCode });
     if (!attempt.current || attempt.current.signature !== signature) {
       attempt.current = { signature, key: newIdempotencyKey() };
     }
@@ -105,7 +105,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
     try {
       const placed = await placeOrderWithCheck(
         transport,
-        { idempotencyKey, customer: submission, lines: payloadLines },
+        { idempotencyKey, customer: submission, lines: payloadLines, discountCode },
         () => setIsChecking(true),
       );
       attempt.current = null;
@@ -119,7 +119,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
       inFlight.current = false;
       setIsChecking(false);
     }
-  }, [values, lines, isHydrated, clear, transport]);
+  }, [values, lines, isHydrated, clear, transport, discountCode]);
 
   return {
     values,

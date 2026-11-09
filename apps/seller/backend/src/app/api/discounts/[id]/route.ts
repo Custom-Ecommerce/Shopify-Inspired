@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { objectIdSchema, updateDiscountSchema } from '@/lib/contracts';
+import { discountDatesProblem, discountValueProblem, objectIdSchema, updateDiscountSchema } from '@/lib/contracts';
 import { authenticate } from '@/lib/auth';
 import { HttpError, handleRouteError, jsonError } from '@/lib/http';
 import { parseBody } from '@/lib/placeholder';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, Discount } from '@/lib/services';
-import { plainDoc, requireSellerStoreId, toWire } from '@/lib/seller-scope';
+import { resolveOwnedStoreId } from '@/lib/data-plane';
+import { plainDoc, toWire } from '@/lib/seller-scope';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'discounts');
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const doc = await Discount.findOne({ _id: id, store: storeId }).lean();
     if (!doc) throw new HttpError(404, 'Discount not found');
@@ -37,7 +38,17 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
   }
 }
 
-/** PATCH /api/discounts/:id. Changes isActive, maxUses, or endDate only. */
+interface StoredDiscount {
+  type: string;
+  startDate?: Date | string | null;
+  endDate?: Date | string | null;
+  archivedAt?: Date | null;
+}
+
+/**
+ * PATCH /api/discounts/:id. Changes value, minimum, dates, maxUses or isActive, and archives or restores with { archived }.
+ * Another store's discount answers 404. Past orders are unaffected: each keeps its own snapshot of the rule.
+ */
 export async function PATCH(request: NextRequest, context: Ctx): Promise<Response> {
   try {
     const { id } = await context.params;
@@ -45,15 +56,27 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const ctx = await authenticate(request);
     const body = await parseBody(request, updateDiscountSchema);
     if (!body.ok) return body.response;
-    assertCan(ctx.actor, 'update', 'discounts', Object.keys(body.data));
+    const { archived, ...fields } = body.data;
+    assertCan(ctx.actor, 'update', 'discounts', [...Object.keys(fields), ...(archived === undefined ? [] : ['archivedAt'])]);
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
-    const updated = await Discount.findOneAndUpdate(
-      { _id: id, store: storeId },
-      { $set: body.data },
-      { new: true },
-    ).lean();
+    const existing = (await Discount.findOne({ _id: id, store: storeId }).lean()) as unknown as StoredDiscount | null;
+    if (!existing) throw new HttpError(404, 'Discount not found');
+
+    if (fields.value !== undefined) {
+      const problem = discountValueProblem(existing.type, fields.value);
+      if (problem !== null) return jsonError(422, problem);
+    }
+    const startDate = fields.startDate === undefined ? existing.startDate : fields.startDate;
+    const endDate = fields.endDate === undefined ? existing.endDate : fields.endDate;
+    const datesProblem = discountDatesProblem(startDate, endDate);
+    if (datesProblem !== null) return jsonError(422, datesProblem);
+
+    const set: Record<string, unknown> = { ...fields };
+    if (archived !== undefined) set.archivedAt = archived ? (existing.archivedAt ?? new Date()) : null;
+
+    const updated = await Discount.findOneAndUpdate({ _id: id, store: storeId }, { $set: set }, { new: true }).lean();
     if (!updated) throw new HttpError(404, 'Discount not found');
     return NextResponse.json(toWire(plainDoc(updated)));
   } catch (err) {

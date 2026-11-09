@@ -333,7 +333,7 @@ Object.assign(POLICY_MATRIX, {
     },
     update: {
       actors: ['admin', 'system', 'seller'],
-      fields: { admin: '*', system: '*', seller: ['isActive', 'maxUses', 'endDate'] },
+      fields: { admin: '*', system: '*', seller: ['value', 'minOrderAmount', 'maxUses', 'startDate', 'endDate', 'isActive', 'archivedAt'] },
     },
     delete: { actors: ['admin', 'system'], fields: '*' },
   },

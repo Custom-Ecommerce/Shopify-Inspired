@@ -6,7 +6,7 @@ import { PREVIEW_RESPONSE_HEADERS, isPreviewRequest, storefrontFailure } from '@
 import { loadCartQuote } from '@/lib/storefront/cart-quote-service';
 import { parseCartQuoteRequest } from '@/lib/storefront/cart-request';
 import { readJsonBody } from '@/lib/storefront/order-request';
-import { CART_QUOTE_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
+import { CART_QUOTE_LIMIT, DISCOUNT_CHECK_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
 
 export const runtime = 'nodejs';
@@ -15,7 +15,8 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/storefront/v1/stores/:id/cart/quote
  *
- * Prices a cart from the catalog. Body: { lines: [{ productId, variantId?, qty }] }. Nothing is saved and no stock moves, so a
+ * Prices a cart from the catalog. Body: { lines: [{ productId, variantId?, qty }], discountCode? }. A code that cannot be used
+ * is answered in discountError and the cart is priced without it. Nothing is saved and no stock moves, so a
  * shopper can ask as often as the cart changes. A preview may ask on a pending store; draft and sample lines stay unbuyable.
  *
  *   200 { data }   the priced cart; lines that cannot be bought carry an issue and are left out of the totals
@@ -33,7 +34,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const store = await loadActiveStore(id, { preview });
 
     const parsed = parseCartQuoteRequest(await readJsonBody(request));
-    const quote = await loadCartQuote(id, store, parsed.lines);
+    if (parsed.discountCode !== null) await enforceRateLimit(DISCOUNT_CHECK_LIMIT, id, request.headers);
+    const quote = await loadCartQuote(id, store, parsed.lines, parsed.discountCode);
 
     const body = storefrontCartQuoteResponseSchema.parse({ data: quote });
     return NextResponse.json(body, { headers: preview ? PREVIEW_RESPONSE_HEADERS : PRIVATE_NO_STORE_HEADERS });

@@ -48,12 +48,14 @@ function failureMessage(f: CheckoutFailure): string {
  */
 export function useStilettoCheckout() {
   const router = useRouter();
-  const { isEmpty } = useCart();
-  const { quote } = useCartQuote();
+  const { isEmpty, discountCode, setDiscountCode } = useCart();
+  const { quote, status: quoteStatus } = useCartQuote();
   const checkout = useCheckout();
   const [fieldErrors, setFieldErrors] = useState<StilettoFieldErrors>({});
   // Goes up whenever messages appear, so the form can move the shopper to the first one.
   const [focusTick, setFocusTick] = useState(0);
+  // A refused code stops showing as soon as the shopper changes or removes it.
+  const [dismissedFailure, setDismissedFailure] = useState<CheckoutFailure | null>(null);
   const placed = useRef({ total: 0, whatsapp: "" });
   const lastInput = useRef<StilettoCheckoutInput | null>(null);
 
@@ -61,6 +63,7 @@ export function useStilettoCheckout() {
   const priced = !isEmpty && quote !== null ? quote : null;
   const deliveryCharges = priced ? priced.deliveryCharges.amount : 0;
   const subtotal = priced ? priced.subtotal.amount : checkout.subtotal.amount;
+  const discount = priced ? priced.discount.amount : 0;
   const grandTotal = priced ? priced.total.amount : checkout.subtotal.amount;
   const grandTotalRef = useRef(grandTotal);
   grandTotalRef.current = grandTotal;
@@ -120,11 +123,31 @@ export function useStilettoCheckout() {
     });
   }, []);
 
+  const changeCode = useCallback(
+    (code: string | null) => {
+      setDismissedFailure(checkout.failure);
+      setDiscountCode(code);
+    },
+    [checkout.failure, setDiscountCode],
+  );
+
+  const refusedAtOrder = checkout.failure?.kind === "discount_rejected" && checkout.failure !== dismissedFailure ? checkout.failure.message : null;
+  const codeError = discountCode === null ? null : (priced?.discountError ?? refusedAtOrder);
+
   // A refusal shown beside its box is not repeated in the banner.
-  const failure = checkout.failure && serverBox === null ? failureMessage(checkout.failure) : null;
+  const failure = checkout.failure && serverBox === null && checkout.failure.kind !== "discount_rejected" ? failureMessage(checkout.failure) : null;
   return {
     subtotal,
     deliveryCharges,
+    discount,
+    /** What the shopper entered, accepted or not. */
+    storedCode: discountCode,
+    /** The code the server has accepted. */
+    appliedCode: priced?.discountCode ?? null,
+    codeError,
+    isCheckingCode: quoteStatus === "loading" && discountCode !== null,
+    applyCode: changeCode,
+    removeCode: useCallback(() => changeCode(null), [changeCode]),
     grandTotal,
     lineTotalOf,
     isSubmitting: checkout.status === "submitting" || checkout.status === "success",

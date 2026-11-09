@@ -69,6 +69,87 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
+interface DiscountCodeBoxProps {
+  storedCode: string | null;
+  appliedCode: string | null;
+  error: string | null;
+  busy: boolean;
+  onApply: (code: string) => void;
+  onRemove: () => void;
+}
+
+/** "Have a code?" in the order summary. It sits inside the checkout form, so nothing here may submit the order. */
+function DiscountCodeBox({ storedCode, appliedCode, error, busy, onApply, onRemove }: DiscountCodeBoxProps) {
+  const [opened, setOpened] = useState(false);
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    if (storedCode) setText(storedCode);
+  }, [storedCode]);
+
+  if (appliedCode) {
+    return (
+      <div className="flex items-center justify-between gap-3 text-xs text-[var(--text-inverse)]">
+        <span className="min-w-0 truncate">
+          Code <span className="font-bold">{appliedCode}</span> applied
+        </span>
+        <button type="button" onClick={onRemove} className="shrink-0 underline underline-offset-2 text-(--text-inverse)/70 hover:text-[var(--text-inverse)]">
+          Remove
+        </button>
+      </div>
+    );
+  }
+
+  if (!opened && !storedCode) {
+    return (
+      <button type="button" onClick={() => setOpened(true)} className="text-xs underline underline-offset-2 text-(--text-inverse)/70 hover:text-[var(--text-inverse)]">
+        Have a code?
+      </button>
+    );
+  }
+
+  const apply = () => {
+    if (text.trim() !== "" && !busy) onApply(text);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          aria-label="Discount code"
+          aria-invalid={error ? true : undefined}
+          autoComplete="off"
+          autoCapitalize="characters"
+          maxLength={40}
+          placeholder="Discount code"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter in a form field would place the order.
+            if (e.key === "Enter") {
+              e.preventDefault();
+              apply();
+            }
+          }}
+          className="min-w-0 flex-1 h-10 rounded-lg border border-(--text-inverse)/20 bg-(--surface-elevated)/5 px-3 text-xs uppercase text-[var(--text-inverse)] placeholder:normal-case placeholder:text-(--text-inverse)/40 focus:outline-none focus:border-(--text-inverse)/50"
+        />
+        <button type="button" onClick={apply} disabled={busy || text.trim() === ""} className="h-10 shrink-0 rounded-lg border border-(--text-inverse)/30 px-3 text-xs font-semibold text-[var(--text-inverse)] disabled:opacity-50">
+          {busy ? "Checking…" : "Apply"}
+        </button>
+      </div>
+      {error && (
+        <div className="flex items-start justify-between gap-3 text-[11px] text-[var(--status-error-text)]">
+          <p role="alert">{error}</p>
+          <button type="button" onClick={onRemove} className="shrink-0 underline underline-offset-2">
+            Remove
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Reusable set of address input fields (First/Last name, Street Address,
  * Apartment, City, Zip, Phone, Country). Rendered once for the Shipping
@@ -276,6 +357,13 @@ export function CheckoutSection({
   const {
     subtotal,
     deliveryCharges,
+    discount,
+    storedCode,
+    appliedCode,
+    codeError,
+    isCheckingCode,
+    applyCode,
+    removeCode,
     grandTotal,
     lineTotalOf,
     isSubmitting,
@@ -607,6 +695,17 @@ export function CheckoutSection({
                   </div>
                 )}
 
+                {cartItems.length > 0 && (
+                  <DiscountCodeBox
+                    storedCode={storedCode}
+                    appliedCode={appliedCode}
+                    error={codeError}
+                    busy={isCheckingCode}
+                    onApply={applyCode}
+                    onRemove={removeCode}
+                  />
+                )}
+
                 <div className="space-y-1.5 text-xs text-(--text-inverse)/70">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
@@ -622,6 +721,13 @@ export function CheckoutSection({
                       {cartItems.length > 0 ? formatCurrency(deliveryCharges) : "Rs. 0"}
                     </span>
                   </div>
+
+                  {discount > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span>Discount{appliedCode ? ` (${appliedCode})` : ""}</span>
+                      <span className="text-[var(--text-inverse)] font-medium">-{formatCurrency(discount)}</span>
+                    </div>
+                  )}
 
                   <div className="flex justify-between items-center pt-2 border-t border-(--text-inverse)/10 text-sm font-bold text-[var(--text-inverse)]">
                     <span>Total Amount</span>

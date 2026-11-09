@@ -258,7 +258,7 @@ test('a quantity above stock is a line error that says how many are left', async
 
 test('an empty cart is 200 with nothing to pay, and cannot check out', async () => {
   const data = await quoted({ lines: [] });
-  assert.deepEqual(data, { lines: [], subtotal: 0, deliveryCharges: 0, discount: 0, total: 0, canCheckout: false });
+  assert.deepEqual(data, { lines: [], subtotal: 0, deliveryCharges: 0, discount: 0, total: 0, canCheckout: false, discountCode: null, discountError: null });
   assert.equal(productReads, 0, 'an empty cart asks the catalog nothing');
 });
 

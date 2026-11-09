@@ -16,7 +16,7 @@ import type {
 } from "./types";
 import { OrderRejectedError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
-import { normalizePhoneE164 } from "@markaz/contracts/checkout";
+import { discountRefusalMessage, normalizePhoneE164 } from "@markaz/contracts/checkout";
 
 // Hardcoded dummy catalogue. Includes edge cases (no image, discount, out of stock,
 // low stock, no reviews, free delivery, very long title) so themes are exercised from day one.
@@ -224,7 +224,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
 
   /**
    * Mock of POST /cart/quote. Prices come from the fixtures. The fixtures carry availability but no counts, so the mock
-   * never reports insufficient_stock, and it charges no delivery.
+   * never reports insufficient_stock, and it charges no delivery. A demo has no discount codes, so every code is unknown.
    */
   async function quoteCart(input: CartQuoteInput): Promise<CartQuote> {
     await delay(120);
@@ -279,6 +279,8 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       discount: 0,
       total: subtotal,
       canCheckout: lines.length > 0 && lines.every((line) => line.issue === null),
+      discountCode: null,
+      discountError: input.discountCode ? { reason: "unknown", message: discountRefusalMessage("unknown") } : null,
     };
   }
 
@@ -290,6 +292,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     if (replay) return { ...replay };
 
     if (payload.lines.length === 0) throw new OrderRejectedError({ code: "empty_order" });
+    if (payload.discountCode) throw new OrderRejectedError({ code: "discount_rejected", reason: "unknown", message: discountRefusalMessage("unknown") });
 
     const items: StorefrontOrderItem[] = [];
     for (const line of payload.lines) {
@@ -326,6 +329,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       paymentMethod: "cod",
       subtotal: total,
       deliveryCharges: 0,
+      discount: 0,
       total,
       createdAt: now,
       updatedAt: now,

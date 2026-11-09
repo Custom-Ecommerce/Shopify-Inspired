@@ -1,7 +1,8 @@
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
 
 /**
- * Collection: discounts (apps/admin/src/collections/Discounts.ts). A code is unique per store.
+ * Collection: discounts. A code is unique per store and stored in capitals, so it is not case sensitive. New codes are
+ * percentage or fixed_amount only (D-080); the other two types stay readable and no longer work at checkout.
  */
 export interface IDiscount extends Document {
   store: Types.ObjectId;
@@ -15,6 +16,8 @@ export interface IDiscount extends Document {
   endDate?: Date | null;
   applicableProducts: Types.ObjectId[];
   isActive: boolean;
+  /** Set when the seller archives the code. It then stops working; past orders keep their own snapshot. */
+  archivedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +39,7 @@ const DiscountSchema = new Schema<IDiscount>(
     endDate: { type: Date, default: null },
     applicableProducts: { type: [Schema.Types.ObjectId], default: [] },
     isActive: { type: Boolean, default: true },
+    archivedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

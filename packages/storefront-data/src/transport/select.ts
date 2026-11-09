@@ -51,6 +51,8 @@ export interface RemoteSelection {
   fetchImpl?: typeof fetch;
   /** The shopper's IP as the BFF trusts it. The backend uses it for its per-client limits. */
   clientIp?: string | null;
+  /** Vouches for clientIp. Built on the storefront server, because the secret must not reach this package's browser code. */
+  clientAddressHeaders?: Record<string, string>;
   /** A preview the backend accepted. Set only from the store lookup. */
   previewToken?: string | null;
 }

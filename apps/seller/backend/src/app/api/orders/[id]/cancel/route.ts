@@ -8,6 +8,7 @@ import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { restoreOrderStock, stockRestoreSummary, type RestoreLine } from '@/lib/order-stock';
+import { returnDiscountUse } from '@/lib/storefront/discount-service';
 import { handleOrderError, OrderRequestError, toDashboardOrderDetail } from '@/lib/orders';
 import { assertCan, Order, ORDER_ACTIONS, writeAuditLog } from '@/lib/services';
 
@@ -21,6 +22,8 @@ interface StoredOrder {
   orderId?: string;
   status?: unknown;
   items?: RestoreLine[];
+  discountCode?: string | null;
+  discountSnapshot?: { discountId?: string } | null;
 }
 
 const notFound = (): HttpError => new HttpError(404, 'Order not found');
@@ -74,6 +77,7 @@ async function audit(
   body: OrderCancelRequest,
   stock: OrderStockRestore,
   summary: string | null,
+  discountUse: string | null,
 ): Promise<void> {
   try {
     await writeAuditLog('order.cancel', 'order', String(row._id), 'seller:' + ctx.userId, {
@@ -86,6 +90,7 @@ async function audit(
       skipped: stock.skipped,
       failed: stock.failed,
       summary,
+      discountUse,
       at: new Date().toISOString(),
     });
   } catch (err) {
@@ -106,8 +111,9 @@ async function audit(
  *   422 ORDER_CANCEL_ILLEGAL { status, reason }                     dispatched or later, already cancelled, unknown status
  *
  * The cancel is ONE findOneAndUpdate filtered on { _id, store, status: <read status>, stockRestoredAt absent }: it sets
- * the status, cancelledAt, cancelReason and stockRestoredAt and pushes the history entry. Only the request that wins it
- * restores stock, so two parallel cancels give the stock back once.
+ * the status, cancelledAt, cancelReason and stockRestoredAt, plus discountRestoredAt when the order used a code, and pushes
+ * the history entry. Only the request that wins it restores stock and returns the discount use, so two parallel cancels
+ * give each back once (A-017). A discount deleted since the order is skipped.
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
@@ -134,9 +140,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     const now = new Date();
     const cancelled = await Order.findOneAndUpdate(
-      { _id: id, store: storeId, status: from, stockRestoredAt: { $exists: false } },
+      { _id: id, store: storeId, status: from, stockRestoredAt: { $exists: false }, discountRestoredAt: { $exists: false } },
       {
-        $set: { status: 'cancelled', cancelledAt: now, cancelReason: body.reason, stockRestoredAt: now },
+        $set: {
+          status: 'cancelled',
+          cancelledAt: now,
+          cancelReason: body.reason,
+          stockRestoredAt: now,
+          ...(current.discountCode ? { discountRestoredAt: now } : {}),
+        },
         $push: { statusHistory: { from, to: 'cancelled', by: ctx.userObjectId, at: now, note: body.note ? body.note : null } },
       },
       { new: true, runValidators: true },
@@ -158,9 +170,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const lines = ((cancelled as unknown as StoredOrder).items ?? []) as RestoreLine[];
     const stockRestore = await restoreOrderStock(storeId, id, ctx.userObjectId, lines);
     const summary = stockRestoreSummary(stockRestore);
+    const discountId = (cancelled as unknown as StoredOrder).discountSnapshot?.discountId;
+    const discountUse = discountId ? await returnDiscountUse(storeId, discountId) : null;
     const finalRow = summary ? ((await noteStockSummary(id, storeId, ctx, summary)) ?? cancelled) : cancelled;
 
-    await audit(ctx, storeId, current, from, body, stockRestore, summary);
+    await audit(ctx, storeId, current, from, body, stockRestore, summary, discountUse);
     return NextResponse.json({ order: toDashboardOrderDetail(finalRow), stockRestore }, { headers: NO_STORE });
   } catch (err) {
     return handleOrderError(err);

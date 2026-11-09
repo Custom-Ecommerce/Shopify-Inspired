@@ -17,6 +17,8 @@ export type CheckoutFailure =
   | { kind: "rate_limited"; retryAfterSeconds: number | null }
   | { kind: "invalid_request"; message: string }
   | { kind: "store_inactive" }
+  /** The discount code cannot be used. No order was placed. message is written for the shopper. */
+  | { kind: "discount_rejected"; reason: string; message: string }
   | { kind: "unavailable" }
   /** No clear answer even after checking with the same key. Trying again cannot place a second order (CO-03). */
   | { kind: "unconfirmed" };
@@ -88,6 +90,8 @@ export function toCheckoutFailure(error: unknown, lines: readonly CartLineRef[])
       return { kind: "invalid_request", message: rejection.message };
     case "store_inactive":
       return { kind: "store_inactive" };
+    case "discount_rejected":
+      return { kind: "discount_rejected", reason: rejection.reason, message: rejection.message };
     default: {
       const unhandled: never = rejection;
       void unhandled;
