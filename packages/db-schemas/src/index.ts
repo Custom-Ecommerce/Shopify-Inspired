@@ -28,3 +28,6 @@ export * from './models/product';
 export * from './models/stock-movement';
 // PB-4: what is kept of a review after its product is permanently deleted.
 export * from './models/archived-review';
+
+// CB-2: the shared rate-limit counters.
+export * from './models/rate-limit-counter';

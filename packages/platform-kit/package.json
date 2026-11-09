@@ -16,7 +16,10 @@
     "./preview": "./src/preview.ts",
     "./reservation": "./src/reservation/index.ts",
     "./themes": "./src/themes/index.ts",
-    "./revalidate": "./src/revalidate/index.ts"
+    "./revalidate": "./src/revalidate/index.ts",
+    "./cache-tags": "./src/revalidate/tags.ts",
+    "./client-ip": "./src/client-ip.ts",
+    "./socket-address": "./src/socket-address.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit",

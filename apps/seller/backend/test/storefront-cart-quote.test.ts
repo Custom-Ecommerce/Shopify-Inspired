@@ -124,12 +124,17 @@ test('POST cart/quote loads, refuses a bad body with 400, and prices a valid car
   assert.equal(data.canCheckout, true);
 });
 
-test('a product with several variants needs a variantId: 422 VARIANT_REQUIRED naming the product', async () => {
-  const res = await post({ lines: [{ productId: TOP, qty: 1 }] });
-  assert.equal(res.status, 422);
-  const body = (await res.json()) as { error: { code: string }; productId: string };
-  assert.equal(body.error.code, 'VARIANT_REQUIRED');
-  assert.equal(body.productId, TOP);
+test('a product with several variants and no variantId is a line issue, and the rest of the cart is still shown', async () => {
+  const res = await post({ lines: [{ productId: TOP, qty: 1 }, { productId: SHIRT, qty: 2 }] });
+  assert.equal(res.status, 200);
+  const { data } = storefrontCartQuoteResponseSchema.parse(await res.json());
+  assert.deepEqual(data.lines.map((line) => line.issue), ['unknown_variant', null]);
+  assert.equal(data.lines[0].title, 'Lawn top');
+  assert.equal(data.lines[0].variantId, null);
+  assert.equal(data.lines[0].unitPrice, null);
+  assert.equal(data.lines[0].lineTotal, null);
+  assert.equal(data.subtotal, 3000);
+  assert.equal(data.canCheckout, false);
 });
 
 test('the variant decides the price, and the delivery override applies to it', async () => {

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import { isDuplicateKeyError } from '@/lib/http';
 import { toWholeRupees } from '@/lib/contracts';
+import { revalidateStoreProduct } from '@/lib/revalidate';
 import { Order, Product } from '@/lib/services';
 import { StorefrontHttpError, productUnavailable } from '@/lib/storefront/errors';
 import { isLiveProduct, type LiveFlags } from '@/lib/storefront/live-product';
@@ -171,10 +172,12 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
   const orderObjectId = new Types.ObjectId().toHexString();
 
   const reserved: Reservation[] = [];
+  const soldOut = new Set<string>();
   try {
     for (const line of lines) {
-      const deducted = await reserveStock(storeId, line.productId, line.variantId, line.qty, orderObjectId);
-      reserved.push({ productId: line.productId, variantId: line.variantId, qty: line.qty, deducted });
+      const taken = await reserveStock(storeId, line.productId, line.variantId, line.qty, orderObjectId);
+      reserved.push({ productId: line.productId, variantId: line.variantId, qty: line.qty, deducted: taken.deducted });
+      if (taken.soldOut) soldOut.add(line.productId);
     }
   } catch (err) {
     await releaseAll(storeId, reserved, orderObjectId);
@@ -211,6 +214,8 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       deliveryCharges: totals.deliveryCharges,
       total: totals.total,
     });
+    // Only once the order is saved: until then a failure would give the units back.
+    for (const productId of soldOut) revalidateStoreProduct(storeId, productId);
     return { order, replayed: false };
   } catch (err) {
     await releaseAll(storeId, reserved, orderObjectId);

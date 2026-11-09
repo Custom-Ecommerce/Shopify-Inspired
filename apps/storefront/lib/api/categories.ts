@@ -2,7 +2,7 @@ import "server-only";
 
 import { STOREFRONT_API_PREFIX, parseResponse, sellerGet } from "./client";
 import { CategoriesResponse, type StorefrontCategory } from "./schemas";
-import { storeCategoriesTag, storeProductsTag } from "./tags";
+import { storeCategoriesTag, storeProductsTag, storeStaticTag } from "./tags";
 
 export const CATEGORIES_REVALIDATE_SECONDS = 600;
 
@@ -16,7 +16,7 @@ export const CATEGORIES_REVALIDATE_SECONDS = 600;
  */
 export async function fetchCategories(storeId: string): Promise<StorefrontCategory[]> {
   const body = await sellerGet(`${STOREFRONT_API_PREFIX}/stores/${encodeURIComponent(storeId)}/categories`, {
-    tags: [storeCategoriesTag(storeId), storeProductsTag(storeId)],
+    tags: [storeCategoriesTag(storeId), storeProductsTag(storeId), storeStaticTag(storeId)],
     revalidate: CATEGORIES_REVALIDATE_SECONDS,
   });
   return parseResponse(CategoriesResponse, body, "categories").data;

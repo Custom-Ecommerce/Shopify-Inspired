@@ -29,6 +29,7 @@ function toAsciiDigit(digit: string): string {
  *
  *   03001234567 | 3001234567 | 923001234567 | +923001234567 | 00923001234567
  *
+ * The 0 of the local form is also dropped after a country code (+92 0300 1234567), which people often type.
  * Spaces, dashes, dots and brackets are ignored, and Urdu or Arabic digits count as digits. Pure, and also used to
  * compare a shopper's number with an order's, so a number that places an order can always look it up.
  */
@@ -50,6 +51,8 @@ export function normalizePhoneE164(input: unknown): string | null {
   } else {
     value = '+92' + value;
   }
+
+  if (value.startsWith('+920')) value = '+92' + value.slice(4);
 
   return PK_MOBILE_E164.test(value) ? value : null;
 }

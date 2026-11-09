@@ -8,6 +8,7 @@ import { liveListFilter, previewListFilter } from '@/lib/storefront/live-product
 import { PREVIEW_RESPONSE_HEADERS, isPreviewRequest, storefrontFailure } from '@/lib/storefront/preview-request';
 import { toValidatedProductSummaries, type ProductRow } from '@/lib/storefront/product-dto';
 import { escapeRegex, parseProductListQuery, sortSpec } from '@/lib/storefront/product-query';
+import { FAVOURITES_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { servesStore } from '@/lib/storefront/store-guard';
 
 export const runtime = 'nodejs';
@@ -48,6 +49,7 @@ const PREVIEW_LIST_PROJECTION = { ...LIST_PROJECTION, isPublished: 1, isDemo: 1,
  *
  *   404 STORE_NOT_FOUND   malformed or unknown store id
  *   403 STORE_NOT_ACTIVE  the store exists but is not serving (the body carries its status)
+ *   429 RATE_LIMITED      only the ids form is limited: a shopper's browser asks for it, while the catalog is read by the storefront server
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   let preview = false;
@@ -56,6 +58,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (!objectIdSchema.safeParse(id).success) throw storeNotFound();
 
     const query = parseProductListQuery(request.nextUrl.searchParams);
+    if (query.ids !== null) await enforceRateLimit(FAVOURITES_LIMIT, id, request.headers);
     preview = query.ids === null && (await isPreviewRequest(request, id));
     const headers = preview ? PREVIEW_RESPONSE_HEADERS : PUBLIC_CACHE_HEADERS;
 

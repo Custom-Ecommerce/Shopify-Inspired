@@ -1,6 +1,5 @@
 import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from '@markaz/contracts';
 import { toWholeRupees } from '@/lib/contracts';
-import { StorefrontHttpError } from './errors';
 import { computeTotals, roundMoney } from './pricing';
 import type { PricingStore } from './pricing';
 import { availabilityOf, canSupply, resolveVariant, unitsLeft, type CheckoutVariant } from './variant';
@@ -44,9 +43,9 @@ interface ResolvedLine {
  * Lines that cannot be bought carry an issue and are left out of the totals. The same rule the order uses: a variant is
  * out of stock when it has no units, and short when its units cannot cover the quantity.
  *
- * A product with several variants and no variantId is a 422 VARIANT_REQUIRED, the answer an order gets, because the
- * cart has no way to price what it cannot name. A variantId that does not belong to the product is a line issue, since
- * a seller can delete a variant while it sits in a shopper's cart.
+ * A product with several variants and no variantId is a line issue, unknown_variant, because the cart cannot price what
+ * it cannot name; the rest of the cart is still shown. (Placing such an order is a 422 VARIANT_REQUIRED.) A variantId that
+ * does not belong to the product is the same issue, since a seller can delete a variant while it sits in a shopper's cart.
  *
  * `unavailable` holds the products of this store that exist but are not for sale (D-037): a draft, an unedited demo, or
  * one in trash. Their lines are refused with product_unavailable, and say nothing else about the product.
@@ -74,10 +73,7 @@ export function buildCartQuote(
       continue;
     }
     const match = resolveVariant(row.variants, line.variantId);
-    if (match.kind === 'variant_required') {
-      throw new StorefrontHttpError(422, 'VARIANT_REQUIRED', 'Choose a variant of this product.', { productId: line.productId });
-    }
-    if (match.kind === 'unknown_variant') {
+    if (match.kind !== 'ok') {
       lines.push(refusal(line, row.title, 'unknown_variant'));
       continue;
     }

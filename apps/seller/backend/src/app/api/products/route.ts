@@ -151,7 +151,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const created = await withSkuGuard(() => Product.create(document));
 
     const productId = String(created._id);
-    await revalidateStoreProduct(storeId, productId);
+    revalidateStoreProduct(storeId, productId);
     return NextResponse.json(await loadSellerProduct(storeId, productId), { status: 201 });
   } catch (err) {
     return handleProductError(err);

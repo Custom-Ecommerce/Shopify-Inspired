@@ -77,7 +77,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         order: body.data.order ?? (await nextCategoryOrder(storeId)),
         store: storeId,
       });
-      await revalidateStoreCategories(storeId);
+      revalidateStoreCategories(storeId);
       return NextResponse.json(toWire(plainDoc(created)), { status: 201 });
     } catch (err) {
       if (isDuplicateKeyError(err)) return slugTaken();

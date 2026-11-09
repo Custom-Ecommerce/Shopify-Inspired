@@ -243,7 +243,8 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
           availableQty: null,
         };
       }
-      const variant = variantOf(product, line.variantId);
+      // A product with several variants and no choice is a line issue here, as on the backend. Only an order is refused.
+      const variant = line.variantId === undefined && product.variants.length !== 1 ? null : variantOf(product, line.variantId);
       if (!variant) {
         return {
           productId: product.id,

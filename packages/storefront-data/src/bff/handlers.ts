@@ -311,6 +311,10 @@ async function products(request: Request, context: BffRouteContext, deps: BffDep
     const data = await lookup.transport.getProductsByIds(requestedIds(request));
     return jsonResponse(200, { data, page: 1, totalPages: data.length > 0 ? 1 : 0, totalDocs: data.length, limit: FAVOURITES_PAGE_SIZE });
   } catch (error) {
+    if (error instanceof OrderRejectedError) {
+      const envelope = rejectionToEnvelope(error.rejection);
+      return errorResponse(envelope.status, envelope.code, envelope.message, envelope.extra);
+    }
     if (error instanceof TransportUnavailableError) {
       return errorResponse(503, "STOREFRONT_UNAVAILABLE", "Storefront data is temporarily unavailable.");
     }

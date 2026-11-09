@@ -39,7 +39,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (preview) throw previewOrderBlocked();
     const { id } = await context.params;
     assertStoreId(id);
-    enforceRateLimit(ORDER_CREATE_LIMIT, id, request.headers);
+    await enforceRateLimit(ORDER_CREATE_LIMIT, id, request.headers);
     const store = await loadActiveStore(id);
 
     const parsed = parseCreateOrderRequest(await readJsonBody(request), request.headers.get('idempotency-key'));

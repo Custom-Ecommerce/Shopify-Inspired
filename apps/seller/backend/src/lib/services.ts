@@ -24,6 +24,7 @@ export const {
 
 export const User = db.User;
 export const AuditLog = db.AuditLog;
+export const RateLimitCounter = db.RateLimitCounter;
 
 /**
  * Loaded on first use. @markaz/billing creates its Stripe client at import time, which needs

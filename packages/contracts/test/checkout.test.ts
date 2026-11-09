@@ -51,6 +51,10 @@ for (const phone of [
   '+92 (300) 1234567',
   '00923001234567',
   '0092 300 1234567',
+  '+92 0300 1234567',
+  '+920300-1234567',
+  '92 0300 1234567',
+  '0092 0300 1234567',
   '0300 1234567', // no-break space
   '0300–1234567', // en dash
   '0300‑1234567', // non-breaking hyphen
@@ -71,6 +75,7 @@ for (const [name, phone] of [
   ['Urdu digits with dashes', urdu('0300-1234567')],
   ['Urdu digits with +92', '+' + urdu('923001234567')],
   ['Urdu digits with 92', urdu('92 300 1234567')],
+  ['Urdu digits with +92 and the 0 kept', '+' + urdu('92 0300 1234567')],
   ['Arabic digits', arabic('03001234567')],
   ['Urdu and ASCII digits mixed', urdu('0300') + '1234567'],
 ] as const) {
@@ -97,7 +102,9 @@ for (const [why, phone] of [
   ['mobile prefix 04', '04001234567'],
   ['another country', '+14155550123'],
   ['indian number', '+919876543210'],
-  ['+92 with the leading 0 kept', '+9203001234567'],
+  ['+92 with two zeros', '+92003001234567'],
+  ['+92 0 then a landline', '+920212345678'],
+  ['+92 0 and too short', '+9203001234'],
   ['plus in the middle', '0300+1234567'],
   ['two pluses', '++923001234567'],
   ['plus at the end', '03001234567+'],

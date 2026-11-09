@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import type { OrderStockRestore, OrderStockSkipReason } from '@markaz/contracts';
 import { Product } from '@/lib/services';
+import { revalidateStoreProduct } from '@/lib/revalidate';
 import { recordMovement } from '@/lib/storefront/stock';
 
 /*
@@ -67,6 +68,7 @@ export async function restoreOrderStock(
   lines: readonly RestoreLine[],
 ): Promise<OrderStockRestore> {
   const result: OrderStockRestore = { restored: [], skipped: [], failed: [] };
+  const backInStock = new Set<string>();
 
   for (const line of lines) {
     const name = lineName(line);
@@ -99,7 +101,9 @@ export async function restoreOrderStock(
         .lean()) as unknown as { variants: VariantStock[] } | null;
 
       if (after) {
-        await recordMovement(storeId, line.productId, line.variantId, stockOf(after, line.variantId), qty, ORDER_CANCELLED_REASON, actorId, orderId);
+        const quantity = stockOf(after, line.variantId);
+        if (quantity !== null && quantity > 0 && quantity - qty <= 0) backInStock.add(line.productId);
+        await recordMovement(storeId, line.productId, line.variantId, quantity, qty, ORDER_CANCELLED_REASON, actorId, orderId);
         result.restored.push({ name, sku: line.sku ?? null, qty });
         continue;
       }
@@ -113,6 +117,7 @@ export async function restoreOrderStock(
     }
   }
 
+  for (const productId of backInStock) revalidateStoreProduct(storeId, productId);
   return result;
 }
 

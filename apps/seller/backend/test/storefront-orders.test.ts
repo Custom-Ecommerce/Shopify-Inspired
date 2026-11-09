@@ -26,6 +26,7 @@ let lookupPOST: (r: NextRequest, c: any) => Promise<Response>;
 
 before(async () => {
   process.env.SELLER_MONGODB_URI = 'mongodb://stub.invalid/seller';
+  process.env.TRUSTED_PROXY_HOPS = '1';
   createPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/route')).POST;
   lookupPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/lookup/route')).POST;
 });

@@ -37,8 +37,9 @@ const stockOf = (row: { variants: VariantStock[] }, variantId: string): number |
  * The movement record is a second write. It only records; the conditional update is what protects the stock, so a
  * failure there is logged and does not fail the order.
  *
- * Returns whether units were actually taken (D-066): true after the decrement, false for a variant that does not track
- * quantity. orderId, when given, is written on the movement so the order's stock history can be found.
+ * Returns whether units were actually taken (D-066): false for a variant that does not track quantity. soldOut says this
+ * took the variant's last units, which shoppers can see. orderId, when given, is written on the movement so the order's
+ * stock history can be found.
  */
 export async function reserveStock(
   storeId: string,
@@ -46,7 +47,7 @@ export async function reserveStock(
   variantId: string,
   qty: number,
   orderId?: string,
-): Promise<boolean> {
+): Promise<{ deducted: boolean; soldOut: boolean }> {
   const owner = { _id: productId, ...liveProductFilter(storeId) };
 
   const after = (await Product.findOneAndUpdate(
@@ -58,12 +59,13 @@ export async function reserveStock(
     .lean()) as unknown as { variants: VariantStock[] } | null;
 
   if (after) {
-    await recordMovement(storeId, productId, variantId, stockOf(after, variantId), -qty, 'storefront_order', null, orderId);
-    return true;
+    const remaining = stockOf(after, variantId);
+    await recordMovement(storeId, productId, variantId, remaining, -qty, 'storefront_order', null, orderId);
+    return { deducted: true, soldOut: remaining !== null && remaining <= 0 };
   }
 
   const untracked = await Product.exists({ ...owner, variants: { $elemMatch: { _id: variantId, trackQuantity: false } } });
-  if (untracked) return false;
+  if (untracked) return { deducted: false, soldOut: false };
 
   const live = await Product.exists({ ...owner, variants: { $elemMatch: { _id: variantId } } });
   throw live ? outOfStock(productId, variantId) : productUnavailable(productId);

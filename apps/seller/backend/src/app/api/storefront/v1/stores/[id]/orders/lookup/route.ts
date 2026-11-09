@@ -37,7 +37,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   try {
     const { id } = await context.params;
     assertStoreId(id);
-    enforceRateLimit(ORDER_LOOKUP_LIMIT, id, request.headers);
+    await enforceRateLimit(ORDER_LOOKUP_LIMIT, id, request.headers);
     const store = await loadActiveStore(id);
 
     const { orderId, phone } = parseLookupRequest(await readJsonBody(request));

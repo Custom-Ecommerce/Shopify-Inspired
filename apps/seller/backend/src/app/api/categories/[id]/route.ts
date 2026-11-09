@@ -64,7 +64,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
         { new: true, runValidators: true },
       ).lean();
       if (!updated) throw categoryNotFound();
-      await revalidateStoreCategories(storeId);
+      revalidateStoreCategories(storeId);
       return NextResponse.json(toWire(plainDoc(updated)));
     } catch (err) {
       if (isDuplicateKeyError(err)) return slugTaken();
@@ -101,7 +101,7 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     }
 
     await Category.deleteOne({ _id: id, store: storeId });
-    await revalidateStoreCategories(storeId);
+    revalidateStoreCategories(storeId);
     return NextResponse.json({ deleted: true, id });
   } catch (err) {
     return handleRouteError(err);

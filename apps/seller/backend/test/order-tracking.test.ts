@@ -47,6 +47,7 @@ let lookupPOST: (request: NextRequest, context: { params: Promise<{ id: string }
 before(async () => {
   process.env.SELLER_AUTH_SECRET = SECRET;
   process.env.SELLER_MONGODB_URI = 'mongodb://stub.invalid/seller';
+  process.env.TRUSTED_PROXY_HOPS = '1';
   tokenA = await signSession({ sub: USER_A, role: 'seller' }, SECRET, SELLER_AUDIENCE);
   tokenB = await signSession({ sub: USER_B, role: 'seller' }, SECRET, SELLER_AUDIENCE);
   tokenAdmin = await signSession({ sub: ADMIN, role: 'admin' }, SECRET, SELLER_AUDIENCE);
@@ -466,7 +467,7 @@ test('customer tracking: dates use the first time a status was reached; an old o
   });
 });
 
-test('customer tracking: rate limited per client and store, sharing the lookup bucket', async () => {
+test('customer tracking: rate limited per client and store, separately from the order lookup', async () => {
   seedOrder('confirmed');
   const ip = '198.51.100.20';
   for (let i = 0; i < 10; i += 1) {
@@ -475,9 +476,9 @@ test('customer tracking: rate limited per client and store, sharing the lookup b
   const limited = await track({ orderId: 'ORD-ABCD2345', phone: '0300 1234567' }, STORE_A, ip);
   assert.equal(limited.status, 429);
   assert.equal(limited.body.error.code, 'RATE_LIMITED');
-  // The order lookup counts against the same window.
+  // The order lookup has its own count.
   const lookup = await shopperPost(lookupPOST, STORE_A, { orderId: 'ORD-ABCD2345', phone: '0300 1234567' }, ip);
-  assert.equal(lookup.status, 429);
+  assert.equal(lookup.status, 200);
   // Another client is not affected.
   assert.equal((await track({ orderId: 'ORD-ABCD2345', phone: '0300 1234567' }, STORE_A, '198.51.100.21')).status, 200);
 });

@@ -2,7 +2,8 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { assertCan, signSession, User, Discount, Review } from '@/lib/services';
+import { assertCan, signSession, User, Discount, Review, Product } from '@/lib/services';
+import { settleRevalidations } from '../src/lib/revalidate';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 
 const SECRET = 'x'.repeat(40);
@@ -260,6 +261,33 @@ test('a seller can approve a review in their store', async () => {
     assert.equal(body.status, 'approved');
   } finally {
     restore();
+  }
+});
+
+test('a review status change purges the product it belongs to', async () => {
+  seed();
+  reviews[0]!.product = '65a0000000000000000000b1';
+  const restore = installStubs();
+  const saved = { fetch: globalThis.fetch, findById: (Product as any).findById };
+  const purged: string[][] = [];
+  process.env.STOREFRONT_URL = 'http://storefront.test';
+  process.env.REVALIDATE_SECRET = 'purge-secret';
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    purged.push(JSON.parse(String(init.body)).tags);
+    return new Response('{}');
+  }) as typeof fetch;
+  (Product as any).findById = () => ({ select: () => ({ lean: async () => ({ slug: 'blue-shirt' }) }) });
+  try {
+    const response = await reviewItem.PATCH(authed('PATCH', 'http://seller.test/api/reviews/' + REV1, { status: 'approved' }), params(REV1));
+    assert.equal(response.status, 200);
+    await settleRevalidations();
+    assert.deepEqual(purged, [['store:' + STORE + ':product:blue-shirt', 'store:' + STORE + ':products', 'store:' + STORE + ':categories']]);
+  } finally {
+    restore();
+    globalThis.fetch = saved.fetch;
+    (Product as any).findById = saved.findById;
+    delete process.env.STOREFRONT_URL;
+    delete process.env.REVALIDATE_SECRET;
   }
 });
 
