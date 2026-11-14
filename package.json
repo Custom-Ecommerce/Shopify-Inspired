@@ -16,14 +16,10 @@
     "lint": "turbo run lint",
     "dev:seller-portal": "turbo run dev --filter=@markaz/seller-portal",
     "dev:seller-backend": "turbo run dev --filter=@markaz/seller-backend",
+    "typecheck": "turbo run type-check --continue",
     "type-check:all": "pnpm -r run type-check",
-    "check:no-payload": "node tools/check-no-payload.js",
     "test": "pnpm -r --if-present run test",
-    "prelaunch": "node tools/prelaunch/check.js",
-    "dev:admin-frontend": "pnpm --filter @markaz/admin-frontend dev",
-    "check:tokens": "pnpm --filter @markaz/admin-frontend run check:tokens",
-    "check:no-shopify": "node tools/check-no-shopify.js",
-    "stiletto:verify": "node tools/stiletto-patch/verify.mjs"
+    "dev:admin-frontend": "pnpm --filter @markaz/admin-frontend dev"
   },
   "devDependencies": {
     "turbo": "^2.1.3",

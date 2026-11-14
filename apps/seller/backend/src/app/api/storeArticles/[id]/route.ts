@@ -5,7 +5,8 @@ import { authenticate } from '@/lib/auth';
 import { HttpError, handleRouteError, jsonError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, StoreArticle } from '@/lib/services';
-import { plainDoc, requireSellerStoreId, toWire } from '@/lib/seller-scope';
+import { plainDoc, toWire } from '@/lib/seller-scope';
+import { resolveOwnedStoreId } from '@/lib/data-plane';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const doc = await StoreArticle.findOne({ _id: id, store: storeId }).lean();
     if (!doc) throw new HttpError(404, 'Article not found');

@@ -46,3 +46,13 @@ Thumbs.db
 csv-files/
 # EP-01 verification run: holds test passwords and session tokens
 verify/
+
+# Sprint 4 SB-1 (EP-06.US05): junk that must not come back
+# Backup copies and archives
+*.orig
+*.zip
+.backup/
+# Batch reports and review output (the owner archives these outside git)
+*_REPORT.txt
+*_CHANGES.txt
+_review/

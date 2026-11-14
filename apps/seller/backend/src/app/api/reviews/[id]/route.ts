@@ -7,7 +7,8 @@ import { parseBody } from '@/lib/placeholder';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, Review } from '@/lib/services';
 import { revalidateStoreProduct } from '@/lib/revalidate';
-import { plainDoc, requireSellerStoreId, toWire } from '@/lib/seller-scope';
+import { plainDoc, toWire } from '@/lib/seller-scope';
+import { resolveOwnedStoreId } from '@/lib/data-plane';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'reviews');
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const doc = await Review.findOne({ _id: id, store: storeId }).lean();
     if (!doc) throw new HttpError(404, 'Review not found');
@@ -48,7 +49,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     if (!body.ok) return body.response;
     assertCan(ctx.actor, 'update', 'reviews', ['status']);
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const updated = await Review.findOneAndUpdate(
       { _id: id, store: storeId },

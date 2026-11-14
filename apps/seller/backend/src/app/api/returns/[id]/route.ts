@@ -6,7 +6,8 @@ import { HttpError, handleRouteError, jsonError } from '@/lib/http';
 import { parseBody } from '@/lib/placeholder';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, Return } from '@/lib/services';
-import { plainDoc, requireSellerStoreId, toWire } from '@/lib/seller-scope';
+import { plainDoc, toWire } from '@/lib/seller-scope';
+import { resolveOwnedStoreId } from '@/lib/data-plane';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'returns');
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const doc = await Return.findOne({ _id: id, store: storeId }).lean();
     if (!doc) throw new HttpError(404, 'Return not found');
@@ -50,7 +51,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     if (!body.ok) return body.response;
     assertCan(ctx.actor, 'update', 'returns', Object.keys(body.data));
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const current = await Return.findOne({ _id: id, store: storeId }).lean();
     if (!current) throw new HttpError(404, 'Return not found');

@@ -4,7 +4,8 @@ import { authenticate } from '@/lib/auth';
 import { HttpError, handleRouteError, jsonError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, listEnvelope, Review } from '@/lib/services';
-import { plainDoc, requireSellerStoreId, toWire } from '@/lib/seller-scope';
+import { plainDoc, toWire } from '@/lib/seller-scope';
+import { resolveOwnedStoreId } from '@/lib/data-plane';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const limit = parseIntParam(params.get('limit'), 20, 1, 100);
 
     await requireDatabase();
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
     const filter: Record<string, unknown> = { store: storeId };
     if (status !== null) filter.status = status;
 

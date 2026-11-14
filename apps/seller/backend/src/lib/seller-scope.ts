@@ -1,19 +1,8 @@
-import { HttpError } from '@/lib/http';
-import type { AuthContext } from '@/lib/auth';
-import { Store, User } from '@/lib/services';
-
-/**
- * The store the signed-in seller owns. A seller account has one store (User.store). A seller with no store
- * gets 404: there is nothing to read or change.
+/*
+ * Wire helpers shared by the seller routes. The store a request is about comes from resolveOwnedStoreId in
+ * '@/lib/data-plane' (x-store-id verified against Store.owner); the old first-store lookup was removed in
+ * Sprint 4 SB-1 (CO-57).
  */
-export async function requireSellerStoreId(ctx: AuthContext): Promise<string> {
-  const user = (await User.findById(ctx.userObjectId).select('store').lean()) as { store?: unknown } | null;
-  if (user && user.store) return String(user.store);
-  /* patch_orders_fix: stores created through the workspace flow are linked by Store.owner, not User.store */
-  const owned = (user ? await Store.findOne({ owner: ctx.userObjectId }).sort({ createdAt: 1 }).select("_id").lean() : null) as unknown as { _id: unknown } | null;
-  if (!owned) throw new HttpError(404, 'No store is linked to this account');
-  return String(owned._id);
-}
 
 /** Wire form: id instead of _id, and no Mongoose bookkeeping field. */
 export function toWire(doc: Record<string, unknown>): Record<string, unknown> {

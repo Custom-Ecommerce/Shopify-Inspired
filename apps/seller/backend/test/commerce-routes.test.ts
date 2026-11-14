@@ -465,3 +465,25 @@ test('there is no delete route for a seller', async () => {
   assert.equal('DELETE' in collection, false);
   assert.equal('DELETE' in item, false);
 });
+
+/* ------------------------------ Sprint 4 SB-1 (CO-57): verified active store ------------------------------ */
+
+test("Seller B naming Seller A's store id is refused on the review list, detail and status change", () =>
+  withStubs(async () => {
+    const FOREIGN_REVIEW = '65a0000000000000000000e2';
+    reviews.push({ _id: FOREIGN_REVIEW, product: '65a000000000000000000022', store: OTHER_STORE, rating: 1, body: 'Foreign review', images: [], status: 'pending', createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' });
+    const foreign = (method: string, url: string, body?: unknown) => {
+      const request = authed(method, url, body);
+      request.headers.set('x-store-id', OTHER_STORE);
+      return request;
+    };
+    const list = await reviewGET(foreign('GET', 'http://seller.test/api/reviews'));
+    assert.equal(list.status, 403);
+    assert.equal((await list.text()).includes('Foreign review'), false);
+    const detail = await reviewItem.GET(foreign('GET', 'http://seller.test/api/reviews/' + FOREIGN_REVIEW), params(FOREIGN_REVIEW));
+    assert.equal(detail.status, 403);
+    assert.equal((await detail.text()).includes('Foreign review'), false);
+    const patch = await reviewItem.PATCH(foreign('PATCH', 'http://seller.test/api/reviews/' + FOREIGN_REVIEW, { status: 'approved' }), params(FOREIGN_REVIEW));
+    assert.equal(patch.status, 403);
+    assert.equal(reviews.find((r) => r._id === FOREIGN_REVIEW)!.status, 'pending');
+  }));
