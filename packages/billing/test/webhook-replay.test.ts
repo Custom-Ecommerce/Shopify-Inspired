@@ -192,3 +192,23 @@ test('a subscription update is upserted once, and its replay is a duplicate', as
   assert.equal(state.subscriptions[0].stripeSubscriptionId, 'sub_1');
   assert.equal(state.subscriptions[0].status, 'active');
 });
+
+function checkoutEvent(eventId: string, metadata: Doc): Doc {
+  return { id: eventId, object: 'event', type: 'checkout.session.completed', data: { object: { id: 'cs_1', object: 'checkout.session', payment_status: 'paid', amount_total: ORDER_AMOUNT, payment_intent: 'pi_1', metadata } } };
+}
+
+test('D-082: a storefront card order session is left to the seller backend: no ledger row and no failure', async () => {
+  const { raw, signature } = deliver(checkoutEvent('evt_card', { orderId: '65a0000000000000000a0001', storeId: '65a000000000000000000011' }));
+  const result = await handleStripeWebhook(raw, signature);
+  assert.equal(result.status, 200);
+  assert.equal(state.ledger.length, 0);
+  assert.equal(state.releases, 0);
+});
+
+test('D-082: a session with commission details is still recorded here', async () => {
+  const { raw, signature } = deliver(checkoutEvent('evt_commission', { orderRef: 'ORD-9', orderId: 'seller-doc-9', storeId: 'store-1', commissionRate: '4' }));
+  const result = await handleStripeWebhook(raw, signature);
+  assert.equal(result.status, 200);
+  assert.equal(state.ledger.length, 1);
+  assert.equal(state.ledger[0]!.orderId, 'ORD-9');
+});

@@ -303,6 +303,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.2.18)(date-fns@4.4.0)(react-dom@19.0.1(react@19.0.1))(react@19.0.1)
+      '@markaz/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@markaz/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -530,6 +533,9 @@ importers:
 
   packages/storefront-data:
     dependencies:
+      '@markaz/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@markaz/platform-kit':
         specifier: workspace:*
         version: link:../platform-kit
@@ -546,6 +552,9 @@ importers:
       react:
         specifier: 19.0.1
         version: 19.0.1
+      tsx:
+        specifier: ^4.19.1
+        version: 4.23.12
       typescript:
         specifier: ^5
         version: 5.9.3

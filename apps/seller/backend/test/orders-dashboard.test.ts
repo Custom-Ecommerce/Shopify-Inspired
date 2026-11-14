@@ -511,8 +511,8 @@ test('orders: the detail shape, with history and notes newest first', async () =
   assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
   assert.deepEqual(Object.keys(detail).sort(), [
     'address', 'allowedNext', 'canCancel', 'canEditTracking', 'canMarkCollected', 'cancelReason', 'cancelledAt', 'city', 'collectedAmount', 'collectedAt', 'courier', 'createdAt',
-    'customerName', 'deliveryCharges', 'id', 'items', 'notes', 'orderId', 'paymentMethod', 'paymentStatus', 'phone',
-    'status', 'statusHistory', 'subtotal', 'timeline', 'total', 'trackingNumber', 'trackingUrl', 'updatedAt',
+    'customerEmail', 'customerName', 'customerNote', 'customerWhatsapp', 'deliveryCharges', 'discountAmount', 'discountCode', 'id', 'items', 'notes', 'orderId', 'paidAt', 'paymentMethod', 'paymentStatus', 'phone',
+    'status', 'statusHistory', 'stripeSessionId', 'subtotal', 'timeline', 'total', 'trackingNumber', 'trackingUrl', 'updatedAt',
   ]);
   assert.deepEqual(detail.allowedNext, ['delivered']);
   assert.deepEqual(detail.items.map((item: any) => item.lineTotal), [2400, 200]);

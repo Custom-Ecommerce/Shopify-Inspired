@@ -1,4 +1,11 @@
 import { z } from "zod";
+import {
+  STOREFRONT_ORDER_MAX_LINES,
+  storefrontCartQuoteRequestSchema,
+  storefrontCheckoutCustomerSchema,
+  storefrontDiscountCodeSchema,
+  storefrontOrderLineRequestSchema,
+} from "@markaz/contracts/checkout";
 import { MAX_LINE_QTY } from "../domain/cart";
 import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError } from "../transport/errors";
 import type { OrderRejection, OrderTransport } from "../transport/types";
@@ -37,6 +44,8 @@ export interface BffRoutes {
   quote(request: Request, context: BffRouteContext): Promise<Response>;
   submit(request: Request, context: BffRouteContext): Promise<Response>;
   lookup(request: Request, context: BffRouteContext): Promise<Response>;
+  /** The tab that placed an order reading it back with its token. */
+  confirmation(request: Request, context: BffRouteContext): Promise<Response>;
   /** Customer tracking (EP-02 OB-4, D-069): the same body and gates as lookup, the journey-only answer. */
   track(request: Request, context: BffRouteContext): Promise<Response>;
   /** The Live products behind a browser's favourites: GET ?ids=a,b. Public data, so it has no origin gate. */
@@ -50,28 +59,25 @@ export const BFF_MAX_BODY_BYTES = 32 * 1024;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
-const lineSchema = z.object({
-  productId: z.string().trim().min(1).max(64),
-  variantId: z.string().trim().min(1).max(64).optional(),
-  qty: z.number(),
-});
+/** Unknown keys are stripped by these schemas, so a price or a total in the body never reaches the backend. */
+const quoteBody = storefrontCartQuoteRequestSchema;
 
-const quoteBody = z.object({
-  lines: z.array(lineSchema).max(50),
-});
-
+/** The checkout form's own schema. The customer that goes on is its output: the phone in E.164 and the text cleaned. */
 const submitBody = z.object({
-  customer: z.object({
-    customerName: z.string().trim().min(2).max(80),
-    phone: z.string().trim().min(1).max(32),
-    address: z.string().trim().min(10).max(300),
-  }),
-  lines: z.array(lineSchema).max(50),
+  customer: storefrontCheckoutCustomerSchema,
+  lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
+  discountCode: storefrontDiscountCodeSchema.nullish(),
+  paymentMethod: z.enum(["cod", "card"]).optional(),
 });
 
 const lookupBody = z.object({
   orderId: z.string().trim().min(1).max(40),
   phone: z.string().trim().min(1).max(32),
+});
+
+const confirmationBody = z.object({
+  orderNumber: z.string().trim().min(1).max(40),
+  token: z.string().min(1).max(200),
 });
 
 /** The browser gets one shape for every refusal: { error: { code, message }, ...extra }, as the backend sends it. */
@@ -170,9 +176,18 @@ export function rejectionToEnvelope(rejection: OrderRejection): {
         extra: rejection.retryAfterSeconds === null ? {} : { retryAfterSeconds: rejection.retryAfterSeconds },
       };
     case "invalid_request":
-      return { status: 400, code: "INVALID_REQUEST", message: rejection.message, extra: {} };
+      return { status: 400, code: "INVALID_REQUEST", message: rejection.message, extra: rejection.field ? { field: rejection.field } : {} };
     case "store_inactive":
       return { status: 403, code: "STORE_NOT_ACTIVE", message: "This store is not available.", extra: {} };
+    case "payment_not_started":
+      return { status: 502, code: "PAYMENT_NOT_STARTED", message: rejection.message, extra: {} };
+    case "discount_rejected":
+      return {
+        status: rejection.reason === "used_up" ? 409 : 422,
+        code: rejection.reason === "used_up" ? "DISCOUNT_USED_UP" : "DISCOUNT_REJECTED",
+        message: rejection.message,
+        extra: { reason: rejection.reason, field: "discountCode" },
+      };
     default: {
       const unhandled: never = rejection;
       void unhandled;
@@ -204,11 +219,13 @@ function isJson(request: Request): boolean {
   return (request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json");
 }
 
-function firstIssue(error: z.ZodError): string {
+/** The refusal for a bad body: the first problem as "path: message", and the path again as `field`, as the backend sends it. */
+function invalidBody(error: z.ZodError): Response {
   const issue = error.issues[0];
-  if (!issue) return "Invalid request.";
-  const path = issue.path.map(String).join(".");
-  return path ? path + ": " + issue.message : issue.message;
+  if (!issue) return errorResponse(400, "INVALID_REQUEST", "Invalid request.");
+  const field = issue.path.map(String).join(".");
+  if (field === "") return errorResponse(400, "INVALID_REQUEST", issue.message);
+  return errorResponse(400, "INVALID_REQUEST", field + ": " + issue.message, { field });
 }
 
 type ReadBody = { ok: true; value: unknown } | { ok: false; response: Response };
@@ -272,7 +289,7 @@ async function handle<T>(
   const body = await readJson(request);
   if (!body.ok) return body.response;
   const parsed = schema.safeParse(body.value);
-  if (!parsed.success) return errorResponse(400, "INVALID_REQUEST", firstIssue(parsed.error));
+  if (!parsed.success) return invalidBody(parsed.error);
 
   try {
     const outcome = await run(lookup.transport, parsed.data, idempotencyKey);
@@ -313,6 +330,10 @@ async function products(request: Request, context: BffRouteContext, deps: BffDep
     const data = await lookup.transport.getProductsByIds(requestedIds(request));
     return jsonResponse(200, { data, page: 1, totalPages: data.length > 0 ? 1 : 0, totalDocs: data.length, limit: FAVOURITES_PAGE_SIZE });
   } catch (error) {
+    if (error instanceof OrderRejectedError) {
+      const envelope = rejectionToEnvelope(error.rejection);
+      return errorResponse(envelope.status, envelope.code, envelope.message, envelope.extra);
+    }
     if (error instanceof TransportUnavailableError) {
       return errorResponse(503, "STOREFRONT_UNAVAILABLE", "Storefront data is temporarily unavailable.");
     }
@@ -329,19 +350,28 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
       handle(request, context, quoteBody, deps, { needsIdempotencyKey: false }, async (transport, input) => ({
         kind: "data",
         status: 200,
-        data: await transport.quoteCart({ lines: input.lines }),
+        data: await transport.quoteCart({ lines: input.lines, discountCode: input.discountCode }),
       })),
 
     submit: (request, context) =>
       handle(request, context, submitBody, deps, { needsIdempotencyKey: true, outcomeMayBeUnknown: true }, async (transport, input, key) => ({
         kind: "data",
         status: 201,
-        data: await transport.submitOrder({ idempotencyKey: key, customer: input.customer, lines: input.lines }),
+        data: await transport.submitOrder({ idempotencyKey: key, customer: input.customer, lines: input.lines, discountCode: input.discountCode, paymentMethod: input.paymentMethod }),
       })),
 
     lookup: (request, context) =>
       handle(request, context, lookupBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
         const order = await transport.lookupOrder({ orderId: input.orderId, phone: input.phone });
+        if (order === null) {
+          return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
+        }
+        return { kind: "data", status: 200, data: order };
+      }),
+
+    confirmation: (request, context) =>
+      handle(request, context, confirmationBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        const order = await transport.confirmOrder({ orderNumber: input.orderNumber, token: input.token });
         if (order === null) {
           return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
         }

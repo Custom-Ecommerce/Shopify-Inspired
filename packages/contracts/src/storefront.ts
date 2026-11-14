@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { STOCK_STATUSES } from './stock-status';
+import { STOREFRONT_ORDER_MAX_LINES, storefrontCheckoutCustomerSchema, storefrontDiscountCodeSchema, storefrontOrderLineRequestSchema } from './checkout';
 
 /**
  * Storefront wire contract (Track B). The seller backend serves these shapes under
@@ -50,6 +51,11 @@ export const STOREFRONT_ERROR_CODES = [
   'PRODUCT_UNAVAILABLE',
   // Seller preview: an order sent from a preview is never placed.
   'PREVIEW_ORDER_BLOCKED',
+  // Discounts (D-080).
+  'DISCOUNT_REJECTED',
+  'DISCOUNT_USED_UP',
+  // Card payment (D-082).
+  'PAYMENT_NOT_STARTED',
 ] as const;
 export type StorefrontErrorCode = (typeof STOREFRONT_ERROR_CODES)[number];
 
@@ -182,9 +188,6 @@ export type StorefrontProductListResponse = z.infer<typeof storefrontProductList
 /** A product slug is one path segment: no whitespace, no slashes. Anything else cannot be a product. */
 export const STOREFRONT_PRODUCT_SLUG_PATTERN = /^[^\s/\\]{1,200}$/;
 export const STOREFRONT_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
-export const STOREFRONT_ORDER_MAX_LINES = 50;
-export const STOREFRONT_ORDER_MAX_QTY = 99;
-
 export const STOREFRONT_PAYMENT_METHODS = ['cod', 'card'] as const;
 export type StorefrontPaymentMethod = (typeof STOREFRONT_PAYMENT_METHODS)[number];
 
@@ -204,13 +207,15 @@ export const storefrontProductOptionSchema = z.object({
   values: z.array(z.string()),
 });
 
-/** A variant as a shopper sees it. No sku, no barcode, no stock count: availability is all a shopper needs. */
+/** A variant as a shopper sees it. No sku, no barcode, and no stock count beyond onlyLeft. */
 export const storefrontProductVariantSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
   price,
   compareAtPrice: price.nullable(),
   availability: z.enum(STOCK_STATUSES),
+  /** Units left, only when there are few (STOCK_WARNING_THRESHOLD or fewer) and at least one. A larger count is never shown. */
+  onlyLeft: z.number().int().positive().nullable().default(null),
   optionValues: z.array(z.string()),
   imageId: z.string().nullable(),
 });
@@ -234,31 +239,14 @@ export const storefrontProductDetailSchema = storefrontProductSummarySchema.exte
 
 export const storefrontProductDetailResponseSchema = z.object({ data: storefrontProductDetailSchema });
 
-export const storefrontCheckoutCustomerSchema = z.object({
-  customerName: z.string().trim().min(2).max(80),
-  /** Normalised to E.164 by the server; any Pakistani mobile format is accepted. */
-  phone: z.string().trim().min(1).max(32),
-  address: z.string().trim().min(10).max(300),
-  city: z.string().trim().min(2).max(60).nullish(),
-});
-
-/**
- * One cart line. qty is only checked as a number here: the range and integer rules live in the handler so a
- * bad quantity is reported as INVALID_QUANTITY with the offending productId, not as a generic schema error.
- */
-export const storefrontOrderLineRequestSchema = z.object({
-  productId: z.string().trim().min(1).max(64),
-  /** May be left out only for a product with exactly one variant. Otherwise the answer is 422 VARIANT_REQUIRED. */
-  variantId: z.string().trim().min(1).max(64).optional(),
-  qty: z.number(),
-});
-
 export const storefrontCreateOrderRequestSchema = z.object({
   /** Also accepted as the Idempotency-Key header, which wins when both are present. */
   idempotencyKey: z.string().regex(STOREFRONT_IDEMPOTENCY_KEY_PATTERN).optional(),
   customer: storefrontCheckoutCustomerSchema,
   lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
   paymentMethod: z.enum(STOREFRONT_PAYMENT_METHODS).optional(),
+  /** One code per order. Empty counts as none. */
+  discountCode: storefrontDiscountCodeSchema.nullish(),
 });
 
 export const storefrontOrderCreatedSchema = z.object({
@@ -267,16 +255,31 @@ export const storefrontOrderCreatedSchema = z.object({
   paymentMethod: z.enum(STOREFRONT_PAYMENT_METHODS),
   subtotal: price,
   deliveryCharges: price,
+  /** Rupees taken off the subtotal by a code. */
+  discount: price.default(0),
   total: price,
   createdAt: z.string().min(1),
 });
 
 /** Superset of the provisional WireOrderCreated ({ data: { orderId, total } }) the storefront already parses. */
-export const storefrontOrderCreatedResponseSchema = z.object({ data: storefrontOrderCreatedSchema });
+export const storefrontOrderCreatedResponseSchema = z.object({
+  data: storefrontOrderCreatedSchema.extend({
+    /** Where the shopper pays a card order. Null for cash on delivery, or when nothing is left to pay. */
+    checkoutUrl: z.string().min(1).nullable().default(null),
+    /** Lets the tab that placed this order read it back for 24 hours, without a phone number. Null when not configured. */
+    accessToken: z.string().min(1).nullable().default(null),
+  }),
+});
 
 export const storefrontOrderLookupRequestSchema = z.object({
   orderId: z.string().trim().min(1).max(40),
   phone: z.string().trim().min(1).max(32),
+});
+
+/** The tab that placed an order reading it back. The answer is the lookup's. */
+export const storefrontOrderConfirmationRequestSchema = z.object({
+  orderNumber: z.string().trim().min(1).max(40),
+  token: z.string().min(1).max(200),
 });
 
 export const storefrontOrderItemSchema = z.object({
@@ -294,6 +297,8 @@ export const storefrontOrderSchema = storefrontOrderCreatedSchema.extend({
   phone: z.string(),
   city: nullableText,
   address: z.string(),
+  discountCode: nullableText.default(null),
+  paymentStatus: z.enum(['unpaid', 'collected', 'paid']).default('unpaid'),
   items: z.array(storefrontOrderItemSchema),
   updatedAt: z.string().min(1),
 });
@@ -336,38 +341,6 @@ export const storefrontOrderTrackingResponseSchema = z.object({ data: storefront
 
 export type StorefrontOrderTrackingDates = z.output<typeof storefrontOrderTrackingDatesSchema>;
 export type StorefrontOrderTracking = z.output<typeof storefrontOrderTrackingSchema>;
-
-/** Cart quote. The request carries product ids and quantities only; the response is priced by the server. */
-export const storefrontCartQuoteRequestSchema = z.object({
-  lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
-});
-
-export const storefrontCartQuoteIssueSchema = z.enum(['unknown_product', 'product_unavailable', 'unknown_variant', 'out_of_stock', 'insufficient_stock']);
-
-export const storefrontCartQuoteLineSchema = z.object({
-  productId: z.string(),
-  variantId: z.string().nullable(),
-  title: z.string().nullable(),
-  variantTitle: z.string().nullable(),
-  unitPrice: price.nullable(),
-  qty: z.number().int(),
-  lineTotal: price.nullable(),
-  issue: storefrontCartQuoteIssueSchema.nullable(),
-  availableQty: z.number().int().nonnegative().nullable(),
-});
-
-export const storefrontCartQuoteSchema = z.object({
-  lines: z.array(storefrontCartQuoteLineSchema),
-  subtotal: price,
-  deliveryCharges: price,
-  total: price,
-  canCheckout: z.boolean(),
-});
-
-export const storefrontCartQuoteResponseSchema = z.object({ data: storefrontCartQuoteSchema });
-
-export type StorefrontCartQuoteDto = z.infer<typeof storefrontCartQuoteSchema>;
-
 
 export type StorefrontProductDetailDto = z.infer<typeof storefrontProductDetailSchema>;
 export type StorefrontCreateOrderRequest = z.infer<typeof storefrontCreateOrderRequestSchema>;

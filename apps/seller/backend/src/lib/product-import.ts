@@ -214,7 +214,7 @@ async function createFromRows(handle: string, rows: readonly CsvRow[], context: 
   if (context.dryRun) return;
 
   const created = await withSkuGuard(() => Product.create({ ...document, isPublished: publish }));
-  await revalidateStoreProduct(context.storeId, String(created._id));
+  revalidateStoreProduct(context.storeId, String(created._id));
 }
 
 /**
@@ -322,7 +322,7 @@ async function updateFromRows(handle: string, rows: readonly CsvRow[], current: 
       .select('_id')
       .lean();
   }
-  await revalidateStoreProduct(context.storeId, id);
+  revalidateStoreProduct(context.storeId, id);
 }
 
 function refusalOf(err: unknown, firstRow: number): RowProblem {

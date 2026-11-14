@@ -6,7 +6,7 @@ import {
   ProductListResponse,
   type StorefrontProductDetail,
 } from "./schemas";
-import { storeProductsTag } from "./tags";
+import { storeProductTag, storeProductsTag, storeSettingsTag, storeStaticTag } from "./tags";
 
 export const PRODUCTS_REVALIDATE_SECONDS = 600;
 
@@ -48,7 +48,7 @@ export async function fetchProducts(storeId: string, params: ProductListParams =
       page: params.page,
       limit: params.limit,
     },
-    tags: [storeProductsTag(storeId)],
+    tags: [storeProductsTag(storeId), storeStaticTag(storeId)],
     revalidate: params.q?.trim() ? PRODUCT_SEARCH_REVALIDATE_SECONDS : PRODUCTS_REVALIDATE_SECONDS,
   });
   return parseResponse(ProductListResponse, body, "product list");
@@ -57,15 +57,15 @@ export async function fetchProducts(storeId: string, params: ProductListParams =
 /**
  * GET /stores/:storeId/products/:slug
  *
- * Tagged `store:<id>:products`. The per-product tag (`store:<id>:product:<pid>`)
- * cannot be attached here because a slug lookup does not know the product id
- * until the response arrives. Throws `ProductNotFoundError` when absent.
+ * Tagged with this product's slug, the store's product list, and its settings
+ * (the delivery charge falls back to the store's rate). Throws
+ * `ProductNotFoundError` when absent.
  */
 export async function fetchProductBySlug(storeId: string, slug: string): Promise<StorefrontProductDetail> {
   const body = await sellerGet(
     `${STOREFRONT_API_PREFIX}/stores/${encodeURIComponent(storeId)}/products/${encodeURIComponent(slug)}`,
     {
-      tags: [storeProductsTag(storeId)],
+      tags: [storeProductTag(storeId, slug), storeProductsTag(storeId), storeSettingsTag(storeId), storeStaticTag(storeId)],
       revalidate: PRODUCTS_REVALIDATE_SECONDS,
     },
   );

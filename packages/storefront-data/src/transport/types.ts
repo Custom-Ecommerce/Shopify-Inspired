@@ -58,13 +58,14 @@ export interface StorefrontProductOption {
   values: string[];
 }
 
-/** A variant as a shopper sees it. Availability only: stock counts, SKUs and barcodes never reach a storefront. */
+/** A variant as a shopper sees it. onlyLeft is the only count there is, and only when few remain. Otherwise availability only: stock counts, SKUs and barcodes never reach a storefront. */
 export interface StorefrontProductVariant {
   id: string;
   title: string;
   price: number;
   compareAtPrice: number | null;
   availability: StockStatus;
+  onlyLeft?: number | null;
   optionValues: string[];
   imageId: string | null;
 }
@@ -92,7 +93,12 @@ export interface CheckoutCustomer {
   customerName: string;
   /** E.164, for example +923001234567. Any Pakistani mobile format is accepted; the server normalises it. */
   phone: string;
+  /** Only when it differs from the phone. */
+  whatsapp?: string | null;
   address: string;
+  city: string;
+  email?: string | null;
+  note?: string | null;
 }
 
 export interface SubmitOrderLine {
@@ -107,17 +113,27 @@ export interface SubmitOrderPayload {
   customer: CheckoutCustomer;
   /** Prices are not sent. The server prices the order itself. */
   lines: SubmitOrderLine[];
+  /** One code per order. */
+  discountCode?: string | null;
+  /** Left out means cash on delivery. */
+  paymentMethod?: PaymentMethod;
 }
 
 export interface SubmitOrderResult {
   orderId: string;
   /** Server-computed total in PKR. */
   total: number;
+  /** Where the shopper pays a card order. */
+  checkoutUrl?: string | null;
+  /** Lets the tab that placed the order read it back. */
+  accessToken?: string | null;
 }
 
 export type OrderStatus = "pending" | "confirmed" | "processing" | "dispatched" | "delivered" | "cancelled" | "returned";
 
 export type PaymentMethod = "cod" | "card";
+
+export type PaymentStatus = "unpaid" | "collected" | "paid";
 
 export interface StorefrontOrderItem {
   productId: string;
@@ -135,8 +151,10 @@ export interface StorefrontOrder {
   orderId: string;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
   subtotal: number;
   deliveryCharges: number;
+  discount: number;
   total: number;
   createdAt: string;
   updatedAt: string;
@@ -194,11 +212,20 @@ export type OrderRejection =
   | { code: "payment_method_unavailable" }
   | { code: "idempotency_conflict" }
   | { code: "rate_limited"; retryAfterSeconds: number | null }
-  | { code: "invalid_request"; message: string }
-  | { code: "store_inactive" };
+  | { code: "invalid_request"; message: string; field?: string }
+  | { code: "store_inactive" }
+  | { code: "discount_rejected"; reason: string; message: string }
+  | { code: "payment_not_started"; message: string };
+
+import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from "@markaz/contracts/checkout";
 
 /** Which adapter produced the data. Lets callers and logs say which source they got. */
 export type TransportKind = "mock" | "remote";
+
+export interface OrderConfirmationInput {
+  orderNumber: string;
+  token: string;
+}
 
 export interface CartQuoteLineInput {
   productId: string;
@@ -208,36 +235,17 @@ export interface CartQuoteLineInput {
 
 export interface CartQuoteInput {
   lines: CartQuoteLineInput[];
+  /** One code per cart. */
+  discountCode?: string | null;
 }
 
 /** Why a cart line cannot be bought as it stands. */
-export type CartQuoteIssue = "unknown_product" | "product_unavailable" | "unknown_variant" | "out_of_stock" | "insufficient_stock";
+export type CartQuoteIssue = StorefrontCartQuoteIssue;
 
-export interface CartQuoteLine {
-  productId: string;
-  /** Null when the variant could not be resolved. */
-  variantId: string | null;
-  /** Null when the product is unknown to this store. */
-  title: string | null;
-  variantTitle: string | null;
-  unitPrice: number | null;
-  qty: number;
-  /** Null for a line that cannot be bought. */
-  lineTotal: number | null;
-  issue: CartQuoteIssue | null;
-  /** Units that can still be bought, when the server knows them. Null for unknown products. */
-  availableQty: number | null;
-}
+export type CartQuoteLine = StorefrontCartQuoteLine;
 
-/** The server's priced view of a cart. Totals cover only the lines that can be bought. */
-export interface CartQuote {
-  lines: CartQuoteLine[];
-  subtotal: number;
-  deliveryCharges: number;
-  total: number;
-  /** True when there is at least one line and every line can be bought. */
-  canCheckout: boolean;
-}
+/** The server's priced view of a cart, as the shared contract defines it. Totals cover only the lines that can be bought. */
+export type CartQuote = StorefrontCartQuoteDto;
 
 /**
  * The order-side operations. A browser reaches them through the same-origin BFF, and the storefront server reaches
@@ -250,6 +258,8 @@ export interface OrderTransport {
   submitOrder(payload: SubmitOrderPayload): Promise<SubmitOrderResult>;
   /** Resolves to null when no order matches both the id and the phone. Refusals reject with OrderRejectedError. */
   lookupOrder(input: OrderLookupInput): Promise<StorefrontOrder | null>;
+  /** The tab that placed the order reading it back with its token. null for a bad or expired token or an unknown order. */
+  confirmOrder(input: OrderConfirmationInput): Promise<StorefrontOrder | null>;
   /** Customer tracking (D-069): the parcel's journey only. null when no order matches both the id and the phone. */
   trackOrder(input: OrderLookupInput): Promise<StorefrontOrderTracking | null>;
   /** The Live products among these ids, at most 48 per call. An id with no Live product is simply absent from the answer. */

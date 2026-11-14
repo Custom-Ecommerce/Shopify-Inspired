@@ -3,13 +3,15 @@
 import type { AddressDetails } from "../../model";
 import { paths } from "../../adapters/paths";
 import { useStilettoCheckout } from "../../adapters/checkout";
+import { firstErrorBox } from "../../adapters/checkout-fields";
+import type { StilettoCheckoutField, StilettoFieldErrors } from "../../adapters/checkout-fields";
 import {
   AlertCircle,
   ArrowLeft,
   Building2,
   ExternalLink,
-  Globe,
   Hash,
+  Mail,
   MapPin,
   MessageSquare,
   Package,
@@ -20,7 +22,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "../../shared/components/primitives/button";
 import { parseNumericPrice, useCartContext } from "../../shared/context/CartContext";
 
@@ -40,8 +42,6 @@ const createEmptyAddress = (): AddressDetails => ({
   address2: "",
   city: "",
   zip: "",
-  phone: "",
-  country: "Pakistan",
 });
 
 const inputBaseClasses =
@@ -49,20 +49,135 @@ const inputBaseClasses =
 const labelBaseClasses =
   "text-xs text-(--text-primary)/70 tracking-wider uppercase font-medium";
 
+const inputErrorClasses = "border-[var(--status-error-text)] focus:border-[var(--status-error-text)]";
+
+/** The element id of the box a message belongs to. Only the shipping address carries messages. */
+const fieldElementId = (field: StilettoCheckoutField): string => {
+  if (field === "whatsapp") return "checkout-whatsapp";
+  if (field === "phone") return "checkout-phone";
+  if (field === "email") return "checkout-email";
+  if (field === "notes") return "order-notes";
+  return `shipping-${field}`;
+};
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} role="alert" className="text-[11px] text-[var(--status-error-text)]">
+      {message}
+    </p>
+  );
+}
+
+function PaymentOption({ selected, title, description, onSelect }: { selected: boolean; title: string; description: string; onSelect: () => void }) {
+  return (
+    <label className="p-4 bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl flex items-start gap-3 cursor-pointer">
+      <input type="radio" name="paymentMethod" checked={selected} onChange={onSelect} className="sr-only" />
+      <span className="mt-0.5 w-4 h-4 rounded-full border-2 border-[var(--surface-inverse)] flex items-center justify-center shrink-0">
+        {selected && <span className="w-2 h-2 rounded-full bg-[var(--surface-inverse)]" />}
+      </span>
+      <span className="space-y-1">
+        <span className="block text-sm font-semibold tracking-wide text-[var(--text-primary)]">{title}</span>
+        <span className="block text-xs text-(--text-primary)/60 leading-relaxed">{description}</span>
+      </span>
+    </label>
+  );
+}
+
+interface DiscountCodeBoxProps {
+  storedCode: string | null;
+  appliedCode: string | null;
+  error: string | null;
+  busy: boolean;
+  onApply: (code: string) => void;
+  onRemove: () => void;
+}
+
+/** "Have a code?" in the order summary. It sits inside the checkout form, so nothing here may submit the order. */
+function DiscountCodeBox({ storedCode, appliedCode, error, busy, onApply, onRemove }: DiscountCodeBoxProps) {
+  const [opened, setOpened] = useState(false);
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    if (storedCode) setText(storedCode);
+  }, [storedCode]);
+
+  if (appliedCode) {
+    return (
+      <div className="flex items-center justify-between gap-3 text-xs text-[var(--text-inverse)]">
+        <span className="min-w-0 truncate">
+          Code <span className="font-bold">{appliedCode}</span> applied
+        </span>
+        <button type="button" onClick={onRemove} className="shrink-0 underline underline-offset-2 text-(--text-inverse)/70 hover:text-[var(--text-inverse)]">
+          Remove
+        </button>
+      </div>
+    );
+  }
+
+  if (!opened && !storedCode) {
+    return (
+      <button type="button" onClick={() => setOpened(true)} className="text-xs underline underline-offset-2 text-(--text-inverse)/70 hover:text-[var(--text-inverse)]">
+        Have a code?
+      </button>
+    );
+  }
+
+  const apply = () => {
+    if (text.trim() !== "" && !busy) onApply(text);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          aria-label="Discount code"
+          aria-invalid={error ? true : undefined}
+          autoComplete="off"
+          autoCapitalize="characters"
+          maxLength={40}
+          placeholder="Discount code"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter in a form field would place the order.
+            if (e.key === "Enter") {
+              e.preventDefault();
+              apply();
+            }
+          }}
+          className="min-w-0 flex-1 h-10 rounded-lg border border-(--text-inverse)/20 bg-(--surface-elevated)/5 px-3 text-xs uppercase text-[var(--text-inverse)] placeholder:normal-case placeholder:text-(--text-inverse)/40 focus:outline-none focus:border-(--text-inverse)/50"
+        />
+        <button type="button" onClick={apply} disabled={busy || text.trim() === ""} className="h-10 shrink-0 rounded-lg border border-(--text-inverse)/30 px-3 text-xs font-semibold text-[var(--text-inverse)] disabled:opacity-50">
+          {busy ? "Checking…" : "Apply"}
+        </button>
+      </div>
+      {error && (
+        <div className="flex items-start justify-between gap-3 text-[11px] text-[var(--status-error-text)]">
+          <p role="alert">{error}</p>
+          <button type="button" onClick={onRemove} className="shrink-0 underline underline-offset-2">
+            Remove
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Reusable set of address input fields (First/Last name, Street Address,
- * Apartment, City, Zip, Phone, Country). Rendered once for the Shipping
- * Address and, conditionally, once more for the Billing Address — each
- * instance keeps its own `values`/`onChange` so the two addresses never
- * collide.
+ * Apartment, City, Zip). There is no Country box: stores sell in Pakistan only, and the box was never sent (CB-6).
  */
 interface AddressFieldsProps {
   idPrefix: string;
   values: AddressDetails;
   onChange: (field: keyof AddressDetails, value: string) => void;
+  /** Messages for this address's boxes. */
+  errors?: StilettoFieldErrors;
 }
 
-function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
+function AddressFields({ idPrefix, values, onChange, errors = {} }: AddressFieldsProps) {
   const handleChange =
     (field: keyof AddressDetails) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,9 +201,12 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
               placeholder="First name"
               value={values.firstName}
               onChange={handleChange("firstName")}
-              className={inputBaseClasses}
+              aria-invalid={errors.firstName ? true : undefined}
+              aria-describedby={errors.firstName ? `${idPrefix}-firstName-error` : undefined}
+              className={errors.firstName ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
             />
           </div>
+          <FieldError id={`${idPrefix}-firstName-error`} message={errors.firstName} />
         </div>
 
         <div className="space-y-1.5">
@@ -105,9 +223,12 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
               placeholder="Last name"
               value={values.lastName}
               onChange={handleChange("lastName")}
-              className={inputBaseClasses}
+              aria-invalid={errors.lastName ? true : undefined}
+              aria-describedby={errors.lastName ? `${idPrefix}-lastName-error` : undefined}
+              className={errors.lastName ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
             />
           </div>
+          <FieldError id={`${idPrefix}-lastName-error`} message={errors.lastName} />
         </div>
       </div>
 
@@ -125,9 +246,12 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
             placeholder="House/Apartment #, Street name, Area"
             value={values.address1}
             onChange={handleChange("address1")}
-            className={inputBaseClasses}
+            aria-invalid={errors.address1 ? true : undefined}
+            aria-describedby={errors.address1 ? `${idPrefix}-address1-error` : undefined}
+            className={errors.address1 ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
           />
         </div>
+        <FieldError id={`${idPrefix}-address1-error`} message={errors.address1} />
       </div>
 
       <div className="space-y-1.5">
@@ -163,9 +287,12 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
               placeholder="Karachi, Lahore, etc."
               value={values.city}
               onChange={handleChange("city")}
-              className={inputBaseClasses}
+              aria-invalid={errors.city ? true : undefined}
+              aria-describedby={errors.city ? `${idPrefix}-city-error` : undefined}
+              className={errors.city ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
             />
           </div>
+          <FieldError id={`${idPrefix}-city-error`} message={errors.city} />
         </div>
 
         <div className="space-y-1.5">
@@ -186,46 +313,6 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
           </div>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label htmlFor={`${idPrefix}-phone`} className={labelBaseClasses}>
-            Phone Number *
-          </label>
-          <div className="relative flex items-center">
-            <Phone className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
-            <input
-              id={`${idPrefix}-phone`}
-              type="tel"
-              name={`${idPrefix}-phone`}
-              required
-              placeholder="e.g. 0300 1234567"
-              value={values.phone}
-              onChange={handleChange("phone")}
-              className={inputBaseClasses}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor={`${idPrefix}-country`} className={labelBaseClasses}>
-            Country *
-          </label>
-          <div className="relative flex items-center">
-            <Globe className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
-            <input
-              id={`${idPrefix}-country`}
-              type="text"
-              name={`${idPrefix}-country`}
-              required
-              placeholder="Pakistan"
-              value={values.country}
-              onChange={handleChange("country")}
-              className={inputBaseClasses}
-            />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -233,48 +320,81 @@ function AddressFields({ idPrefix, values, onChange }: AddressFieldsProps) {
 export function CheckoutSection({
   logoSrc = "/theme-assets/stiletto/logo/logo.png",
 }: CheckoutSectionProps) {
-  const { cartItems, subtotal } = useCartContext();
-  const { deliveryCharges, grandTotal, isSubmitting, isChecking, canRetryUnconfirmed, orderError, submit } = useStilettoCheckout();
+  const { cartItems } = useCartContext();
+  const {
+    blockReason,
+    cardAvailable,
+    subtotal,
+    deliveryCharges,
+    discount,
+    storedCode,
+    appliedCode,
+    codeError,
+    isCheckingCode,
+    applyCode,
+    removeCode,
+    grandTotal,
+    lineTotalOf,
+    isSubmitting,
+    isChecking,
+    canRetryUnconfirmed,
+    orderError,
+    fieldErrors,
+    focusTick,
+    clearFieldError,
+    submit,
+  } = useStilettoCheckout();
 
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [sameOnWhatsapp, setSameOnWhatsapp] = useState(true);
   const [whatsapp, setWhatsapp] = useState("");
   const [notes, setNotes] = useState("");
+  const [chosenPayment, setChosenPayment] = useState<"cod" | "card">("cod");
+  // Card is hidden when the store cannot take it, so a choice made earlier cannot outlive the option.
+  const paymentMethod = cardAvailable ? chosenPayment : "cod";
 
   const [shippingAddress, setShippingAddress] = useState<AddressDetails>(
     createEmptyAddress()
   );
-  const [billingAddress, setBillingAddress] = useState<AddressDetails>(
-    createEmptyAddress()
-  );
-  const [sameAsShipping, setSameAsShipping] = useState(true);
 
+
+  // Moves to the first box with a message, which on a phone can be a long way above the button.
+  useEffect(() => {
+    if (focusTick === 0) return;
+    const first = firstErrorBox(fieldErrors);
+    if (first) document.getElementById(fieldElementId(first))?.focus();
+    // Only when new messages appear, not each time one is cleared.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTick]);
 
   const handleShippingAddressChange = (
     field: keyof AddressDetails,
     value: string
   ) => {
     setShippingAddress((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleBillingAddressChange = (
-    field: keyof AddressDetails,
-    value: string
-  ) => {
-    setBillingAddress((prev) => ({ ...prev, [field]: value }));
+    if (field === "firstName" || field === "lastName" || field === "address1" || field === "city") {
+      clearFieldError(field);
+    }
+    if (field === "address2" || field === "zip") clearFieldError("address1");
   };
 
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // A second press while the order is on its way does nothing: the button is disabled and useCheckout refuses it too.
+    if (isSubmitting) return;
 
     if (cartItems.length === 0) {
       alert("Your cart is empty!");
       return;
     }
 
-    await submit({ whatsapp, shippingAddress, billingAddress, sameAsShipping, notes });
+    await submit({ email, phone, sameOnWhatsapp, whatsapp, shippingAddress, notes, paymentMethod });
   };
 
   return (
-    <div data-source="partial" data-source-note="Cart, delivery charges and totals are live. Email, billing address and notes are shown but not stored." data-section="checkout" className="min-h-screen bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans flex flex-col">
+    <div data-source="partial" data-source-note="Cart, delivery charges, totals and payment are live." data-section="checkout" className="min-h-screen bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans flex flex-col">
       {/* Black Navbar Header */}
       <div className="bg-[var(--surface-inverse)] text-[var(--text-inverse)] border-b border-[var(--surface-inverse)] sticky top-0 z-30 shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -308,6 +428,7 @@ export function CheckoutSection({
       {/* Main Content Area */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8 w-full flex-1">
         <form
+          noValidate
           onSubmit={handleOrderSubmit}
           className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch h-full lg:h-[calc(100vh-140px)]"
         >
@@ -322,25 +443,102 @@ export function CheckoutSection({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs text-(--text-primary)/70 tracking-wider uppercase font-medium">
-                  Active WhatsApp Number *
+                <label htmlFor="checkout-email" className={labelBaseClasses}>
+                  Email (Optional)
                 </label>
                 <div className="relative flex items-center">
-                  <MessageSquare className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
+                  <Mail className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
                   <input
-                    type="tel"
-                    name="whatsapp"
-                    required
-                    placeholder="e.g. 0300 1234567"
-                    value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value)}
-                    className="w-full h-11 bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl pl-10 pr-4 text-sm text-[var(--text-primary)] placeholder:text-(--text-primary)/30 focus:outline-none focus:border-(--surface-inverse)/40 transition-colors"
+                    id="checkout-email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    name="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      clearFieldError("email");
+                    }}
+                    aria-invalid={fieldErrors.email ? true : undefined}
+                    aria-describedby={fieldErrors.email ? "checkout-email-error" : undefined}
+                    className={fieldErrors.email ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
                   />
                 </div>
+                <FieldError id="checkout-email-error" message={fieldErrors.email} />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="checkout-phone" className={labelBaseClasses}>
+                  Phone Number *
+                </label>
+                <div className="relative flex items-center">
+                  <Phone className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
+                  <input
+                    id="checkout-phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    name="phone"
+                    required
+                    placeholder="e.g. 0300 1234567"
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      clearFieldError("phone");
+                    }}
+                    aria-invalid={fieldErrors.phone ? true : undefined}
+                    aria-describedby={fieldErrors.phone ? "checkout-phone-error" : undefined}
+                    className={fieldErrors.phone ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
+                  />
+                </div>
+                <FieldError id="checkout-phone-error" message={fieldErrors.phone} />
                 <p className="text-[11px] text-(--text-primary)/50">
-                  Order status & dispatch updates will be sent to this WhatsApp number.
+                  Used for delivery and for order updates on WhatsApp.
                 </p>
               </div>
+
+              <label htmlFor="same-on-whatsapp" className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  id="same-on-whatsapp"
+                  type="checkbox"
+                  checked={sameOnWhatsapp}
+                  onChange={(e) => {
+                    setSameOnWhatsapp(e.target.checked);
+                    clearFieldError("whatsapp");
+                  }}
+                  className="w-4 h-4 rounded border-(--surface-inverse)/30 accent-[var(--surface-inverse)] cursor-pointer"
+                />
+                <span className="text-xs sm:text-sm font-medium text-[var(--text-primary)]">Same number on WhatsApp</span>
+              </label>
+
+              {!sameOnWhatsapp && (
+                <div className="space-y-1.5">
+                  <label htmlFor="checkout-whatsapp" className={labelBaseClasses}>
+                    WhatsApp Number *
+                  </label>
+                  <div className="relative flex items-center">
+                    <MessageSquare className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
+                    <input
+                      id="checkout-whatsapp"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="off"
+                      name="whatsapp"
+                      placeholder="e.g. 0300 1234567"
+                      value={whatsapp}
+                      onChange={(e) => {
+                        setWhatsapp(e.target.value);
+                        clearFieldError("whatsapp");
+                      }}
+                      aria-invalid={fieldErrors.whatsapp ? true : undefined}
+                      aria-describedby={fieldErrors.whatsapp ? "checkout-whatsapp-error" : undefined}
+                      className={fieldErrors.whatsapp ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
+                    />
+                  </div>
+                  <FieldError id="checkout-whatsapp-error" message={fieldErrors.whatsapp} />
+                </div>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -355,44 +553,8 @@ export function CheckoutSection({
                 idPrefix="shipping"
                 values={shippingAddress}
                 onChange={handleShippingAddressChange}
+                errors={fieldErrors}
               />
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-2 border-b border-(--surface-inverse)/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-(--text-primary)/80" />
-                  <h2 className="text-sm uppercase tracking-[0.15em] font-semibold text-[var(--text-primary)]">
-                    Billing Address
-                  </h2>
-                </div>
-              </div>
-
-              <label
-                htmlFor="same-as-shipping"
-                className="flex items-center gap-2.5 p-3.5 bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl cursor-pointer select-none"
-              >
-                <input
-                  id="same-as-shipping"
-                  type="checkbox"
-                  checked={sameAsShipping}
-                  onChange={(e) => setSameAsShipping(e.target.checked)}
-                  className="w-4 h-4 rounded border-(--surface-inverse)/30 accent-[var(--surface-inverse)] cursor-pointer"
-                />
-                <span className="text-xs sm:text-sm font-medium text-[var(--text-primary)]">
-                  Billing address same as shipping address
-                </span>
-              </label>
-
-              {!sameAsShipping && (
-                <div className="pt-1">
-                  <AddressFields
-                    idPrefix="billing"
-                    values={billingAddress}
-                    onChange={handleBillingAddressChange}
-                  />
-                </div>
-              )}
             </div>
 
             <div className="space-y-1.5">
@@ -405,9 +567,15 @@ export function CheckoutSection({
                 rows={3}
                 placeholder="Delivery instructions, landmark, or anything else we should know"
                 value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-(--text-primary)/30 focus:outline-none focus:border-(--surface-inverse)/40 transition-colors resize-none"
+                onChange={(e) => {
+                  setNotes(e.target.value);
+                  clearFieldError("notes");
+                }}
+                aria-invalid={fieldErrors.notes ? true : undefined}
+                aria-describedby={fieldErrors.notes ? "order-notes-error" : undefined}
+                className={`w-full bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-(--text-primary)/30 focus:outline-none focus:border-(--surface-inverse)/40 transition-colors resize-none ${fieldErrors.notes ? inputErrorClasses : ""}`}
               />
+              <FieldError id="order-notes-error" message={fieldErrors.notes} />
             </div>
 
             <div className="space-y-4">
@@ -418,23 +586,21 @@ export function CheckoutSection({
                 </h2>
               </div>
 
-              <div className="p-4 bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl flex items-start gap-3">
-                <div className="mt-0.5 w-4 h-4 rounded-full border-2 border-[var(--surface-inverse)] flex items-center justify-center shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-[var(--surface-inverse)]" />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tracking-wide text-[var(--text-primary)]">
-                      Cash on Delivery (COD)
-                    </span>
-                    <span className="text-[10px] uppercase font-bold bg-[var(--surface-inverse)] text-[var(--text-inverse)] px-2 py-0.5 rounded">
-                      Default
-                    </span>
-                  </div>
-                  <p className="text-xs text-(--text-primary)/60 leading-relaxed">
-                    Pay in cash when your parcel is delivered to your doorstep. No advance payment required.
-                  </p>
-                </div>
+              <div className="space-y-3">
+                <PaymentOption
+                  selected={paymentMethod === "cod"}
+                  title="Cash on Delivery (COD)"
+                  description="Pay in cash when your parcel is delivered to your doorstep. No advance payment required."
+                  onSelect={() => setChosenPayment("cod")}
+                />
+                {cardAvailable && (
+                  <PaymentOption
+                    selected={paymentMethod === "card"}
+                    title="Credit or Debit Card"
+                    description="You will pay securely on the next page."
+                    onSelect={() => setChosenPayment("card")}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -460,7 +626,8 @@ export function CheckoutSection({
                   <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-3.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent]">
                     {cartItems.map((item) => {
                       const itemUnitPrice = item.numericPrice || parseNumericPrice(item.price);
-                      const itemTotalPrice = itemUnitPrice * item.quantity;
+                      // The server's line total once it has answered; the cart's own price can be out of date.
+                      const itemTotalPrice = lineTotalOf(item.productId, item.variantId) ?? itemUnitPrice * item.quantity;
                       const itemHandle = (item as { handle?: string }).handle;
                       const productHref = itemHandle ? paths.product(itemHandle) : "#";
 
@@ -520,6 +687,17 @@ export function CheckoutSection({
                   </div>
                 )}
 
+                {cartItems.length > 0 && (
+                  <DiscountCodeBox
+                    storedCode={storedCode}
+                    appliedCode={appliedCode}
+                    error={codeError}
+                    busy={isCheckingCode}
+                    onApply={applyCode}
+                    onRemove={removeCode}
+                  />
+                )}
+
                 <div className="space-y-1.5 text-xs text-(--text-inverse)/70">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
@@ -536,23 +714,34 @@ export function CheckoutSection({
                     </span>
                   </div>
 
+                  {discount > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span>Discount{appliedCode ? ` (${appliedCode})` : ""}</span>
+                      <span className="text-[var(--text-inverse)] font-medium">-{formatCurrency(discount)}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-center pt-2 border-t border-(--text-inverse)/10 text-sm font-bold text-[var(--text-inverse)]">
                     <span>Total Amount</span>
                     <span className="text-lg font-bold">{formatCurrency(grandTotal)}</span>
                   </div>
                 </div>
 
+                {blockReason && (
+                  <p role="alert" className="text-[11px] text-[var(--status-error-text)]">{blockReason}</p>
+                )}
+
                 <Button
                   type="submit"
-                  disabled={isSubmitting || cartItems.length === 0}
+                  disabled={isSubmitting || cartItems.length === 0 || blockReason !== null}
                   className="w-full h-11 bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans text-xs uppercase tracking-[0.15em] font-bold rounded-xl hover:bg-(--surface-elevated)/90 transition-all disabled:opacity-50"
                 >
-                  {isChecking ? "We are checking your order…" : isSubmitting ? "Processing Order..." : canRetryUnconfirmed ? "Try Again" : "Place Order (COD)"}
+                  {isChecking ? "We are checking your order…" : isSubmitting ? "Processing Order..." : canRetryUnconfirmed ? "Try Again" : paymentMethod === "card" ? "Pay with Card" : "Place Order (COD)"}
                 </Button>
 
                 <div className="flex items-center justify-center gap-2 text-[10px] text-(--text-inverse)/40">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>100% Safe & Secure Cash on Delivery</span>
+                  <span>{paymentMethod === "card" ? "Secure card payment by Stripe" : "100% Safe & Secure Cash on Delivery"}</span>
                 </div>
               </div>
             </div>

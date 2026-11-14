@@ -20,7 +20,9 @@ export type VariantResolution<V> =
  * Which variant a cart line means. A line may leave variantId out only when the product has exactly one variant, so a
  * shopper is never given a size or colour they did not choose. A variantId must belong to this product.
  */
-export function resolveVariant<V extends { _id: unknown }>(variants: readonly V[], variantId: string | null): VariantResolution<V> {
+export function resolveVariant<V extends { _id: unknown }>(stored: readonly V[] | null | undefined, variantId: string | null): VariantResolution<V> {
+  // An older product row may have no variants at all. Nothing on it can be bought, and that is not a server error.
+  const variants = stored ?? [];
   if (variantId !== null) {
     const wanted = variantId.toLowerCase();
     const variant = variants.find((candidate) => String(candidate._id).toLowerCase() === wanted);
@@ -41,5 +43,5 @@ export function canSupply(variant: CheckoutVariant, qty: number): boolean {
 
 /** The units left, or null when the variant does not track quantity. */
 export function unitsLeft(variant: CheckoutVariant): number | null {
-  return variant.trackQuantity ? Math.max(0, variant.stockQuantity) : null;
+  return variant.trackQuantity ? Math.max(0, Math.floor(variant.stockQuantity)) : null;
 }

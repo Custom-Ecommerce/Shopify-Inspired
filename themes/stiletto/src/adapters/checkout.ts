@@ -1,21 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { validateCheckout } from "@markaz/storefront-data";
+import { checkoutBlockReason } from "@markaz/storefront-data";
 import type { CheckoutFailure } from "@markaz/storefront-data/client";
-import { useCart, useCartQuote, useCheckout } from "@markaz/storefront-data/client";
-import type { AddressDetails } from "../model";
+import { checkoutServerFieldError, useCardAvailable, useCart, useCartQuote, useCheckout } from "@markaz/storefront-data/client";
+import { boxForField, firstErrorBox, stilettoFieldErrors, toCheckoutValues } from "./checkout-fields";
+import type { StilettoCheckoutField, StilettoCheckoutInput, StilettoFieldErrors } from "./checkout-fields";
 import { paths } from "./paths";
 import { rememberLastOrder } from "./last-order";
 
-export interface StilettoCheckoutInput {
-  whatsapp: string;
-  shippingAddress: AddressDetails;
-  billingAddress: AddressDetails;
-  sameAsShipping: boolean;
-  notes: string;
-}
+export type { StilettoCheckoutInput } from "./checkout-fields";
+
+/** A refusal whose message is written for developers ("lines.0.qty: ...") and so is not shown as it stands. */
+const TECHNICAL_MESSAGE = /^[\w.]+:\s/;
 
 function failureMessage(f: CheckoutFailure): string {
   switch (f.kind) {
@@ -32,9 +30,11 @@ function failureMessage(f: CheckoutFailure): string {
     case "store_inactive":
       return "This store is not taking orders right now.";
     case "invalid_request":
-      return f.message;
+      return TECHNICAL_MESSAGE.test(f.message) ? "Please check your details and try again." : f.message;
     case "payment_method_unavailable":
       return "Cash on delivery is not available for this store.";
+    case "payment_not_started":
+      return f.message;
     case "unconfirmed":
       return "We could not confirm your order. Please try again; you will not be charged twice.";
     case "idempotency_conflict":
@@ -45,59 +45,121 @@ function failureMessage(f: CheckoutFailure): string {
 }
 
 /**
- * Stiletto's checkout on top of the storefront's. The form keeps its own state; this joins the fields the SaaS stores
- * (name, phone, address), prices the cart on the server, places the order and moves to the order page.
- * Email, billing address and order notes are shown for design parity and are not sent.
+ * Stiletto's checkout on top of the storefront's. The form keeps its own state, which an error never resets; this joins
+ * the fields the store keeps, prices the cart on the server, places the order and moves to the order page. Each message
+ * goes on the box it is about. Billing address is shown for design parity and is not sent.
  */
 export function useStilettoCheckout() {
   const router = useRouter();
-  const { isEmpty } = useCart();
-  const { quote } = useCartQuote();
+  const { isEmpty, lines, discountCode, setDiscountCode } = useCart();
+  const { quote, status: quoteStatus } = useCartQuote();
   const checkout = useCheckout();
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const placed = useRef({ total: 0, whatsapp: "" });
+  const [fieldErrors, setFieldErrors] = useState<StilettoFieldErrors>({});
+  // Goes up whenever messages appear, so the form can move the shopper to the first one.
+  const [focusTick, setFocusTick] = useState(0);
+  // A refused code stops showing as soon as the shopper changes or removes it.
+  const [dismissedFailure, setDismissedFailure] = useState<CheckoutFailure | null>(null);
+  const cardAvailable = useCardAvailable();
 
-  const deliveryCharges = !isEmpty && quote ? quote.deliveryCharges.amount : 0;
-  const grandTotal = quote && !isEmpty ? quote.total.amount : checkout.subtotal.amount;
-  const grandTotalRef = useRef(grandTotal);
-  grandTotalRef.current = grandTotal;
+  // Only the server's prices are shown once it has answered. The cart's own prices can be older than the catalog.
+  const priced = !isEmpty && quote !== null ? quote : null;
+  const deliveryCharges = priced ? priced.deliveryCharges.amount : 0;
+  const subtotal = priced ? priced.subtotal.amount : checkout.subtotal.amount;
+  const discount = priced ? priced.discount.amount : 0;
+  const grandTotal = priced ? priced.total.amount : checkout.subtotal.amount;
+
+  /** The server's total for a line, or null when it has none: not answered yet, or the line cannot be bought. */
+  const lineTotalOf = useCallback(
+    (productId: string | undefined, variantId: string | undefined): number | null => {
+      const match = priced?.lines.find(
+        (line) => line.productId.toLowerCase() === productId?.toLowerCase() && line.variantId?.toLowerCase() === variantId?.toLowerCase(),
+      );
+      return match?.lineTotal?.amount ?? null;
+    },
+    [priced],
+  );
 
   useEffect(() => {
     if (checkout.status === "success" && checkout.orderId) {
-      rememberLastOrder({ orderId: checkout.orderId, total: placed.current.total, whatsapp: placed.current.whatsapp });
-      router.push(paths.order(checkout.orderId));
+      rememberLastOrder({ orderId: checkout.orderId, accessToken: checkout.accessToken });
+      if (checkout.checkoutUrl) window.location.assign(checkout.checkoutUrl);
+      else router.push(paths.order(checkout.orderId));
     }
-  }, [checkout.status, checkout.orderId, router]);
+  }, [checkout.status, checkout.orderId, checkout.checkoutUrl, checkout.accessToken, router]);
+
+  // A refusal from the server about one field reads the same as the form's own message for it.
+  const serverField = checkoutServerFieldError(checkout.failure);
+  const serverBox = serverField ? boxForField(serverField.field) : null;
+  useEffect(() => {
+    if (serverField === null || serverBox === null) return;
+    setFieldErrors((previous) => ({ ...previous, [serverBox]: serverField.message }));
+    setFocusTick((tick) => tick + 1);
+    // One message per refusal: the failure object is new each time the server refuses.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkout.failure]);
 
   const submit = useMemo(
     () => async (input: StilettoCheckoutInput) => {
-      const a = input.shippingAddress;
-      const values = {
-        customerName: (a.firstName + " " + a.lastName).trim(),
-        phone: input.whatsapp || a.phone,
-        address: [a.address1, a.address2, a.city, a.zip].map((p) => (p ?? "").trim()).filter(Boolean).join(", "),
-      };
-      const v = validateCheckout(values);
-      if (!v.ok) {
-        setValidationError(v.errors.customerName ?? v.errors.phone ?? v.errors.address ?? "Please check your details.");
+      const errors = stilettoFieldErrors(input);
+      setFieldErrors(errors);
+      if (firstErrorBox(errors) !== null) {
+        setFocusTick((tick) => tick + 1);
         return;
       }
-      setValidationError(null);
-      placed.current = { total: grandTotalRef.current, whatsapp: values.phone };
-      await checkout.submit(values);
+      const values = toCheckoutValues(input);
+      await checkout.submit(values, { paymentMethod: input.paymentMethod ?? "cod" });
     },
     [checkout],
   );
 
-  const failure = checkout.failure ? failureMessage(checkout.failure) : null;
+  /** Called as the shopper edits a box, so its message goes away once they start to fix it. */
+  const clearFieldError = useCallback((field: StilettoCheckoutField) => {
+    setFieldErrors((previous) => {
+      if (previous[field] === undefined) return previous;
+      const next = { ...previous };
+      delete next[field];
+      return next;
+    });
+  }, []);
+
+  const changeCode = useCallback(
+    (code: string | null) => {
+      setDismissedFailure(checkout.failure);
+      setDiscountCode(code);
+    },
+    [checkout.failure, setDiscountCode],
+  );
+
+  const refusedAtOrder = checkout.failure?.kind === "discount_rejected" && checkout.failure !== dismissedFailure ? checkout.failure.message : null;
+  const codeError = discountCode === null ? null : (priced?.discountError ?? refusedAtOrder);
+
+  // A refusal shown beside its box is not repeated in the banner.
+  const failure = checkout.failure && serverBox === null && checkout.failure.kind !== "discount_rejected" ? failureMessage(checkout.failure) : null;
   return {
+    /** Why the order cannot be placed as it stands, for the button. */
+    blockReason: priced ? checkoutBlockReason(lines, priced) : null,
+    cardAvailable,
+    subtotal,
     deliveryCharges,
+    discount,
+    /** What the shopper entered, accepted or not. */
+    storedCode: discountCode,
+    /** The code the server has accepted. */
+    appliedCode: priced?.discountCode ?? null,
+    codeError,
+    isCheckingCode: quoteStatus === "loading" && discountCode !== null,
+    applyCode: changeCode,
+    removeCode: useCallback(() => changeCode(null), [changeCode]),
     grandTotal,
+    lineTotalOf,
     isSubmitting: checkout.status === "submitting" || checkout.status === "success",
     isChecking: checkout.isChecking,
     /** The retry reuses the same order and so the same idempotency key. */
     canRetryUnconfirmed: checkout.failure?.kind === "unconfirmed",
-    orderError: validationError ?? failure,
+    orderError: failure,
+    fieldErrors,
+    focusTick,
+    clearFieldError,
     submit,
   };
 }

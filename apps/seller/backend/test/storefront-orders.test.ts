@@ -26,6 +26,7 @@ let lookupPOST: (r: NextRequest, c: any) => Promise<Response>;
 
 before(async () => {
   process.env.SELLER_MONGODB_URI = 'mongodb://stub.invalid/seller';
+  process.env.TRUSTED_PROXY_HOPS = '1';
   createPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/route')).POST;
   lookupPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/lookup/route')).POST;
 });
@@ -212,7 +213,7 @@ function product(id: string, { price, stockQuantity, ...overrides }: Record<stri
 
 const variant = (id: string): Record<string, unknown> => products.get(id)!.variants[0];
 
-const CUSTOMER = { customerName: 'Sara Khan', phone: '0300 1234567', address: 'House 12, Street 4, Block 5' };
+const CUSTOMER = { customerName: 'Sara Khan', phone: '0300 1234567', address: 'House 12, Street 4, Block 5', city: 'Karachi' };
 let keySeq = 0;
 const newKey = () => 'idem-test-' + String(++keySeq).padStart(6, '0');
 
@@ -593,6 +594,107 @@ test('every Pakistani phone format is stored as E.164', async () => {
   assert.deepEqual([...new Set(orders.map((o) => o.phone))], ['+923001234567']);
 });
 
+test('every refused customer field is a 400 that names the field, with the UI bypassed', async () => {
+  const cases: Array<[Record<string, unknown>, string]> = [
+    [{ customerName: '' }, 'customer.customerName'],
+    [{ customerName: 'x'.repeat(81) }, 'customer.customerName'],
+    [{ phone: '12345' }, 'customer.phone'],
+    [{ phone: { $gt: '' } }, 'customer.phone'],
+    [{ address: 'short' }, 'customer.address'],
+    [{ address: 'x'.repeat(301) }, 'customer.address'],
+    [{ city: '' }, 'customer.city'],
+    [{ city: null }, 'customer.city'],
+    [{ city: undefined }, 'customer.city'],
+    [{ city: 'x'.repeat(61) }, 'customer.city'],
+    [{ email: 'not-an-email' }, 'customer.email'],
+    [{ note: 'x'.repeat(501) }, 'customer.note'],
+  ];
+  for (const [change, field] of cases) {
+    const res = await order({ customer: { ...CUSTOMER, ...change } });
+    assert.equal(res.status, 400, field);
+    const body = (await res.json()) as { error: { code: string; message: string }; field: string };
+    assert.equal(body.error.code, 'INVALID_REQUEST', field);
+    assert.equal(body.field, field);
+    assert.ok(body.error.message.startsWith(field + ': '), body.error.message);
+  }
+  assert.equal(orders.length, 0, 'nothing refused is saved');
+});
+
+test('Urdu digits, spaces and dashes are stored as the one format, and the same number finds the order', async () => {
+  const urdu = (digits: string) => digits.replace(/\d/g, (d) => String.fromCharCode(0x06f0 + Number(d)));
+  for (const phone of [urdu('03001234567'), urdu('0300-1234567'), '+' + urdu('92 300 1234567')]) {
+    const res = await order({ customer: { ...CUSTOMER, phone } });
+    assert.equal(res.status, 201, phone);
+    const { data } = (await res.json()) as { data: { orderId: string } };
+    assert.equal((await lookup({ orderId: data.orderId, phone })).status, 200, phone);
+  }
+  assert.deepEqual([...new Set(orders.map((o) => o.phone))], ['+923001234567']);
+});
+
+test('script-like text is stored as text and comes back only as JSON text', async () => {
+  const script = '<script>alert(1)</script>';
+  const res = await order({ customer: { ...CUSTOMER, customerName: script, address: '<img src=x onerror=alert(1)> House 5', city: script, note: script } });
+  assert.equal(res.status, 201);
+  assert.equal((await res.clone().text()).includes('<script'), false, 'the created answer carries no customer text');
+
+  const saved = orders[0]!;
+  assert.equal(saved.customerName, script);
+  assert.equal(saved.address, '<img src=x onerror=alert(1)> House 5');
+  assert.equal(saved.city, script);
+  assert.equal(saved.customerNote, script);
+
+  const { data } = (await res.json()) as { data: { orderId: string } };
+  const found = await lookup({ orderId: data.orderId, phone: CUSTOMER.phone });
+  assert.match(found.headers.get('content-type') ?? '', /application\/json/);
+  assert.equal(((await found.json()) as { data: { customerName: string } }).data.customerName, script);
+});
+
+test('a refusal never repeats what was sent', async () => {
+  const script = '<script>alert(1)</script>';
+  for (const change of [{ phone: script }, { email: script }, { customerName: script.repeat(10) }]) {
+    const text = await (await order({ customer: { ...CUSTOMER, ...change } })).text();
+    assert.equal(text.includes('<script'), false, text);
+  }
+});
+
+test('optional email and note are stored, separate from the seller notes, and blank reads as none', async () => {
+  await order({ customer: { ...CUSTOMER, email: ' Sara@Example.PK ', note: 'Ring the bell' } });
+  const saved = orders[0]!;
+  assert.equal(saved.customerEmail, 'sara@example.pk');
+  assert.equal(saved.customerNote, 'Ring the bell');
+  assert.equal(saved.notes, undefined, 'the seller\'s internal notes are not written by checkout');
+
+  await order({ customer: { ...CUSTOMER, email: '', note: '  ' } });
+  assert.equal(orders[1]!.customerEmail, null);
+  assert.equal(orders[1]!.customerNote, null);
+});
+
+test('prices in an order body are ignored, wherever they are put', async () => {
+  const res = await order({ lines: [{ productId: SHIRT, qty: 1, unitPrice: 1, price: 1 }], subtotal: 1, total: 1, discount: 9999 });
+  assert.equal(res.status, 201);
+  const saved = orders[0]! as Record<string, any>;
+  assert.equal(saved.items[0].unitPrice > 1, true);
+  assert.equal(saved.total > 1, true);
+});
+
+test('an empty order and a bad quantity name their field too', async () => {
+  const empty = (await (await order({ lines: [] })).json()) as { error: { code: string }; field: string };
+  assert.equal(empty.error.code, 'EMPTY_ORDER');
+  assert.equal(empty.field, 'lines');
+  const bad = (await (await order({ lines: [{ productId: SHIRT, qty: 0 }] })).json()) as { error: { code: string }; field: string };
+  assert.equal(bad.error.code, 'INVALID_QUANTITY');
+  assert.equal(bad.field, 'lines.0.qty');
+});
+
+test('a retry with the same key and the same email and note is the same order; a changed note is not', async () => {
+  const key = newKey();
+  const customer = { ...CUSTOMER, email: 'sara@example.pk', note: 'Ring the bell' };
+  assert.equal((await order({ customer }, { 'idempotency-key': key })).status, 201);
+  assert.equal((await order({ customer }, { 'idempotency-key': key })).status, 200);
+  assert.equal((await order({ customer: { ...customer, note: 'Leave at the gate' } }, { 'idempotency-key': key })).status, 409);
+  assert.equal(orders.length, 1);
+});
+
 test('a malformed or oversized body is 400, never 500', async () => {
   const notJson = await post(createPOST, STORE_ID, '/orders', '{nope', { 'idempotency-key': newKey() });
   assert.equal(notJson.status, 400);
@@ -921,4 +1023,33 @@ test('when saving fails, only the deducted lines are given back, and the release
   assert.deepEqual(movements.map((m) => m.reason), ['storefront_order', 'storefront_order_released']);
   assert.ok(movements[0].orderId);
   assert.equal(String(movements[1].orderId), String(movements[0].orderId));
+});
+
+/* ------------------------------------------- EP-03 CB-5 ------------------------------------------- */
+
+test('a placed order carries a token for this order and store; with no secret it carries none', async () => {
+  process.env.ORDER_ACCESS_SECRET = 's'.repeat(40);
+  try {
+    const res = await order();
+    const { data } = (await res.json()) as { data: { orderId: string; accessToken: string; createdAt: string } };
+    const placedAt = Date.parse(data.createdAt);
+    const { isValidOrderAccessToken } = await import('../src/lib/storefront/order-access');
+    assert.equal(isValidOrderAccessToken(data.accessToken, data.orderId, STORE_ID, placedAt + 1000), true);
+    assert.equal(isValidOrderAccessToken(data.accessToken, data.orderId, OTHER_STORE_ID, placedAt + 1000), false);
+  } finally {
+    delete process.env.ORDER_ACCESS_SECRET;
+  }
+  const without = (await (await order()).json()) as { data: { accessToken: unknown } };
+  assert.equal(without.data.accessToken, null);
+});
+
+test('a separate WhatsApp number is stored in the one form, and a blank one is none', async () => {
+  await order({ customer: { ...CUSTOMER, whatsapp: '0311 7654321' } });
+  assert.equal(orders[0]!.customerWhatsapp, '+923117654321');
+  assert.equal(orders[0]!.phone, '+923001234567');
+  await order({ customer: { ...CUSTOMER, whatsapp: '' } });
+  assert.equal(orders[1]!.customerWhatsapp, null);
+  const res = await order({ customer: { ...CUSTOMER, whatsapp: 'nope' } });
+  assert.equal(res.status, 400);
+  assert.equal(((await res.json()) as { field: string }).field, 'customer.whatsapp');
 });

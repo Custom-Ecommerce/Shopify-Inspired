@@ -1,9 +1,7 @@
 /**
- * Storefront cache-tag contract (report §4.7).
- *
- * The seller and admin backends emit these tags; the storefront's
- * `/api/revalidate` accepts only tags that match `ALLOWED_TAG_PATTERNS`.
- * Pure, no I/O.
+ * Storefront cache-tag contract (report §4.7): the one tag map. The storefront attaches these tags to its fetches, the
+ * seller backend purges them, and `/api/revalidate` accepts only tags that match `ALLOWED_TAG_PATTERNS`.
+ * Pure, no I/O. The storefront's browser code may import this file, through `@markaz/platform-kit/cache-tags`.
  */
 
 import { STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from "../reservation";
@@ -11,9 +9,11 @@ import { STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from "../reservation";
 export const REVALIDATE_PATH = "/api/revalidate";
 export const REVALIDATE_SECRET_HEADER = "x-revalidate-secret";
 export const REVALIDATE_MAX_TAGS = 50;
-export const REVALIDATE_MAX_TAG_LENGTH = 200;
+/** Next.js ignores a longer tag. */
+export const REVALIDATE_MAX_TAG_LENGTH = 256;
 
 const OBJECT_ID = "[a-zA-Z0-9_-]{1,64}";
+const PRODUCT_SLUG = "[a-zA-Z0-9_-]{1,200}";
 const STORE_SLUG = `[a-z0-9-]{${STORE_SLUG_MIN_LENGTH},${STORE_SLUG_MAX_LENGTH}}`;
 const STORE_KEY = "[a-z0-9-]{3,64}";
 
@@ -24,8 +24,8 @@ const ALLOWED_TAG_PATTERNS: readonly RegExp[] = [
   /^stores$/,
   /^themes-catalog$/,
   // Canonical store-scoped tags (§4.7 table).
-  new RegExp(`^store:${OBJECT_ID}:(static|categories|products)$`),
-  new RegExp(`^store:${OBJECT_ID}:product:${OBJECT_ID}$`),
+  new RegExp(`^store:${OBJECT_ID}:(static|settings|categories|products)$`),
+  new RegExp(`^store:${OBJECT_ID}:product:${PRODUCT_SLUG}$`),
   new RegExp(`^store-resolve:${STORE_KEY}$`),
   // Legacy tags still emitted by the Admin and Seller hooks. Remove once
   // those call sites move to the canonical names above.
@@ -76,12 +76,22 @@ export function validateRevalidateTags(input: unknown): RevalidateTagsResult {
   return { ok: true, tags: Array.from(valid) };
 }
 
-/** Canonical tag builders. Use these instead of inline template strings. */
+/**
+ * The tag map. Use these instead of inline template strings.
+ *
+ *   static      every read of this store's data, so a change to the store as a whole drops all of it
+ *   settings    reads whose answer depends on the store's settings, such as a product page's delivery charge
+ *   categories  the category list
+ *   products    product lists, and each product page
+ *   product     one product page. Keyed by slug, because a page is fetched by slug and a tag must be known before the fetch
+ */
 export const storeTags = {
   static: (storeId: string): string => `store:${storeId}:static`,
+  settings: (storeId: string): string => `store:${storeId}:settings`,
   categories: (storeId: string): string => `store:${storeId}:categories`,
   products: (storeId: string): string => `store:${storeId}:products`,
-  product: (storeId: string, productId: string): string => `store:${storeId}:product:${productId}`,
+  product: (storeId: string, productSlug: string): string => `store:${storeId}:product:${productSlug}`,
 } as const;
 
+/** The store record, which is fetched by its slug or handle before its id is known. */
 export const storeResolveTag = (key: string): string => `store-resolve:${key}`;

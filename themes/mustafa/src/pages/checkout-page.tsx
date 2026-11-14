@@ -51,10 +51,18 @@ const FIELDS: FormFieldSpec[] = [
   {
     name: "address",
     label: "Delivery address",
-    placeholder: "House, street, area, city",
+    placeholder: "House, street, area",
     autoComplete: "street-address",
     type: "text",
     multiline: true,
+  },
+  {
+    name: "city",
+    label: "City",
+    placeholder: "Your city",
+    autoComplete: "address-level2",
+    type: "text",
+    multiline: false,
   },
 ];
 

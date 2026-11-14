@@ -15,8 +15,8 @@ export const ORDER_STATUSES = [
 ] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
-/** EP-02 US07: cash on delivery only. An order that has no paymentStatus (written before EP-02) reads as unpaid. */
-export const ORDER_PAYMENT_STATUSES = ['unpaid', 'collected'] as const;
+/** collected is cash on delivery (EP-02 US07), paid is a card payment (D-082). An order with no paymentStatus (before EP-02) reads as unpaid. */
+export const ORDER_PAYMENT_STATUSES = ['unpaid', 'collected', 'paid'] as const;
 export type OrderPaymentStatus = (typeof ORDER_PAYMENT_STATUSES)[number];
 
 /** What a history entry records (EP-02 OB-5a). Same values as ORDER_HISTORY_KINDS in @markaz/contracts. */
@@ -61,8 +61,8 @@ export interface IOrderLine {
 export interface IOrderStatusChange {
   from: OrderStatus;
   to: OrderStatus;
-  /** The user who made the change. */
-  by: Types.ObjectId;
+  /** The user who made the change. Null for a system actor, such as a Stripe event. */
+  by: Types.ObjectId | null;
   at: Date;
   note?: string | null;
   /** Written by newer code only. Older entries have none, and the timeline derives it from the entry. */
@@ -92,10 +92,23 @@ export interface IOrder extends Document {
   phone?: string | null;
   address?: string | null;
   city?: string | null;
+  /** Optional, from checkout. Null on every order written before EP-03. */
+  customerEmail?: string | null;
+  /** The shopper's own note from checkout. Not the seller's internal notes below. */
+  customerNote?: string | null;
+  /** A WhatsApp number that differs from the phone. Null means the phone is used. */
+  customerWhatsapp?: string | null;
   items: IOrderLine[];
   subtotal: number;
   deliveryCharges: number;
   total: number;
+  /** The code used, and what it took off the subtotal (D-080). One code per order. */
+  discountCode?: string | null;
+  discountAmount?: number;
+  /** The rule as it stood when the order was placed, so later edits or an archive do not rewrite this order. */
+  discountSnapshot?: { discountId: string; type: string; value: number; minOrderAmount: number | null } | null;
+  /** Set once, in the same compare-and-set that cancels the order, so its discount use goes back exactly once (A-017). */
+  discountRestoredAt?: Date;
   /*
    * EP-02 fields. All have defaults, so an order written before EP-02 still loads: a hydrated document gets the
    * defaults, while a .lean() read simply lacks the field and must treat it as the default (no history, no notes,
@@ -109,6 +122,12 @@ export interface IOrder extends Document {
   paymentStatus: OrderPaymentStatus;
   collectedAt?: Date | null;
   collectedAmount?: number | null;
+  /** When a card payment was received. */
+  paidAt?: Date | null;
+  /** The order's one Stripe Checkout Session. */
+  stripeSessionId?: string | null;
+  /** When that session stops being payable. */
+  stripeSessionExpiresAt?: Date | null;
   /** Internal seller notes. Never part of a storefront response. */
   notes: IOrderNote[];
   cancelledAt?: Date | null;
@@ -123,7 +142,8 @@ const OrderStatusChangeSchema = new Schema<IOrderStatusChange>(
   {
     from: { type: String, required: true, enum: [...ORDER_STATUSES] },
     to: { type: String, required: true, enum: [...ORDER_STATUSES] },
-    by: { type: Schema.Types.ObjectId, required: true },
+    // Null for a system actor.
+    by: { type: Schema.Types.ObjectId, default: null },
     at: { type: Date, required: true, default: () => new Date() },
     note: { type: String, trim: true, maxlength: ORDER_STATUS_NOTE_MAX, default: null },
     // No default: a missing kind means the entry predates it.
@@ -156,6 +176,9 @@ const OrderSchema = new Schema<IOrder>(
     phone: { type: String, trim: true, maxlength: 32, default: null },
     address: { type: String, trim: true, maxlength: 300, default: null },
     city: { type: String, trim: true, maxlength: 60, default: null },
+    customerEmail: { type: String, trim: true, maxlength: 254, default: null },
+    customerNote: { type: String, trim: true, maxlength: 500, default: null },
+    customerWhatsapp: { type: String, trim: true, maxlength: 32, default: null },
     items: {
       type: [
         {
@@ -175,6 +198,22 @@ const OrderSchema = new Schema<IOrder>(
     subtotal: { type: Number, min: 0, default: 0 },
     deliveryCharges: { type: Number, min: 0, default: 0 },
     total: { type: Number, min: 0, default: 0 },
+    discountCode: { type: String, default: null },
+    discountAmount: { type: Number, min: 0, default: 0 },
+    discountSnapshot: {
+      type: new Schema(
+        {
+          discountId: { type: String, required: true },
+          type: { type: String, required: true },
+          value: { type: Number, required: true },
+          minOrderAmount: { type: Number, default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
+    // No default, like stockRestoredAt: the cancel filter requires it to be absent.
+    discountRestoredAt: { type: Date },
     statusHistory: { type: [OrderStatusChangeSchema], default: [] },
     courier: { type: String, trim: true, maxlength: ORDER_COURIER_MAX, default: null },
     trackingNumber: { type: String, trim: true, maxlength: ORDER_TRACKING_NUMBER_MAX, default: null },
@@ -182,6 +221,9 @@ const OrderSchema = new Schema<IOrder>(
     paymentStatus: { type: String, required: true, enum: [...ORDER_PAYMENT_STATUSES], default: 'unpaid' },
     collectedAt: { type: Date, default: null },
     collectedAmount: { type: Number, min: 0, default: null },
+    paidAt: { type: Date, default: null },
+    stripeSessionId: { type: String, default: null },
+    stripeSessionExpiresAt: { type: Date, default: null },
     notes: { type: [OrderNoteSchema], default: [] },
     cancelledAt: { type: Date, default: null },
     cancelReason: { type: String, trim: true, maxlength: ORDER_CANCEL_REASON_MAX, default: null },

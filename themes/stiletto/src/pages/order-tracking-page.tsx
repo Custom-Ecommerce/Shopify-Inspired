@@ -1,12 +1,11 @@
 "use client";
 
-import React, { Suspense, useEffect, useRef } from "react";
+import React, { Suspense } from "react";
 import type { OrderTrackingPageProps } from "@markaz/storefront-data";
 import { useOrderTracking } from "@markaz/storefront-data/client";
 import { paths } from "../adapters/paths";
 import { toTrackingSteps, trackingPlacedOn } from "../adapters/order";
 import { useStilettoChrome } from "../adapters/chrome-context";
-import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Package, Search, Truck, ExternalLink, AlertCircle, Loader2, PackageSearch, XCircle } from "lucide-react";
@@ -14,12 +13,11 @@ import { ArrowLeft, Package, Search, Truck, ExternalLink, AlertCircle, Loader2, 
 /*
  * Customer tracking (EP-02 OB-4, D-069). The shopper enters the order reference and the phone the order was placed with;
  * the answer is only the parcel's journey: a step line with dates, the courier and a tracking link. No name, address, items
- * or totals are fetched, and nothing typed here is stored in the browser.
+ * or totals are fetched, nothing typed here is stored in the browser, and the phone never travels in a link: the customer types it.
  */
 function TrackOrderContent({ initialOrderId }: { initialOrderId: string }) {
   const { content } = useStilettoChrome();
   const lookup = useOrderTracking(initialOrderId);
-  const autoRan = useRef(false);
 
   const loading = lookup.status === "searching";
   const fieldError = lookup.errors.orderId ?? lookup.errors.phone ?? null;
@@ -35,18 +33,6 @@ function TrackOrderContent({ initialOrderId }: { initialOrderId: string }) {
           ? "Too many attempts. Please wait a minute and try again."
           : "We could not check your order right now. Please try again."
         : null);
-
-  // A link that carries both the order reference and the phone (the confirmation page's) looks the order up straight away.
-  const linkedPhone = useSearchParams().get("phone") ?? "";
-  useEffect(() => {
-    if (autoRan.current || !initialOrderId || !linkedPhone) return;
-    if (lookup.values.phone !== linkedPhone) {
-      lookup.setField("phone", linkedPhone);
-      return;
-    }
-    autoRan.current = true;
-    void lookup.submit();
-  }, [initialOrderId, linkedPhone, lookup]);
 
   const handleTrackSubmit = (e: React.FormEvent) => {
     e.preventDefault();

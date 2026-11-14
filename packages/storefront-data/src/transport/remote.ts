@@ -1,10 +1,12 @@
 import type { z } from "zod";
+import { storeTags } from "@markaz/platform-kit/cache-tags";
 import { PREVIEW_CREDENTIAL_HEADER } from "@markaz/platform-kit/preview";
 import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
 import type {
   CartQuote,
   CartQuoteInput,
+  OrderConfirmationInput,
   OrderLookupInput,
   OrderRejection,
   OrderTransport,
@@ -48,6 +50,11 @@ export const DEFAULT_BFF_TIMEOUT_MS = 10000;
 export const DEFAULT_SUBMIT_REMOTE_TIMEOUT_MS = 20000;
 export const DEFAULT_SUBMIT_BFF_TIMEOUT_MS = 25000;
 
+/** How long a catalog read may be kept when no purge arrives. The seller backend purges these tags on every change. */
+export const CATALOG_REVALIDATE_SECONDS = 600;
+/** Free-text searches are unbounded in variety, so they are kept briefly. */
+export const SEARCH_REVALIDATE_SECONDS = 60;
+
 /**
  * "http" (the default) calls the seller backend. "stub" never touches the network: every call rejects with
  * not_implemented. Use stub only for a storefront that runs without a seller backend.
@@ -70,9 +77,11 @@ export interface RemoteTransportOptions {
    * shopper and not to the storefront server. Omit it for calls that are not made on a shopper's behalf.
    */
   clientIp?: string | null;
+  /** Vouches for clientIp. Built on the storefront server, because the secret must not reach this package's browser code. */
+  clientAddressHeaders?: Record<string, string>;
   /**
-   * A preview the backend accepted for this store. Sent as a header on every call, never in a URL. Every call here is
-   * already no-store, so a preview answer has no cache entry at all. A credential: never log it.
+   * A preview the backend accepted for this store. Sent as a header on every call, never in a URL. With one set every
+   * call is no-store, so a preview answer has no cache entry at all. A credential: never log it.
    */
   previewToken?: string | null;
 }
@@ -99,6 +108,8 @@ interface ExchangeRequest {
   retry: boolean;
   /** Overrides the exchanger's timeout for this call. */
   timeoutMs?: number;
+  /** Lets the storefront's data cache keep this read under these tags. Ignored for a preview, which is never kept. */
+  cached?: { tags: string[]; revalidateSeconds: number };
 }
 
 type Exchanger = (method: "GET" | "POST", path: string, request: ExchangeRequest) => Promise<Exchange>;
@@ -155,7 +166,7 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
   const parsed = WireRefusal.safeParse(body);
   if (!parsed.success) return null;
   const { code, message } = parsed.data.error;
-  const { productId, retryAfterSeconds } = parsed.data;
+  const { productId, retryAfterSeconds, field, reason } = parsed.data;
   switch (code) {
     case "EMPTY_ORDER":
       return { code: "empty_order" };
@@ -178,9 +189,14 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
     case "RATE_LIMITED":
       return { code: "rate_limited", retryAfterSeconds: retryAfterSeconds ?? null };
     case "INVALID_REQUEST":
-      return { code: "invalid_request", message: message ?? "Invalid request." };
+      return { code: "invalid_request", message: message ?? "Invalid request.", ...(field === undefined ? {} : { field }) };
     case "STORE_NOT_ACTIVE":
       return { code: "store_inactive" };
+    case "PAYMENT_NOT_STARTED":
+      return { code: "payment_not_started", message: message ?? "The card payment could not be started." };
+    case "DISCOUNT_REJECTED":
+    case "DISCOUNT_USED_UP":
+      return { code: "discount_rejected", reason: code === "DISCOUNT_USED_UP" ? "used_up" : (reason ?? "unknown"), message: message ?? "This code cannot be used." };
     // Reads as an invalid request, whose message every theme already shows, so no theme needs a new case.
     case "PREVIEW_ORDER_BLOCKED":
       return { code: "invalid_request", message: message ?? "This is a preview, so no order was placed." };
@@ -208,14 +224,21 @@ function makeExchanger(options: {
   timeoutMs: number;
   fetchImpl: typeof fetch;
   clientIp?: string | null;
+  clientAddressHeaders?: Record<string, string>;
   previewToken?: string | null;
 }): Exchanger {
-  const forwarded: Record<string, string> =
-    options.clientIp && options.clientIp !== "unknown" ? { "x-forwarded-for": options.clientIp } : {};
+  const forwarded: Record<string, string> = {
+    ...(options.clientIp && options.clientIp !== "unknown" ? { "x-forwarded-for": options.clientIp } : {}),
+    ...options.clientAddressHeaders,
+  };
   if (options.previewToken) forwarded[PREVIEW_CREDENTIAL_HEADER] = options.previewToken;
 
   return async (method, path, request) => {
     const attempts = request.retry ? 2 : 1;
+    const caching: RequestInit & { next?: { revalidate: number; tags: string[] } } =
+      request.cached && !options.previewToken
+        ? { next: { revalidate: request.cached.revalidateSeconds, tags: request.cached.tags } }
+        : { cache: "no-store" };
     let lastError: unknown = undefined;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
@@ -229,7 +252,7 @@ function makeExchanger(options: {
           },
           body: request.body === undefined ? undefined : JSON.stringify(request.body),
           signal: AbortSignal.timeout(request.timeoutMs ?? options.timeoutMs),
-          cache: "no-store",
+          ...caching,
         });
         const body: unknown = await response.json().catch(() => undefined);
         return { status: response.status, body };
@@ -249,7 +272,8 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
   return {
     async quoteCart(input: CartQuoteInput): Promise<CartQuote> {
       requireHttp();
-      const result = await exchange("POST", "/cart/quote", { body: { lines: input.lines }, retry: true });
+      const body = { lines: input.lines, ...(input.discountCode ? { discountCode: input.discountCode } : {}) };
+      const result = await exchange("POST", "/cart/quote", { body, retry: true });
       throwIfRefused(result);
       return unwrap(result, WireCartQuoteEnvelope, "cart quote").data;
     },
@@ -257,7 +281,12 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
     async submitOrder(payload: SubmitOrderPayload): Promise<SubmitOrderResult> {
       requireHttp();
       const result = await exchange("POST", "/orders", {
-        body: { customer: payload.customer, lines: payload.lines },
+        body: {
+          customer: payload.customer,
+          lines: payload.lines,
+          ...(payload.discountCode ? { discountCode: payload.discountCode } : {}),
+          ...(payload.paymentMethod === "card" ? { paymentMethod: "card" } : {}),
+        },
         headers: { "idempotency-key": payload.idempotencyKey },
         retry: false,
         timeoutMs: submitTimeoutMs,
@@ -281,6 +310,17 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
       return unwrap(result, WireOrderLookup, "order lookup").data;
     },
 
+    async confirmOrder(input: OrderConfirmationInput): Promise<StorefrontOrder | null> {
+      requireHttp();
+      const result = await exchange("POST", "/orders/confirmation", {
+        body: { orderNumber: input.orderNumber, token: input.token },
+        retry: true,
+      });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfRefused(result);
+      return unwrap(result, WireOrderLookup, "order confirmation").data;
+    },
+
     async trackOrder(input: OrderLookupInput): Promise<StorefrontOrderTracking | null> {
       requireHttp();
       const result = await exchange("POST", "/orders/track", {
@@ -296,6 +336,7 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
       requireHttp();
       if (ids.length === 0) return [];
       const result = await exchange("GET", "/products?ids=" + ids.map(encodeURIComponent).join(","), { retry: true });
+      throwIfRefused(result);
       return unwrap(result, WireProductList, "product list").data;
     },
   };
@@ -310,6 +351,7 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
  *   POST /cart/quote            price a cart without moving stock
  *   POST /orders                create order, with an Idempotency-Key header; refusals become OrderRejectedError
  *   POST /orders/lookup         the shopper's order by id and phone; 404 ORDER_NOT_FOUND becomes null
+ *   POST /orders/confirmation   the tab that placed an order reading it back with its token; 404 ORDER_NOT_FOUND becomes null
  *   POST /orders/track          customer tracking by id and phone (journey only); 404 ORDER_NOT_FOUND becomes null
  *   GET  /products?ids=         the Live products among these ids
  *
@@ -325,6 +367,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     timeoutMs: options.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,
     fetchImpl: options.fetchImpl ?? defaultFetch,
     clientIp: options.clientIp,
+    clientAddressHeaders: options.clientAddressHeaders,
     previewToken: options.previewToken,
   });
 
@@ -339,23 +382,28 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
 
   const orders = makeOrderTransport(exchange, requireHttp, options.submitTimeoutMs ?? DEFAULT_SUBMIT_REMOTE_TIMEOUT_MS);
 
+  const { storeId } = options;
+  const productListTags = [storeTags.products(storeId), storeTags.static(storeId)];
+  const catalogRead = (tags: string[], revalidateSeconds = CATALOG_REVALIDATE_SECONDS) => ({ retry: true, cached: { tags, revalidateSeconds } });
+
   return {
     kind: "remote",
     quoteCart: orders.quoteCart,
     submitOrder: orders.submitOrder,
     lookupOrder: orders.lookupOrder,
+    confirmOrder: orders.confirmOrder,
     trackOrder: orders.trackOrder,
     getProductsByIds: orders.getProductsByIds,
 
     async getProducts(): Promise<StorefrontProductSummary[]> {
       requireHttp();
-      const result = await exchange("GET", "/products", { retry: true });
+      const result = await exchange("GET", "/products", catalogRead(productListTags));
       return unwrap(result, WireProductList, "product list").data;
     },
 
     async listCategories(): Promise<StorefrontCategory[]> {
       requireHttp();
-      const result = await exchange("GET", "/categories", { retry: true });
+      const result = await exchange("GET", "/categories", catalogRead([storeTags.categories(storeId), ...productListTags]));
       return unwrap(result, WireCategoryList, "category list").data;
     },
 
@@ -368,14 +416,17 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
       if (query.page) params.set("page", String(query.page));
       if (query.limit) params.set("limit", String(query.limit));
       const qs = params.toString();
-      const result = await exchange("GET", "/products" + (qs ? "?" + qs : ""), { retry: true });
+      const read = catalogRead(productListTags, query.q ? SEARCH_REVALIDATE_SECONDS : CATALOG_REVALIDATE_SECONDS);
+      const result = await exchange("GET", "/products" + (qs ? "?" + qs : ""), read);
       const list = unwrap(result, WireProductList, "product list");
       return { items: list.data, page: list.page, totalPages: list.totalPages };
     },
 
     async getProduct(slug: string): Promise<StorefrontProductDetail | null> {
       requireHttp();
-      const result = await exchange("GET", "/products/" + encodeURIComponent(slug), { retry: true });
+      // The delivery charge on a product page falls back to the store's rate, so a settings change must drop it too.
+      const tags = [storeTags.product(storeId, slug), storeTags.settings(storeId), ...productListTags];
+      const result = await exchange("GET", "/products/" + encodeURIComponent(slug), catalogRead(tags));
       if (result.status === 404 && errorCode(result.body) === "PRODUCT_NOT_FOUND") return null;
       return unwrap(result, WireProductDetailEnvelope, "product").data;
     },

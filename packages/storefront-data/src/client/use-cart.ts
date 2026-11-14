@@ -29,8 +29,14 @@ export interface UseCartResult extends CartVM {
   /** Sets one line's quantity. Below 1 removes the line. Quantities are capped at MAX_LINE_QTY. */
   setQty: (lineId: string, qty: number) => void;
   remove: (lineId: string) => void;
-  /** Empties the cart. Used after a successful order. */
+  /** Empties the cart, and forgets its code. Used after a successful order. */
   clear: () => void;
+  /** Replaces the prices remembered in the cart with the server's current ones. */
+  applyQuotedPrices: (prices: ReadonlyArray<{ lineId: string; unitPrice: number }>) => void;
+  /** The shopper's code, in capitals, whether or not the server has accepted it yet. */
+  discountCode: string | null;
+  /** Sets or, with null or blank, removes the code. */
+  setDiscountCode: (code: string | null) => void;
 }
 
 /** The cart of the storefront this component is rendered under. The demo has one; a live store has its own. */
@@ -42,6 +48,9 @@ export function useCart(): UseCartResult {
   const setLineQty = store((state) => state.setLineQty);
   const removeLine = store((state) => state.removeLine);
   const clearLines = store((state) => state.clearLines);
+  const applyQuotedPrices = store((state) => state.applyPrices);
+  const discountCode = store((state) => state.discountCode);
+  const storeDiscountCode = store((state) => state.setDiscountCode);
 
   useEffect(() => {
     const finish = () => store.getState().markHydrated();
@@ -76,5 +85,10 @@ export function useCart(): UseCartResult {
     [addLine],
   );
 
-  return { ...view, isHydrated, add, setQty: setLineQty, remove: removeLine, clear: clearLines };
+  const setDiscountCode = useCallback(
+    (code: string | null) => storeDiscountCode(code?.trim().toUpperCase() || null),
+    [storeDiscountCode],
+  );
+
+  return { ...view, isHydrated, add, setQty: setLineQty, remove: removeLine, clear: clearLines, applyQuotedPrices, discountCode, setDiscountCode };
 }

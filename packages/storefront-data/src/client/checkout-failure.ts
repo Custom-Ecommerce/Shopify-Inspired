@@ -1,3 +1,5 @@
+import { CHECKOUT_FIELDS } from "../domain/checkout";
+import type { CheckoutField } from "../domain/checkout";
 import { OrderRejectedError, OrderUnconfirmedError } from "../transport/errors";
 import type { OrderRejection } from "../transport/types";
 
@@ -15,6 +17,10 @@ export type CheckoutFailure =
   | { kind: "rate_limited"; retryAfterSeconds: number | null }
   | { kind: "invalid_request"; message: string }
   | { kind: "store_inactive" }
+  /** The discount code cannot be used. No order was placed. message is written for the shopper. */
+  | { kind: "discount_rejected"; reason: string; message: string }
+  /** Stripe could not start the payment and the order was cancelled. A new attempt is a new order. */
+  | { kind: "payment_not_started"; message: string }
   | { kind: "unavailable" }
   /** No clear answer even after checking with the same key. Trying again cannot place a second order (CO-03). */
   | { kind: "unconfirmed" };
@@ -25,6 +31,20 @@ type CartLineRef = { productId: string; title: string };
 export function cartTitle(lines: readonly CartLineRef[], productId: string | undefined): string | null {
   if (productId === undefined) return null;
   return lines.find((line) => line.productId === productId)?.title ?? null;
+}
+
+/**
+ * The server's refusal of one of the form's fields, or null when the failure is about something else. The server words
+ * it as "customer.phone: Enter a valid...", so this is what lets a theme put the message beside the right box.
+ */
+export function checkoutServerFieldError(failure: CheckoutFailure | null): { field: CheckoutField; message: string } | null {
+  if (failure === null || failure.kind !== "invalid_request") return null;
+  const match = /^customer\.(\w+):\s*(.+)$/.exec(failure.message.trim());
+  if (match === null) return null;
+  const field = CHECKOUT_FIELDS.find((name) => name === match[1]);
+  if (field === undefined) return null;
+  const text = match[2] ?? "";
+  return { field, message: text.charAt(0).toUpperCase() + text.slice(1) };
 }
 
 /**
@@ -72,6 +92,10 @@ export function toCheckoutFailure(error: unknown, lines: readonly CartLineRef[])
       return { kind: "invalid_request", message: rejection.message };
     case "store_inactive":
       return { kind: "store_inactive" };
+    case "discount_rejected":
+      return { kind: "discount_rejected", reason: rejection.reason, message: rejection.message };
+    case "payment_not_started":
+      return { kind: "payment_not_started", message: rejection.message };
     default: {
       const unhandled: never = rejection;
       void unhandled;

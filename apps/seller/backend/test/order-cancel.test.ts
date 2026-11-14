@@ -4,9 +4,11 @@ import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
 import * as contractsNs from '@markaz/contracts';
 import { unwrapCjs } from '@/lib/cjs';
-import { AuditLog, Order, Product, StockMovement, Store, signSession } from '@/lib/services';
+import { AuditLog, Discount, Order, Product, StockMovement, Store, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { lineName, restoreOrderStock, stockRestoreSummary } from '@/lib/order-stock';
+import { toDashboardOrderDetail } from '@/lib/orders';
+import { stripeClient } from '../src/lib/storefront/card-payment';
 
 // EP-02 OB-3: POST /api/orders/:id/cancel and the stock restore (D-064, D-066, D-067). Models are stubbed; no database.
 
@@ -76,6 +78,7 @@ before(async () => {
 function orderMatches(row: Record<string, any>, filter: Record<string, any>): boolean {
   return Object.entries(filter).every(([key, value]) => {
     if (value && typeof value === 'object' && '$exists' in value) return (row[key] !== undefined) === Boolean(value.$exists);
+    if (value && typeof value === 'object' && '$ne' in value) return row[key] !== value.$ne;
     return String(row[key]) === String(value);
   });
 }
@@ -604,4 +607,271 @@ test('restore lib: invalid ids are skipped without a write', async () => {
     { name: 'T-Shirt (L)', why: 'variant_deleted' },
   ]);
   assert.equal(movements.length, 0);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// EP-15 CB-3: the discount use goes back exactly once (A-017), through the same compare-and-set.
+
+const DISCOUNT_ID = '65a0000000000000000e0001';
+const DiscountModel = Discount as any;
+
+const withCode = { discountCode: 'EID10', discountAmount: 200, discountSnapshot: { discountId: DISCOUNT_ID, type: 'percentage', value: 10, minOrderAmount: null } };
+
+function stubDiscounts(rows: Array<Record<string, any>>, fail = false): { calls: () => number; undo: () => void } {
+  const saved = DiscountModel.updateOne;
+  let calls = 0;
+  DiscountModel.updateOne = async (filter: any, update: any) => {
+    calls += 1;
+    if (fail) throw new Error('write failed');
+    const row = rows.find((r) => String(r._id) === String(filter._id) && String(r.store) === String(filter.store));
+    if (!row || !(row.usedCount > filter.usedCount.$gt)) return { matchedCount: 0 };
+    row.usedCount += update.$inc.usedCount;
+    return { matchedCount: 1 };
+  };
+  return { calls: () => calls, undo: () => (DiscountModel.updateOne = saved) };
+}
+
+const auditText = () => JSON.stringify(audits[0]);
+
+test('cancel: a discount use goes back once, and the marker is set with the cancel', async () => {
+  const row = { _id: DISCOUNT_ID, store: STORE_A, usedCount: 3 };
+  const stub = stubDiscounts([row]);
+  try {
+    seedOrder('pending', withCode);
+    assert.equal((await cancel()).status, 200);
+    assert.equal(row.usedCount, 2);
+    assert.ok(stored().discountRestoredAt instanceof Date);
+    assert.equal(stored().discountRestoredAt, stored().stockRestoredAt, 'one write sets both');
+    assert.match(auditText(), /"discountUse":"returned"/);
+  } finally {
+    stub.undo();
+  }
+});
+
+test('cancel: cancelling twice returns the use once', async () => {
+  const row = { _id: DISCOUNT_ID, store: STORE_A, usedCount: 3 };
+  const stub = stubDiscounts([row]);
+  try {
+    seedOrder('pending', withCode);
+    assert.equal((await cancel()).status, 200);
+    assert.equal((await cancel()).status, 422);
+    assert.equal(row.usedCount, 2);
+    assert.equal(stub.calls(), 1);
+  } finally {
+    stub.undo();
+  }
+});
+
+test('cancel: two parallel cancels return the use once', async () => {
+  const row = { _id: DISCOUNT_ID, store: STORE_A, usedCount: 3 };
+  const stub = stubDiscounts([row]);
+  try {
+    seedOrder('pending', withCode);
+    holdReads(2);
+    const results = await Promise.all([cancel(), cancel()]);
+    assert.deepEqual(results.map((r) => r.status).sort(), [200, 422]);
+    assert.equal(row.usedCount, 2);
+    assert.equal(stub.calls(), 1);
+  } finally {
+    stub.undo();
+  }
+});
+
+test('cancel: a discount deleted since the order is skipped, and the cancel goes through', async () => {
+  const stub = stubDiscounts([]);
+  try {
+    seedOrder('pending', withCode);
+    assert.equal((await cancel()).status, 200);
+    assert.equal(stored().status, 'cancelled');
+    assert.match(auditText(), /"discountUse":"skipped"/);
+  } finally {
+    stub.undo();
+  }
+});
+
+test('cancel: an archived discount still gets its use back', async () => {
+  const row = { _id: DISCOUNT_ID, store: STORE_A, usedCount: 1, archivedAt: new Date() };
+  const stub = stubDiscounts([row]);
+  try {
+    seedOrder('pending', withCode);
+    assert.equal((await cancel()).status, 200);
+    assert.equal(row.usedCount, 0);
+  } finally {
+    stub.undo();
+  }
+});
+
+test('cancel: an order without a code touches no discount and sets no marker', async () => {
+  const stub = stubDiscounts([{ _id: DISCOUNT_ID, store: STORE_A, usedCount: 3 }]);
+  try {
+    seedOrder('pending');
+    assert.equal((await cancel()).status, 200);
+    assert.equal(stub.calls(), 0);
+    assert.equal('discountRestoredAt' in stored(), false);
+    assert.match(auditText(), /"discountUse":null/);
+  } finally {
+    stub.undo();
+  }
+});
+
+test('cancel: the use count never goes below zero', async () => {
+  const row = { _id: DISCOUNT_ID, store: STORE_A, usedCount: 0 };
+  const stub = stubDiscounts([row]);
+  try {
+    seedOrder('pending', withCode);
+    assert.equal((await cancel()).status, 200);
+    assert.equal(row.usedCount, 0);
+  } finally {
+    stub.undo();
+  }
+});
+
+test("cancel: another store's discount with the same id is not credited", async () => {
+  const row = { _id: DISCOUNT_ID, store: STORE_B, usedCount: 3 };
+  const stub = stubDiscounts([row]);
+  try {
+    seedOrder('pending', withCode);
+    assert.equal((await cancel()).status, 200);
+    assert.equal(row.usedCount, 3);
+  } finally {
+    stub.undo();
+  }
+});
+
+test('cancel: a discount write that fails does not stop the cancel, and is on the record', async () => {
+  const stub = stubDiscounts([], true);
+  const quiet = console.error;
+  console.error = () => undefined;
+  try {
+    seedOrder('pending', withCode);
+    assert.equal((await cancel()).status, 200);
+    assert.equal(stored().status, 'cancelled');
+    assert.equal(units(SHIRT, SHIRT_M), 3, 'stock still went back');
+    assert.match(auditText(), /"discountUse":"failed"/);
+  } finally {
+    console.error = quiet;
+    stub.undo();
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// EP-03 CB-5: card orders and the hand cancel.
+
+const SESSION = 'cs_test_cancel';
+const unpaidCard = { paymentMethod: 'card', paymentStatus: 'unpaid', stripeSessionId: SESSION };
+
+async function withStripe(run: (state: { expired: string[]; warned: unknown[][]; failed: unknown[][]; expire: (id: string) => Promise<unknown>; session: Record<string, unknown> }) => Promise<void>): Promise<void> {
+  process.env.STRIPE_SECRET_KEY = 'sk_test_stub';
+  process.env.STRIPE_ORDER_WEBHOOK_SECRET = 'whsec_stub';
+  process.env.STOREFRONT_URL = 'https://markazify.test';
+  const sessions = (await stripeClient()).checkout.sessions as any;
+  const saved = { expire: sessions.expire, retrieve: sessions.retrieve, warn: console.warn, error: console.error };
+  const state = { expired: [] as string[], warned: [] as unknown[][], failed: [] as unknown[][], expire: async (_id: string): Promise<unknown> => ({ status: 'expired' }), session: { payment_status: 'unpaid' } as Record<string, unknown> };
+  sessions.expire = async (id: string) => {
+    state.expired.push(id);
+    return state.expire(id);
+  };
+  sessions.retrieve = async () => state.session;
+  console.warn = (...args: unknown[]) => void state.warned.push(args);
+  console.error = (...args: unknown[]) => void state.failed.push(args);
+  try {
+    await run(state);
+  } finally {
+    sessions.expire = saved.expire;
+    sessions.retrieve = saved.retrieve;
+    console.warn = saved.warn;
+    console.error = saved.error;
+    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_ORDER_WEBHOOK_SECRET;
+    delete process.env.STOREFRONT_URL;
+  }
+}
+
+test('cancel: a seller cancelling an unpaid card order also expires its Stripe session', () =>
+  withStripe(async (state) => {
+    seedOrder('pending', unpaidCard);
+    assert.equal((await cancel()).status, 200);
+    assert.deepEqual(state.expired, [SESSION]);
+    assert.equal(state.failed.length, 0);
+  }));
+
+test('cancel: an order with no session, or cash on delivery, asks Stripe nothing', () =>
+  withStripe(async (state) => {
+    seedOrder('pending', { paymentMethod: 'card', paymentStatus: 'unpaid', stripeSessionId: null });
+    assert.equal((await cancel()).status, 200);
+    orders = [];
+    seedOrder('pending', { paymentMethod: 'cod' });
+    assert.equal((await cancel()).status, 200);
+    assert.deepEqual(state.expired, []);
+  }));
+
+test('cancel: if Stripe says the session was already paid, it is logged as needing a refund and the cancel stands', () =>
+  withStripe(async (state) => {
+    state.expire = async () => {
+      throw Object.assign(new Error('not open'), { code: 'checkout_session_not_open' });
+    };
+    state.session = { payment_status: 'paid' };
+    seedOrder('pending', unpaidCard);
+    assert.equal((await cancel()).status, 200);
+    assert.equal(stored().status, 'cancelled');
+    assert.match(String(state.failed[0]?.[0]), /needs a refund/);
+  }));
+
+test('cancel: a Stripe failure does not fail the cancel, and is logged', () =>
+  withStripe(async (state) => {
+    state.expire = async () => {
+      throw Object.assign(new Error('secret detail'), { code: 'api_error' });
+    };
+    seedOrder('pending', unpaidCard);
+    assert.equal((await cancel()).status, 200);
+    assert.equal(stored().status, 'cancelled');
+    assert.equal(state.warned.length, 1);
+    assert.equal(JSON.stringify(state.warned).includes('secret detail'), false);
+  }));
+
+test('cancel: a refused cancel does not touch the session', () =>
+  withStripe(async (state) => {
+    seedOrder('dispatched', unpaidCard);
+    assert.equal((await cancel()).status, 422);
+    assert.deepEqual(state.expired, []);
+  }));
+
+test('cancel: a paid card order cannot be cancelled by hand, and says refunds come later', async () => {
+  seedOrder('pending', { paymentMethod: 'card', paymentStatus: 'paid' });
+  const { status, body } = await cancel();
+  assert.equal(status, 422);
+  assert.equal(body.errors[0].code, 'ORDER_CANCEL_ILLEGAL');
+  assert.equal(body.errors[0].reason, 'card_paid');
+  assert.match(body.errors[0].message, /Refunds/);
+  assert.equal(stored().status, 'pending');
+  assert.equal(cancelWrites, 0);
+});
+
+test('cancel: a payment landing between the read and the write still blocks the cancel', async () => {
+  seedOrder('pending', { paymentMethod: 'card', paymentStatus: 'unpaid' });
+  const write = OrderModel.findOneAndUpdate;
+  OrderModel.findOneAndUpdate = (filter: any, update: any, options: any) => {
+    stored().paymentStatus = 'paid';
+    return write(filter, update, options);
+  };
+  const { status, body } = await cancel();
+  assert.equal(status, 422);
+  assert.equal(body.errors[0].reason, 'card_paid');
+  assert.equal(stored().status, 'pending');
+});
+
+test('cancel: a paid cash on delivery order is unaffected by the card rule', async () => {
+  seedOrder('pending', { paymentMethod: 'cod', paymentStatus: 'collected' });
+  assert.equal((await cancel()).status, 200);
+});
+
+test('detail: a paid card order offers no cancel; the customer email, WhatsApp and note are shown', () => {
+  const paid = toDashboardOrderDetail({ _id: ORDER_A, orderId: 'ORD-1', status: 'pending', paymentMethod: 'card', paymentStatus: 'paid' });
+  assert.equal(paid.canCancel, false);
+  const unpaid = toDashboardOrderDetail({ _id: ORDER_A, orderId: 'ORD-1', status: 'pending', paymentMethod: 'card', paymentStatus: 'unpaid', customerEmail: 'sara@example.pk', customerWhatsapp: '+923117654321', customerNote: 'Ring the bell', notes: [] });
+  assert.equal(unpaid.canCancel, true);
+  assert.equal(unpaid.customerEmail, 'sara@example.pk');
+  assert.equal(unpaid.customerWhatsapp, '+923117654321');
+  assert.equal(unpaid.customerNote, 'Ring the bell');
+  assert.deepEqual(unpaid.notes, [], "the shopper's note is not one of the seller's notes");
 });

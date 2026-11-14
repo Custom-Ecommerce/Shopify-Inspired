@@ -75,7 +75,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
 
     await applyProductUpdate(storeId, id, data, await prepareProductUpdate(storeId, id, data, current));
 
-    await revalidateStoreProduct(storeId, id);
+    revalidateStoreProduct(storeId, id);
     return NextResponse.json(await loadSellerProduct(storeId, id));
   } catch (err) {
     return handleProductError(err);
@@ -130,11 +130,11 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
         .select('_id')
         .lean();
       if (!trashed) throw productNotFound();
-      await revalidateStoreProduct(storeId, id);
+      revalidateStoreProduct(storeId, id);
       return NextResponse.json({ trashed: true, id });
     }
 
-    await revalidateStoreProduct(storeId, id);
+    revalidateStoreProduct(storeId, id);
     return NextResponse.json({ deleted: true, id });
   } catch (err) {
     return handleProductError(err);

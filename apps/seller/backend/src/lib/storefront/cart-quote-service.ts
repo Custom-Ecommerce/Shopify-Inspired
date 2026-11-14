@@ -1,5 +1,6 @@
 import { Product } from '@/lib/services';
 import { buildCartQuote, type CartQuote, type QuoteCatalogRow, type QuoteRequestLine } from '@/lib/storefront/cart-quote';
+import { findDiscountRule } from '@/lib/storefront/discount-service';
 import { isLiveProduct, type LiveFlags } from '@/lib/storefront/live-product';
 import type { StoreCommerce } from '@/lib/storefront/store-guard';
 
@@ -13,6 +14,7 @@ export async function loadCartQuote(
   storeId: string,
   commerce: StoreCommerce,
   lines: QuoteRequestLine[],
+  discountCode: string | null = null,
 ): Promise<CartQuote> {
   const queryable = lines.map((line) => line.productId).filter((id) => HEX_ID.test(id));
   const rows =
@@ -24,5 +26,6 @@ export async function loadCartQuote(
   const idOf = (row: { _id: unknown }): string => String(row._id).toLowerCase();
   const catalog = new Map(rows.filter(isLiveProduct).map((row) => [idOf(row), row] as const));
   const unavailable = new Set(rows.filter((row) => !isLiveProduct(row)).map(idOf));
-  return buildCartQuote(lines, catalog, commerce, unavailable);
+  const discount = discountCode === null ? null : { code: discountCode, rule: await findDiscountRule(storeId, discountCode) };
+  return buildCartQuote(lines, catalog, commerce, unavailable, discount);
 }

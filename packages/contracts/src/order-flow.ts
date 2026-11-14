@@ -84,12 +84,13 @@ export function transitionRefusal(from: unknown, to: unknown): OrderTransitionRe
 /** The statuses an order can be cancelled from. After dispatch the way back is a return (EP-13). */
 export const CANCELLABLE_STATUSES: readonly OrderFlowStatus[] = ['pending', 'confirmed', 'processing'];
 
-export type OrderCancelRefusal = 'already_cancelled' | 'dispatched_or_later' | 'unknown_status';
+export type OrderCancelRefusal = 'already_cancelled' | 'dispatched_or_later' | 'unknown_status' | 'card_paid';
 
 export const ORDER_CANCEL_REFUSAL_MESSAGES: Readonly<Record<OrderCancelRefusal, string>> = {
   already_cancelled: 'This order is already cancelled.',
   dispatched_or_later: 'This order has already been dispatched, so it cannot be cancelled. After dispatch the way back is a return.',
   unknown_status: 'This order has an unknown status, so it cannot be cancelled.',
+  card_paid: 'This order has been paid by card, so it cannot be cancelled yet. Refunds will come in a later update.',
 };
 
 /** Why an order in this status cannot be cancelled, or null when it can. */
@@ -104,6 +105,11 @@ export function canCancel(status: unknown): boolean {
   return cancelRefusal(status) === null;
 }
 
+/** A paid card order stays until refunds exist (EP-13), because cancelling would keep the shopper's money. */
+export function paidCardOrder(order: { paymentMethod?: unknown; paymentStatus?: unknown }): boolean {
+  return order.paymentMethod === 'card' && order.paymentStatus === 'paid';
+}
+
 // EP-02 OB-5a: COD collected (D-064). Only after dispatch, and only for cash on delivery.
 
 export const PAYMENT_COLLECTABLE_STATUSES: readonly OrderFlowStatus[] = ['dispatched', 'delivered'];
@@ -114,6 +120,11 @@ export type OrderPaymentRefusal = 'before_dispatch' | 'order_closed';
 export function paymentRefusal(status: unknown): OrderPaymentRefusal | null {
   if (isOrderFlowStatus(status) && PAYMENT_COLLECTABLE_STATUSES.includes(status)) return null;
   return status === 'pending' || status === 'confirmed' || status === 'processing' ? 'before_dispatch' : 'order_closed';
+}
+
+/** A card order is paid before it ships. Cash on delivery is not affected. */
+export function cardPaymentPending(order: { paymentMethod?: unknown; paymentStatus?: unknown }): boolean {
+  return order.paymentMethod === 'card' && order.paymentStatus !== 'paid';
 }
 
 /** COD, not collected yet (a missing paymentStatus is unpaid), and dispatched or delivered. */

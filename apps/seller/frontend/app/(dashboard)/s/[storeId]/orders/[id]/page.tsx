@@ -1094,6 +1094,11 @@ export default function OrderDetailPage() {
             <Row label="Delivery">
               <span className="tabular-nums">{order.deliveryCharges === 0 ? "Free" : money(order.deliveryCharges)}</span>
             </Row>
+            {order.discountAmount > 0 ? (
+              <Row label={order.discountCode ? "Discount (" + order.discountCode + ")" : "Discount"}>
+                <span className="tabular-nums">-{money(order.discountAmount)}</span>
+              </Row>
+            ) : null}
             <Row label="Total">
               <span className="tabular-nums font-semibold">{money(order.total)}</span>
             </Row>
@@ -1110,6 +1115,14 @@ export default function OrderDetailPage() {
           {order.phone ? <p className="font-mono">{order.phone}</p> : null}
           {order.address ? <p className="break-words">{order.address}</p> : null}
           {order.city ? <p>{order.city}</p> : null}
+          {order.customerWhatsapp ? <p className="font-mono">WhatsApp: {order.customerWhatsapp}</p> : null}
+          {order.customerEmail ? <p className="break-all">{order.customerEmail}</p> : null}
+          {order.customerNote ? (
+            <div className="mt-2 rounded-xl border bg-muted/40 p-3">
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Note from the customer</p>
+              <p className="whitespace-pre-wrap break-words">{order.customerNote}</p>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -1120,8 +1133,17 @@ export default function OrderDetailPage() {
         <CardContent className="flex flex-col gap-2 text-sm">
           <Row label="Method">{order.paymentMethod ? PAYMENT_METHOD_LABEL[order.paymentMethod] : "—"}</Row>
           <Row label="Status">
-            <PaymentStatusBadge status={order.paymentStatus} />
+            <PaymentStatusBadge
+              status={order.paymentStatus}
+              label={order.paymentMethod === "card" && order.paymentStatus === "unpaid" ? "Awaiting payment" : undefined}
+            />
           </Row>
+          {order.paidAt ? <Row label="Paid">{dateTime(order.paidAt)}</Row> : null}
+          {order.stripeSessionId ? (
+            <Row label="Session">
+              <span className="font-mono text-xs break-all">{order.stripeSessionId}</span>
+            </Row>
+          ) : null}
           {order.collectedAt ? <Row label="Collected">{dateTime(order.collectedAt)}</Row> : null}
           {order.collectedAmount !== null ? (
             <Row label="Amount collected">

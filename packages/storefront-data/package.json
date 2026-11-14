@@ -11,9 +11,11 @@
     "./preview": "./src/preview.ts"
   },
   "scripts": {
+    "test": "node test/run-checks.mjs",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@markaz/contracts": "workspace:*",
     "@markaz/platform-kit": "workspace:*",
     "zod": "4.4.3",
     "zustand": "^4.5.2"
@@ -24,6 +26,7 @@
   "devDependencies": {
     "@types/react": "^19",
     "react": "19.0.1",
+    "tsx": "^4.19.1",
     "typescript": "^5"
   }
 }

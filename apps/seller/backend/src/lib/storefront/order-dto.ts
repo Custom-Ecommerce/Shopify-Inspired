@@ -2,9 +2,13 @@ import { storefrontOrderCreatedSchema, storefrontOrderSchema, storefrontOrderTra
 
 /** An order as .lean() (or toObject) returns it. */
 export interface OrderRow {
+  _id?: unknown;
   orderId: string;
   status: string;
   paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  stripeSessionId?: string | null;
+  stripeSessionExpiresAt?: Date | string | null;
   customerName?: string | null;
   phone?: string | null;
   address?: string | null;
@@ -21,6 +25,8 @@ export interface OrderRow {
   subtotal?: number | null;
   deliveryCharges?: number | null;
   total?: number | null;
+  discountCode?: string | null;
+  discountAmount?: number | null;
   idempotencyKey?: string | null;
   requestFingerprint?: string | null;
   createdAt?: Date | string | null;
@@ -41,6 +47,7 @@ function created(row: OrderRow) {
     paymentMethod: row.paymentMethod ?? 'cod',
     subtotal: row.subtotal ?? 0,
     deliveryCharges: row.deliveryCharges ?? 0,
+    discount: row.discountAmount ?? 0,
     total: row.total ?? 0,
     createdAt: iso(row.createdAt),
   };
@@ -62,6 +69,8 @@ export function toOrderDto(row: OrderRow) {
     phone: row.phone ?? '',
     city: row.city ?? null,
     address: row.address ?? '',
+    discountCode: row.discountCode ?? null,
+    paymentStatus: row.paymentStatus === 'paid' || row.paymentStatus === 'collected' ? row.paymentStatus : 'unpaid',
     items: (row.items ?? []).map((item) => ({
       productId: item.productId,
       variantId: item.variantId,

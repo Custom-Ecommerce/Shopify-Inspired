@@ -35,7 +35,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const outcome = await adjustInventory(storeId, ctx.userObjectId, body.data.lines);
 
     const changed = new Set(outcome.results.flatMap((result) => (result.ok && result.delta !== 0 ? [result.productId] : [])));
-    await Promise.all([...changed].map((productId) => revalidateStoreProduct(storeId, productId)));
+    for (const productId of changed) revalidateStoreProduct(storeId, productId);
 
     if (outcome.succeeded > 0) return NextResponse.json(outcome);
     const errors = outcome.results.flatMap((result) =>

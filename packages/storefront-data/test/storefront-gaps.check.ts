@@ -179,7 +179,7 @@ async function main(): Promise<void> {
   await check("mock order lookup: found by id and local phone format, refused for another phone", async () => {
     const placed = await mockTransport.submitOrder({
       idempotencyKey: "gaps-check-key-0001",
-      customer: { customerName: "Test Buyer", phone: "03001234567", address: "House 1, Street 2, Karachi" },
+      customer: { customerName: "Test Buyer", phone: "03001234567", address: "House 1, Street 2", city: "Karachi" },
       lines: [{ productId: "prod_tee_001", qty: 2 }],
     });
     const found = await mockTransport.lookupOrder({ orderId: placed.orderId, phone: "0300 1234567" });

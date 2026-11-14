@@ -55,7 +55,7 @@ test('product slug pattern is one path segment', () => {
 });
 
 const request = {
-  customer: { customerName: 'Sara Khan', phone: '0300 1234567', address: 'House 12, Street 4, Block 5' },
+  customer: { customerName: 'Sara Khan', phone: '0300 1234567', address: 'House 12, Street 4, Block 5', city: 'Karachi' },
   lines: [{ productId: '65a0000000000000000000b1', qty: 2 }],
 };
 

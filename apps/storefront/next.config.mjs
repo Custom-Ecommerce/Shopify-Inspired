@@ -3,6 +3,7 @@ const nextConfig = {
   allowedDevOrigins: ["theme.mustafa.localhost", "*.localhost", "localhost"],
   // The shared workspace package ships TypeScript source (see its package.json `exports`).
   transpilePackages: [
+    "@markaz/contracts",
     "@markaz/platform-kit",
     "@markaz/storefront-data",
     "@markaz/storefront-theme-kit",

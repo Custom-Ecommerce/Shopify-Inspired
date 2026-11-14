@@ -124,11 +124,11 @@ test('an order loaded from the database without the EP-02 fields gets the defaul
   assert.deepEqual(stored.toObject().notes, []);
 });
 
-test('paymentStatus accepts unpaid and collected only', () => {
-  assert.deepEqual([...ORDER_PAYMENT_STATUSES], ['unpaid', 'collected']);
+test('paymentStatus accepts unpaid, collected and paid only', () => {
+  assert.deepEqual([...ORDER_PAYMENT_STATUSES], ['unpaid', 'collected', 'paid']);
   const collected = order({ paymentStatus: 'collected', collectedAt: new Date(), collectedAmount: 2400 });
   assert.equal(collected.validateSync(), undefined);
-  assert.notEqual(order({ paymentStatus: 'paid' }).validateSync(), undefined);
+  assert.equal(order({ paymentStatus: 'paid', paidAt: new Date() }).validateSync(), undefined);
   assert.notEqual(order({ paymentStatus: 'refunded' }).validateSync(), undefined);
   assert.notEqual(order({ collectedAmount: -1 }).validateSync(), undefined);
 });
@@ -155,11 +155,11 @@ test('a status history entry has from, to, by, at and an optional note', () => {
   assert.equal('_id' in first, false);
 });
 
-test('a status history entry needs from, to and by, and only known statuses', () => {
+test('a status history entry needs from and to, a real user or none, and only known statuses', () => {
   const bad = (entry: Record<string, unknown>) => order({ statusHistory: [entry] }).validateSync();
   assert.notEqual(bad({ to: 'confirmed', by: USER }), undefined);
   assert.notEqual(bad({ from: 'pending', by: USER }), undefined);
-  assert.notEqual(bad({ from: 'pending', to: 'confirmed' }), undefined);
+  assert.equal(bad({ from: 'pending', to: 'cancelled', by: null }), undefined, 'a system actor, such as a Stripe event, has no user');
   assert.notEqual(bad({ from: 'pending', to: 'shipped', by: USER }), undefined);
   assert.notEqual(bad({ from: 'pending', to: 'confirmed', by: 'not-an-id' }), undefined);
   assert.notEqual(bad({ from: 'pending', to: 'confirmed', by: USER, note: 'x'.repeat(ORDER_STATUS_NOTE_MAX + 1) }), undefined);
@@ -274,4 +274,10 @@ test('a history entry may carry a kind; it has no default and only known kinds v
   assert.equal(without.validateSync(), undefined);
   assert.equal('kind' in without.toObject().statusHistory[0], false);
   assert.notEqual(order({ statusHistory: [{ ...entry, kind: 'bogus' }] }).validateSync(), undefined);
+});
+
+test('a separate WhatsApp number is kept apart from the phone and defaults to none', () => {
+  assert.equal(order({}).customerWhatsapp, null);
+  assert.equal(order({ customerWhatsapp: '+923117654321' }).validateSync(), undefined);
+  assert.notEqual(order({ customerWhatsapp: 'x'.repeat(33) }).validateSync(), undefined);
 });

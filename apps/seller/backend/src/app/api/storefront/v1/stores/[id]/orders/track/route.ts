@@ -1,14 +1,13 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { storefrontOrderTrackingResponseSchema } from '@/lib/contracts';
+import { normalizePhoneE164, storefrontOrderTrackingResponseSchema } from '@/lib/contracts';
 import { Order } from '@/lib/services';
 import { PRIVATE_NO_STORE_HEADERS, StorefrontHttpError, handleStorefrontError } from '@/lib/storefront/errors';
 import { toOrderTrackingDto, type OrderTrackingRow } from '@/lib/storefront/order-dto';
 import { parseLookupRequest, readJsonBody } from '@/lib/storefront/order-request';
 import { ORDER_LOOKUP_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
-import { normalizePhoneE164 } from '@markaz/platform-kit/phone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,7 +30,7 @@ function samePhone(a: string, b: string): boolean {
  * payment or ids. An unknown order, another store's order and a wrong phone all give the same 404 ORDER_NOT_FOUND body.
  *
  * POST, not GET, so the phone never sits in a URL (browser history, proxy and server logs). The rate limit is the lookup's
- * own bucket (ORDER_LOOKUP_LIMIT), shared, so having two endpoints does not double the attempts a client gets.
+ * own bucket (ORDER_LOOKUP_LIMIT), shared, so having two endpoints does not double the attempts a client gets (D-069).
  *
  *   200 { data }   400 INVALID_REQUEST   404 ORDER_NOT_FOUND | STORE_NOT_FOUND   403 STORE_NOT_ACTIVE   429 RATE_LIMITED
  */
@@ -39,7 +38,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   try {
     const { id } = await context.params;
     assertStoreId(id);
-    enforceRateLimit(ORDER_LOOKUP_LIMIT, id, request.headers);
+    await enforceRateLimit(ORDER_LOOKUP_LIMIT, id, request.headers);
     const store = await loadActiveStore(id);
 
     const { orderId, phone } = parseLookupRequest(await readJsonBody(request));

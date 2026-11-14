@@ -63,6 +63,8 @@ export interface InternalVerification extends Omit<InternalRequestParts, "timest
   adminId: string | null;
   signature: string | null;
   now?: number;
+  /** A shorter limit than INTERNAL_SIGNATURE_MAX_AGE_MS, for a signature that is used at once. */
+  maxAgeMs?: number;
 }
 
 /** True only for a fresh, untouched request. Never throws, and the signatures are compared in constant time. */
@@ -70,7 +72,7 @@ export function verifyInternalSignature(input: InternalVerification): boolean {
   const { secret, timestamp, adminId, signature, method, path, body } = input;
   if (timestamp === null || signature === null || !isInternalAdminId(adminId)) return false;
   if (!TIMESTAMP.test(timestamp) || !SIGNATURE.test(signature)) return false;
-  if (Math.abs((input.now ?? Date.now()) - Number(timestamp)) > INTERNAL_SIGNATURE_MAX_AGE_MS) return false;
+  if (Math.abs((input.now ?? Date.now()) - Number(timestamp)) > (input.maxAgeMs ?? INTERNAL_SIGNATURE_MAX_AGE_MS)) return false;
 
   const expected = Buffer.from(signInternalRequest(secret, { method, path, timestamp, adminId, body }), "hex");
   const provided = Buffer.from(signature, "hex");

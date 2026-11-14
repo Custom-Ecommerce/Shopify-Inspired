@@ -6,6 +6,7 @@ import { HttpError, handleRouteError, jsonError } from '@/lib/http';
 import { parseBody } from '@/lib/placeholder';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, Review } from '@/lib/services';
+import { revalidateStoreProduct } from '@/lib/revalidate';
 import { plainDoc, requireSellerStoreId, toWire } from '@/lib/seller-scope';
 
 export const runtime = 'nodejs';
@@ -55,6 +56,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
       { new: true },
     ).lean();
     if (!updated) throw new HttpError(404, 'Review not found');
+    revalidateStoreProduct(storeId, String(updated.product));
     return NextResponse.json(toWire(plainDoc(updated)));
   } catch (err) {
     return handleRouteError(err);

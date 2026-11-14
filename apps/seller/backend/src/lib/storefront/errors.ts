@@ -18,7 +18,10 @@ export type StorefrontErrorCode =
   | 'VARIANT_REQUIRED'
   | 'UNKNOWN_VARIANT'
   | 'PRODUCT_UNAVAILABLE'
-  | 'PREVIEW_ORDER_BLOCKED';
+  | 'PREVIEW_ORDER_BLOCKED'
+  | 'DISCOUNT_REJECTED'
+  | 'DISCOUNT_USED_UP'
+  | 'PAYMENT_NOT_STARTED';
 
 /** Carries the storefront error envelope: { error: { code, message }, ...extra }. */
 export class StorefrontHttpError extends Error {
@@ -56,6 +59,12 @@ export function handleStorefrontError(err: unknown): NextResponse {
 /** The product exists but is not for sale: a draft, an unedited demo, or in trash (D-037). */
 export const productUnavailable = (productId: string): StorefrontHttpError =>
   new StorefrontHttpError(422, 'PRODUCT_UNAVAILABLE', 'A product in the order is no longer for sale.', { productId });
+
+/** A code an order cannot use. The last use gone is its own code and status, since that is the one that can happen in a race. */
+export const discountRefused = (reason: string, message: string): StorefrontHttpError =>
+  reason === 'used_up'
+    ? new StorefrontHttpError(409, 'DISCOUNT_USED_UP', message, { reason, field: 'discountCode' })
+    : new StorefrontHttpError(422, 'DISCOUNT_REJECTED', message, { reason, field: 'discountCode' });
 
 /** An order sent from a seller's preview. Nothing is saved and no stock moves. */
 export const previewOrderBlocked = (): StorefrontHttpError =>

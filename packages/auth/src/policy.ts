@@ -241,7 +241,8 @@ delete: { actors: [], fields: {} },
 orderCancel: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
-update: { actors: ['seller'], fields: { seller: ['reason', 'note'] } },
+// system: a Stripe event cancelling an unpaid card order (D-082).
+update: { actors: ['seller', 'system'], fields: { seller: ['reason', 'note'], system: ['reason', 'note'] } },
 delete: { actors: [], fields: {} },
 },
 
@@ -255,7 +256,8 @@ delete: { actors: [], fields: {} },
 orderPayment: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
-update: { actors: ['seller'], fields: { seller: ['amount'] } },
+// system: a Stripe event marking a card order paid (D-082).
+update: { actors: ['seller', 'system'], fields: { seller: ['amount'], system: ['paymentStatus', 'paidAt'] } },
 delete: { actors: [], fields: {} },
 },
 
@@ -333,7 +335,7 @@ Object.assign(POLICY_MATRIX, {
     },
     update: {
       actors: ['admin', 'system', 'seller'],
-      fields: { admin: '*', system: '*', seller: ['isActive', 'maxUses', 'endDate'] },
+      fields: { admin: '*', system: '*', seller: ['value', 'minOrderAmount', 'maxUses', 'startDate', 'endDate', 'isActive', 'archivedAt'] },
     },
     delete: { actors: ['admin', 'system'], fields: '*' },
   },

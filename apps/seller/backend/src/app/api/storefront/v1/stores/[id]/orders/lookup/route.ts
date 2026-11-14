@@ -1,14 +1,13 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { storefrontOrderLookupResponseSchema } from '@/lib/contracts';
+import { normalizePhoneE164, storefrontOrderLookupResponseSchema } from '@/lib/contracts';
 import { Order } from '@/lib/services';
 import { PRIVATE_NO_STORE_HEADERS, StorefrontHttpError, handleStorefrontError } from '@/lib/storefront/errors';
 import { toOrderDto, type OrderRow } from '@/lib/storefront/order-dto';
 import { parseLookupRequest, readJsonBody } from '@/lib/storefront/order-request';
 import { ORDER_LOOKUP_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
-import { normalizePhoneE164 } from '@markaz/platform-kit/phone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +37,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   try {
     const { id } = await context.params;
     assertStoreId(id);
-    enforceRateLimit(ORDER_LOOKUP_LIMIT, id, request.headers);
+    await enforceRateLimit(ORDER_LOOKUP_LIMIT, id, request.headers);
     const store = await loadActiveStore(id);
 
     const { orderId, phone } = parseLookupRequest(await readJsonBody(request));

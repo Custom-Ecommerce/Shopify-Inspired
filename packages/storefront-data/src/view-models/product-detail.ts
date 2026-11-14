@@ -14,6 +14,8 @@ export interface ProductVariantVM {
   compareAt: Money | null;
   discountPercent: number;
   availability: StockStatus;
+  /** Units left, only when there are few. */
+  onlyLeft: number | null;
   optionValues: string[];
   imageId: string | null;
 }
@@ -26,6 +28,7 @@ function toVariantVM(variant: StorefrontProductVariant): ProductVariantVM {
     compareAt: variant.compareAtPrice === null ? null : toMoney(variant.compareAtPrice),
     discountPercent: discountPercent(variant.price, variant.compareAtPrice),
     availability: variant.availability,
+    onlyLeft: variant.onlyLeft ?? null,
     optionValues: [...variant.optionValues],
     imageId: variant.imageId,
   };
@@ -116,7 +119,9 @@ export { initialSelection };
 export function toVariantSelectionVM(product: ProductDetailVM, selected: SelectedOptions): VariantSelectionVM {
   const variant = resolveVariant(product, selected);
   const chosenAll = product.options.every((_, index) => Boolean(selected[index]));
-  const stock = variant ? { status: variant.availability, label: STOCK_LABELS[variant.availability] } : product.stock;
+  const stock = variant
+    ? { status: variant.availability, label: variant.onlyLeft !== null && variant.availability !== "out_of_stock" ? "Only " + variant.onlyLeft + " left" : STOCK_LABELS[variant.availability] }
+    : product.stock;
 
   let block: VariantBlock | null = null;
   if (product.previewLabel !== null) block = "preview_only";

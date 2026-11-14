@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { storefrontCartQuoteLineSchema, storefrontCartQuoteResponseSchema, storefrontCartQuoteSchema } from "@markaz/contracts/checkout";
 
 /*
  * Response shapes the remote transport and the browser BFF client accept. They mirror apps/storefront/lib/api/schemas.ts
@@ -73,6 +74,7 @@ export const WireProductVariant = z.object({
   price,
   compareAtPrice: price.nullable(),
   availability: stockStatus,
+  onlyLeft: z.number().int().positive().nullable().optional(),
   optionValues: z.array(z.string()),
   imageId: z.string().nullable(),
 });
@@ -112,6 +114,8 @@ export const WireOrderCreated = z.object({
   data: z.object({
     orderId: z.string().min(1),
     total: z.number().nonnegative(),
+    checkoutUrl: z.string().min(1).nullable().optional(),
+    accessToken: z.string().min(1).nullable().optional(),
   }),
 });
 
@@ -133,8 +137,10 @@ export const WireOrder = z.object({
   orderId: z.string().min(1),
   status: orderStatus,
   paymentMethod,
+  paymentStatus: z.enum(["unpaid", "collected", "paid"]).default("unpaid"),
   subtotal: price,
   deliveryCharges: price,
+  discount: price.default(0),
   total: price,
   createdAt: z.string().min(1),
   customerName: z.string(),
@@ -174,32 +180,10 @@ export const WireOrderTrackingEnvelope = z.object({
   data: WireOrderTracking,
 });
 
-const quoteIssue = z.enum(["unknown_product", "product_unavailable", "unknown_variant", "out_of_stock", "insufficient_stock"]);
-
-export const WireCartQuoteLine = z.object({
-  productId: z.string().min(1),
-  variantId: nullableText,
-  title: nullableText,
-  variantTitle: nullableText,
-  unitPrice: price.nullable(),
-  qty: z.number().int().min(1),
-  lineTotal: price.nullable(),
-  issue: quoteIssue.nullable(),
-  availableQty: z.number().int().nonnegative().nullable(),
-});
-
-/** A priced cart. Mirrors storefrontCartQuoteSchema in @markaz/contracts. */
-export const WireCartQuote = z.object({
-  lines: z.array(WireCartQuoteLine),
-  subtotal: price,
-  deliveryCharges: price,
-  total: price,
-  canCheckout: z.boolean(),
-});
-
-export const WireCartQuoteEnvelope = z.object({
-  data: WireCartQuote,
-});
+/** The priced cart is the shared contract itself, not a copy of it. */
+export const WireCartQuoteLine = storefrontCartQuoteLineSchema;
+export const WireCartQuote = storefrontCartQuoteSchema;
+export const WireCartQuoteEnvelope = storefrontCartQuoteResponseSchema;
 
 export const WireErrorEnvelope = z.object({
   error: z.object({
@@ -219,5 +203,9 @@ export const WireRefusal = z.object({
   }),
   productId: z.string().optional(),
   retryAfterSeconds: z.number().optional(),
+  /** The input that was refused, for example customer.phone. */
+  field: z.string().optional(),
+  /** Why a discount code was refused. */
+  reason: z.string().optional(),
 });
 /* @theme-integration-patch:wire */

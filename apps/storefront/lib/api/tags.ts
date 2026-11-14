@@ -10,9 +10,10 @@ import { storeResolveTag as kitStoreResolveTag, storeTags } from "@markaz/platfo
  * a fetch can never drift apart. Resulting formats:
  *
  *   store:${id}:static
+ *   store:${id}:settings
  *   store:${id}:categories
  *   store:${id}:products
- *   store:${id}:product:${productId}
+ *   store:${id}:product:${slug}
  *   store-resolve:${key}
  *
  * `server-only` because the platform-kit `/revalidate` subpath also exports a
@@ -22,6 +23,7 @@ import { storeResolveTag as kitStoreResolveTag, storeTags } from "@markaz/platfo
 export const storeStaticTag = (storeId: string): string => storeTags.static(storeId);
 export const storeCategoriesTag = (storeId: string): string => storeTags.categories(storeId);
 export const storeProductsTag = (storeId: string): string => storeTags.products(storeId);
-export const storeProductTag = (storeId: string, productId: string): string =>
-  storeTags.product(storeId, productId);
+export const storeSettingsTag = (storeId: string): string => storeTags.settings(storeId);
+export const storeProductTag = (storeId: string, productSlug: string): string =>
+  storeTags.product(storeId, productSlug);
 export const storeResolveTag = (key: string): string => kitStoreResolveTag(key);

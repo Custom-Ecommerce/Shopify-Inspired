@@ -2,6 +2,7 @@ import type {
   CartQuote,
   CartQuoteInput,
   CartQuoteLine,
+  OrderConfirmationInput,
   OrderLookupInput,
   StorefrontOrderTracking,
   StorefrontOrder,
@@ -16,7 +17,7 @@ import type {
 } from "./types";
 import { OrderRejectedError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
-import { normalizePhoneE164 } from "@markaz/platform-kit/phone";
+import { discountRefusalMessage, normalizePhoneE164 } from "@markaz/contracts/checkout";
 
 // Hardcoded dummy catalogue. Includes edge cases (no image, discount, out of stock,
 // low stock, no reviews, free delivery, very long title) so themes are exercised from day one.
@@ -224,7 +225,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
 
   /**
    * Mock of POST /cart/quote. Prices come from the fixtures. The fixtures carry availability but no counts, so the mock
-   * never reports insufficient_stock, and it charges no delivery.
+   * never reports insufficient_stock, and it charges no delivery. A demo has no discount codes, so every code is unknown.
    */
   async function quoteCart(input: CartQuoteInput): Promise<CartQuote> {
     await delay(120);
@@ -243,7 +244,8 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
           availableQty: null,
         };
       }
-      const variant = variantOf(product, line.variantId);
+      // A product with several variants and no choice is a line issue here, as on the backend. Only an order is refused.
+      const variant = line.variantId === undefined && product.variants.length !== 1 ? null : variantOf(product, line.variantId);
       if (!variant) {
         return {
           productId: product.id,
@@ -275,8 +277,11 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       lines,
       subtotal,
       deliveryCharges: 0,
+      discount: 0,
       total: subtotal,
       canCheckout: lines.length > 0 && lines.every((line) => line.issue === null),
+      discountCode: null,
+      discountError: input.discountCode ? { reason: "unknown", message: discountRefusalMessage("unknown") } : null,
     };
   }
 
@@ -288,6 +293,8 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     if (replay) return { ...replay };
 
     if (payload.lines.length === 0) throw new OrderRejectedError({ code: "empty_order" });
+    if (payload.paymentMethod === "card") throw new OrderRejectedError({ code: "payment_method_unavailable" });
+    if (payload.discountCode) throw new OrderRejectedError({ code: "discount_rejected", reason: "unknown", message: discountRefusalMessage("unknown") });
 
     const items: StorefrontOrderItem[] = [];
     for (const line of payload.lines) {
@@ -322,19 +329,21 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       orderId,
       status: "pending",
       paymentMethod: "cod",
+      paymentStatus: "unpaid",
       subtotal: total,
       deliveryCharges: 0,
+      discount: 0,
       total,
       createdAt: now,
       updatedAt: now,
       customerName: payload.customer.customerName,
       phone: normalizePhoneE164(payload.customer.phone) ?? payload.customer.phone,
-      city: null,
+      city: payload.customer.city,
       address: payload.customer.address,
       items,
     });
 
-    const result: SubmitOrderResult = { orderId, total };
+    const result: SubmitOrderResult = { orderId, total, accessToken: "demo-" + orderId };
     orderBook.set(payload.idempotencyKey, result);
     return { ...result };
   }
@@ -347,6 +356,13 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     const phone = normalizePhoneE164(input.phone);
     if (phone === null || phone !== order.phone) return null;
     return clone(order);
+  }
+
+  /** Mock of POST /orders/confirmation. The token is only a stand-in: the demo's orders never leave the page's memory. */
+  async function confirmOrder(input: OrderConfirmationInput): Promise<StorefrontOrder | null> {
+    await delay(150);
+    const order = orderById.get(input.orderNumber.trim());
+    return order && input.token === "demo-" + order.orderId ? clone(order) : null;
   }
 
   /** Mock of POST /orders/track. The same matching as lookupOrder; the demo's orders never leave pending. */
@@ -411,6 +427,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     quoteCart,
     submitOrder,
     lookupOrder,
+    confirmOrder,
     trackOrder,
   };
 }

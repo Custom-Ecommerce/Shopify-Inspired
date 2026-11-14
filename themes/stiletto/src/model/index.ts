@@ -81,8 +81,6 @@ export interface AddressDetails {
   address2?: string;
   city: string;
   zip?: string;
-  phone: string;
-  country: string;
 }
 
 /** Store facts the theme shows. Built from the storefront's StoreVM by the layout. */

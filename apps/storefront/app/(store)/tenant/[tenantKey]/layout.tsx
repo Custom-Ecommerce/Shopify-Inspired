@@ -81,7 +81,7 @@ export default async function TenantLayout({
   return (
     <TenantProvider value={snapshot}>
       <ThemeScope slug={effectiveTheme.slug} />
-      <StorefrontProvider storeKey={store.id}>
+      <StorefrontProvider storeKey={store.id} cardEnabled={store.commerce.cardEnabled} preview={result.previewToken !== null}>
         <StoreShell snapshot={snapshot} theme={theme} chrome={chrome}>
           <div className="tenant-boundary">{children}</div>
         </StoreShell>

@@ -1,5 +1,5 @@
 import { productAvailability, variantAvailability } from '@markaz/platform-kit/commerce';
-import { storefrontProductDetailSchema, storefrontProductSummarySchema } from '@/lib/contracts';
+import { STOCK_WARNING_THRESHOLD, storefrontProductDetailSchema, storefrontProductSummarySchema } from '@/lib/contracts';
 import { previewLabelOf } from '@/lib/storefront/live-product';
 
 interface PopulatedCategory {
@@ -140,6 +140,7 @@ export function toProductDetailDto(row: ProductDetailRow, storeDeliveryRate: num
       price: variant.price,
       compareAtPrice: variant.compareAtPrice ?? null,
       availability: variantAvailability(variant),
+      onlyLeft: variant.trackQuantity && variant.stockQuantity > 0 && variant.stockQuantity <= STOCK_WARNING_THRESHOLD ? variant.stockQuantity : null,
       optionValues: [...(variant.optionValues ?? [])],
       imageId: variant.imageId ? String(variant.imageId) : null,
     })),

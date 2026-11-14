@@ -16,7 +16,7 @@ import type { OrderTransport, SubmitOrderPayload, SubmitOrderResult } from "../s
 
 const payload: SubmitOrderPayload = {
   idempotencyKey: "checkout-key-0001",
-  customer: { customerName: "Ali Raza", phone: "+923001234567", address: "House 1, Street 2, Karachi" },
+  customer: { customerName: "Ali Raza", phone: "+923001234567", address: "House 1, Street 2", city: "Karachi" },
   lines: [{ productId: "65a0000000000000000000aa", qty: 2 }],
 };
 const placed: SubmitOrderResult = { orderId: "ORD-1", total: 2000 };
@@ -136,6 +136,8 @@ function bffWith(error: Error) {
     submitOrder: async () => {
       throw error;
     },
+    trackOrder: async () => null,
+    confirmOrder: async () => null,
   } as unknown as OrderTransport;
   return createBffRoutes({ lookupStore: async () => ({ outcome: "ok", transport }) });
 }

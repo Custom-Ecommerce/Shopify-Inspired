@@ -67,6 +67,9 @@ async function onCheckoutCompleted(event: Stripe.Event): Promise<void> {
   if (session.payment_status !== 'paid') return;
 
   const meta = session.metadata ?? {};
+  // A storefront card order (D-082): the seller backend's own webhook handles it, and it has no commission details to record here.
+  if (meta.orderId && !meta.orderRef) return;
+
   const orderRef = meta.orderRef;
   const sellerOrderDocId = meta.orderId;
   const storeId = meta.storeId;

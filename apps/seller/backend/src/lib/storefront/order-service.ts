@@ -1,13 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import { isDuplicateKeyError } from '@/lib/http';
+import { discountRefusalMessage, toWholeRupees } from '@/lib/contracts';
+import { revalidateStoreProduct } from '@/lib/revalidate';
 import { Order, Product } from '@/lib/services';
-import { StorefrontHttpError, productUnavailable } from '@/lib/storefront/errors';
+import { CARD_SESSION_LIFETIME_MS } from '@/lib/storefront/card-config';
+import { claimDiscountUse, findDiscountRule, returnDiscountUse } from '@/lib/storefront/discount-service';
+import { StorefrontHttpError, discountRefused, productUnavailable } from '@/lib/storefront/errors';
 import { isLiveProduct, type LiveFlags } from '@/lib/storefront/live-product';
 import { generateOrderId } from '@/lib/storefront/order-id';
 import type { OrderRow } from '@/lib/storefront/order-dto';
 import type { ParsedOrderRequest } from '@/lib/storefront/order-request';
-import { computeTotals } from '@/lib/storefront/pricing';
+import { priceCart } from '@/lib/storefront/pricing';
 import { releaseAll, reserveStock, type Reservation } from '@/lib/storefront/stock';
 import type { StoreCommerce } from '@/lib/storefront/store-guard';
 import { canSupply, resolveVariant, type CheckoutVariant } from '@/lib/storefront/variant';
@@ -103,9 +107,9 @@ async function priceOrder(storeId: string, commerce: StoreCommerce, request: Par
     if (match.kind === 'unknown_variant') throw unknownVariant(line.productId);
 
     const { variant } = match;
-    if (typeof variant.price !== 'number' || !Number.isFinite(variant.price) || variant.price < 0) {
-      throw unknownProduct(line.productId);
-    }
+    // The same rule as the quote, so the price a shopper saw is the price they are charged.
+    const unitPrice = toWholeRupees(variant.price);
+    if (unitPrice === null) throw unknownProduct(line.productId);
 
     const variantId = String(variant._id).toLowerCase();
     const key = line.productId + '|' + variantId;
@@ -120,7 +124,7 @@ async function priceOrder(storeId: string, commerce: StoreCommerce, request: Par
       title: row.title,
       variantTitle: variant.title,
       sku: variant.sku ?? null,
-      unitPrice: variant.price,
+      unitPrice,
       qty: line.qty,
       deliveryCharge: typeof row.deliveryCharge === 'number' ? row.deliveryCharge : null,
       variant,
@@ -132,7 +136,12 @@ async function priceOrder(storeId: string, commerce: StoreCommerce, request: Par
     return line;
   });
 
-  return { lines: priced, totals: computeTotals(priced, commerce) };
+  const discount = request.discountCode === null ? null : { code: request.discountCode, rule: await findDiscountRule(storeId, request.discountCode) };
+  const { totals, applied, refusal } = priceCart(priced, commerce, discount);
+  // The shopper was shown a total that counted on this code, so the order is refused rather than charged without it.
+  if (refusal !== null) throw discountRefused(refusal.reason, refusal.message);
+
+  return { lines: priced, totals, applied };
 }
 
 /** Saves the order, retrying with a fresh order id on the (astronomically rare) id collision. */
@@ -152,17 +161,28 @@ async function insertOrder(data: Record<string, unknown>): Promise<OrderRow> {
  *
  *   1. An existing order for this (store, idempotencyKey) is returned as is. No pricing, no stock change.
  *   2. The order is priced from catalog rows read now; client prices do not exist on the wire.
- *   3. Stock is taken line by line with a conditional write. A line that loses a race releases the lines
- *      already taken.
- *   4. The order is saved. If that fails the stock is released. If it fails because a concurrent request
- *      with the same key saved first (the unique index decides), this request releases its stock and
- *      returns the winner's order, so a double submit costs one unit of stock, once.
+ *   3. A discount use is taken with a conditional write, before any stock, so the loser of a last-use race touches nothing.
+ *   4. Stock is taken line by line with a conditional write. A line that loses a race releases the lines
+ *      already taken, and the discount use.
+ *   5. The order is saved. If that fails the stock and the use are given back. If it fails because a concurrent
+ *      request with the same key saved first (the unique index decides), this request gives back its stock and use and
+ *      returns the winner's order, so a double submit costs one unit of stock and one use, once.
  */
 export async function placeOrder(storeId: string, commerce: StoreCommerce, request: ParsedOrderRequest): Promise<PlaceOrderResult> {
   const existing = await findByKey(storeId, request.idempotencyKey);
   if (existing) return replay(existing, request.fingerprint);
 
-  const { lines, totals } = await priceOrder(storeId, commerce, request);
+  const { lines, totals, applied } = await priceOrder(storeId, commerce, request);
+
+  if (applied !== null && !(await claimDiscountUse(storeId, applied.discountId))) {
+    // A retry of this very order may have taken the last use and saved by now.
+    const saved = await findByKey(storeId, request.idempotencyKey);
+    if (saved) return replay(saved, request.fingerprint);
+    throw discountRefused('used_up', discountRefusalMessage('used_up'));
+  }
+  const giveBackDiscount = async (): Promise<void> => {
+    if (applied !== null) await returnDiscountUse(storeId, applied.discountId);
+  };
 
   // The order's _id is chosen before stock is taken, so every stock movement of this placement can carry it (D-066).
   // If the order is never saved (a failure, or a parallel request with the same key won) the movements name an id that
@@ -170,13 +190,16 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
   const orderObjectId = new Types.ObjectId().toHexString();
 
   const reserved: Reservation[] = [];
+  const pageChanged = new Set<string>();
   try {
     for (const line of lines) {
-      const deducted = await reserveStock(storeId, line.productId, line.variantId, line.qty, orderObjectId);
-      reserved.push({ productId: line.productId, variantId: line.variantId, qty: line.qty, deducted });
+      const taken = await reserveStock(storeId, line.productId, line.variantId, line.qty, orderObjectId);
+      reserved.push({ productId: line.productId, variantId: line.variantId, qty: line.qty, deducted: taken.deducted });
+      if (taken.pageChanged) pageChanged.add(line.productId);
     }
   } catch (err) {
     await releaseAll(storeId, reserved, orderObjectId);
+    await giveBackDiscount();
     throw err;
   }
 
@@ -193,6 +216,9 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       phone: request.customer.phone,
       address: request.customer.address,
       city: request.customer.city,
+      customerEmail: request.customer.email,
+      customerNote: request.customer.note,
+      customerWhatsapp: request.customer.whatsapp,
       items: lines.map((l, i) => ({
         productId: l.productId,
         variantId: l.variantId,
@@ -207,10 +233,15 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       subtotal: totals.subtotal,
       deliveryCharges: totals.deliveryCharges,
       total: totals.total,
+      ...(applied === null ? {} : { discountCode: applied.code, discountAmount: applied.amount, discountSnapshot: applied.snapshot }),
+      ...(request.paymentMethod === 'card' ? { stripeSessionExpiresAt: new Date(Date.now() + CARD_SESSION_LIFETIME_MS) } : {}),
     });
+    // Only once the order is saved: until then a failure would give the units back.
+    for (const productId of pageChanged) revalidateStoreProduct(storeId, productId);
     return { order, replayed: false };
   } catch (err) {
     await releaseAll(storeId, reserved, orderObjectId);
+    await giveBackDiscount();
     if (duplicateOn(err, 'idempotencyKey')) {
       const winner = await findByKey(storeId, request.idempotencyKey);
       if (winner) return replay(winner, request.fingerprint);

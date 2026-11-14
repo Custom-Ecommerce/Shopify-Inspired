@@ -14,6 +14,8 @@ import {
   ORDER_FLOW_STATUSES,
   ORDER_TRANSITION_REFUSAL_MESSAGES,
   transitionRefusal,
+  cardPaymentPending,
+  paidCardOrder,
 } from '../src/order-flow';
 import { DASHBOARD_ORDER_STATUSES } from '../src/order';
 import { STOREFRONT_ORDER_STATUSES } from '../src/storefront';
@@ -147,4 +149,24 @@ test('payment: canMarkCollected needs COD, unpaid and dispatched or delivered', 
   assert.equal(canMarkCollected({ paymentStatus: 'unpaid', status: 'delivered' }), false, 'no method is not COD');
   assert.equal(canMarkCollected({ paymentMethod: 'cod', paymentStatus: 'unpaid', status: 'processing' }), false);
   assert.equal(canMarkCollected({ paymentMethod: 'cod', paymentStatus: 'unpaid', status: 'cancelled' }), false);
+});
+
+test('D-082: only an unpaid card order is held back from dispatch', () => {
+  assert.equal(cardPaymentPending({ paymentMethod: 'card', paymentStatus: 'unpaid' }), true);
+  assert.equal(cardPaymentPending({ paymentMethod: 'card' }), true);
+  assert.equal(cardPaymentPending({ paymentMethod: 'card', paymentStatus: 'paid' }), false);
+  assert.equal(cardPaymentPending({ paymentMethod: 'cod', paymentStatus: 'unpaid' }), false);
+  assert.equal(cardPaymentPending({}), false);
+});
+
+test('D-082: a card order can never be marked COD collected, paid or not', () => {
+  assert.equal(canMarkCollected({ paymentMethod: 'card', paymentStatus: 'unpaid', status: 'dispatched' }), false);
+  assert.equal(canMarkCollected({ paymentMethod: 'card', paymentStatus: 'paid', status: 'delivered' }), false);
+});
+
+test('a paid card order is the only one held back from a hand cancel', () => {
+  assert.equal(paidCardOrder({ paymentMethod: 'card', paymentStatus: 'paid' }), true);
+  assert.equal(paidCardOrder({ paymentMethod: 'card', paymentStatus: 'unpaid' }), false);
+  assert.equal(paidCardOrder({ paymentMethod: 'cod', paymentStatus: 'collected' }), false);
+  assert.match(ORDER_CANCEL_REFUSAL_MESSAGES.card_paid, /Refunds/);
 });

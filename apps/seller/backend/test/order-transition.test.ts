@@ -6,6 +6,7 @@ import * as contractsNs from '@markaz/contracts';
 import { unwrapCjs } from '@/lib/cjs';
 import { AuditLog, Order, Product, StockMovement, Store, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
+import { toDashboardOrderDetail } from '@/lib/orders';
 
 // EP-02 OB-2: POST /api/orders/:id/transition and allowedNext on GET /api/orders/:id. Models are stubbed; no database.
 
@@ -537,4 +538,43 @@ test('transition: the response never carries idempotencyKey or requestFingerprin
   assert.equal(text.includes('idempotencyKey'), false);
   assert.equal(text.includes('requestFingerprint'), false);
   assert.equal(text.includes('idem-key-1'), false);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// D-082: a card order is paid before it ships.
+
+test('transition: an unpaid card order cannot be dispatched', async () => {
+  seedOrder('processing', { paymentMethod: 'card', paymentStatus: 'unpaid' });
+  const res = await postJson(ORDER_A, bodyFor('dispatched'));
+  assert.equal(res.status, 422);
+  assert.equal(res.body.errors[0].code, 'PAYMENT_PENDING');
+  assert.equal(orders[0]!.status, 'processing');
+});
+
+test('transition: a paid card order can be dispatched', async () => {
+  seedOrder('processing', { paymentMethod: 'card', paymentStatus: 'paid' });
+  assert.equal((await postJson(ORDER_A, bodyFor('dispatched'))).status, 200);
+  assert.equal(orders[0]!.status, 'dispatched');
+});
+
+test('transition: an unpaid card order can still be confirmed and processed', async () => {
+  seedOrder('pending', { paymentMethod: 'card', paymentStatus: 'unpaid' });
+  assert.equal((await postJson(ORDER_A, { status: 'confirmed' })).status, 200);
+});
+
+test('transition: an unpaid cash on delivery order ships as before', async () => {
+  seedOrder('processing', { paymentMethod: 'cod', paymentStatus: 'unpaid' });
+  assert.equal((await postJson(ORDER_A, bodyFor('dispatched'))).status, 200);
+});
+
+test('detail: dispatch is not offered for an unpaid card order, and the payment details are shown', () => {
+  const unpaid = toDashboardOrderDetail({ _id: ORDER_A, orderId: 'ORD-1', status: 'processing', paymentMethod: 'card', paymentStatus: 'unpaid', stripeSessionId: 'cs_1' });
+  assert.deepEqual(unpaid.allowedNext, []);
+  assert.equal(unpaid.stripeSessionId, 'cs_1');
+  assert.equal(unpaid.paymentStatus, 'unpaid');
+  const paidAt = new Date('2026-11-10T10:05:00.000Z');
+  const paid = toDashboardOrderDetail({ _id: ORDER_A, orderId: 'ORD-1', status: 'processing', paymentMethod: 'card', paymentStatus: 'paid', paidAt });
+  assert.deepEqual(paid.allowedNext, ['dispatched']);
+  assert.equal(paid.paymentStatus, 'paid');
+  assert.equal(paid.paidAt, paidAt.toISOString());
 });

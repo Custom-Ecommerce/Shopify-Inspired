@@ -1,5 +1,6 @@
 "use client";
 
+import { useCartCheck } from "@markaz/storefront-data/client";
 import { productMatchesCategory } from "../../shared/lib/productCategoryMatch";
 import type { CartDrawerData, NormalizedCategory, NormalizedProduct } from "../../types";
 import { Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react";
@@ -94,6 +95,7 @@ export function CartDrawer(props: CartDrawerProps) {
   } = useCartContext();
 
   const { products, categories } = useStoreData();
+  const check = useCartCheck(isCartOpen);
 
   const cartLineIds = new Set(cartItems.map((item) => item.lineId));
   const availableProducts = products.filter(
@@ -156,11 +158,20 @@ export function CartDrawer(props: CartDrawerProps) {
         {cartItems.length > 0 ? (
           <div className="flex flex-col h-full overflow-hidden">
             <div className="flex-1 overflow-y-auto p-4 space-y-5">
+              {check.notices.length > 0 && (
+                <div role="status" className="p-3 rounded-xl border border-[var(--nav-mobile-text)]/20 bg-[var(--nav-mobile-text)]/5 text-[12px] text-[var(--nav-mobile-text)] space-y-1">
+                  {check.notices.map((notice) => (
+                    <p key={notice}>{notice}</p>
+                  ))}
+                </div>
+              )}
+
               <div className="space-y-3">
                 {cartItems.map((item) => {
                   const itemUnitPrice = item.numericPrice || parseNumericPrice(item.price);
                   const itemTotalPrice = itemUnitPrice * item.quantity;
                   const isPackItem = Boolean(item.pack);
+                  const lineNotice = item.variantId ? check.noticeFor(item.variantId) : null;
 
                   return (
                     <div
@@ -189,6 +200,11 @@ export function CartDrawer(props: CartDrawerProps) {
                           <p className="font-sans text-[22px] font-bold text-[var(--nav-mobile-text)] mt-1">
                             {formatCurrency(itemTotalPrice)}
                           </p>
+                          {lineNotice && (
+                            <p className={`text-[11px] font-semibold mt-0.5 ${lineNotice.tone === "blocked" ? "text-[var(--status-error-text)]" : "text-[var(--nav-mobile-text)]/70"}`}>
+                              {lineNotice.text}
+                            </p>
+                          )}
                         </div>
 
                         <div className="flex items-center justify-between mt-2 w-full">
@@ -259,9 +275,14 @@ export function CartDrawer(props: CartDrawerProps) {
                 </span>
               </div>
 
+              {check.blockReason && (
+                <p role="alert" className="text-[11px] text-center text-[var(--status-error-text)]">{check.blockReason}</p>
+              )}
+
               <Button
                 type="button"
                 onClick={handleCheckout}
+                disabled={check.blockReason !== null}
                 className="w-full h-11 bg-[var(--nav-mobile-text)] text-[var(--nav-mobile-bg)] font-sans text-[12px] uppercase tracking-[0.15em] font-bold rounded-lg hover:bg-[var(--nav-mobile-text)]/90 transition-all"
               >
                 PROCEED TO CHECKOUT

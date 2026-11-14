@@ -160,6 +160,7 @@ test('returns the full detail and it matches the storefront wire schema', async 
         compareAtPrice: 1800,
         availability: 'in_stock',
         optionValues: [],
+        onlyLeft: null,
         imageId: null,
       },
     ],
@@ -324,4 +325,18 @@ test('a database outage is 503 STOREFRONT_UNAVAILABLE', async () => {
   const res = await get(STORE_ID, 'blue-shirt');
   assert.equal(res.status, 503);
   assert.equal((await res.json()).error.code, 'STOREFRONT_UNAVAILABLE');
+});
+
+/* ------------------------------------------- EP-03 CB-5 ------------------------------------------- */
+
+test('a variant says how many are left only when few remain', async () => {
+  const { toProductDetailDto } = await import('../src/lib/storefront/product-dto');
+  const variant = (stockQuantity: number, trackQuantity = true) => ({ _id: '65a0000000000000000000e' + stockQuantity, title: 'V', price: 100, compareAtPrice: null, trackQuantity, stockQuantity, position: 0, optionValues: [] });
+  const row = (variants: unknown[]) => ({ _id: '65a0000000000000000000b1', slug: 's', title: 'T', minPrice: 100, variants, categories: [], media: [], avgRating: 0, reviewCount: 0 });
+  const onlyLeft = (stockQuantity: number, tracked = true) => toProductDetailDto(row([variant(stockQuantity, tracked)]) as never, 0).variants[0]!.onlyLeft;
+  assert.equal(onlyLeft(5), 5);
+  assert.equal(onlyLeft(1), 1);
+  assert.equal(onlyLeft(6), null, 'a larger count is never shown');
+  assert.equal(onlyLeft(0), null, 'sold out is said another way');
+  assert.equal(onlyLeft(3, false), null, 'an untracked variant has no count');
 });

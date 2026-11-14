@@ -144,7 +144,7 @@ export async function takedownProduct(input: { productId: string; reason: string
     .select(FIELDS)
     .lean()) as unknown as ModerationRow | null;
 
-  await revalidateStoreProduct(String(row.store), input.productId);
+  revalidateStoreProduct(String(row.store), input.productId);
   return toSingleItem(updated ?? (await loadRow(input.productId)));
 }
 
@@ -168,7 +168,7 @@ export async function restoreModeratedProduct(input: { productId: string }, admi
     .lean()) as unknown as ModerationRow | null;
   if (!updated) throw productNotFound();
 
-  await revalidateStoreProduct(String(row.store), input.productId);
+  revalidateStoreProduct(String(row.store), input.productId);
   return toSingleItem(updated);
 }
 
@@ -197,7 +197,7 @@ export async function deleteModeratedProduct(input: { productId: string; reason:
     .lean()) as unknown as ModerationRow | null;
   if (!updated) throw new ProductRequestError(409, 'PRODUCT_CHANGED', 'This product changed. Reload and try again.');
 
-  await revalidateStoreProduct(String(row.store), input.productId);
+  revalidateStoreProduct(String(row.store), input.productId);
   return toSingleItem(updated);
 }
 
@@ -209,7 +209,7 @@ export async function purgeModeratedProduct(input: { productId: string; reason: 
 
   await audit('permanent-delete', row, adminId, input.reason);
   if (!(await purgeProduct(row, new Date()))) throw productNotFound();
-  await revalidateStoreProduct(String(row.store), input.productId);
+  revalidateStoreProduct(String(row.store), input.productId);
   return { deleted: true, productId: input.productId };
 }
 

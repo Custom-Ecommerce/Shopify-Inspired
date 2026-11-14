@@ -81,7 +81,7 @@ export async function changePublished(request: NextRequest, context: ProductRout
       .lean();
     if (!updated) throw productNotFound();
 
-    await revalidateStoreProduct(storeId, id);
+    revalidateStoreProduct(storeId, id);
     return NextResponse.json(await loadSellerProduct(storeId, id));
   } catch (err) {
     return handleProductError(err);
@@ -120,7 +120,7 @@ export async function restoreProduct(request: NextRequest, context: ProductRoute
       .lean();
     if (!restored) throw productNotFound();
 
-    await revalidateStoreProduct(storeId, id);
+    revalidateStoreProduct(storeId, id);
     return NextResponse.json(await loadSellerProduct(storeId, id));
   } catch (err) {
     return handleProductError(err);

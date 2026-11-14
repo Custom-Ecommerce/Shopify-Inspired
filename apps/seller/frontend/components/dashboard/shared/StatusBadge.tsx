@@ -54,6 +54,7 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   // order payment status (EP-02): COD still to collect, and collected
   unpaid: "warning",
   collected: "success",
+  paid: "success",
 };
 
 /**
@@ -74,6 +75,7 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
 export const PAYMENT_STATUS_LABEL: Record<string, string> = {
   unpaid: "Unpaid",
   collected: "Collected",
+  paid: "Paid",
 };
 
 export const PAYMENT_METHOD_LABEL: Record<string, string> = {
@@ -146,6 +148,6 @@ export function OrderStatusBadge({ status, className }: { status: string; classN
 }
 
 /** An order's payment status: Unpaid or COD collected. */
-export function PaymentStatusBadge({ status, className }: { status: string; className?: string }) {
-  return <StatusBadge status={status} label={PAYMENT_STATUS_LABEL[status]} className={className} />;
+export function PaymentStatusBadge({ status, label, className }: { status: string; label?: string; className?: string }) {
+  return <StatusBadge status={status} label={label ?? PAYMENT_STATUS_LABEL[status]} className={className} />;
 }

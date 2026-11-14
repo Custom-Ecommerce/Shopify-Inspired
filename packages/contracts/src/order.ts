@@ -55,7 +55,7 @@ export const DASHBOARD_ORDER_DISPLAY_STATUSES = [...DASHBOARD_ORDER_STATUSES, 'u
 export type DashboardOrderDisplayStatus = (typeof DASHBOARD_ORDER_DISPLAY_STATUSES)[number];
 
 /** COD only in EP-02 (US07). An order written before EP-02 has no payment status and reads as unpaid. */
-export const DASHBOARD_ORDER_PAYMENT_STATUSES = ['unpaid', 'collected'] as const;
+export const DASHBOARD_ORDER_PAYMENT_STATUSES = ['unpaid', 'collected', 'paid'] as const;
 export type DashboardOrderPaymentStatus = (typeof DASHBOARD_ORDER_PAYMENT_STATUSES)[number];
 
 export const DASHBOARD_ORDER_PAYMENT_METHODS = ['cod', 'card'] as const;
@@ -75,6 +75,7 @@ export const ORDER_STATUS_LABELS: Readonly<Record<DashboardOrderStatus, string>>
 export const ORDER_PAYMENT_STATUS_LABELS: Readonly<Record<DashboardOrderPaymentStatus, string>> = {
   unpaid: 'Unpaid',
   collected: 'Collected',
+  paid: 'Paid',
 };
 
 export const ORDER_PAYMENT_METHOD_LABELS: Readonly<Record<DashboardOrderPaymentMethod, string>> = {
@@ -222,13 +223,24 @@ export const dashboardOrderDetailSchema = z.object({
   paymentStatus: z.enum(DASHBOARD_ORDER_PAYMENT_STATUSES),
   collectedAt: z.string().nullable(),
   collectedAmount: z.number().min(0).nullable(),
+  /** When a card payment was received. */
+  paidAt: z.string().nullable(),
+  /** The Stripe Checkout Session of a card order. */
+  stripeSessionId: z.string().nullable(),
   customerName: z.string().nullable(),
   phone: z.string().nullable(),
   address: z.string().nullable(),
   city: z.string().nullable(),
+  customerEmail: z.string().nullable(),
+  /** Only when it differs from the phone. */
+  customerWhatsapp: z.string().nullable(),
+  /** The shopper's note from checkout. Not the seller's internal notes. */
+  customerNote: z.string().nullable(),
   items: z.array(dashboardOrderItemSchema),
   subtotal: z.number().min(0),
   deliveryCharges: z.number().min(0),
+  discountCode: z.string().nullable(),
+  discountAmount: z.number().min(0),
   total: z.number().min(0),
   courier: z.string().nullable(),
   trackingNumber: z.string().nullable(),
