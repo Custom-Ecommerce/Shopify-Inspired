@@ -18,6 +18,8 @@ const platformSettingsSchema = new Schema(
     maxStoresPerSeller: { type: Number, min: 1, default: 3 },
     settingsRevision: { type: Number, default: 0 },
     stripeCommissionNote: { type: String },
+    /** Sprint 4 D-094/D-095: when true, a seller's go-live waits for an admin to activate the store. Missing means false. */
+    storeApprovalRequired: { type: Boolean, default: false },
   },
   { timestamps: true, collection: 'globals' },
 );

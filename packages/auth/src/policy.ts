@@ -25,7 +25,8 @@ readonly delete: PolicyRule;
 }
 
 // Blueprint v3 section 1.2, store.operations: what a seller may write.
-export const SELLER_STORE_WRITABLE_FIELDS = ['name', 'storefront', 'paymentSettings', 'courierSettings'] as const;
+// Sprint 4 EP-04.US03 (D-088): payoutDetails too. It is not in SELLER_STORE_READABLE_FIELDS: a seller reads it masked only.
+export const SELLER_STORE_WRITABLE_FIELDS = ['name', 'storefront', 'paymentSettings', 'courierSettings', 'payoutDetails'] as const;
 
 // Payload STORE_STAFF_WRITABLE_FIELDS (apps/admin/src/collections/Stores.ts).
 export const ADMIN_STORE_WRITABLE_FIELDS = [
@@ -59,7 +60,7 @@ export const ADMIN_LEDGER_READABLE_FIELDS = [
 
 // Payload PlatformSettings: settingsRevision has update access false, so it is excluded.
 export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
-'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote',
+'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired',
 ] as const;
 
 // What a seller may set on a category of their store. store and isDemo are never client-writable.
@@ -374,7 +375,8 @@ Object.assign(POLICY_MATRIX, {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
     create: { actors: ['system', 'seller'], fields: { system: '*', seller: ['alt'] } },
     update: { actors: ['system'], fields: { system: '*' } },
-    delete: { actors: ['admin', 'system'], fields: '*' },
+    // Sprint 4 CO-09: a seller deletes their own store's media (DELETE /api/media/:id, 409 while in use).
+    delete: { actors: ['admin', 'system', 'seller'], fields: '*' },
   },
 });
 

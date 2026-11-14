@@ -32,10 +32,13 @@ export function maxStoresPerSeller(): number {
   return Number.isFinite(n) && n > 0 ? n : 3;
 }
 
+/**
+ * Sprint 4 EP-04.US06 (D-094, CO-26): every new store starts pending, in every environment. It goes live through the
+ * readiness checklist and POST /api/stores/:id/go-live. The SELLER_NEW_STORE_STATUS shortcut and the "active outside
+ * production" default are gone.
+ */
 export function newStoreStatus(): WorkspaceStoreStatus {
-  const configured = process.env.SELLER_NEW_STORE_STATUS;
-  if (configured && KNOWN_STATUSES.includes(configured)) return configured as WorkspaceStoreStatus;
-  return process.env.NODE_ENV === 'production' ? 'pending' : 'active';
+  return 'pending';
 }
 
 export function slugify(name: string): string {

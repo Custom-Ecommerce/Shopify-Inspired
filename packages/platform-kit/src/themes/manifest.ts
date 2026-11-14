@@ -37,6 +37,10 @@ export interface ThemeManifestEntry {
   /** The theme new stores start with. Exactly one entry must set this. */
   readonly isDefault: boolean;
   readonly note?: string;
+  /** Sprint 4 EP-04.US04: a theme package exists, so a store may choose it (apps/storefront/lib/themes.ts loads it). */
+  readonly installed?: boolean;
+  /** Public path of a preview image, when there is one. */
+  readonly previewImage?: string;
 }
 
 export const THEME_MANIFEST = [
@@ -46,6 +50,7 @@ export const THEME_MANIFEST = [
     tier: "free",
     status: "available",
     isDefault: true,
+    installed: true,
   },
   {
     slug: "stiletto",
@@ -53,6 +58,7 @@ export const THEME_MANIFEST = [
     tier: "free",
     status: "available",
     isDefault: false,
+    installed: true,
   },
   {
     slug: "mola",
@@ -123,6 +129,19 @@ export function isThemeSlug(value: unknown): value is ThemeSlug {
 
 export function getThemeEntry(slug: string): ThemeManifestEntry | undefined {
   return THEME_MANIFEST.find((entry) => entry.slug === slug);
+}
+
+/**
+ * Sprint 4 EP-04.US04: the themes a store can choose: installed (a package exists) and not archived. The storefront's
+ * loader map (apps/storefront/lib/themes.ts) must have an entry for each; the manifest test checks the flag is set only
+ * where a package exists.
+ */
+export function listInstalledThemes(): readonly ThemeManifestEntry[] {
+  return THEME_MANIFEST.filter((entry) => (entry as ThemeManifestEntry).installed === true && entry.status !== "archived");
+}
+
+export function isInstalledThemeSlug(value: unknown): boolean {
+  return typeof value === "string" && listInstalledThemes().some((entry) => entry.slug === value);
 }
 
 /** Entries shown in the public `/themes` gallery (everything except archived). */

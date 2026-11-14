@@ -3,6 +3,7 @@ import {
   adminAccountDeps,
   adminAuthLimiter,
   clientAddress,
+  consumeIp,
   FORGOT_PASSWORD_MESSAGE,
   forgotPasswordRequestSchema,
   readAdminBody,
@@ -25,7 +26,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = await readAdminBody(request, forgotPasswordRequestSchema);
-    await adminAuthLimiter.consume(FORGOT_IP_RULE, clientAddress(request.headers));
+    await consumeIp(adminAuthLimiter, FORGOT_IP_RULE, clientAddress(request.headers));
     await adminAuthLimiter.consume(FORGOT_EMAIL_RULE, body.email);
     const email = body.email;
     runAfterResponse('password_reset', () => requestPasswordReset(adminAccountDeps(), email));

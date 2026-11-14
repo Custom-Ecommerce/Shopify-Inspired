@@ -105,10 +105,14 @@ afterEach(() => {
 });
 
 const token = (tv?: number) => signSession({ sub: SELLER, role: 'seller', ...(tv === undefined ? {} : { tv }) }, SECRET, SELLER_AUDIENCE);
-const req = (url: string, init: { method?: string; body?: unknown; bearer?: string } = {}) =>
+const req = (url: string, init: { method?: string; body?: unknown; bearer?: string; ip?: string } = {}) =>
   new NextRequest('http://seller.test' + url, {
     method: init.method ?? 'POST',
-    headers: { 'content-type': 'application/json', ...(init.bearer ? { authorization: 'Bearer ' + init.bearer } : {}) },
+    headers: {
+      'content-type': 'application/json',
+      ...(init.bearer ? { authorization: 'Bearer ' + init.bearer } : {}),
+      ...(init.ip ? { 'x-test-client-ip': init.ip } : {}),
+    },
     body: init.body === undefined ? undefined : typeof init.body === 'string' ? init.body : JSON.stringify(init.body),
   });
 
@@ -269,7 +273,13 @@ test('sign out of all other devices: the old token stops, the new one works', as
 const windowKey = (rule: string, subject: string, windowMs: number) =>
   'auth:' + rule + ':' + createHash('sha256').update(subject.trim().toLowerCase()).digest('hex').slice(0, 32) + ':' + Math.floor(Date.now() / windowMs) * windowMs;
 const FIFTEEN = 15 * 60 * 1000;
-const login = (email: string, password: string) => routes.login!(req('/api/users/login', { body: { email, password } }));
+const IP = '203.0.113.7';
+/** SB-4 A2: the per-IP bucket needs a resolvable address; these tests name a trusted header for it. */
+const login = (email: string, password: string, ip?: string) => {
+  if (ip) process.env.TRUSTED_CLIENT_IP_HEADER = 'x-test-client-ip';
+  else delete process.env.TRUSTED_CLIENT_IP_HEADER;
+  return routes.login!(req('/api/users/login', { body: { email, password }, ip }));
+};
 
 test('unknown email, wrong password and a suspended account get the same login error', async () => {
   const unknown = await login('nobody@example.com', PASSWORD);
@@ -289,19 +299,37 @@ test('10 failures lock the account and 30 lock the address for 15 minutes, with 
   assert.ok(Number(account429.headers.get('retry-after')) > 0);
   assert.equal((await login('other@example.com', PASSWORD)).status, 401, 'another account from the same address is not locked yet');
 
-  memory.counts.set(windowKey('login-ip', 'unknown', FIFTEEN), 30);
-  assert.equal((await login('other@example.com', PASSWORD)).status, 429);
+  memory.counts.set(windowKey('login-ip', IP, FIFTEEN), 30);
+  assert.equal((await login('other@example.com', PASSWORD, IP)).status, 429);
+  assert.equal((await login('third@example.com', PASSWORD, '198.51.100.9')).status, 401, 'another address is not locked');
 });
 
 test('a successful login clears the account counter but not the address counter, and carries tokenVersion', async () => {
-  await login('ayesha@example.com', 'wrong-password-value');
-  await login('ayesha@example.com', 'wrong-password-value');
+  await login('ayesha@example.com', 'wrong-password-value', IP);
+  await login('ayesha@example.com', 'wrong-password-value', IP);
   assert.equal(memory.counts.get(windowKey('login-account', 'ayesha@example.com', FIFTEEN)), 2);
   stored.tokenVersion = 4;
-  const ok = await login('ayesha@example.com', PASSWORD);
+  const ok = await login('ayesha@example.com', PASSWORD, IP);
   assert.equal(ok.status, 200);
   assert.equal(memory.counts.get(windowKey('login-account', 'ayesha@example.com', FIFTEEN)), undefined);
-  assert.equal(memory.counts.get(windowKey('login-ip', 'unknown', FIFTEEN)), 2);
+  assert.equal(memory.counts.get(windowKey('login-ip', IP, FIFTEEN)), 2);
   const body = (await ok.json()) as { token: string };
   assert.equal((await verifySession(body.token, SECRET, SELLER_AUDIENCE)).tv, 4);
+});
+
+test('SB-4 A2: without a resolvable address, 50 failed logins on different emails never produce a 429', async () => {
+  for (let i = 0; i < 50; i += 1) {
+    const response = await login('person' + i + '@example.com', 'wrong-password-value');
+    assert.equal(response.status, 401, 'attempt ' + i);
+  }
+  assert.equal([...memory.counts.keys()].some((key) => key.startsWith('auth:login-ip:')), false, 'no shared IP bucket is written');
+});
+
+test('SB-4 A1: there is no 423 lockout any more: stored lockout fields are ignored and the right password signs in', async () => {
+  stored.loginAttempts = 8;
+  stored.lockUntil = new Date(Date.now() + 60_000);
+  const response = await login('ayesha@example.com', PASSWORD);
+  assert.equal(response.status, 200);
+  stored.loginAttempts = 0;
+  stored.lockUntil = null;
 });

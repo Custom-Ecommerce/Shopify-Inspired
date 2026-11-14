@@ -40,7 +40,9 @@ export default async function TenantLayout({
   // `redirect` returns `never`, so after these two checks TypeScript narrows
   // `result` to the `ok` branch and `result.store` is typed.
   if (result.outcome === 'error') redirect('/store-not-found');
-  if (result.outcome !== 'ok') redirect('/store-unavailable');
+  // Sprint 4 EP-04.US06 (D-094): a store that has not gone live yet shows a plain "opening soon" page with no products.
+  // Its owner still sees it through Preview (the backend serves a pending store to a valid preview token).
+  if (result.outcome !== 'ok') redirect(result.outcome === 'unavailable' && result.status === 'pending' ? '/store-unavailable?state=opening' : '/store-unavailable');
 
   const store = result.store;
   const effectiveTheme = resolveEffectiveTheme(store.theme.activeTheme);

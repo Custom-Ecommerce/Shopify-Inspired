@@ -198,9 +198,9 @@ test('parseSettingsUpdate refuses bad values, unknown fields, and an empty chang
 
 test('toSettingsRow uses the model defaults for what is missing, and ISO dates', () => {
   const row = toSettingsRow(stored);
-  assert.deepEqual(row, { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', settingsRevision: 2, updatedAt: T1.toISOString() });
+  assert.deepEqual(row, { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, settingsRevision: 2, updatedAt: T1.toISOString() });
   assert.equal('_id' in row, false);
-  assert.deepEqual(toSettingsRow({ _id: SETTINGS_ID }), { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, settingsRevision: 0, updatedAt: null });
+  assert.deepEqual(toSettingsRow({ _id: SETTINGS_ID }), { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, storeApprovalRequired: false, settingsRevision: 0, updatedAt: null });
   const unusable = toSettingsRow({ _id: SETTINGS_ID, defaultCommissionRate: -3, maxStoresPerSeller: 0, stripeCommissionNote: '', settingsRevision: -1 });
   assert.equal(unusable.defaultCommissionRate, 4);
   assert.equal(unusable.maxStoresPerSeller, 3);
@@ -261,7 +261,7 @@ test('GET answers the settings in the wire shape, with no store header and no _i
     assert.equal(response.headers.get('cache-control'), 'no-store');
     const body = (await response.json()) as any;
     assert.deepEqual(body, {
-      settings: { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', settingsRevision: 2, updatedAt: T1.toISOString() },
+      settings: { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, settingsRevision: 2, updatedAt: T1.toISOString() },
     });
     assert.deepEqual(calls.finds, [{ globalType: 'platformSettings' }]);
   } finally {
@@ -312,7 +312,7 @@ test('PATCH changes the default rate, audits before and after with the reason, a
     assert.equal(calls.outbox[0].entity, 'platform');
     assert.equal(calls.outbox[0].entityId, 'platform');
     assert.equal(calls.outbox[0].group, 'settings');
-    assert.deepEqual(calls.outbox[0].payload, { defaultCommissionRate: 6.5, maxStoresPerSeller: 3 });
+    assert.deepEqual(calls.outbox[0].payload, { defaultCommissionRate: 6.5, maxStoresPerSeller: 3, storeApprovalRequired: false });
     assert.equal(calls.reverts.length, 0);
   } finally {
     restore();
@@ -457,4 +457,12 @@ test('the policy decides: with the admin actor removed from read or update, the 
   } finally {
     again();
   }
+});
+
+test('Sprint 4 D-095: storeApprovalRequired is a boolean setting, false when missing', () => {
+  assert.deepEqual(parseSettingsUpdate({ storeApprovalRequired: true }), { ok: true, data: { changes: { storeApprovalRequired: true }, reason: null } });
+  const bad = parseSettingsUpdate({ storeApprovalRequired: 'yes' });
+  assert.deepEqual(bad.ok ? [] : bad.issues, [{ path: 'storeApprovalRequired', message: 'must be true or false' }]);
+  assert.equal(toSettingsRow({ _id: SETTINGS_ID, storeApprovalRequired: true }).storeApprovalRequired, true);
+  assert.equal(toSettingsRow({ _id: SETTINGS_ID }).storeApprovalRequired, false);
 });

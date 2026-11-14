@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { authLimiter, clientAddress, NO_STORE, readAccountBody, sellerAccountDeps } from '@/lib/account-support';
+import { authLimiter, clientAddress, consumeIp, NO_STORE, readAccountBody, sellerAccountDeps } from '@/lib/account-support';
 import { FORGOT_PASSWORD_MESSAGE, forgotPasswordRequestSchema } from '@/lib/contracts';
 import { handleRouteError } from '@/lib/http';
 import { runAfterResponse } from '@/lib/notifications';
@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = await readAccountBody(request, forgotPasswordRequestSchema);
-    await authLimiter.consume(FORGOT_IP_RULE, clientAddress(request.headers));
+    await consumeIp(authLimiter, FORGOT_IP_RULE, clientAddress(request.headers));
     await authLimiter.consume(FORGOT_EMAIL_RULE, body.email);
     const email = body.email;
     runAfterResponse('password_reset', () => requestPasswordReset(sellerAccountDeps(), email));

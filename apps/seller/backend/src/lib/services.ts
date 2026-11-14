@@ -72,6 +72,9 @@ export const SellerAlert = db.SellerAlert;
 
 // Sprint 4 EP-08: account links, the per-request session guard, the account-route limits and the account flows.
 export const AuthToken = db.AuthToken;
+// Sprint 4 EP-04.US06 (D-095): go-live reads storeApprovalRequired from the platform settings.
+export const PlatformSettingsModel = db.PlatformSettingsModel;
+export const PLATFORM_SETTINGS_GLOBAL_TYPE = db.PLATFORM_SETTINGS_GLOBAL_TYPE;
 export const {
   createSessionGuard,
   toSessionUserRecord,

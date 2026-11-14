@@ -237,6 +237,8 @@ export interface CartQuoteInput {
   lines: CartQuoteLineInput[];
   /** One code per cart. */
   discountCode?: string | null;
+  /** Sprint 4 EP-04.US02: the shipping city, when the checkout knows it, so the quote uses the store's rate for it. */
+  city?: string | null;
 }
 
 /** Why a cart line cannot be bought as it stands. */

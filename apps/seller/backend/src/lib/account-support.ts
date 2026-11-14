@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { resolveClientIp } from '@markaz/platform-kit/client-ip';
+import { verifiedClientAddress } from '@markaz/platform-kit/signed-client-address';
 import type { AccountFlowDeps, AuthRateLimiter, AuthTokenModelPort, AccountUserModelPort, RateCounterStore } from '@markaz/auth';
 import type { AuthContext } from '@/lib/auth';
 import { issueToken, tokenVersionOf } from '@/lib/accounts';
@@ -49,11 +50,23 @@ export function useMemoryAuthLimits(): ReturnType<typeof memoryRateCounterStore>
 }
 
 /**
- * The caller's address for the per-IP limits: the trusted-proxy rule (TRUSTED_PROXY_HOPS or TRUSTED_CLIENT_IP_HEADER),
- * never a raw x-forwarded-for. Without a setting every caller shares one bucket, 'unknown'.
+ * The caller's address for the per-IP limits, or null when it cannot be known (then the per-IP bucket is skipped and
+ * only the account or email bucket applies, D-097: never one shared "unknown" bucket).
+ *
+ * First the address the portal's BFF signed (x-markaz-client-address, CLIENT_ADDRESS_SIGNING_SECRET, scope
+ * PORTAL_CLIENT_SCOPE): the BFF calls this backend server to server, so only it knows the browser's address. Then the
+ * trusted-proxy rule (TRUSTED_PROXY_HOPS or TRUSTED_CLIENT_IP_HEADER), never a raw x-forwarded-for.
  */
-export function clientAddress(headers: Headers): string {
-  return resolveClientIp(headers, process.env) ?? 'unknown';
+export function clientAddress(headers: Headers): string | null {
+  return verifiedClientAddress(headers, process.env.CLIENT_ADDRESS_SIGNING_SECRET ?? '', PORTAL_CLIENT_SCOPE) ?? resolveClientIp(headers, process.env);
+}
+
+/** The scope the seller portal and the admin console sign the browser's address for (no store is involved). */
+export const PORTAL_CLIENT_SCOPE = 'account-portal';
+
+/** Consumes the per-IP bucket only when the address is known. */
+export async function consumeIp(limiter: AuthRateLimiter, rule: Parameters<AuthRateLimiter['consume']>[0], address: string | null): Promise<void> {
+  if (address !== null) await limiter.consume(rule, address);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -92,15 +105,18 @@ export function sellerAccountDeps(): AccountFlowDeps {
  * Throws 403 EMAIL_NOT_VERIFIED unless the signed-in seller's email is verified. Uses the session guard's read when
  * authenticate() had one, otherwise reads the account.
  */
+/** Whether the signed-in seller's email is verified (the guard's read, or the account itself). */
+export async function isEmailVerified(ctx: AuthContext): Promise<boolean> {
+  if (ctx.emailVerified !== undefined) return ctx.emailVerified;
+  await connectSellerDb().catch(() => {
+    throw new HttpError(503, 'Seller database unavailable');
+  });
+  const user = (await User.findById(ctx.userObjectId).select('emailVerifiedAt').lean()) as { emailVerifiedAt?: unknown } | null;
+  return Boolean(user && user.emailVerifiedAt);
+}
+
 export async function requireVerifiedEmail(ctx: AuthContext): Promise<void> {
-  let verified = ctx.emailVerified;
-  if (verified === undefined) {
-    await connectSellerDb().catch(() => {
-      throw new HttpError(503, 'Seller database unavailable');
-    });
-    const user = (await User.findById(ctx.userObjectId).select('emailVerifiedAt').lean()) as { emailVerifiedAt?: unknown } | null;
-    verified = Boolean(user && user.emailVerifiedAt);
-  }
+  const verified = await isEmailVerified(ctx);
   if (!verified) {
     throw new HttpError(403, 'Verify your email address first. We can send the link again from your dashboard.', ACCOUNT_CODES.EMAIL_NOT_VERIFIED);
   }

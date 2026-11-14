@@ -56,12 +56,14 @@ test('100 percent with free delivery is a total of zero, not less', () => {
   assert.equal(free.totals.total, 0);
 });
 
-test('free delivery is judged on the subtotal before the discount', () => {
+test('free delivery is judged on the item subtotal AFTER the discount (D-094, Sprint 4)', () => {
   const justOver = price([line(5000)], { value: 50 });
   assert.equal(justOver.totals.subtotal, 5000);
   assert.equal(justOver.totals.discount, 2500);
-  assert.equal(justOver.totals.deliveryCharges, 0, 'the discounted 2500 is below the threshold, and delivery stays free');
-  assert.equal(justOver.totals.total, 2500);
+  assert.equal(justOver.totals.deliveryCharges, 250, 'the discounted 2500 is below the threshold, so delivery is charged');
+  assert.equal(justOver.totals.total, 2750);
+  const stillFree = price([line(10000)], { value: 50 });
+  assert.equal(stillFree.totals.deliveryCharges, 0, 'the discounted 5000 reaches the threshold');
 
   const under = price([line(4999)], { value: 50 });
   assert.equal(under.totals.deliveryCharges, 250);

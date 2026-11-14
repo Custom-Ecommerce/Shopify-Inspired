@@ -52,9 +52,10 @@ preview links, cache purge, sync, Cloudinary uploads, email. Each example has a 
 (the same value on the storefront and the seller backend), `TRUSTED_PROXY_HOPS` or `TRUSTED_CLIENT_IP_HEADER` (on both),
 and `REVALIDATE_SECRET` (the same value on the storefront and the seller backend).
 
-### Do not set in production
+### Removed in Sprint 4
 
-`SELLER_NEW_STORE_STATUS` existed only for verification runs (CO-26). Leave it empty. EP-04.US06 removes it.
+`SELLER_NEW_STORE_STATUS` is no longer read (CO-26, EP-04.US06): every new store starts `pending` and goes live
+through the readiness checklist. Delete it from any environment that still has it.
 
 ## 3. A throwaway database
 
@@ -97,8 +98,7 @@ dummy URL. To build without calling the backend at all, also set `STOREFRONT_REM
 3. **Seller backend**.
 4. **Seller frontend** and **admin frontend**: last; they only call the backends.
 
-After a deploy that adds variables, set them on the platform first, then redeploy. Remove `SELLER_NEW_STORE_STATUS`
-from production (CO-26).
+After a deploy that adds variables, set them on the platform first, then redeploy.
 
 ### Required secrets (production)
 
@@ -199,6 +199,21 @@ The password follows the shared rule (8 to 128 characters). Neither the password
 | Reset password, verify email | 10 per hour per IP |
 | Resend verification | 3 per hour per account |
 
-The per-IP limits need `TRUSTED_PROXY_HOPS` or `TRUSTED_CLIENT_IP_HEADER` on the backend. Without one, every caller
-shares one bucket (`unknown`).
+### Per-IP limits: the client address (Sprint 4, D-097)
+
+The seller portal and the admin console call their backend server to server, so the backend sees the frontend's
+address, not the browser's. The frontend therefore resolves the browser's address and signs it
+(`x-markaz-client-address`, scope `account-portal`, valid 60 seconds). The backend believes it only with a valid
+signature. Deploy settings:
+
+| App | Set |
+| --- | --- |
+| Seller frontend | `CLIENT_ADDRESS_SIGNING_SECRET` (the same value as the seller backend's) and `TRUSTED_PROXY_HOPS=1` on Vercel |
+| Seller backend | `CLIENT_ADDRESS_SIGNING_SECRET` (already set for the storefront; one value serves both) |
+| Admin frontend | `CLIENT_ADDRESS_SIGNING_SECRET` (the same value as the admin backend's) and `TRUSTED_PROXY_HOPS=1` on Vercel |
+| Admin backend | `CLIENT_ADDRESS_SIGNING_SECRET` |
+
+Use `TRUSTED_CLIENT_IP_HEADER` instead of `TRUSTED_PROXY_HOPS` only behind a proxy that always sets that header itself.
+When no address can be known (no secret, or no setting), the per-IP bucket is skipped and only the per-account or
+per-email bucket applies. There is never one shared bucket for unknown callers.
 

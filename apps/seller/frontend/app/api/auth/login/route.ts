@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientAddressHeaders } from "@/lib/client-address";
 
 const PAYLOAD_API_URL = process.env.SELLER_BACKEND_API_URL || "http://localhost:4001";
 
@@ -35,7 +36,8 @@ export async function POST(req: NextRequest) {
   try {
     res = await fetch(`${PAYLOAD_API_URL}/api/users/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Sprint 4 A3: the browser's address, signed, so the login limit per IP sees the shopper and not this server.
+      headers: { "Content-Type": "application/json", ...clientAddressHeaders(req.headers) },
       body: JSON.stringify({ email, password }),
       cache: "no-store",
     });

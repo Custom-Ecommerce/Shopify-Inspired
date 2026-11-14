@@ -159,16 +159,26 @@ test('a suspended operator, or a token older than the last reset, is refused wit
 const FIFTEEN = 15 * 60 * 1000;
 const windowKey = (rule: string, subject: string) =>
   'auth:' + rule + ':' + createHash('sha256').update(subject.trim().toLowerCase()).digest('hex').slice(0, 32) + ':' + Math.floor(Date.now() / FIFTEEN) * FIFTEEN;
-const login = (email: string, password: string) =>
-  loginPOST(new Request('http://admin.test/api/admin/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) }));
+const IP = '203.0.113.8';
+const login = (email: string, password: string, ip?: string) => {
+  if (ip) process.env.TRUSTED_CLIENT_IP_HEADER = 'x-test-client-ip';
+  else delete process.env.TRUSTED_CLIENT_IP_HEADER;
+  return loginPOST(
+    new Request('http://admin.test/api/admin/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(ip ? { 'x-test-client-ip': ip } : {}) },
+      body: JSON.stringify({ email, password }),
+    }),
+  );
+};
 
 test('admin login: 429 past the account or address limit; a success clears only the account counter', async () => {
   const memory = useMemoryAdminAuthLimits();
-  assert.equal((await login('op@example.com', 'wrong-password')).status, 401);
-  const ok = await login('op@example.com', PASSWORD);
+  assert.equal((await login('op@example.com', 'wrong-password', IP)).status, 401);
+  const ok = await login('op@example.com', PASSWORD, IP);
   assert.equal(ok.status, 200);
   assert.equal(memory.counts.get(windowKey('login-account', 'op@example.com')), undefined);
-  assert.equal(memory.counts.get(windowKey('login-ip', 'unknown')), 1);
+  assert.equal(memory.counts.get(windowKey('login-ip', IP)), 1);
 
   memory.counts.set(windowKey('login-account', 'op@example.com'), 10);
   const limited = await login('op@example.com', PASSWORD);

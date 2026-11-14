@@ -107,7 +107,7 @@ test('signup for an existing email is refused with 409', async () => {
   }
 });
 
-test('login with the right password returns 200, a session, and resets the attempt counter', async () => {
+test('login with the right password returns 200 and a session, and writes no lockout counter (D-097)', async () => {
   const updates: unknown[] = [];
   const restore = installStubs({ findDoc: await storedUser({ loginAttempts: 3 }) }, updates, []);
   try {
@@ -118,20 +118,19 @@ test('login with the right password returns 200, a session, and resets the attem
     assert.equal('passwordHash' in body.user, false);
     const claims = await verifySession(body.token, SECRET, SELLER_AUDIENCE);
     assert.equal(claims.sub, OID);
-    assert.deepEqual(updates[0], { $set: { loginAttempts: 0, lockUntil: null } });
+    assert.equal(updates.length, 0, 'login no longer writes loginAttempts or lockUntil');
   } finally {
     restore();
   }
 });
 
-test('login with a wrong password is refused with 401 and records one more attempt', async () => {
+test('login with a wrong password is refused with 401 and writes no lockout counter (D-097)', async () => {
   const updates: unknown[] = [];
   const restore = installStubs({ findDoc: await storedUser() }, updates, []);
   try {
     const response = await login(json({ email: 'ali@example.com', password: 'wrong-password-value' }));
     assert.equal(response.status, 401);
-    const update = updates[0] as { $set: { loginAttempts: number } };
-    assert.equal(update.$set.loginAttempts, 1);
+    assert.equal(updates.length, 0, 'the account throttle counts failures, not the User document');
   } finally {
     restore();
   }
@@ -149,7 +148,7 @@ test('login for an unknown email is refused with 401 and does not reveal which p
   }
 });
 
-test('a locked account is refused with 423 before any password check', async () => {
+test('a stored lockUntil no longer locks the account: the 10-per-15-minute throttle is the only lock (D-097)', async () => {
   const restore = installStubs(
     { findDoc: await storedUser({ loginAttempts: 8, lockUntil: new Date(Date.now() + 60_000) }) },
     [],
@@ -157,7 +156,7 @@ test('a locked account is refused with 423 before any password check', async () 
   );
   try {
     const response = await login(json({ email: 'ali@example.com', password: PASSWORD }));
-    assert.equal(response.status, 423);
+    assert.equal(response.status, 200);
   } finally {
     restore();
   }

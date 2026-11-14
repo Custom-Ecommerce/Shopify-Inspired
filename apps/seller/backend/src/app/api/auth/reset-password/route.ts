@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { authLimiter, clientAddress, NO_STORE, readAccountBody, sellerAccountDeps } from '@/lib/account-support';
+import { authLimiter, clientAddress, consumeIp, NO_STORE, readAccountBody, sellerAccountDeps } from '@/lib/account-support';
 import { requireDatabase } from '@/lib/accounts';
 import { ACCOUNT_CODES, resetPasswordRequestSchema } from '@/lib/contracts';
 import { HttpError, handleRouteError } from '@/lib/http';
@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = await readAccountBody(request, resetPasswordRequestSchema);
-    await authLimiter.consume(RESET_IP_RULE, clientAddress(request.headers));
+    await consumeIp(authLimiter, RESET_IP_RULE, clientAddress(request.headers));
     await requireDatabase();
     const result = await resetPassword(sellerAccountDeps(), body.token, body.password);
     if (!result.ok) {

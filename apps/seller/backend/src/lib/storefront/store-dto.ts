@@ -1,6 +1,7 @@
 import { storefrontStoreSchema } from '@/lib/contracts';
 import { Media } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
+import { readPayments } from '@/lib/store-settings';
 
 /** A Mongo document as .lean() returns it. Mixed fields stay unknown until read defensively. */
 export interface StoreRow {
@@ -65,7 +66,8 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
       currency: 'PKR',
       // Cash on delivery is on unless the seller turned it off. Card depends on the platform's Stripe keys (A-015).
       codEnabled: pay.codEnabled !== false,
-      cardEnabled: cardPaymentsAvailable(),
+      // Sprint 4 EP-04.US03: the platform keys AND the store's own switch (missing = on, as before).
+      cardEnabled: cardPaymentsAvailable() && readPayments(store.paymentSettings).cardEnabled,
       deliveryRate: amount(sf.deliveryRate) ?? 0,
       freeDeliveryThreshold: amount(sf.freeDeliveryThreshold),
       whatsappNumber: text(sf.whatsappNumber),

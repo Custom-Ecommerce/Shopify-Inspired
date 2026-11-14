@@ -1,5 +1,5 @@
 import { AdminHttpError, errorResponse, requireDatabase } from '@/lib/admin-auth';
-import { ACCOUNT_CODES, adminAccountDeps, adminAuthLimiter, clientAddress, readAdminBody, resetPasswordRequestSchema } from '@/lib/admin-account';
+import { ACCOUNT_CODES, adminAccountDeps, adminAuthLimiter, clientAddress, consumeIp, readAdminBody, resetPasswordRequestSchema } from '@/lib/admin-account';
 import { RESET_IP_RULE, resetPassword } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = await readAdminBody(request, resetPasswordRequestSchema);
-    await adminAuthLimiter.consume(RESET_IP_RULE, clientAddress(request.headers));
+    await consumeIp(adminAuthLimiter, RESET_IP_RULE, clientAddress(request.headers));
     await requireDatabase();
     const result = await resetPassword(adminAccountDeps(), body.token, body.password);
     if (!result.ok) throw new AdminHttpError(400, 'This link is not valid any more. Ask for a new one.', ACCOUNT_CODES.TOKEN_INVALID);

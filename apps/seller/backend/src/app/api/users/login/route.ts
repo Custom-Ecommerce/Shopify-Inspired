@@ -3,7 +3,7 @@ import { issueToken, requireDatabase, sessionUserOf, tokenVersionOf } from '@/li
 import { authLimiter, clientAddress } from '@/lib/account-support';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { parseBody } from '@/lib/placeholder';
-import { hashPassword, isLocked, LOGIN_ACCOUNT_RULE, LOGIN_IP_RULE, recordFailedAttempt, User, verifyPassword } from '@/lib/services';
+import { hashPassword, LOGIN_ACCOUNT_RULE, LOGIN_IP_RULE, User, verifyPassword } from '@/lib/services';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,12 +62,16 @@ async function spendHashTime(password: string): Promise<void> {
 }
 
 /**
- * POST /api/users/login. Verifies the credentials and the lockout, and returns a session token.
+ * POST /api/users/login. Verifies the credentials and returns a session token.
  *
  * Sprint 4 EP-08.US05.T01 (D-093): failures are counted per account (10 per 15 minutes) and per IP (30 per 15 minutes)
  * on the shared counters; past either limit the answer is 429 with Retry-After, before any password check. A successful
  * login clears the account counter but not the IP counter. Unknown email, wrong password and a suspended or blocked
  * account all get the same 401 text. The token carries the account's tokenVersion.
+ *
+ * D-097: that throttle is the only lock. The old 8-failure 423 lockout was removed because it answered differently
+ * for an existing account; loginAttempts and lockUntil stay on the User model but login no longer reads or writes them.
+ * Without a resolvable client address the per-IP bucket is skipped (the account bucket still applies).
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -76,29 +80,23 @@ export async function POST(request: Request): Promise<Response> {
 
     const email = body.data.email.toLowerCase();
     const ip = clientAddress(request.headers);
-    await authLimiter.assertBelow(LOGIN_IP_RULE, ip);
+    if (ip !== null) await authLimiter.assertBelow(LOGIN_IP_RULE, ip);
     await authLimiter.assertBelow(LOGIN_ACCOUNT_RULE, email);
 
     await requireDatabase();
 
     const failed = async (): Promise<never> => {
-      await authLimiter.record(LOGIN_IP_RULE, ip);
+      if (ip !== null) await authLimiter.record(LOGIN_IP_RULE, ip);
       await authLimiter.record(LOGIN_ACCOUNT_RULE, email);
       throw new HttpError(401, INVALID_CREDENTIALS);
     };
 
     const user = await User.findOne({ email })
-      .select('+passwordHash name email role store loginAttempts lockUntil accountStatus tokenVersion emailVerifiedAt')
+      .select('+passwordHash name email role store accountStatus tokenVersion emailVerifiedAt')
       .exec();
     if (!user) {
       await spendHashTime(body.data.password);
       return await failed();
-    }
-
-    const now = new Date();
-    const state = { loginAttempts: user.loginAttempts, lockUntil: user.lockUntil ?? null };
-    if (isLocked(state, now)) {
-      throw new HttpError(423, 'Account is temporarily locked. Try again later.');
     }
 
     /* patch_login_fix: resolve-password-hash */
@@ -111,20 +109,12 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const ok = await verifyPassword(body.data.password, passwordHash);
-    if (!ok) {
-      const next = recordFailedAttempt(state, now);
-      await User.updateOne(
-        { _id: user._id },
-        { $set: { loginAttempts: next.loginAttempts, lockUntil: next.lockUntil } },
-      );
-      return await failed();
-    }
+    if (!ok) return await failed();
 
     // D-093: a suspended or blocked account cannot sign in, and is told nothing more than a wrong password would be.
     const status = (user as { accountStatus?: unknown }).accountStatus;
     if (status === 'suspended' || status === 'blocked') return await failed();
 
-    await User.updateOne({ _id: user._id }, { $set: { loginAttempts: 0, lockUntil: null } });
     await authLimiter.reset(LOGIN_ACCOUNT_RULE, email);
     const token = await issueToken(String(user._id), user.role, tokenVersionOf(user as { tokenVersion?: unknown }));
     return Response.json(

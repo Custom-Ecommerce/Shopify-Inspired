@@ -4,6 +4,7 @@ import * as notificationsNs from '@markaz/notifications';
 import type { EnqueueInput, NotificationOutboxModel } from '@markaz/notifications';
 import type { AccountFlowDeps, AccountUserModelPort, AuthRateLimiter, AuthTokenModelPort, RateCounterStore } from '@markaz/auth';
 import { resolveClientIp } from '@markaz/platform-kit/client-ip';
+import { verifiedClientAddress } from '@markaz/platform-kit/signed-client-address';
 import * as contractsNs from '@markaz/contracts';
 import { AdminHttpError } from '@/lib/admin-auth';
 import { unwrapCjs } from '@/lib/cjs';
@@ -73,8 +74,24 @@ export function useMemoryAdminAuthLimits(): ReturnType<typeof memoryRateCounterS
   return memory;
 }
 
-export function clientAddress(headers: Headers): string {
-  return resolveClientIp(headers, process.env) ?? 'unknown';
+/**
+ * The caller's address for the per-IP limits, or null when it cannot be known (then the per-IP bucket is skipped and
+ * only the account or email bucket applies, D-097: never one shared "unknown" bucket).
+ *
+ * First the address the console's proxy signed (x-markaz-client-address, CLIENT_ADDRESS_SIGNING_SECRET, scope
+ * PORTAL_CLIENT_SCOPE): the BFF calls this backend server to server, so only it knows the browser's address. Then the
+ * trusted-proxy rule (TRUSTED_PROXY_HOPS or TRUSTED_CLIENT_IP_HEADER), never a raw x-forwarded-for.
+ */
+export function clientAddress(headers: Headers): string | null {
+  return verifiedClientAddress(headers, process.env.CLIENT_ADDRESS_SIGNING_SECRET ?? '', PORTAL_CLIENT_SCOPE) ?? resolveClientIp(headers, process.env);
+}
+
+/** The scope the seller portal and the admin console sign the browser's address for (no store is involved). */
+export const PORTAL_CLIENT_SCOPE = 'account-portal';
+
+/** Consumes the per-IP bucket only when the address is known. */
+export async function consumeIp(limiter: AuthRateLimiter, rule: Parameters<AuthRateLimiter['consume']>[0], address: string | null): Promise<void> {
+  if (address !== null) await limiter.consume(rule, address);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

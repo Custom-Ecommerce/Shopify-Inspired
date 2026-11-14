@@ -1,3 +1,4 @@
+import { clientAddressHeaders } from "@/lib/client-address";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { backendFetch, BackendUnavailableError } from "@/lib/backend";
@@ -57,7 +58,8 @@ export async function proxyToBackend(request: NextRequest, path: string, init: P
 
   let upstream: Response;
   try {
-    const headers: Record<string, string> = { authorization: "Bearer " + token };
+    // Sprint 4 A3: the operator's address, signed, for the backend's per-IP limits.
+    const headers: Record<string, string> = { authorization: "Bearer " + token, ...clientAddressHeaders(request.headers) };
     if (init.body !== undefined) headers["content-type"] = "application/json";
     upstream = await backendFetch(path, { method, headers, body: init.body });
   } catch (err) {

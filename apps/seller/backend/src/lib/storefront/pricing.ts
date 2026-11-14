@@ -1,5 +1,5 @@
 import type { StorefrontDiscountError, StorefrontDiscountRefusal, StorefrontQuoteTotals } from '@markaz/contracts';
-import { discountRefusalMessage, toWholeRupees } from '@/lib/contracts';
+import { cityKey, discountRefusalMessage, toWholeRupees } from '@/lib/contracts';
 
 /**
  * Server-side cart and order pricing. Pure: no database, and the time is passed in. Prices come from the catalog rows the
@@ -7,11 +7,11 @@ import { discountRefusalMessage, toWholeRupees } from '@/lib/contracts';
  * the total a shopper sees is the total they are charged.
  *
  * Delivery policy:
- *   - each line has a delivery charge: the product's own charge, or the store's default rate when the
- *     product has none;
+ *   - each line has a delivery charge: the product's own charge, or the store's rate when the product has none. The
+ *     store's rate is its rate for the shipping city when it set one (Sprint 4 EP-04.US02), else its default rate;
  *   - an order ships as one parcel, so it pays the highest line charge once (not the sum);
- *   - the charge is waived when the subtotal reaches the store's free-delivery threshold. A threshold of
- *     null or 0 means the store has no free-delivery offer. The subtotal is the one before any discount.
+ *   - the charge is waived when the item subtotal AFTER the discount reaches the store's free-delivery threshold
+ *     (D-094; before Sprint 4 it was judged before the discount). A threshold of null or 0 means no free-delivery offer.
  *
  * Discount policy (D-080): percent or whole rupees off the item subtotal only, never delivery. The total never goes below zero.
  */
@@ -28,6 +28,19 @@ export interface PricingLine {
 export interface PricingStore {
   deliveryRate: number;
   freeDeliveryThreshold: number | null;
+  /** Sprint 4 EP-04.US02: the store's rate per city, keyed by cityKey(). Missing: the default rate everywhere. */
+  cityRates?: Readonly<Record<string, number>>;
+  /** The shipping city of this quote or order; an unlisted or missing city pays the default rate. */
+  city?: string | null;
+}
+
+/** The store's rate for this parcel: the city's override when there is one, else the default rate. */
+export function storeRateFor(store: PricingStore): number {
+  if (store.city && store.cityRates) {
+    const override = store.cityRates[cityKey(store.city)];
+    if (typeof override === 'number' && Number.isFinite(override) && override >= 0) return override;
+  }
+  return store.deliveryRate;
 }
 
 /** A Discount row as pricing reads it. */
@@ -75,12 +88,14 @@ export function computeTotals(lines: PricingLine[], store: PricingStore, discoun
   const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0));
 
   const threshold = store.freeDeliveryThreshold;
-  const freeDelivery = threshold !== null && threshold > 0 && subtotal >= threshold;
+  const itemsAfterDiscount = Math.max(0, subtotal - discount);
+  const freeDelivery = threshold !== null && threshold > 0 && itemsAfterDiscount >= threshold;
 
+  const rate = storeRateFor(store);
   let deliveryCharges = 0;
   if (!freeDelivery) {
     for (const line of lines) {
-      const charge = line.deliveryCharge ?? store.deliveryRate;
+      const charge = line.deliveryCharge ?? rate;
       if (charge > deliveryCharges) deliveryCharges = charge;
     }
   }

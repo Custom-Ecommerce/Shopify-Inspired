@@ -383,7 +383,7 @@ for (const missing of ['STRIPE_SECRET_KEY', 'STRIPE_ORDER_WEBHOOK_SECRET', 'STOR
     const store = await toStorefrontStoreDto({ _id: STORE, slug: 'alpha-store', name: 'Alpha' });
     assert.equal(store.commerce.cardEnabled, false);
     const res = await place();
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 422, 'Sprint 4 EP-04.US03: a method the store does not offer is 422');
     assert.equal(((await res.json()) as Any).error.code, 'PAYMENT_METHOD_UNAVAILABLE');
     assert.equal(orders.length, 0);
     assert.equal(stock, 5);

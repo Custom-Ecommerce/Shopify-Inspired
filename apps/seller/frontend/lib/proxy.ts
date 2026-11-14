@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { extractStoreIds, getDashboardUser, isImplicitDefaultEnabled } from "@/lib/dashboard-auth";
 import { ERROR_STATUS, type ApiErrorBody, type ErrorCode } from "@/lib/error-codes";
+import { clientAddressHeaders } from "@/lib/client-address";
 
 import type { DashboardUser } from "@/lib/types/dashboard";
 
@@ -310,7 +311,8 @@ export async function proxyToBackend(req: NextRequest, options: ProxyOptions): P
     }
   }
 
-  const headers: Record<string, string> = { ...options.headers, "x-request-id": requestId };
+  // Sprint 4 A3: the browser's address, signed for the backend's per-IP limits.
+  const headers: Record<string, string> = { ...options.headers, ...clientAddressHeaders(req.headers), "x-request-id": requestId };
   if (auth.token) {
     const prefix = options.authHeaderPrefix || (authReq === "customer" ? "Bearer" : "JWT");
     headers["Authorization"] = `${prefix} ${auth.token}`;

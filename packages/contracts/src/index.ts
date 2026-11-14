@@ -54,3 +54,5 @@ export * from './storefront';
 export * from './notifications';
 // Sprint 4 EP-08: seller account and auth.
 export * from './account';
+// Sprint 4 EP-04: store settings, delivery, payments, payout, readiness and go-live.
+export * from './store-settings';

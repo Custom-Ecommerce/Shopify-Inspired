@@ -350,7 +350,7 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
       handle(request, context, quoteBody, deps, { needsIdempotencyKey: false }, async (transport, input) => ({
         kind: "data",
         status: 200,
-        data: await transport.quoteCart({ lines: input.lines, discountCode: input.discountCode }),
+        data: await transport.quoteCart({ lines: input.lines, discountCode: input.discountCode, city: input.city ?? null }),
       })),
 
     submit: (request, context) =>

@@ -106,10 +106,10 @@ export async function uploadVideo(file: Blob): Promise<UploadedVideo> {
 }
 
 /**
- * Deletes a video from Cloudinary, for a file that was uploaded and then refused. It reports rather than throws: the seller
- * must still get the real refusal, and a failure here is logged so the leftover asset can be found.
+ * Deletes one asset from Cloudinary (Sprint 4: images too, for a replaced logo or banner and the media delete route). It
+ * reports rather than throws: the seller's action already happened, and a failure is logged so the leftover can be found.
  */
-export async function deleteVideo(publicId: string): Promise<boolean> {
+export async function deleteAsset(publicId: string, resource: 'image' | 'video'): Promise<boolean> {
   try {
     const cloud = requireEnv('CLOUDINARY_CLOUD_NAME');
     const apiKey = requireEnv('CLOUDINARY_API_KEY');
@@ -122,13 +122,18 @@ export async function deleteVideo(publicId: string): Promise<boolean> {
     form.append('api_key', apiKey);
     form.append('signature', signParams(params, secret));
 
-    const res = await fetch('https://api.cloudinary.com/v1_1/' + cloud + '/video/destroy', { method: 'POST', body: form });
+    const res = await fetch('https://api.cloudinary.com/v1_1/' + cloud + '/' + resource + '/destroy', { method: 'POST', body: form });
     const json = (await res.json().catch(() => null)) as { result?: string } | null;
     if (res.ok && json?.result === 'ok') return true;
-    console.error('[seller-backend] a refused video was not deleted from Cloudinary', publicId);
+    console.error('[seller-backend] a Cloudinary asset was not deleted', { publicId, resource });
     return false;
   } catch {
-    console.error('[seller-backend] a refused video was not deleted from Cloudinary', publicId);
+    console.error('[seller-backend] a Cloudinary asset was not deleted', { publicId, resource });
     return false;
   }
+}
+
+/** Deletes a video from Cloudinary, for a file that was uploaded and then refused. Never throws. */
+export async function deleteVideo(publicId: string): Promise<boolean> {
+  return deleteAsset(publicId, 'video');
 }

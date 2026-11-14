@@ -3,6 +3,7 @@ import { connectSellerDb } from '@/lib/mongo';
 import { Store } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
 import { StorefrontHttpError, databaseUnavailable, storeNotFound } from '@/lib/storefront/errors';
+import { cityRateMap, readDelivery, readPayments } from '@/lib/store-settings';
 
 /** What a store charges and accepts, read defensively from its Mixed settings. */
 export interface StoreCommerce {
@@ -11,6 +12,10 @@ export interface StoreCommerce {
   freeDeliveryThreshold: number | null;
   codEnabled: boolean;
   cardEnabled: boolean;
+  /** Sprint 4 EP-04.US02: the store's rate per city (cityKey -> rupees). */
+  cityRates: Readonly<Record<string, number>>;
+  /** The shipping city of a quote or an order, set by the caller. */
+  city?: string | null;
 }
 
 interface ActiveStoreRow {
@@ -29,16 +34,21 @@ function amount(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 }
 
-/** Same defaults as the store DTO: cash on delivery is on unless turned off, card only when enabled. */
+/**
+ * Same defaults as the store DTO: cash on delivery is on unless turned off. Card (Sprint 4 EP-04.US03, D-094) is offered
+ * only when the platform's Stripe keys exist AND the store has not switched card off (a store that never saved the
+ * switch keeps today's behaviour: on with the keys).
+ */
 export function readStoreCommerce(row: ActiveStoreRow): StoreCommerce {
-  const sf = record(row.storefront);
-  const pay = record(row.paymentSettings);
+  const delivery = readDelivery(row.storefront);
+  const payments = readPayments(row.paymentSettings);
   return {
     id: String(row._id),
-    deliveryRate: amount(sf.deliveryRate) ?? 0,
-    freeDeliveryThreshold: amount(sf.freeDeliveryThreshold),
-    codEnabled: pay.codEnabled !== false,
-    cardEnabled: cardPaymentsAvailable(),
+    deliveryRate: delivery.defaultRate,
+    freeDeliveryThreshold: delivery.freeOver,
+    codEnabled: payments.codEnabled,
+    cardEnabled: cardPaymentsAvailable() && payments.cardEnabled,
+    cityRates: cityRateMap(delivery),
   };
 }
 
