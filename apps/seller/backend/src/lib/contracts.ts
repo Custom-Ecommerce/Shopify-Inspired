@@ -127,3 +127,17 @@ export const { notificationPrefsUpdateSchema, readNotificationPrefs, SELLER_ALER
 
 // EP-02 OB-5b: print data.
 export const { labelCodAmount, ORDER_PRINT_MAX_IDS, orderPrintResponseSchema } = contracts;
+
+// Sprint 4 EP-08: seller account and auth.
+export const {
+  ACCOUNT_CODES,
+  FORGOT_PASSWORD_MESSAGE,
+  forgotPasswordRequestSchema,
+  resetPasswordRequestSchema,
+  verifyEmailRequestSchema,
+  accountProfileUpdateSchema,
+  passwordChangeRequestSchema,
+  emailChangeRequestSchema,
+  sellerAccountStatusRequestSchema,
+  internalAccountStatusRequestSchema,
+} = contracts;

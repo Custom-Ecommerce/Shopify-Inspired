@@ -17,6 +17,13 @@ export interface SessionClaims extends JWTPayload {
 sub: string;
 role: string;
 aud: string;
+/** Sprint 4 EP-08: the user's tokenVersion when the token was issued. Tokens from before have none: read as 0. */
+tv?: number;
+}
+
+/** The token version a session carries: its tv claim, or 0 for a token issued before tv existed. */
+export function sessionTokenVersion(claims: { tv?: unknown }): number {
+return typeof claims.tv === 'number' && Number.isInteger(claims.tv) && claims.tv >= 0 ? claims.tv : 0;
 }
 
 function keyFor(secret: string): Uint8Array {
@@ -32,11 +39,12 @@ return new TextEncoder().encode(secret);
 * are configured with the same secret.
 */
 export async function signSession(
-claims: { sub: string; role: string },
+claims: { sub: string; role: string; tv?: number },
 secret: string,
 audience: string,
 ): Promise<string> {
-return new SignJWT({ role: claims.role })
+const tv = typeof claims.tv === 'number' && Number.isInteger(claims.tv) && claims.tv > 0 ? claims.tv : undefined;
+return new SignJWT(tv === undefined ? { role: claims.role } : { role: claims.role, tv })
 .setProtectedHeader({ alg: 'HS256' })
 .setSubject(claims.sub)
 .setAudience(audience)

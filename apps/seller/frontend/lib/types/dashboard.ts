@@ -13,7 +13,11 @@ import type { User as PayloadUserDoc } from "@markaz/contracts";
  */
 export type DashboardUser = Omit<PayloadUserDoc, "store"> & {
   stores?: (string | { id: string })[] | null;
-  accountStatus?: "active" | "suspended" | null;
+  accountStatus?: "active" | "suspended" | "blocked" | null;
+  /** Sprint 4 EP-08: false shows the verify-email banner. Missing (an older backend) shows nothing. */
+  emailVerified?: boolean | null;
+  phone?: string | null;
+  pendingEmail?: string | null;
 };
 export type DashboardStore = PayloadStoreDoc;
 

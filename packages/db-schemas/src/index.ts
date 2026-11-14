@@ -35,3 +35,6 @@ export * from './models/rate-limit-counter';
 // Sprint 4 EP-07: the notification outbox and the seller's in-app alerts.
 export * from './models/notification-outbox';
 export * from './models/seller-alert';
+
+// Sprint 4 EP-08: single-use account links (password reset, email verification, email change).
+export * from './models/auth-token';

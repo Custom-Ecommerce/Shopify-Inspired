@@ -75,5 +75,7 @@ export function toSellerItem(doc: Doc, stores: Doc[]) {
     })),
     storeCount: stores.length,
     createdAt: toIso(doc.createdAt) ?? new Date(0).toISOString(),
+    // Sprint 4 EP-08.US03: missing on accounts from before, which are active.
+    accountStatus: doc.accountStatus === 'suspended' || doc.accountStatus === 'blocked' ? (doc.accountStatus as 'suspended' | 'blocked') : ('active' as const),
   };
 }

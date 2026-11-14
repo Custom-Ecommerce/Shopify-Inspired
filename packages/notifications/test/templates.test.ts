@@ -29,6 +29,10 @@ const FULL: TemplateVars = {
   dashboardLink: 'https://seller.markazify.com/s/1/orders/2',
   productName: 'Lawn suit (Blue)',
   stockLeft: '3',
+  appName: 'Markazify',
+  actionLink: 'https://seller.markazify.com/reset-password?token=abc',
+  validFor: '30 minutes',
+  newEmail: 'new@example.com',
 };
 
 test('every template uses only variables it declares, and every declared variable is known', () => {
@@ -102,4 +106,16 @@ test('escapeHtml, formatRupees and formatItems', () => {
     { title: 'Shirt', variantTitle: 'Default', quantity: 2, unitPrice: 1200 },
     { title: 'Cap', variantTitle: 'Red', quantity: 1, unitPrice: 900 },
   ]), 'Shirt x 2 - Rs. 2,400\nCap (Red) x 1 - Rs. 900');
+});
+
+test('Sprint 4 account emails: the link is an anchor, values are escaped, and Urdu follows English', () => {
+  for (const name of ['password_reset', 'password_changed', 'email_verify', 'email_change_verify'] as const) {
+    const out = renderTemplate(name, { ...FULL, customerName: '<img src=x onerror=alert(1)>' });
+    assert.ok(out.html.includes('<a href="https://seller.markazify.com/reset-password?token=abc">'), name);
+    assert.equal(out.html.includes('<img'), false, name + ': the name is escaped');
+    assert.ok(out.text.indexOf('---') < out.text.search(/[؀-ۿ]/), name);
+  }
+  const change = renderTemplate('email_change_verify', FULL);
+  assert.ok(change.text.includes('new@example.com'));
+  assert.throws(() => renderTemplate('password_reset', { ...FULL, actionLink: '' }), TemplateError);
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, Search, ShoppingBag, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, MessageCircle, Search, ShoppingBag, XCircle } from "lucide-react";
 import Link from "next/link";
 import React, { Suspense } from "react";
 import type { OrderConfirmationPageProps, StorefrontOrder } from "@markaz/storefront-data";
@@ -23,7 +23,7 @@ function Row({ label, value, strong = false }: { label: string; value: string; s
   );
 }
 
-function OrderDetails({ order }: { order: StorefrontOrder }) {
+function OrderDetails({ order, sellerWhatsappLink }: { order: StorefrontOrder; sellerWhatsappLink?: string | null }) {
   const payment = paymentSummary(order);
   const cancelled = order.status === "cancelled";
 
@@ -76,6 +76,17 @@ function OrderDetails({ order }: { order: StorefrontOrder }) {
           <Search className="w-4 h-4" />
           Track Order
         </Link>
+        {sellerWhatsappLink ? (
+          <a
+            href={sellerWhatsappLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full h-11 bg-[#25D366] hover:bg-[#1ebe5b] text-black text-xs uppercase tracking-widest font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Message the seller on WhatsApp
+          </a>
+        ) : null}
         <Link href={paths.home} className="w-full h-11 bg-white hover:bg-white/90 text-black text-xs uppercase tracking-widest font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
           <ShoppingBag className="w-4 h-4" />
           Continue Shopping
@@ -132,7 +143,7 @@ function AskForDetails({ lookup }: { lookup: ReturnType<typeof useOrderLookup> }
   );
 }
 
-function ConfirmationContent({ orderId }: { orderId: string }) {
+function ConfirmationContent({ orderId, sellerWhatsappLink }: { orderId: string; sellerWhatsappLink?: string | null }) {
   const confirmed = useConfirmedOrder(orderId);
   const lookup = useOrderLookup(orderId);
   const order = confirmed.order ?? lookup.order;
@@ -140,7 +151,7 @@ function ConfirmationContent({ orderId }: { orderId: string }) {
   return (
     <div className={shell}>
       {order ? (
-        <OrderDetails order={order} />
+        <OrderDetails order={order} sellerWhatsappLink={sellerWhatsappLink} />
       ) : confirmed.status === "loading" ? (
         <p className="text-sm text-gray-500">Loading your order...</p>
       ) : (
@@ -150,10 +161,10 @@ function ConfirmationContent({ orderId }: { orderId: string }) {
   );
 }
 
-export function OrderConfirmationPage({ orderId }: OrderConfirmationPageProps) {
+export function OrderConfirmationPage({ orderId, sellerWhatsappLink }: OrderConfirmationPageProps) {
   return (
     <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center text-black">Loading order confirmation...</div>}>
-      <ConfirmationContent orderId={orderId} />
+      <ConfirmationContent orderId={orderId} sellerWhatsappLink={sellerWhatsappLink} />
     </Suspense>
   );
 }

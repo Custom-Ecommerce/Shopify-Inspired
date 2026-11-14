@@ -16,6 +16,11 @@ export const TEMPLATE_NAMES = [
   'order_cancelled',
   'low_stock_seller',
   'out_of_stock_seller',
+  // Sprint 4 EP-08: account emails (D-093).
+  'password_reset',
+  'password_changed',
+  'email_verify',
+  'email_change_verify',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -34,6 +39,10 @@ export const TEMPLATE_VARIABLES = [
   'dashboardLink',
   'productName',
   'stockLeft',
+  'appName',
+  'actionLink',
+  'validFor',
+  'newEmail',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
@@ -41,7 +50,7 @@ export type TemplateVars = Partial<Record<TemplateVariable, string>>;
 /** Variables whose value is several lines (one order line each); HTML keeps the line breaks. */
 const MULTILINE: ReadonlySet<string> = new Set(['items']);
 /** Variables that are links: in HTML they become a link, and only http(s) is accepted. */
-const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink']);
+const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink', 'actionLink']);
 
 export interface TemplateDefinition {
   /** The variables the texts may use; every one must have a value when rendering. */
@@ -167,6 +176,80 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
     en: ['{{productName}} is out of stock on {{storeName}}. Shoppers cannot order it until you restock.', '', 'Restock it here: {{dashboardLink}}'],
     ur: ['{{storeName}} پر {{productName}} کا اسٹاک ختم ہو گیا ہے۔', 'اسٹاک یہاں بڑھائیں: {{dashboardLink}}'],
     whatsapp: '{{productName}} is out of stock on {{storeName}}. {{dashboardLink}}\n{{productName}} کا اسٹاک ختم ہو گیا ہے۔',
+  },
+  password_reset: {
+    variables: ['appName', 'customerName', 'actionLink', 'validFor'],
+    subject: '{{appName}}: reset your password',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Someone asked to reset the password of your {{appName}} account. Open this link to choose a new one:',
+      '{{actionLink}}',
+      '',
+      'The link works once and for {{validFor}}. If you did not ask for it, ignore this email: your password stays as it is.',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کے {{appName}} اکاؤنٹ کا پاس ورڈ بدلنے کی درخواست آئی ہے۔ نیا پاس ورڈ رکھنے کے لیے یہ لنک کھولیں:',
+      '{{actionLink}}',
+      'یہ لنک صرف ایک بار اور {{validFor}} تک چلے گا۔ اگر یہ درخواست آپ نے نہیں کی تو اس ای میل کو نظر انداز کریں۔',
+    ],
+    whatsapp: 'Reset your {{appName}} password: {{actionLink}}\nپاس ورڈ بدلنے کا لنک: {{actionLink}}',
+  },
+  password_changed: {
+    variables: ['appName', 'customerName', 'actionLink'],
+    subject: '{{appName}}: your password was changed',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'The password of your {{appName}} account was just changed, and every other device was signed out.',
+      '',
+      'If this was not you, reset your password now: {{actionLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کے {{appName}} اکاؤنٹ کا پاس ورڈ ابھی بدلا گیا ہے اور باقی تمام ڈیوائسز سے سائن آؤٹ کر دیا گیا ہے۔',
+      'اگر یہ آپ نے نہیں کیا تو ابھی پاس ورڈ بدلیں: {{actionLink}}',
+    ],
+    whatsapp: 'Your {{appName}} password was changed. Not you? {{actionLink}}\nآپ کا پاس ورڈ بدل دیا گیا ہے۔',
+  },
+  email_verify: {
+    variables: ['appName', 'customerName', 'actionLink', 'validFor'],
+    subject: '{{appName}}: confirm your email address',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Welcome to {{appName}}. Confirm your email address to put your store live and to receive payouts:',
+      '{{actionLink}}',
+      '',
+      'The link works once and for {{validFor}}.',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      '{{appName}} میں خوش آمدید۔ اپنا اسٹور لائیو کرنے اور ادائیگیاں وصول کرنے کے لیے اپنا ای میل کنفرم کریں:',
+      '{{actionLink}}',
+      'یہ لنک صرف ایک بار اور {{validFor}} تک چلے گا۔',
+    ],
+    whatsapp: 'Confirm your {{appName}} email: {{actionLink}}\nاپنا ای میل کنفرم کریں: {{actionLink}}',
+  },
+  email_change_verify: {
+    variables: ['appName', 'customerName', 'newEmail', 'actionLink', 'validFor'],
+    subject: '{{appName}}: confirm your new email address',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'You asked to sign in to {{appName}} with {{newEmail}} from now on. Open this link to confirm it:',
+      '{{actionLink}}',
+      '',
+      'Until you do, your old email stays your login. The link works once and for {{validFor}}.',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ نے {{appName}} میں آئندہ {{newEmail}} سے سائن اِن کرنے کی درخواست کی ہے۔ کنفرم کرنے کے لیے یہ لنک کھولیں:',
+      '{{actionLink}}',
+      'جب تک آپ کنفرم نہیں کرتے، پرانا ای میل ہی آپ کا لاگ اِن رہے گا۔ یہ لنک صرف ایک بار اور {{validFor}} تک چلے گا۔',
+    ],
+    whatsapp: 'Confirm {{newEmail}} for {{appName}}: {{actionLink}}\nنیا ای میل کنفرم کریں: {{actionLink}}',
   },
 };
 

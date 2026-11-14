@@ -52,3 +52,5 @@ export * from './checkout';
 export * from './storefront';
 // Sprint 4 EP-07: seller alerts and the email switches.
 export * from './notifications';
+// Sprint 4 EP-08: seller account and auth.
+export * from './account';

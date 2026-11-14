@@ -1,5 +1,6 @@
 import { AdminHttpError, dummyPasswordHash, errorResponse, issueAdminToken, parseLogin, requireAdminSecret, requireDatabase, sessionUserOf } from '@/lib/admin-auth';
-import { User, isLocked, recordFailedAttempt, verifyPassword } from '@/lib/workspace';
+import { User, LOGIN_ACCOUNT_RULE, LOGIN_IP_RULE, isLocked, recordFailedAttempt, verifyPassword } from '@/lib/workspace';
+import { adminAuthLimiter, clientAddress } from '@/lib/admin-account';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,6 +62,11 @@ async function recordFailureAtomically(id: unknown, initial: LockState, now: Dat
 /**
  * POST /api/admin/session. Signs an operator in and returns a session token (audience admin-backend).
  * Unknown emails and non-admin accounts get the same 401 as a wrong password, after the same hash work.
+ *
+ * Sprint 4 EP-08.US05.T01 (D-093): failures are also counted per account (10 per 15 minutes) and per IP (30 per 15
+ * minutes) on the shared counters; past either limit the answer is 429 with Retry-After, before any password check. A
+ * successful login clears the account counter, not the IP counter. A suspended or blocked operator gets the same 401.
+ * The token carries the account's tokenVersion.
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -79,13 +85,23 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     requireAdminSecret();
-    await requireDatabase();
 
     const email = input.data.email.toLowerCase();
-    const user = await User.findOne({ email }).select('+passwordHash name email role store loginAttempts lockUntil').exec();
+    const ip = clientAddress(request.headers);
+    await adminAuthLimiter.assertBelow(LOGIN_IP_RULE, ip);
+    await adminAuthLimiter.assertBelow(LOGIN_ACCOUNT_RULE, email);
+    const failed = async (): Promise<never> => {
+      await adminAuthLimiter.record(LOGIN_IP_RULE, ip);
+      await adminAuthLimiter.record(LOGIN_ACCOUNT_RULE, email);
+      throw new AdminHttpError(401, INVALID_CREDENTIALS);
+    };
+
+    await requireDatabase();
+
+    const user = await User.findOne({ email }).select('+passwordHash name email role store loginAttempts lockUntil accountStatus tokenVersion').exec();
     if (!user || user.role !== 'admin' || typeof user.passwordHash !== 'string' || user.passwordHash.length === 0) {
       await equalizeTiming(input.data.password);
-      throw new AdminHttpError(401, INVALID_CREDENTIALS);
+      return await failed();
     }
 
     const now = new Date();
@@ -95,11 +111,16 @@ export async function POST(request: Request): Promise<Response> {
     const ok = await checkPassword(input.data.password, user.passwordHash);
     if (!ok) {
       await recordFailureAtomically(user._id, state, now);
-      throw new AdminHttpError(401, INVALID_CREDENTIALS);
+      return await failed();
     }
 
+    const status = (user as { accountStatus?: unknown }).accountStatus;
+    if (status === 'suspended' || status === 'blocked') return await failed();
+
     await User.updateOne({ _id: user._id }, { $set: { loginAttempts: 0, lockUntil: null } });
-    const token = await issueAdminToken(String(user._id));
+    await adminAuthLimiter.reset(LOGIN_ACCOUNT_RULE, email);
+    const tv = (user as { tokenVersion?: unknown }).tokenVersion;
+    const token = await issueAdminToken(String(user._id), typeof tv === 'number' && Number.isInteger(tv) && tv > 0 ? tv : 0);
     return Response.json({ token, user: sessionUserOf(user) }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return errorResponse(err);

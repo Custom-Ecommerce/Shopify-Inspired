@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { objectIdSchema } from './object-id';
 import { USER_ROLES } from './user';
+import { passwordSchema } from './account';
 
 /** The session user as /api/users/me and the login and signup responses return it (id, not _id). */
 export const sessionUserSchema = z.object({
@@ -19,7 +20,8 @@ export const loginRequestSchema = z.object({
 export const signupRequestSchema = z.object({
   name: z.string().min(1).max(120),
   email: z.string().email(),
-  password: z.string().min(8, 'password must be at least 8 characters'),
+  // Sprint 4 EP-08: the one shared rule (account.ts), the same 8-character minimum as before plus a 128 maximum.
+  password: passwordSchema,
 });
 
 export const authResponseSchema = z.object({

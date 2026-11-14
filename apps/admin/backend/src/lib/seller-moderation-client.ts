@@ -14,11 +14,11 @@ const { INTERNAL_SECRET_MIN_LENGTH, internalRequestHeaders } = unwrapCjs(signatu
 const TIMEOUT_MS = 8000;
 const BASE_PATH = '/api/internal/moderation';
 
-function configuration(): { baseUrl: string; secret: string } {
+function configuration(label: string): { baseUrl: string; secret: string } {
   // SELLER_BACKEND_API_URL is the name this app's environment already uses for the same address.
   const baseUrl = (process.env.SELLER_BACKEND_URL ?? process.env.SELLER_BACKEND_API_URL ?? '').trim().replace(/\/+$/, '');
   const secret = process.env.MODERATION_API_SECRET ?? '';
-  if (baseUrl === '' || secret.length < INTERNAL_SECRET_MIN_LENGTH) throw new AdminHttpError(503, 'Product moderation is not configured');
+  if (baseUrl === '' || secret.length < INTERNAL_SECRET_MIN_LENGTH) throw new AdminHttpError(503, label + ' is not configured');
   return { baseUrl, secret };
 }
 
@@ -33,8 +33,8 @@ function refusalMessage(payload: unknown): string {
  * One signed call. Its 401 means this console's signature was refused, a setup problem: it must not read as the operator's
  * own session ending, so it answers 503. A refusal the operator can act on keeps its status and message.
  */
-async function send<T>(method: 'GET' | 'POST', path: string, adminId: string, input?: unknown): Promise<T> {
-  const { baseUrl, secret } = configuration();
+async function send<T>(method: 'GET' | 'POST', path: string, adminId: string, input?: unknown, label: string = 'Product moderation'): Promise<T> {
+  const { baseUrl, secret } = configuration(label);
   const body = input === undefined ? '' : JSON.stringify(input);
   const signed = internalRequestHeaders(secret, { method, path, adminId, body });
 
@@ -56,7 +56,7 @@ async function send<T>(method: 'GET' | 'POST', path: string, adminId: string, in
     if (payload === null) throw new AdminHttpError(502, 'Unexpected response from the seller backend');
     return payload as T;
   }
-  if (response.status === 401 || response.status === 503) throw new AdminHttpError(503, 'Product moderation is unavailable');
+  if (response.status === 401 || response.status === 503) throw new AdminHttpError(503, label + ' is unavailable');
   if ([403, 404, 409, 422].includes(response.status)) throw new AdminHttpError(response.status, refusalMessage(payload));
   throw new AdminHttpError(502, 'The seller backend could not complete the request');
 }
@@ -83,3 +83,13 @@ export const deleteProduct = (adminId: string, productId: string, reason: string
 
 export const permanentlyDeleteProduct = (adminId: string, productId: string, reason: string): Promise<ModerationPermanentDeleteResponse> =>
   send('POST', BASE_PATH + '/permanent-delete', adminId, { productId, reason });
+
+/**
+ * Sprint 4 EP-08.US03.T02: applies a seller account status in the seller database, where every seller request is
+ * checked (POST /api/internal/accounts/status, signed like moderation).
+ */
+export const setSellerAccountStatus = (
+  adminId: string,
+  input: { userId: string; status: 'active' | 'suspended'; reason: string | null },
+): Promise<{ userId: string; status: string; changed: boolean }> => send('POST', '/api/internal/accounts/status', adminId, input, 'Seller account control');
+

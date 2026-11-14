@@ -13,3 +13,24 @@ export const { assertCan, PolicyDeniedError, writeAuditLog, hashPassword, verify
 export const { AuditLog, CommissionLedgerModel, PlatformSettingsModel, Store, SubscriptionPlanModel, SyncOutbox, User } = db;
 export const { enqueueSyncEvent, registerSyncOutboxModel } = sync;
 export type { SyncOutboxModelPort } from '@markaz/sync-core';
+
+// Sprint 4 EP-08: the account guard, limits and flows, and the models they use (EP-07 outbox for the account emails).
+export const { AuthToken, NotificationOutbox, RateLimitCounter } = db;
+export const {
+  createSessionGuard,
+  toSessionUserRecord,
+  sessionTokenVersion,
+  SESSION_USER_FIELDS,
+  SessionRejectedError,
+  RateLimitedError,
+  createAuthRateLimiter,
+  mongoRateCounterStore,
+  memoryRateCounterStore,
+  LOGIN_ACCOUNT_RULE,
+  LOGIN_IP_RULE,
+  FORGOT_IP_RULE,
+  FORGOT_EMAIL_RULE,
+  RESET_IP_RULE,
+  requestPasswordReset,
+  resetPassword,
+} = auth;

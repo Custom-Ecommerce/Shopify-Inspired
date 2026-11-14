@@ -418,3 +418,22 @@ Object.assign(POLICY_MATRIX, {
     delete: { actors: [], fields: {} },
   },
 });
+
+// Sprint 4 EP-08: the seller's own account (profile, password, email, sessions) and the single-use account tokens.
+// A seller changes only their own record, and only these fields. Tokens are written and read by the system only.
+// Suspending a seller is the existing sellers row (admin, accountStatus).
+export const SELLER_ACCOUNT_WRITABLE_FIELDS = ['name', 'phone', 'password', 'email', 'sessions'] as const;
+Object.assign(POLICY_MATRIX, {
+  sellerAccount: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: ['seller'], fields: { seller: SELLER_ACCOUNT_WRITABLE_FIELDS } },
+    delete: { actors: [], fields: {} },
+  },
+  authTokens: {
+    read: { actors: ['system'], fields: { system: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['system'], fields: { system: '*' } },
+    delete: { actors: ['system'], fields: { system: '*' } },
+  },
+});

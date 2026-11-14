@@ -7,6 +7,8 @@ import {
   type StoreStatusChangeRequest,
   type StoreStatusChangeResponse,
   adminSellerListEnvelopeSchema,
+  adminSellerStatusResponseSchema,
+  type AdminSellerStatusResponse,
   adminSyncOutboxSchema,
   adminAuditListSchema,
   type AdminSellerListEnvelope,
@@ -119,6 +121,14 @@ export function runModerationAction(action: ModerationAction, productId: string,
 
 export function listSellers(state: SellerListState, signal?: AbortSignal): Promise<AdminSellerListEnvelope> {
   return call("/api/sellers?" + sellerStateToQuery(state, true), adminSellerListEnvelopeSchema as Parser<AdminSellerListEnvelope>, { signal });
+}
+
+/** Sprint 4 EP-08.US03: suspend (with a reason) or unsuspend a seller account. */
+export function changeSellerStatus(id: string, input: { status: "suspended" | "active"; reason?: string }): Promise<AdminSellerStatusResponse> {
+  return call("/api/sellers/" + encodeURIComponent(id) + "/status", adminSellerStatusResponseSchema as Parser<AdminSellerStatusResponse>, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function getSyncOutbox(state: SyncListState, signal?: AbortSignal): Promise<AdminSyncOutbox> {

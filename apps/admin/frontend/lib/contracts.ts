@@ -13,7 +13,8 @@ export const {
   GOVERNANCE_REASON_MAX,
   GOVERNANCE_NOTE_MAX,
 } = contracts;
-export const { adminSellerListEnvelopeSchema, adminSyncOutboxSchema, adminAuditListSchema } = contracts;
+export const { adminSellerListEnvelopeSchema, adminSyncOutboxSchema, adminAuditListSchema, adminSellerStatusResponseSchema } = contracts;
+export type { AdminSellerStatusResponse } from "@markaz/contracts";
 export type { SessionUser, LoginRequest } from "@markaz/contracts";
 export type {
   AdminStoreListItem,

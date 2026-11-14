@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
@@ -14,6 +14,7 @@ import { formatDateTime, formatRelative } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
 import { useDebouncedSearch } from "@/lib/hooks/use-debounced-search";
 import { parseSellerListState, sellerStateToQuery, type SellerListState } from "@/lib/sellers";
+import { SellerStatusDialog } from "@/components/sellers/seller-status-dialog";
 
 const COLUMNS: Array<Column<AdminSellerListItem>> = [
   {
@@ -56,6 +57,11 @@ const COLUMNS: Array<Column<AdminSellerListItem>> = [
       </time>
     ),
   },
+  {
+    key: "account",
+    header: "Account",
+    cell: (seller) => <StatusBadge status={seller.accountStatus} />,
+  },
 ];
 
 /** The seller list at /sellers. Search and page live in the URL, so a view can be shared or reloaded. */
@@ -79,6 +85,27 @@ export function SellersView() {
   }, [data]);
 
   const filtered = state.q !== "";
+
+  // Sprint 4 EP-08.US03.T02: suspend or unsuspend, behind a confirm dialog.
+  const [changing, setChanging] = useState<AdminSellerListItem | null>(null);
+  const columns = useMemo<Array<Column<AdminSellerListItem>>>(
+    () => [
+      ...COLUMNS,
+      {
+        key: "actions",
+        header: "Actions",
+        cell: (seller) =>
+          seller.accountStatus === "blocked" ? (
+            <span className="text-xs text-muted-foreground">Blocked</span>
+          ) : (
+            <Button variant={seller.accountStatus === "suspended" ? "outline" : "destructive"} size="sm" onClick={() => setChanging(seller)}>
+              {seller.accountStatus === "suspended" ? "Unsuspend" : "Suspend"}
+            </Button>
+          ),
+      },
+    ],
+    [],
+  );
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -110,7 +137,7 @@ export function SellersView() {
       ) : null}
       <DataTable
         label="Sellers"
-        columns={COLUMNS}
+        columns={columns}
         rows={data?.docs ?? []}
         rowKey={(seller) => seller.id}
         loading={loading}
@@ -119,6 +146,17 @@ export function SellersView() {
         emptyTitle={filtered ? "No sellers match" : "No sellers yet"}
         emptyHint={filtered ? "Try a different name, email, or id." : "Sellers appear here as they sign up."}
       />
+
+      {changing ? (
+        <SellerStatusDialog
+          seller={changing}
+          onClose={() => setChanging(null)}
+          onDone={() => {
+            setChanging(null);
+            refetch();
+          }}
+        />
+      ) : null}
 
       {data ? <TablePagination page={data.page} totalPages={data.totalPages} totalDocs={data.totalDocs} noun="seller" disabled={loading} onPage={(page) => go({ ...state, page })} /> : null}
     </div>

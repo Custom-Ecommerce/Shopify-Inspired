@@ -37,7 +37,15 @@ export const adminSellerListItemSchema = z.object({
   stores: z.array(adminSellerStoreSchema),
   storeCount: z.number().int().min(0),
   createdAt: isoDate,
+  /** Sprint 4 EP-08.US03: the account status (an older backend sends none: active). */
+  accountStatus: z.enum(['active', 'suspended', 'blocked']).default('active'),
 });
+
+/** POST /api/admin/sellers/:id/status answers this. */
+export const adminSellerStatusResponseSchema = z.object({
+  seller: z.object({ id: objectIdSchema, accountStatus: z.enum(['active', 'suspended']), changed: z.boolean() }),
+});
+export type AdminSellerStatusResponse = z.infer<typeof adminSellerStatusResponseSchema>;
 
 export const adminSellerListEnvelopeSchema = envelopeOf(adminSellerListItemSchema);
 

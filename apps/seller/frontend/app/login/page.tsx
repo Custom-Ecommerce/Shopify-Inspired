@@ -143,6 +143,13 @@ function LoginForm() {
             </div>
           </div>
 
+          {/* Sprint 4 EP-08.US01.T03 */}
+          <div className="-mt-2 text-right">
+            <Link href="/forgot-password" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              Forgot password?
+            </Link>
+          </div>
+
           {/* Inline error */}
           {errorMessage && (
             <div

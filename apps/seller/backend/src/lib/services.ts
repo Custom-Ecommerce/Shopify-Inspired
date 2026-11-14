@@ -69,3 +69,29 @@ export const ArchivedReview = db.ArchivedReview;
 // Sprint 4 EP-07: the notification outbox and the seller's in-app alerts.
 export const NotificationOutbox = db.NotificationOutbox;
 export const SellerAlert = db.SellerAlert;
+
+// Sprint 4 EP-08: account links, the per-request session guard, the account-route limits and the account flows.
+export const AuthToken = db.AuthToken;
+export const {
+  createSessionGuard,
+  toSessionUserRecord,
+  sessionTokenVersion,
+  SESSION_USER_FIELDS,
+  SessionRejectedError,
+  RateLimitedError,
+  createAuthRateLimiter,
+  mongoRateCounterStore,
+  memoryRateCounterStore,
+  LOGIN_ACCOUNT_RULE,
+  LOGIN_IP_RULE,
+  FORGOT_IP_RULE,
+  FORGOT_EMAIL_RULE,
+  RESET_IP_RULE,
+  RESEND_VERIFY_RULE,
+  requestPasswordReset,
+  resetPassword,
+  sendPasswordChanged,
+  sendEmailVerification,
+  requestEmailChange,
+  confirmEmailToken,
+} = auth;

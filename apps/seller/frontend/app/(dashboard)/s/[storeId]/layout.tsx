@@ -27,6 +27,7 @@ import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { DashboardBreadcrumb } from "@/components/dashboard/shared/DashboardBreadcrumb";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { AlertBell } from "@/components/dashboard/AlertBell";
+import { VerifyEmailBanner } from "@/components/dashboard/VerifyEmailBanner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
@@ -114,6 +115,8 @@ export default async function StoreDashboardLayout({
             {/* Main content: PageContainer applied per-page (blueprint §4.6).
                 Pages stop adding their own p-8 once migrated. */}
             <div className="flex min-w-0 flex-1 flex-col">
+              {/* Sprint 4 EP-08.US02.T02: an unverified seller can prepare the store but not go live or be paid. */}
+              {user.emailVerified === false ? <VerifyEmailBanner email={user.email} /> : null}
               <DashboardDataProvider key={activeStore.id}>{children}</DashboardDataProvider>
             </div>
           </SidebarInset>

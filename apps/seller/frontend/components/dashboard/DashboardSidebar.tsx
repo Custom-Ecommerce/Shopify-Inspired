@@ -38,7 +38,7 @@ import {
   CreditCard,
   Settings,
   Globe,
-  ExternalLink,
+  ExternalLink, UserCog
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -85,6 +85,8 @@ export const NAV_GROUPS = [
     links: [
       { href: "/store", label: "Store Settings", icon: Settings },
       { href: "/domain", label: "Domain", icon: Globe },
+      // Sprint 4 EP-08.US04.T02: the seller's own account (profile, password, email, devices).
+      { href: "/account", label: "Account", icon: UserCog },
     ],
   },
 ] as const;

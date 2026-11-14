@@ -79,7 +79,8 @@ beforeEach(() => {
   };
   outbox = [];
   sellerAlerts = [];
-  owner = { _id: OWNER, email: 'seller@example.com', notificationPrefs: { emailNewOrder: true, emailLowStock: true } };
+  // Sprint 4 EP-08: authenticate() now reads the account too (role, status, tokenVersion), so the stub user has a role.
+  owner = { _id: OWNER, role: 'seller', email: 'seller@example.com', notificationPrefs: { emailNewOrder: true, emailLowStock: true } };
   orders = [order()];
   process.env.STOREFRONT_URL = 'https://markazify.com';
   process.env.APP_BASE_URL_SELLER = 'https://seller.markazify.com';

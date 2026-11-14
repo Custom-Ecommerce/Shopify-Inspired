@@ -44,6 +44,7 @@ preview links, cache purge, sync, Cloudinary uploads, email. Each example has a 
 | `OUTBOX_CRON_SECRET` | seller backend, admin backend | Bearer secret for the internal outbox retry route (EP-07.US01.T02). |
 | `PLATFORM_DEFAULT_COMMISSION_PERCENT` | seller backend, admin backend | Platform default commission in percent. The placeholder is 5; the owner sets the real value (A-019). |
 | `APP_BASE_URL_SELLER` | seller backend, admin backend | Seller portal base URL for links in emails. |
+| `APP_BASE_URL_ADMIN` | admin backend | Admin console base URL for operator password-reset links (Sprint 4 EP-08). |
 
 ### Sprint 3 deploy variables (still required for those features)
 
@@ -153,4 +154,51 @@ chooses the scheduler.
 
 Email in development: leave `EMAIL_PROVIDER` empty or set it to `log`. Every message is still written to the
 `notificationoutbox` collection with status `skipped`, so you can read it there. Nothing is sent.
+
+The admin backend has the same flush route (`/api/internal/notifications/flush`, same `OUTBOX_CRON_SECRET`) for
+the emails it queues (operator password reset). Schedule both.
+
+## 8. Accounts (Sprint 4 EP-08)
+
+### Deploy notes
+
+1. Deploy the seller backend and the admin backend together: a token now carries `tv` (tokenVersion), and both check
+   the account on every request. Tokens issued before have no `tv` and keep working (read as 0).
+2. Right after the seller backend deploy, mark the existing sellers verified once, so nobody is locked out of go-live
+   or payouts (EP-08.US02.T03):
+
+```bash
+cd apps/seller/backend && node --env-file=.env --import tsx scripts/mark-sellers-verified.mjs
+```
+
+```bash
+cd apps/seller/backend && node --env-file=.env --import tsx scripts/mark-sellers-verified.mjs --apply
+```
+
+   The first command is a dry run that prints how many accounts would change. The script prints counts only.
+3. Set `APP_BASE_URL_SELLER` (seller backend) and `APP_BASE_URL_ADMIN` (admin backend), so the reset and
+   verification links point to the right site.
+
+### First admin account (CO-05)
+
+```bash
+cd apps/admin/backend && node --env-file=.env --import tsx scripts/create-admin.mjs
+```
+
+It reads `MONGODB_URI`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` (and `ADMIN_NAME`, optional), and asks for the email and a
+hidden password when they are not set. It refuses when an admin already exists; add `--force` to create another one.
+The password follows the shared rule (8 to 128 characters). Neither the password nor its hash is ever printed.
+`pnpm --filter @markaz/admin-backend-next create-admin` runs the same script; pass the variables in the environment.
+
+### Limits (shared MongoDB counters, D-081)
+
+| Route | Limit |
+| --- | --- |
+| Login (seller and admin) | 10 failures per account and 30 per IP in 15 minutes; then 429 with `Retry-After`. A success clears the account counter, not the IP counter. |
+| Forgot password | 5 per hour per IP, 3 per hour per email |
+| Reset password, verify email | 10 per hour per IP |
+| Resend verification | 3 per hour per account |
+
+The per-IP limits need `TRUSTED_PROXY_HOPS` or `TRUSTED_CLIENT_IP_HEADER` on the backend. Without one, every caller
+shares one bucket (`unknown`).
 
