@@ -31,3 +31,7 @@ export * from './models/archived-review';
 
 // CB-2: the shared rate-limit counters.
 export * from './models/rate-limit-counter';
+
+// Sprint 4 EP-07: the notification outbox and the seller's in-app alerts.
+export * from './models/notification-outbox';
+export * from './models/seller-alert';

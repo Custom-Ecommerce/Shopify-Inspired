@@ -1,4 +1,5 @@
 import { connectSellerDb } from '@/lib/mongo';
+import { notifyOrderPlaced } from '@/lib/notifications';
 import { PAYMENT_NOT_COMPLETED_REASON, PAYMENT_SYSTEM_ACTOR, cancelOrder } from '@/lib/order-cancel';
 import { assertCan, Order, ORDER_ACTIONS, writeAuditLog } from '@/lib/services';
 import { cardPaymentsAvailable, orderWebhookSecret } from '@/lib/storefront/card-config';
@@ -107,6 +108,8 @@ async function onCompleted(session: SessionFields, eventId: string): Promise<voi
 
   if (!updated) return ignored('lost to another change', context);
   await auditPayment(row, storeId, session);
+  // EP-07.US01.T03: a card order is announced once it is paid, by the winner of the unpaid-to-paid compare-and-set.
+  notifyOrderPlaced(storeId, updated);
 }
 
 /** A session that will never be paid. The order goes through the usual cancel, and only if it is still unpaid (A-016). */

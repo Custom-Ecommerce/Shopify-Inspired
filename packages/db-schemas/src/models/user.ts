@@ -13,6 +13,8 @@ store?: Types.ObjectId | null;
 passwordHash: string;
 loginAttempts: number;
 lockUntil: Date | null;
+/** EP-07.US03.T03: which alerts the seller also gets by email. In-app alerts are always on. Missing means on. */
+notificationPrefs?: { emailNewOrder: boolean; emailLowStock: boolean } | null;
 createdAt: Date;
 updatedAt: Date;
 }
@@ -27,6 +29,16 @@ store: { type: Schema.Types.ObjectId, ref: 'Store', default: null },
 passwordHash: { type: String, required: true, select: false },
 loginAttempts: { type: Number, required: true, default: 0 },
 lockUntil: { type: Date, default: null },
+notificationPrefs: {
+type: new Schema(
+{
+emailNewOrder: { type: Boolean, default: true },
+emailLowStock: { type: Boolean, default: true },
+},
+{ _id: false },
+),
+default: () => ({ emailNewOrder: true, emailLowStock: true }),
+},
 },
 { timestamps: true, collection: 'users' },
 );

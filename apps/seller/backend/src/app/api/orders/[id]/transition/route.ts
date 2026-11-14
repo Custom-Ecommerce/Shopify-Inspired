@@ -7,6 +7,7 @@ import { canTransition, cardPaymentPending, nextStatuses, orderTransitionRequest
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
+import { notifyOrderStatus } from '@/lib/notifications';
 import { handleOrderError, OrderRequestError, toDashboardOrderDetail } from '@/lib/orders';
 import { assertCan, Order, ORDER_ACTIONS, writeAuditLog } from '@/lib/services';
 
@@ -147,6 +148,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     await audit(ctx, storeId, current, from, body);
+    // EP-07.US01.T04: only the winner of the compare-and-set gets here, so each status emails the customer once.
+    notifyOrderStatus(storeId, updated, to);
     return NextResponse.json({ changed: true, order: toDashboardOrderDetail(updated) }, { headers: NO_STORE });
   } catch (err) {
     return handleOrderError(err);

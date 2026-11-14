@@ -1,0 +1,26 @@
+{
+  "name": "@markaz/notifications",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sprint 4 EP-07 notification core: email providers, bilingual templates, the outbox enqueue/send/flush, wa.me links (D-091).",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./templates": "./src/templates.ts",
+    "./whatsapp": "./src/whatsapp.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@markaz/contracts": "workspace:*",
+    "nodemailer": "^6.9.16"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/nodemailer": "^6.4.17",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}

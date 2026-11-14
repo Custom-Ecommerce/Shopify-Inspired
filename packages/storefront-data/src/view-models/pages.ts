@@ -49,6 +49,11 @@ export type CartPageProps = Record<string, never>;
 export type CheckoutPageProps = Record<string, never>;
 export interface OrderConfirmationPageProps {
   orderId: string;
+  /**
+   * EP-07.US01.T05: a wa.me link to the store's WhatsApp number with a prefilled question about this order, built on the
+   * server from the public store data. Absent or null when the store has no WhatsApp number (or for the demo).
+   */
+  sellerWhatsappLink?: string | null;
 }
 export interface OrderTrackingPageProps {
   orderId?: string;

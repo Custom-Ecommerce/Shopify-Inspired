@@ -78,7 +78,7 @@ and `REVALIDATE_SECRET` (the same value on the storefront and the seller backend
 | Type-check, without turbo | `pnpm type-check:all` |
 | Lint (where a lint script exists) | `pnpm lint` |
 | All tests | `pnpm test` |
-| One workspace's tests | `pnpm --filter @markaz/seller-backend test` (same for `@markaz/admin-backend-next`, `@markaz/admin-frontend`, `@markaz/auth`, `@markaz/contracts`, `@markaz/db-schemas`, `@markaz/billing`, `@markaz/platform-kit`, `@markaz/storefront-data`, `@markaz/sync-core`, `@markaz/api-compat`) |
+| One workspace's tests | `pnpm --filter @markaz/seller-backend test` (same for `@markaz/admin-backend-next`, `@markaz/admin-frontend`, `@markaz/auth`, `@markaz/contracts`, `@markaz/db-schemas`, `@markaz/billing`, `@markaz/platform-kit`, `@markaz/storefront-data`, `@markaz/sync-core`, `@markaz/api-compat`, `@markaz/notifications`) |
 | Builds | `pnpm build`, or `pnpm --filter <package> build` |
 
 Tests use Node's built-in runner through tsx (`node --import tsx --test "test/**/*.test.ts"`). The storefront-data
@@ -125,3 +125,32 @@ Secrets that two apps share must hold the same value on both: `REVALIDATE_SECRET
 | root `typecheck` | turbo `type-check` | Added (EP-06.US01.T02). |
 
 Every other script points to a file that exists.
+
+## 7. Scheduled jobs
+
+| Job | Call | Secret | How often |
+| --- | --- | --- | --- |
+| Email outbox retry (EP-07.US01.T02) | `POST` or `GET https://<seller backend>/api/internal/notifications/flush` | `OUTBOX_CRON_SECRET`, sent as `x-cron-secret: <secret>` or `Authorization: Bearer <secret>` | every 5 minutes |
+| Trash retention | `POST https://<seller backend>/api/internal/retention` | `RETENTION_CRON_SECRET` in `x-retention-secret` | daily |
+| Sync drain (admin) | `GET https://<admin backend>/api/internal/sync/drain` | `CRON_SECRET` as a bearer token (`apps/admin/backend/vercel.json`) | every minute |
+
+The outbox flush sends queued and failed emails that are due: at most 50 per call, at most 5 tries per email, with a
+wait of 2, 4, 8 and then 16 minutes between tries. Each email is claimed with a compare-and-set, so two calls at the
+same moment never send it twice. The route answers `401` when `OUTBOX_CRON_SECRET` is not set (or is shorter than 16
+characters) or does not match. The JSON answer counts what happened:
+`{ picked, sent, skipped, retry, failed, notClaimed, errors }`.
+
+Example (any scheduler: cron-job.org, GitHub Actions schedule, a server cron):
+
+```bash
+curl -fsS -X POST -H "x-cron-secret: $OUTBOX_CRON_SECRET" https://<seller backend>/api/internal/notifications/flush
+```
+
+Vercel Cron sends `Authorization: Bearer $CRON_SECRET` with the project's `CRON_SECRET`. To use it, set `CRON_SECRET`
+to the same value as `OUTBOX_CRON_SECRET` on the seller backend, and add `{ "path": "/api/internal/notifications/flush",
+"schedule": "*/5 * * * *" }` to `apps/seller/backend/vercel.json`. Neither change is made in the repo: the owner
+chooses the scheduler.
+
+Email in development: leave `EMAIL_PROVIDER` empty or set it to `log`. Every message is still written to the
+`notificationoutbox` collection with status `skipped`, so you can read it there. Nothing is sent.
+

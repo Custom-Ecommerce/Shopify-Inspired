@@ -26,6 +26,7 @@ import { DashboardDataProvider } from "@/lib/dashboard-data-context";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { DashboardBreadcrumb } from "@/components/dashboard/shared/DashboardBreadcrumb";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
+import { AlertBell } from "@/components/dashboard/AlertBell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
@@ -104,6 +105,8 @@ export default async function StoreDashboardLayout({
 
               {/* Right actions */}
               <div className="flex items-center gap-1 px-4">
+                {/* EP-07.US03.T01: new orders and low stock. Inside DashboardProvider, so it knows the active store. */}
+                <AlertBell />
                 <ThemeToggle />
               </div>
             </header>

@@ -122,5 +122,8 @@ export const { orderTrackingRequestSchema, storefrontOrderTrackingSchema, storef
 // EP-02 OB-5a: payment, notes and the timeline.
 export const { buildOrderTimeline, canMarkCollected, cardPaymentPending, paidCardOrder, orderNoteRequestSchema, orderPaymentRequestSchema, paymentRefusal } = contracts;
 
+// Sprint 4 EP-07: seller alerts and the email switches.
+export const { notificationPrefsUpdateSchema, readNotificationPrefs, SELLER_ALERT_PAGE_DEFAULT, SELLER_ALERT_PAGE_MAX } = contracts;
+
 // EP-02 OB-5b: print data.
 export const { labelCodAmount, ORDER_PRINT_MAX_IDS, orderPrintResponseSchema } = contracts;

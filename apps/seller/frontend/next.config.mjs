@@ -1,6 +1,7 @@
 ﻿/** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@markaz/core"],
+  // @markaz/notifications/whatsapp (wa.me links) and the phone rule it uses from @markaz/contracts/checkout ship TypeScript.
+  transpilePackages: ["@markaz/core", "@markaz/notifications", "@markaz/contracts"],
 };
 
 export default nextConfig;

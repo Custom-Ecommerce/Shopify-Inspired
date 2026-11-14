@@ -10,6 +10,7 @@ import { placeOrder } from '@/lib/storefront/order-service';
 import { carriesPreviewCredential, storefrontFailure } from '@/lib/storefront/preview-request';
 import { ORDER_CREATE_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
+import { notifyOrderPlaced } from '@/lib/notifications';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -59,6 +60,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     const { order, replayed } = await placeOrder(id, store, parsed);
+    // EP-07.US01.T03: after the response, never part of the result. A card order is announced when it is paid (card-webhook.ts),
+    // so a shopper who leaves the Stripe page gets no confirmation for an order that is then cancelled.
+    if (!replayed && order.paymentMethod !== 'card') notifyOrderPlaced(id, order);
 
     const checkoutUrl = order.paymentMethod === 'card' ? await cardCheckoutUrl(id, order, replayed) : null;
 

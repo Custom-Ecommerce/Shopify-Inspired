@@ -2,6 +2,7 @@ import { STOCK_WARNING_THRESHOLD } from '@/lib/contracts';
 import { Product, StockMovement } from '@/lib/services';
 import { StorefrontHttpError, productUnavailable } from '@/lib/storefront/errors';
 import { liveProductFilter } from '@/lib/storefront/live-product';
+import { notifyStockLevel } from '@/lib/stock-alerts';
 
 export interface Reservation {
   productId: string;
@@ -112,6 +113,9 @@ export async function releaseStock(
 /**
  * Writes one history row. An order's change has no actor; a seller's adjustment names them. orderId is set only on
  * movements an order caused (D-066); a manual adjustment has none, so the key is left out entirely.
+ *
+ * Every stock change of the platform passes here (a sale, a release, a cancel restore, a seller's adjustment), so this is
+ * also where the low-stock alerts are told (EP-07.US03.T02). That runs after the response and can never fail the change.
  */
 export async function recordMovement(
   storeId: string,
@@ -140,6 +144,7 @@ export async function recordMovement(
   } catch (err) {
     console.error('[seller-backend] could not record stock movement', { productId, variantId, delta, reason }, err);
   }
+  notifyStockLevel(storeId, productId, variantId, quantity, delta);
 }
 
 /**

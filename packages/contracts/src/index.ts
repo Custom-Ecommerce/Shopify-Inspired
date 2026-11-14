@@ -50,3 +50,5 @@ export * from './admin-overview';
 export * from './checkout';
 // Track B: the public storefront API wire contract.
 export * from './storefront';
+// Sprint 4 EP-07: seller alerts and the email switches.
+export * from './notifications';

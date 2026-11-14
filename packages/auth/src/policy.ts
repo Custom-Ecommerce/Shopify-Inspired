@@ -399,3 +399,22 @@ Object.assign(POLICY_MATRIX, {
     if (!(name in POLICY_MATRIX)) Object.assign(POLICY_MATRIX, { [name]: rule });
   }
 }
+
+// Sprint 4 EP-07.US03: the seller's in-app alerts and their email switches. Only the store owner reads and marks alerts
+// (an admin has no row, as for orders, D-067); alerts are written by the system only. The email switches live on the
+// seller's own user record and are the only part of it this row opens.
+export const SELLER_NOTIFICATION_PREF_FIELDS = ['emailNewOrder', 'emailLowStock'] as const;
+Object.assign(POLICY_MATRIX, {
+  sellerAlerts: {
+    read: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['seller', 'system'], fields: { seller: ['readAt'], system: '*' } },
+    delete: { actors: [], fields: {} },
+  },
+  notificationPrefs: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: ['seller'], fields: { seller: SELLER_NOTIFICATION_PREF_FIELDS } },
+    delete: { actors: [], fields: {} },
+  },
+});

@@ -66,3 +66,6 @@ export const Product = db.Product;
 export const productSkus = db.productSkus;
 export const StockMovement = db.StockMovement;
 export const ArchivedReview = db.ArchivedReview;
+// Sprint 4 EP-07: the notification outbox and the seller's in-app alerts.
+export const NotificationOutbox = db.NotificationOutbox;
+export const SellerAlert = db.SellerAlert;
