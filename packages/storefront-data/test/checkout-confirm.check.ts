@@ -136,6 +136,8 @@ function bffWith(error: Error) {
     submitOrder: async () => {
       throw error;
     },
+    trackOrder: async () => null,
+    confirmOrder: async () => null,
   } as unknown as OrderTransport;
   return createBffRoutes({ lookupStore: async () => ({ outcome: "ok", transport }) });
 }

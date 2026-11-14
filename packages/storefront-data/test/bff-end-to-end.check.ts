@@ -150,7 +150,7 @@ check("an order travels end to end, carrying the idempotency key and no prices",
   const [call] = backend.calls;
   assert.equal(call.path, "/api/storefront/v1/stores/" + STORE_ID + "/orders");
   assert.equal(call.headers["idempotency-key"], KEY);
-  assert.deepEqual(call.body, { customer: { ...customer, email: null, note: null }, lines });
+  assert.deepEqual(call.body, { customer: { ...customer, whatsapp: null, email: null, note: null }, lines });
 });
 
 check("an out-of-stock refusal reaches the checkout with the product named", async () => {
@@ -420,6 +420,8 @@ check("an unexpected failure inside the BFF is a 500 with no detail", async () =
           throw new Error("secret stack detail");
         },
         lookupOrder: async () => null,
+        trackOrder: async () => null,
+        confirmOrder: async () => null,
       },
     }),
   });

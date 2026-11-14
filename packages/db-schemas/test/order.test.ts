@@ -275,3 +275,9 @@ test('a history entry may carry a kind; it has no default and only known kinds v
   assert.equal('kind' in without.toObject().statusHistory[0], false);
   assert.notEqual(order({ statusHistory: [{ ...entry, kind: 'bogus' }] }).validateSync(), undefined);
 });
+
+test('a separate WhatsApp number is kept apart from the phone and defaults to none', () => {
+  assert.equal(order({}).customerWhatsapp, null);
+  assert.equal(order({ customerWhatsapp: '+923117654321' }).validateSync(), undefined);
+  assert.notEqual(order({ customerWhatsapp: 'x'.repeat(33) }).validateSync(), undefined);
+});

@@ -31,6 +31,8 @@ export interface UseCartResult extends CartVM {
   remove: (lineId: string) => void;
   /** Empties the cart, and forgets its code. Used after a successful order. */
   clear: () => void;
+  /** Replaces the prices remembered in the cart with the server's current ones. */
+  applyQuotedPrices: (prices: ReadonlyArray<{ lineId: string; unitPrice: number }>) => void;
   /** The shopper's code, in capitals, whether or not the server has accepted it yet. */
   discountCode: string | null;
   /** Sets or, with null or blank, removes the code. */
@@ -46,6 +48,7 @@ export function useCart(): UseCartResult {
   const setLineQty = store((state) => state.setLineQty);
   const removeLine = store((state) => state.removeLine);
   const clearLines = store((state) => state.clearLines);
+  const applyQuotedPrices = store((state) => state.applyPrices);
   const discountCode = store((state) => state.discountCode);
   const storeDiscountCode = store((state) => state.setDiscountCode);
 
@@ -87,5 +90,5 @@ export function useCart(): UseCartResult {
     [storeDiscountCode],
   );
 
-  return { ...view, isHydrated, add, setQty: setLineQty, remove: removeLine, clear: clearLines, discountCode, setDiscountCode };
+  return { ...view, isHydrated, add, setQty: setLineQty, remove: removeLine, clear: clearLines, applyQuotedPrices, discountCode, setDiscountCode };
 }

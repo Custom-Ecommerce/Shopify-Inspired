@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { createStorefrontCartStore, DEMO_CART_STORE } from "./cart-store";
+import { cartStorageKey, createStorefrontCartStore, DEMO_CART_KEY, DEMO_CART_STORE } from "./cart-store";
 import { CardAvailableProvider, CartStoreProvider, DEMO_FAVOURITES_STORE, FavouritesStoreProvider, OrderTransportProvider } from "./context";
 import { createFavouritesStore, favouritesKey } from "../domain/favourites";
 import { createBffTransport } from "../transport/remote";
@@ -18,19 +18,25 @@ export function StorefrontProvider({
   storeKey,
   demoFixtures,
   cardEnabled = false,
+  preview = false,
+  demoScope,
   children,
 }: {
   storeKey?: string;
   /** From the store's answer: whether a card payment can be taken. */
   cardEnabled?: boolean;
+  /** A seller's preview of this store. It gets a cart of its own. */
+  preview?: boolean;
+  /** Which demo this is, so demo themes do not share a cart. */
+  demoScope?: string;
   /** A theme's own demo catalogue. Orders placed in the demo are checked against it. Ignored for a live store. */
   demoFixtures?: MockFixtures;
   children: React.ReactNode;
 }) {
-  const cart = useMemo(
-    () => (storeKey ? createStorefrontCartStore("markaz-cart:" + storeKey) : DEMO_CART_STORE),
-    [storeKey],
-  );
+  const cart = useMemo(() => {
+    const key = cartStorageKey({ storeKey, preview, demoScope });
+    return key === DEMO_CART_KEY ? DEMO_CART_STORE : createStorefrontCartStore(key);
+  }, [storeKey, preview, demoScope]);
   const favourites = useMemo(() => (storeKey ? createFavouritesStore(favouritesKey(storeKey)) : DEMO_FAVOURITES_STORE), [storeKey]);
   const hasDemoFixtures = Boolean(demoFixtures);
   const transport = useMemo<OrderTransport>(

@@ -231,6 +231,11 @@ export const dashboardOrderDetailSchema = z.object({
   phone: z.string().nullable(),
   address: z.string().nullable(),
   city: z.string().nullable(),
+  customerEmail: z.string().nullable(),
+  /** Only when it differs from the phone. */
+  customerWhatsapp: z.string().nullable(),
+  /** The shopper's note from checkout. Not the seller's internal notes. */
+  customerNote: z.string().nullable(),
   items: z.array(dashboardOrderItemSchema),
   subtotal: z.number().min(0),
   deliveryCharges: z.number().min(0),

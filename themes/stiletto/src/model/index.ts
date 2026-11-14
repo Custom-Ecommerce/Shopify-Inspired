@@ -81,7 +81,6 @@ export interface AddressDetails {
   address2?: string;
   city: string;
   zip?: string;
-  phone: string;
   country: string;
 }
 

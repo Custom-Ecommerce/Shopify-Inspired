@@ -2,6 +2,7 @@ import type {
   CartQuote,
   CartQuoteInput,
   CartQuoteLine,
+  OrderConfirmationInput,
   OrderLookupInput,
   StorefrontOrderTracking,
   StorefrontOrder,
@@ -342,7 +343,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
       items,
     });
 
-    const result: SubmitOrderResult = { orderId, total };
+    const result: SubmitOrderResult = { orderId, total, accessToken: "demo-" + orderId };
     orderBook.set(payload.idempotencyKey, result);
     return { ...result };
   }
@@ -355,6 +356,13 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     const phone = normalizePhoneE164(input.phone);
     if (phone === null || phone !== order.phone) return null;
     return clone(order);
+  }
+
+  /** Mock of POST /orders/confirmation. The token is only a stand-in: the demo's orders never leave the page's memory. */
+  async function confirmOrder(input: OrderConfirmationInput): Promise<StorefrontOrder | null> {
+    await delay(150);
+    const order = orderById.get(input.orderNumber.trim());
+    return order && input.token === "demo-" + order.orderId ? clone(order) : null;
   }
 
   /** Mock of POST /orders/track. The same matching as lookupOrder; the demo's orders never leave pending. */
@@ -419,6 +427,7 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     quoteCart,
     submitOrder,
     lookupOrder,
+    confirmOrder,
     trackOrder,
   };
 }

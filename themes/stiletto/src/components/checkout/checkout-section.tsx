@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Globe,
   Hash,
+  Mail,
   MapPin,
   MessageSquare,
   Package,
@@ -42,7 +43,6 @@ const createEmptyAddress = (): AddressDetails => ({
   address2: "",
   city: "",
   zip: "",
-  phone: "",
   country: "Pakistan",
 });
 
@@ -56,6 +56,8 @@ const inputErrorClasses = "border-[var(--status-error-text)] focus:border-[var(-
 /** The element id of the box a message belongs to. Only the shipping address carries messages. */
 const fieldElementId = (field: StilettoCheckoutField): string => {
   if (field === "whatsapp") return "checkout-whatsapp";
+  if (field === "phone") return "checkout-phone";
+  if (field === "email") return "checkout-email";
   if (field === "notes") return "order-notes";
   return `shipping-${field}`;
 };
@@ -167,16 +169,13 @@ function DiscountCodeBox({ storedCode, appliedCode, error, busy, onApply, onRemo
 
 /**
  * Reusable set of address input fields (First/Last name, Street Address,
- * Apartment, City, Zip, Phone, Country). Rendered once for the Shipping
- * Address and, conditionally, once more for the Billing Address — each
- * instance keeps its own `values`/`onChange` so the two addresses never
- * collide.
+ * Apartment, City, Zip, Country).
  */
 interface AddressFieldsProps {
   idPrefix: string;
   values: AddressDetails;
   onChange: (field: keyof AddressDetails, value: string) => void;
-  /** Messages for this address's boxes. The billing address is not sent, so it has none. */
+  /** Messages for this address's boxes. */
   errors?: StilettoFieldErrors;
 }
 
@@ -317,32 +316,7 @@ function AddressFields({ idPrefix, values, onChange, errors = {} }: AddressField
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label htmlFor={`${idPrefix}-phone`} className={labelBaseClasses}>
-            Phone Number *
-          </label>
-          <div className="relative flex items-center">
-            <Phone className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
-            <input
-              id={`${idPrefix}-phone`}
-              type="tel"
-              name={`${idPrefix}-phone`}
-              required
-              placeholder="e.g. 0300 1234567"
-              value={values.phone}
-              onChange={handleChange("phone")}
-              inputMode="tel"
-              autoComplete="tel"
-              aria-invalid={errors.phone ? true : undefined}
-              aria-describedby={errors.phone ? `${idPrefix}-phone-error` : undefined}
-              className={errors.phone ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
-            />
-          </div>
-          <FieldError id={`${idPrefix}-phone-error`} message={errors.phone} />
-        </div>
-
-        <div className="space-y-1.5">
+      <div className="space-y-1.5">
           <label htmlFor={`${idPrefix}-country`} className={labelBaseClasses}>
             Country *
           </label>
@@ -360,7 +334,6 @@ function AddressFields({ idPrefix, values, onChange, errors = {} }: AddressField
             />
           </div>
         </div>
-      </div>
     </div>
   );
 }
@@ -370,6 +343,7 @@ export function CheckoutSection({
 }: CheckoutSectionProps) {
   const { cartItems } = useCartContext();
   const {
+    blockReason,
     cardAvailable,
     subtotal,
     deliveryCharges,
@@ -392,6 +366,9 @@ export function CheckoutSection({
     submit,
   } = useStilettoCheckout();
 
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [sameOnWhatsapp, setSameOnWhatsapp] = useState(true);
   const [whatsapp, setWhatsapp] = useState("");
   const [notes, setNotes] = useState("");
   const [chosenPayment, setChosenPayment] = useState<"cod" | "card">("cod");
@@ -401,10 +378,6 @@ export function CheckoutSection({
   const [shippingAddress, setShippingAddress] = useState<AddressDetails>(
     createEmptyAddress()
   );
-  const [billingAddress, setBillingAddress] = useState<AddressDetails>(
-    createEmptyAddress()
-  );
-  const [sameAsShipping, setSameAsShipping] = useState(true);
 
 
   // Moves to the first box with a message, which on a phone can be a long way above the button.
@@ -421,17 +394,10 @@ export function CheckoutSection({
     value: string
   ) => {
     setShippingAddress((prev) => ({ ...prev, [field]: value }));
-    if (field === "firstName" || field === "lastName" || field === "address1" || field === "city" || field === "phone") {
+    if (field === "firstName" || field === "lastName" || field === "address1" || field === "city") {
       clearFieldError(field);
     }
     if (field === "address2" || field === "zip") clearFieldError("address1");
-  };
-
-  const handleBillingAddressChange = (
-    field: keyof AddressDetails,
-    value: string
-  ) => {
-    setBillingAddress((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleOrderSubmit = async (e: React.FormEvent) => {
@@ -445,11 +411,11 @@ export function CheckoutSection({
       return;
     }
 
-    await submit({ whatsapp, shippingAddress, billingAddress, sameAsShipping, notes, paymentMethod });
+    await submit({ email, phone, sameOnWhatsapp, whatsapp, shippingAddress, notes, paymentMethod });
   };
 
   return (
-    <div data-source="partial" data-source-note="Cart, delivery charges, totals and payment are live. The billing address is shown but not stored." data-section="checkout" className="min-h-screen bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans flex flex-col">
+    <div data-source="partial" data-source-note="Cart, delivery charges, totals and payment are live." data-section="checkout" className="min-h-screen bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans flex flex-col">
       {/* Black Navbar Header */}
       <div className="bg-[var(--surface-inverse)] text-[var(--text-inverse)] border-b border-[var(--surface-inverse)] sticky top-0 z-30 shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
@@ -498,35 +464,102 @@ export function CheckoutSection({
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="checkout-whatsapp" className="text-xs text-(--text-primary)/70 tracking-wider uppercase font-medium">
-                  Active WhatsApp Number *
+                <label htmlFor="checkout-email" className={labelBaseClasses}>
+                  Email (Optional)
                 </label>
                 <div className="relative flex items-center">
-                  <MessageSquare className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
+                  <Mail className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
                   <input
-                    id="checkout-whatsapp"
+                    id="checkout-email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    name="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      clearFieldError("email");
+                    }}
+                    aria-invalid={fieldErrors.email ? true : undefined}
+                    aria-describedby={fieldErrors.email ? "checkout-email-error" : undefined}
+                    className={fieldErrors.email ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
+                  />
+                </div>
+                <FieldError id="checkout-email-error" message={fieldErrors.email} />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="checkout-phone" className={labelBaseClasses}>
+                  Phone Number *
+                </label>
+                <div className="relative flex items-center">
+                  <Phone className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
+                  <input
+                    id="checkout-phone"
                     type="tel"
                     inputMode="tel"
                     autoComplete="tel"
-                    name="whatsapp"
+                    name="phone"
                     required
                     placeholder="e.g. 0300 1234567"
-                    value={whatsapp}
+                    value={phone}
                     onChange={(e) => {
-                      setWhatsapp(e.target.value);
-                      clearFieldError("whatsapp");
+                      setPhone(e.target.value);
                       clearFieldError("phone");
                     }}
-                    aria-invalid={fieldErrors.whatsapp ? true : undefined}
-                    aria-describedby={fieldErrors.whatsapp ? "checkout-whatsapp-error" : undefined}
-                    className={fieldErrors.whatsapp ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
+                    aria-invalid={fieldErrors.phone ? true : undefined}
+                    aria-describedby={fieldErrors.phone ? "checkout-phone-error" : undefined}
+                    className={fieldErrors.phone ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
                   />
                 </div>
-                <FieldError id="checkout-whatsapp-error" message={fieldErrors.whatsapp} />
+                <FieldError id="checkout-phone-error" message={fieldErrors.phone} />
                 <p className="text-[11px] text-(--text-primary)/50">
-                  Order status & dispatch updates will be sent to this WhatsApp number.
+                  Used for delivery and for order updates on WhatsApp.
                 </p>
               </div>
+
+              <label htmlFor="same-on-whatsapp" className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  id="same-on-whatsapp"
+                  type="checkbox"
+                  checked={sameOnWhatsapp}
+                  onChange={(e) => {
+                    setSameOnWhatsapp(e.target.checked);
+                    clearFieldError("whatsapp");
+                  }}
+                  className="w-4 h-4 rounded border-(--surface-inverse)/30 accent-[var(--surface-inverse)] cursor-pointer"
+                />
+                <span className="text-xs sm:text-sm font-medium text-[var(--text-primary)]">Same number on WhatsApp</span>
+              </label>
+
+              {!sameOnWhatsapp && (
+                <div className="space-y-1.5">
+                  <label htmlFor="checkout-whatsapp" className={labelBaseClasses}>
+                    WhatsApp Number *
+                  </label>
+                  <div className="relative flex items-center">
+                    <MessageSquare className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
+                    <input
+                      id="checkout-whatsapp"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="off"
+                      name="whatsapp"
+                      placeholder="e.g. 0300 1234567"
+                      value={whatsapp}
+                      onChange={(e) => {
+                        setWhatsapp(e.target.value);
+                        clearFieldError("whatsapp");
+                      }}
+                      aria-invalid={fieldErrors.whatsapp ? true : undefined}
+                      aria-describedby={fieldErrors.whatsapp ? "checkout-whatsapp-error" : undefined}
+                      className={fieldErrors.whatsapp ? `${inputBaseClasses} ${inputErrorClasses}` : inputBaseClasses}
+                    />
+                  </div>
+                  <FieldError id="checkout-whatsapp-error" message={fieldErrors.whatsapp} />
+                </div>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -543,43 +576,6 @@ export function CheckoutSection({
                 onChange={handleShippingAddressChange}
                 errors={fieldErrors}
               />
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-2 border-b border-(--surface-inverse)/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-(--text-primary)/80" />
-                  <h2 className="text-sm uppercase tracking-[0.15em] font-semibold text-[var(--text-primary)]">
-                    Billing Address
-                  </h2>
-                </div>
-              </div>
-
-              <label
-                htmlFor="same-as-shipping"
-                className="flex items-center gap-2.5 p-3.5 bg-(--surface-inverse)/5 border border-(--surface-inverse)/10 rounded-xl cursor-pointer select-none"
-              >
-                <input
-                  id="same-as-shipping"
-                  type="checkbox"
-                  checked={sameAsShipping}
-                  onChange={(e) => setSameAsShipping(e.target.checked)}
-                  className="w-4 h-4 rounded border-(--surface-inverse)/30 accent-[var(--surface-inverse)] cursor-pointer"
-                />
-                <span className="text-xs sm:text-sm font-medium text-[var(--text-primary)]">
-                  Billing address same as shipping address
-                </span>
-              </label>
-
-              {!sameAsShipping && (
-                <div className="pt-1">
-                  <AddressFields
-                    idPrefix="billing"
-                    values={billingAddress}
-                    onChange={handleBillingAddressChange}
-                  />
-                </div>
-              )}
             </div>
 
             <div className="space-y-1.5">
@@ -752,9 +748,13 @@ export function CheckoutSection({
                   </div>
                 </div>
 
+                {blockReason && (
+                  <p role="alert" className="text-[11px] text-[var(--status-error-text)]">{blockReason}</p>
+                )}
+
                 <Button
                   type="submit"
-                  disabled={isSubmitting || cartItems.length === 0}
+                  disabled={isSubmitting || cartItems.length === 0 || blockReason !== null}
                   className="w-full h-11 bg-[var(--surface-elevated)] text-[var(--text-primary)] font-sans text-xs uppercase tracking-[0.15em] font-bold rounded-xl hover:bg-(--surface-elevated)/90 transition-all disabled:opacity-50"
                 >
                   {isChecking ? "We are checking your order…" : isSubmitting ? "Processing Order..." : canRetryUnconfirmed ? "Try Again" : paymentMethod === "card" ? "Pay with Card" : "Place Order (COD)"}

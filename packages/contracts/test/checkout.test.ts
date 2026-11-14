@@ -140,7 +140,7 @@ test('a full customer parses, with email and note absent reading as null', () =>
   const result = parse({});
   assert.equal(result.success, true);
   if (!result.success) return;
-  assert.deepEqual(result.data, { customerName: 'Sara Khan', phone: STORED, address: valid.address, city: 'Karachi', email: null, note: null });
+  assert.deepEqual(result.data, { customerName: 'Sara Khan', phone: STORED, whatsapp: null, address: valid.address, city: 'Karachi', email: null, note: null });
 });
 
 for (const [field, tooShort, requiredMessage] of [
@@ -283,4 +283,17 @@ test('the package root exports the same schemas the browser entry does', () => {
   assert.equal(root.storefrontCheckoutCustomerSchema, storefrontCheckoutCustomerSchema);
   assert.equal(root.storefrontCartQuoteSchema, storefrontCartQuoteSchema);
   assert.equal(root.normalizePhoneE164, normalizePhoneE164);
+});
+
+test('a separate WhatsApp number is optional, in the same stored form, and blank is none', () => {
+  for (const whatsapp of [undefined, null, '', '   ']) {
+    const result = parse({ whatsapp });
+    assert.equal(result.success, true, JSON.stringify(whatsapp));
+    if (result.success) assert.equal(result.data.whatsapp, null);
+  }
+  const given = parse({ whatsapp: '0311 7654321' });
+  assert.equal(given.success, true);
+  if (given.success) assert.equal(given.data.whatsapp, '+923117654321');
+  assert.equal(refusal({ whatsapp: '12345' }).path, 'whatsapp');
+  assert.equal(refusal({ whatsapp: '<script>' }).path, 'whatsapp');
 });

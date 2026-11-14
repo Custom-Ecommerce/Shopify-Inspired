@@ -18,7 +18,8 @@ export interface UseCartQuoteResult {
  * Asks the server to price the cart whenever its lines change, so stock and totals come from the source. The cart keeps
  * working when the quote cannot be had: checkout validates again when the order is placed.
  */
-export function useCartQuote(): UseCartQuoteResult {
+export function useCartQuote(options: { enabled?: boolean } = {}): UseCartQuoteResult {
+  const enabled = options.enabled ?? true;
   const transport = useOrderTransport();
   const { lines, isHydrated, discountCode } = useCart();
   const requested = useMemo(
@@ -30,7 +31,7 @@ export function useCartQuote(): UseCartQuoteResult {
   const [state, setState] = useState<UseCartQuoteResult>({ status: "idle", quote: null });
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !enabled) return;
     if (requested.length === 0) {
       setState({ status: "ready", quote: null });
       return;
@@ -50,7 +51,7 @@ export function useCartQuote(): UseCartQuoteResult {
     };
     // `requested` is read through `key`, which is its serialised form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, isHydrated, transport]);
+  }, [key, isHydrated, transport, enabled]);
 
   return state;
 }

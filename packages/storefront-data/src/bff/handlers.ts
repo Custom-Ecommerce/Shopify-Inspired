@@ -44,6 +44,8 @@ export interface BffRoutes {
   quote(request: Request, context: BffRouteContext): Promise<Response>;
   submit(request: Request, context: BffRouteContext): Promise<Response>;
   lookup(request: Request, context: BffRouteContext): Promise<Response>;
+  /** The tab that placed an order reading it back with its token. */
+  confirmation(request: Request, context: BffRouteContext): Promise<Response>;
   /** Customer tracking (EP-02 OB-4, D-069): the same body and gates as lookup, the journey-only answer. */
   track(request: Request, context: BffRouteContext): Promise<Response>;
   /** The Live products behind a browser's favourites: GET ?ids=a,b. Public data, so it has no origin gate. */
@@ -71,6 +73,11 @@ const submitBody = z.object({
 const lookupBody = z.object({
   orderId: z.string().trim().min(1).max(40),
   phone: z.string().trim().min(1).max(32),
+});
+
+const confirmationBody = z.object({
+  orderNumber: z.string().trim().min(1).max(40),
+  token: z.string().min(1).max(200),
 });
 
 /** The browser gets one shape for every refusal: { error: { code, message }, ...extra }, as the backend sends it. */
@@ -356,6 +363,15 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
     lookup: (request, context) =>
       handle(request, context, lookupBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
         const order = await transport.lookupOrder({ orderId: input.orderId, phone: input.phone });
+        if (order === null) {
+          return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
+        }
+        return { kind: "data", status: 200, data: order };
+      }),
+
+    confirmation: (request, context) =>
+      handle(request, context, confirmationBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        const order = await transport.confirmOrder({ orderNumber: input.orderNumber, token: input.token });
         if (order === null) {
           return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
         }

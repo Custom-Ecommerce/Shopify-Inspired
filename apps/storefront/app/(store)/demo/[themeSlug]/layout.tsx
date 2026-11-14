@@ -57,7 +57,7 @@ export default async function DemoLayout({
   return (
     <>
       <ThemeScope slug={resolvedParams.themeSlug} />
-      <StorefrontProvider demoFixtures={demo.fixtures}>
+      <StorefrontProvider demoFixtures={demo.fixtures} demoScope={resolvedParams.themeSlug}>
         <div className="demo-provider-boundary">
           {demo.banner === 'top' && (
             <div className="bg-blue-600 text-white text-center py-2 text-sm font-medium">

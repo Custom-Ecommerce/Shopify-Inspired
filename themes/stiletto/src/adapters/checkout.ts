@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { checkoutBlockReason } from "@markaz/storefront-data";
 import type { CheckoutFailure } from "@markaz/storefront-data/client";
 import { checkoutServerFieldError, useCardAvailable, useCart, useCartQuote, useCheckout } from "@markaz/storefront-data/client";
 import { boxForField, firstErrorBox, stilettoFieldErrors, toCheckoutValues } from "./checkout-fields";
@@ -50,7 +51,7 @@ function failureMessage(f: CheckoutFailure): string {
  */
 export function useStilettoCheckout() {
   const router = useRouter();
-  const { isEmpty, discountCode, setDiscountCode } = useCart();
+  const { isEmpty, lines, discountCode, setDiscountCode } = useCart();
   const { quote, status: quoteStatus } = useCartQuote();
   const checkout = useCheckout();
   const [fieldErrors, setFieldErrors] = useState<StilettoFieldErrors>({});
@@ -58,9 +59,7 @@ export function useStilettoCheckout() {
   const [focusTick, setFocusTick] = useState(0);
   // A refused code stops showing as soon as the shopper changes or removes it.
   const [dismissedFailure, setDismissedFailure] = useState<CheckoutFailure | null>(null);
-  const placed = useRef<{ total: number; whatsapp: string; paymentMethod: "cod" | "card" }>({ total: 0, whatsapp: "", paymentMethod: "cod" });
   const cardAvailable = useCardAvailable();
-  const lastInput = useRef<StilettoCheckoutInput | null>(null);
 
   // Only the server's prices are shown once it has answered. The cart's own prices can be older than the catalog.
   const priced = !isEmpty && quote !== null ? quote : null;
@@ -68,8 +67,6 @@ export function useStilettoCheckout() {
   const subtotal = priced ? priced.subtotal.amount : checkout.subtotal.amount;
   const discount = priced ? priced.discount.amount : 0;
   const grandTotal = priced ? priced.total.amount : checkout.subtotal.amount;
-  const grandTotalRef = useRef(grandTotal);
-  grandTotalRef.current = grandTotal;
 
   /** The server's total for a line, or null when it has none: not answered yet, or the line cannot be bought. */
   const lineTotalOf = useCallback(
@@ -84,15 +81,15 @@ export function useStilettoCheckout() {
 
   useEffect(() => {
     if (checkout.status === "success" && checkout.orderId) {
-      rememberLastOrder({ orderId: checkout.orderId, ...placed.current });
+      rememberLastOrder({ orderId: checkout.orderId, accessToken: checkout.accessToken });
       if (checkout.checkoutUrl) window.location.assign(checkout.checkoutUrl);
       else router.push(paths.order(checkout.orderId));
     }
-  }, [checkout.status, checkout.orderId, checkout.checkoutUrl, router]);
+  }, [checkout.status, checkout.orderId, checkout.checkoutUrl, checkout.accessToken, router]);
 
   // A refusal from the server about one field reads the same as the form's own message for it.
   const serverField = checkoutServerFieldError(checkout.failure);
-  const serverBox = serverField && lastInput.current ? boxForField(serverField.field, lastInput.current) : null;
+  const serverBox = serverField ? boxForField(serverField.field) : null;
   useEffect(() => {
     if (serverField === null || serverBox === null) return;
     setFieldErrors((previous) => ({ ...previous, [serverBox]: serverField.message }));
@@ -103,7 +100,6 @@ export function useStilettoCheckout() {
 
   const submit = useMemo(
     () => async (input: StilettoCheckoutInput) => {
-      lastInput.current = input;
       const errors = stilettoFieldErrors(input);
       setFieldErrors(errors);
       if (firstErrorBox(errors) !== null) {
@@ -111,9 +107,7 @@ export function useStilettoCheckout() {
         return;
       }
       const values = toCheckoutValues(input);
-      const paymentMethod = input.paymentMethod ?? "cod";
-      placed.current = { total: grandTotalRef.current, whatsapp: values.phone, paymentMethod };
-      await checkout.submit(values, { paymentMethod });
+      await checkout.submit(values, { paymentMethod: input.paymentMethod ?? "cod" });
     },
     [checkout],
   );
@@ -142,6 +136,8 @@ export function useStilettoCheckout() {
   // A refusal shown beside its box is not repeated in the banner.
   const failure = checkout.failure && serverBox === null && checkout.failure.kind !== "discount_rejected" ? failureMessage(checkout.failure) : null;
   return {
+    /** Why the order cannot be placed as it stands, for the button. */
+    blockReason: priced ? checkoutBlockReason(lines, priced) : null,
     cardAvailable,
     subtotal,
     deliveryCharges,

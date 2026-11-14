@@ -1,7 +1,7 @@
 import { unwrapCjs } from '@/lib/cjs';
 import { PAYMENT_NOT_COMPLETED_REASON, PAYMENT_SYSTEM_ACTOR, cancelOrder } from '@/lib/order-cancel';
 import { Order, Store } from '@/lib/services';
-import { CARD_SESSION_LIFETIME_MS, checkoutReturnUrl } from '@/lib/storefront/card-config';
+import { CARD_SESSION_LIFETIME_MS, cardPaymentsAvailable, checkoutReturnUrl } from '@/lib/storefront/card-config';
 import { StorefrontHttpError } from '@/lib/storefront/errors';
 import type { OrderRow } from '@/lib/storefront/order-dto';
 
@@ -108,5 +108,26 @@ export async function cardCheckoutUrl(storeId: string, order: OrderRow, replayed
       onlyIfUnpaid: true,
     }).catch((cancelErr: unknown) => console.error('[seller-backend] could not cancel an order after a Stripe failure', { orderId: order.orderId, error: errorLabel(cancelErr) }));
     throw paymentNotStarted();
+  }
+}
+
+/**
+ * After a seller cancels an unpaid card order: closes its Stripe session so the shopper cannot pay for it. Best effort, and
+ * never throws. Stripe refuses to expire a session that is no longer open, which is how a payment that got there first shows up.
+ */
+export async function expireCardSession(order: { orderId?: string; stripeSessionId: string }): Promise<void> {
+  if (!cardPaymentsAvailable()) return;
+  const context = { orderId: order.orderId, sessionId: order.stripeSessionId };
+  try {
+    const stripe = await stripeClient();
+    try {
+      await stripe.checkout.sessions.expire(order.stripeSessionId, undefined, STRIPE_REQUEST);
+    } catch (err) {
+      const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId, undefined, STRIPE_REQUEST);
+      if (session.payment_status === 'paid') console.error('[seller-backend] a cancelled order was paid and needs a refund', context);
+      else console.warn('[seller-backend] could not expire a Stripe session', { ...context, error: errorLabel(err) });
+    }
+  } catch (err) {
+    console.warn('[seller-backend] could not expire a Stripe session', { ...context, error: errorLabel(err) });
   }
 }

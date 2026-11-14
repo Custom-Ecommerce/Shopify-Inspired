@@ -39,6 +39,8 @@ function bff(seen: { order?: SubmitOrderPayload }, rejection?: OrderRejectedErro
       if (rejection) throw rejection;
       return { orderId: "ORD-1", total: 1250, checkoutUrl: PAY_URL };
     },
+    trackOrder: async () => null,
+    confirmOrder: async () => null,
   } as unknown as OrderTransport;
   return createBffRoutes({ lookupStore: async () => ({ outcome: "ok", transport }) });
 }

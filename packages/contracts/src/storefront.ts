@@ -207,13 +207,15 @@ export const storefrontProductOptionSchema = z.object({
   values: z.array(z.string()),
 });
 
-/** A variant as a shopper sees it. No sku, no barcode, no stock count: availability is all a shopper needs. */
+/** A variant as a shopper sees it. No sku, no barcode, and no stock count beyond onlyLeft. */
 export const storefrontProductVariantSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
   price,
   compareAtPrice: price.nullable(),
   availability: z.enum(STOCK_STATUSES),
+  /** Units left, only when there are few (STOCK_WARNING_THRESHOLD or fewer) and at least one. A larger count is never shown. */
+  onlyLeft: z.number().int().positive().nullable().default(null),
   optionValues: z.array(z.string()),
   imageId: z.string().nullable(),
 });
@@ -264,12 +266,20 @@ export const storefrontOrderCreatedResponseSchema = z.object({
   data: storefrontOrderCreatedSchema.extend({
     /** Where the shopper pays a card order. Null for cash on delivery, or when nothing is left to pay. */
     checkoutUrl: z.string().min(1).nullable().default(null),
+    /** Lets the tab that placed this order read it back for 24 hours, without a phone number. Null when not configured. */
+    accessToken: z.string().min(1).nullable().default(null),
   }),
 });
 
 export const storefrontOrderLookupRequestSchema = z.object({
   orderId: z.string().trim().min(1).max(40),
   phone: z.string().trim().min(1).max(32),
+});
+
+/** The tab that placed an order reading it back. The answer is the lookup's. */
+export const storefrontOrderConfirmationRequestSchema = z.object({
+  orderNumber: z.string().trim().min(1).max(40),
+  token: z.string().min(1).max(200),
 });
 
 export const storefrontOrderItemSchema = z.object({

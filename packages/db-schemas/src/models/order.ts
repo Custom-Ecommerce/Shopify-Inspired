@@ -96,6 +96,8 @@ export interface IOrder extends Document {
   customerEmail?: string | null;
   /** The shopper's own note from checkout. Not the seller's internal notes below. */
   customerNote?: string | null;
+  /** A WhatsApp number that differs from the phone. Null means the phone is used. */
+  customerWhatsapp?: string | null;
   items: IOrderLine[];
   subtotal: number;
   deliveryCharges: number;
@@ -176,6 +178,7 @@ const OrderSchema = new Schema<IOrder>(
     city: { type: String, trim: true, maxlength: 60, default: null },
     customerEmail: { type: String, trim: true, maxlength: 254, default: null },
     customerNote: { type: String, trim: true, maxlength: 500, default: null },
+    customerWhatsapp: { type: String, trim: true, maxlength: 32, default: null },
     items: {
       type: [
         {

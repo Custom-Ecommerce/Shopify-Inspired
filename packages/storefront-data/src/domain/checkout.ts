@@ -8,6 +8,8 @@ export type { CheckoutField };
 export interface CheckoutValues {
   customerName: string;
   phone: string;
+  /** A WhatsApp number that differs from the phone. Empty means the phone is used. */
+  whatsapp?: string;
   address: string;
   city: string;
   email?: string;
@@ -16,7 +18,7 @@ export interface CheckoutValues {
 
 export type CheckoutFieldErrors = Partial<Record<CheckoutField, string>>;
 
-export const EMPTY_CHECKOUT_VALUES: CheckoutValues = { customerName: "", phone: "", address: "", city: "", email: "", note: "" };
+export const EMPTY_CHECKOUT_VALUES: CheckoutValues = { customerName: "", phone: "", whatsapp: "", address: "", city: "", email: "", note: "" };
 
 /** The guest checkout rules: the contract's schema, the same one the BFF and the seller backend run. */
 export const checkoutFormSchema = storefrontCheckoutCustomerSchema;

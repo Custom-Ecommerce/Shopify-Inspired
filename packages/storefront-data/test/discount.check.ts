@@ -37,6 +37,8 @@ function bff(seen: { quote?: CartQuoteInput; order?: SubmitOrderPayload }, rejec
       if (rejection) throw rejection;
       return { orderId: "ORD-1", total: 1 };
     },
+    trackOrder: async () => null,
+    confirmOrder: async () => null,
   } as unknown as OrderTransport;
   return createBffRoutes({ lookupStore: async () => ({ outcome: "ok", transport }) });
 }

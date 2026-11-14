@@ -20,6 +20,7 @@ import {
   canCancel,
   canMarkCollected,
   cardPaymentPending,
+  paidCardOrder,
   DASHBOARD_ORDER_STATUSES,
   dashboardOrderListQuerySchema,
   nextStatuses,
@@ -361,6 +362,9 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     phone: text(row.phone),
     address: text(row.address),
     city: text(row.city),
+    customerEmail: text(row.customerEmail),
+    customerWhatsapp: text(row.customerWhatsapp),
+    customerNote: text(row.customerNote),
     items: list(row.items).map((item) => {
       const unitPrice = num(item.unitPrice);
       const quantity = num(item.quantity, 1);
@@ -390,7 +394,7 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     createdAt,
     updatedAt: iso(row.updatedAt) ?? createdAt,
     allowedNext: nextStatuses(row.status).filter((next) => !(next === 'dispatched' && cardPaymentPending(row))),
-    canCancel: canCancel(row.status),
+    canCancel: canCancel(row.status) && !paidCardOrder(row),
     canEditTracking: row.status === 'dispatched',
     canMarkCollected: canMarkCollected(row),
     timeline: buildOrderTimeline({ createdAt, statusHistory: history, notes: orderNotes, cancelReason: text(row.cancelReason) }),

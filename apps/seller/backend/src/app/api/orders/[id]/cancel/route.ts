@@ -10,6 +10,7 @@ import { connectSellerDb } from '@/lib/mongo';
 import { cancelOrder } from '@/lib/order-cancel';
 import { handleOrderError, OrderRequestError, toDashboardOrderDetail } from '@/lib/orders';
 import { assertCan, ORDER_ACTIONS } from '@/lib/services';
+import { expireCardSession } from '@/lib/storefront/card-payment';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,8 +35,8 @@ async function readBody(request: NextRequest): Promise<OrderCancelRequest> {
   return parsed.data;
 }
 
-function illegal(status: string): OrderRequestError {
-  const reason = cancelRefusal(status) ?? 'unknown_status';
+function illegal(status: string, paidCard = false): OrderRequestError {
+  const reason = paidCard ? 'card_paid' : (cancelRefusal(status) ?? 'unknown_status');
   return new OrderRequestError(422, 'ORDER_CANCEL_ILLEGAL', ORDER_CANCEL_REFUSAL_MESSAGES[reason], { status, reason });
 }
 
@@ -49,7 +50,10 @@ function illegal(status: string): OrderRequestError {
  *   400 ORDER_BODY_INVALID { field }
  *   401 no session   403 admin, or a store the seller does not own   404 bad id, unknown, or another store's order
  *   409 ORDER_STATUS_CHANGED { status, allowedNext, canCancel }   the order moved on between the read and the write
- *   422 ORDER_CANCEL_ILLEGAL { status, reason }                     dispatched or later, already cancelled, unknown status
+ *   422 ORDER_CANCEL_ILLEGAL { status, reason }                     dispatched or later, already cancelled, unknown status, or a
+ *                                                                   paid card order (reason card_paid), until refunds exist
+ *
+ * Cancelling an unpaid card order also closes its Stripe session, so the shopper cannot pay for it.
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
@@ -79,12 +83,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     if (result.outcome === 'not_found') throw notFound();
     if (result.outcome === 'illegal') throw illegal(result.status);
+    if (result.outcome === 'paid') throw illegal(result.status, true);
     if (result.outcome === 'changed') {
       throw new OrderRequestError(409, 'ORDER_STATUS_CHANGED', 'This order changed while you were working on it. Reload it and try again.', {
         status: result.status,
         allowedNext: nextStatuses(result.status),
         canCancel: canCancel(result.status),
       });
+    }
+
+    const cancelled = result.order as { orderId?: string; paymentMethod?: unknown; stripeSessionId?: string | null };
+    if (cancelled.paymentMethod === 'card' && cancelled.stripeSessionId) {
+      await expireCardSession({ orderId: cancelled.orderId, stripeSessionId: cancelled.stripeSessionId });
     }
 
     return NextResponse.json({ order: toDashboardOrderDetail(result.order), stockRestore: result.stockRestore }, { headers: NO_STORE });

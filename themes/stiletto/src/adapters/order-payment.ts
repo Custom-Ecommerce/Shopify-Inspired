@@ -1,33 +1,45 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { StorefrontOrder } from "@markaz/storefront-data";
 import { useOrderTransport } from "@markaz/storefront-data/client";
-import { paymentLine } from "./last-order";
-import type { LastOrder } from "./last-order";
+import { readLastOrder } from "./last-order";
 
 /** Stripe's message can land a few seconds after the shopper returns. Few tries, because each counts against the lookup limit. */
 const LOOKUPS = 4;
 const LOOKUP_GAP_MS = 3000;
 
-/** The payment line of the order page. A card order is read from the server, so it says Paid only once it is. */
-export function useOrderPaymentLine(summary: LastOrder | null): string | null {
+export interface ConfirmedOrder {
+  /** "ask" means this tab has no way to read the order, so the page asks for the order number and phone. */
+  status: "loading" | "found" | "ask";
+  order: StorefrontOrder | null;
+}
+
+const stillWaiting = (order: StorefrontOrder): boolean => order.paymentMethod === "card" && order.paymentStatus === "unpaid" && order.status !== "cancelled";
+
+/** The order this tab placed, read with its token, and read again for a short while if a card payment has not been confirmed. */
+export function useConfirmedOrder(orderId: string): ConfirmedOrder {
   const transport = useOrderTransport();
-  const [state, setState] = useState<{ paymentStatus: string | null; orderStatus: string | null }>({ paymentStatus: null, orderStatus: null });
-  const orderId = summary?.orderId ?? null;
-  const phone = summary?.whatsapp ?? null;
-  const isCard = summary?.paymentMethod === "card";
+  const [state, setState] = useState<ConfirmedOrder>({ status: "loading", order: null });
 
   useEffect(() => {
-    if (!isCard || orderId === null || phone === null) return;
+    const token = readLastOrder(orderId)?.accessToken ?? null;
+    if (token === null) {
+      setState({ status: "ask", order: null });
+      return;
+    }
     let current = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const look = async (triesLeft: number): Promise<void> => {
-      const order = await transport.lookupOrder({ orderId, phone }).catch(() => null);
+      const order = await transport.confirmOrder({ orderNumber: orderId, token }).catch(() => null);
       if (!current) return;
-      if (order) setState({ paymentStatus: order.paymentStatus, orderStatus: order.status });
-      const settled = order !== null && (order.paymentStatus === "paid" || order.status === "cancelled");
-      if (!settled && triesLeft > 1) timer = setTimeout(() => void look(triesLeft - 1), LOOKUP_GAP_MS);
+      if (order === null) {
+        setState((previous) => (previous.order ? previous : { status: "ask", order: null }));
+        return;
+      }
+      setState({ status: "found", order });
+      if (stillWaiting(order) && triesLeft > 1) timer = setTimeout(() => void look(triesLeft - 1), LOOKUP_GAP_MS);
     };
     void look(LOOKUPS);
 
@@ -35,7 +47,7 @@ export function useOrderPaymentLine(summary: LastOrder | null): string | null {
       current = false;
       clearTimeout(timer);
     };
-  }, [transport, orderId, phone, isCard]);
+  }, [transport, orderId]);
 
-  return paymentLine(summary?.paymentMethod, state.paymentStatus, state.orderStatus);
+  return state;
 }

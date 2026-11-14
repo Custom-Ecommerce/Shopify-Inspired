@@ -58,13 +58,14 @@ export interface StorefrontProductOption {
   values: string[];
 }
 
-/** A variant as a shopper sees it. Availability only: stock counts, SKUs and barcodes never reach a storefront. */
+/** A variant as a shopper sees it. onlyLeft is the only count there is, and only when few remain. Otherwise availability only: stock counts, SKUs and barcodes never reach a storefront. */
 export interface StorefrontProductVariant {
   id: string;
   title: string;
   price: number;
   compareAtPrice: number | null;
   availability: StockStatus;
+  onlyLeft?: number | null;
   optionValues: string[];
   imageId: string | null;
 }
@@ -92,6 +93,8 @@ export interface CheckoutCustomer {
   customerName: string;
   /** E.164, for example +923001234567. Any Pakistani mobile format is accepted; the server normalises it. */
   phone: string;
+  /** Only when it differs from the phone. */
+  whatsapp?: string | null;
   address: string;
   city: string;
   email?: string | null;
@@ -122,6 +125,8 @@ export interface SubmitOrderResult {
   total: number;
   /** Where the shopper pays a card order. */
   checkoutUrl?: string | null;
+  /** Lets the tab that placed the order read it back. */
+  accessToken?: string | null;
 }
 
 export type OrderStatus = "pending" | "confirmed" | "processing" | "dispatched" | "delivered" | "cancelled" | "returned";
@@ -217,6 +222,11 @@ import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQu
 /** Which adapter produced the data. Lets callers and logs say which source they got. */
 export type TransportKind = "mock" | "remote";
 
+export interface OrderConfirmationInput {
+  orderNumber: string;
+  token: string;
+}
+
 export interface CartQuoteLineInput {
   productId: string;
   variantId?: string;
@@ -248,6 +258,8 @@ export interface OrderTransport {
   submitOrder(payload: SubmitOrderPayload): Promise<SubmitOrderResult>;
   /** Resolves to null when no order matches both the id and the phone. Refusals reject with OrderRejectedError. */
   lookupOrder(input: OrderLookupInput): Promise<StorefrontOrder | null>;
+  /** The tab that placed the order reading it back with its token. null for a bad or expired token or an unknown order. */
+  confirmOrder(input: OrderConfirmationInput): Promise<StorefrontOrder | null>;
   /** Customer tracking (D-069): the parcel's journey only. null when no order matches both the id and the phone. */
   trackOrder(input: OrderLookupInput): Promise<StorefrontOrderTracking | null>;
   /** The Live products among these ids, at most 48 per call. An id with no Live product is simply absent from the answer. */

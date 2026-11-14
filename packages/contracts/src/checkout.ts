@@ -69,7 +69,7 @@ export const CHECKOUT_CITY_MAX = 60;
 export const CHECKOUT_EMAIL_MAX = 254;
 export const CHECKOUT_NOTE_MAX = 500;
 
-export const CHECKOUT_FIELDS = ['customerName', 'phone', 'address', 'city', 'email', 'note'] as const;
+export const CHECKOUT_FIELDS = ['customerName', 'phone', 'whatsapp', 'address', 'city', 'email', 'note'] as const;
 export type CheckoutField = (typeof CHECKOUT_FIELDS)[number];
 
 const PHONE_MESSAGE = 'Enter a valid mobile number, for example 0300 1234567';
@@ -116,6 +116,20 @@ export const storefrontCheckoutCustomerSchema = z.object({
     }
     return phone;
   }),
+  /** Optional. A WhatsApp number that differs from the phone, in the same stored form. Empty means the phone is used. */
+  whatsapp: z
+    .string({ error: PHONE_MESSAGE })
+    .transform((value, context) => {
+      if (value.trim() === '') return null;
+      const phone = value.length <= CHECKOUT_PHONE_INPUT_MAX ? normalizePhoneE164(value) : null;
+      if (phone === null) {
+        context.addIssue({ code: 'custom', message: PHONE_MESSAGE });
+        return z.NEVER;
+      }
+      return phone;
+    })
+    .nullish()
+    .transform((value) => value ?? null),
   address: requiredLine(CHECKOUT_ADDRESS_MIN, CHECKOUT_ADDRESS_MAX, 'Enter your full delivery address', 'Address is too long'),
   city: requiredLine(CHECKOUT_CITY_MIN, CHECKOUT_CITY_MAX, 'Enter your city', 'City name is too long'),
   /** Optional. An empty box is no email. */
@@ -141,6 +155,9 @@ export type CheckoutCustomerInput = z.input<typeof storefrontCheckoutCustomerSch
 export type CheckoutCustomer = z.output<typeof storefrontCheckoutCustomerSchema>;
 
 /* ------------------------------------------- cart lines ------------------------------------------- */
+
+/** A variant with this few units left, or fewer, tells the shopper how many remain. */
+export const STOCK_WARNING_THRESHOLD = 5;
 
 export const STOREFRONT_ORDER_MAX_LINES = 50;
 export const STOREFRONT_ORDER_MAX_QTY = 99;

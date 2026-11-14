@@ -18,6 +18,8 @@ export type { CategoryVM, StoreChromeVM } from "./view-models/chrome";
 export { createMockTransport, mockProduct } from "./transport/mock";
 export type { MockFixtures, MockProductInput } from "./transport/mock";
 export { validateCheckout } from "./domain/checkout";
+export { cartLineNotice, checkoutBlockReason, compareCartToQuote } from "./view-models/cart-quote";
+export type { CartLineNotice, CartQuoteChanges } from "./view-models/cart-quote";
 export type { CheckoutValues, CheckoutFieldErrors } from "./domain/checkout";
 export type { ProductQuery, ProductListPage, ProductSort, StorefrontCategory, StorefrontProductDetail, StorefrontProductSummary } from "./transport/types";
 // Re-exported so a theme that imports the hook from the package root works (Mustafa's product card does).

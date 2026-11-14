@@ -1024,3 +1024,32 @@ test('when saving fails, only the deducted lines are given back, and the release
   assert.ok(movements[0].orderId);
   assert.equal(String(movements[1].orderId), String(movements[0].orderId));
 });
+
+/* ------------------------------------------- EP-03 CB-5 ------------------------------------------- */
+
+test('a placed order carries a token for this order and store; with no secret it carries none', async () => {
+  process.env.ORDER_ACCESS_SECRET = 's'.repeat(40);
+  try {
+    const res = await order();
+    const { data } = (await res.json()) as { data: { orderId: string; accessToken: string; createdAt: string } };
+    const placedAt = Date.parse(data.createdAt);
+    const { isValidOrderAccessToken } = await import('../src/lib/storefront/order-access');
+    assert.equal(isValidOrderAccessToken(data.accessToken, data.orderId, STORE_ID, placedAt + 1000), true);
+    assert.equal(isValidOrderAccessToken(data.accessToken, data.orderId, OTHER_STORE_ID, placedAt + 1000), false);
+  } finally {
+    delete process.env.ORDER_ACCESS_SECRET;
+  }
+  const without = (await (await order()).json()) as { data: { accessToken: unknown } };
+  assert.equal(without.data.accessToken, null);
+});
+
+test('a separate WhatsApp number is stored in the one form, and a blank one is none', async () => {
+  await order({ customer: { ...CUSTOMER, whatsapp: '0311 7654321' } });
+  assert.equal(orders[0]!.customerWhatsapp, '+923117654321');
+  assert.equal(orders[0]!.phone, '+923001234567');
+  await order({ customer: { ...CUSTOMER, whatsapp: '' } });
+  assert.equal(orders[1]!.customerWhatsapp, null);
+  const res = await order({ customer: { ...CUSTOMER, whatsapp: 'nope' } });
+  assert.equal(res.status, 400);
+  assert.equal(((await res.json()) as { field: string }).field, 'customer.whatsapp');
+});

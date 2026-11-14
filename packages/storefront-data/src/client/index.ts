@@ -5,6 +5,8 @@ export type { UseProductResult } from "./use-product";
 export { useCart } from "./use-cart";
 export type { CartableProductVM, CartableVariantVM, UseCartResult } from "./use-cart";
 export { useCartQuote } from "./use-cart-quote";
+export { useCartCheck } from "./use-cart-check";
+export type { UseCartCheckResult } from "./use-cart-check";
 export type { CartQuoteStatus, UseCartQuoteResult } from "./use-cart-quote";
 export { useFavouriteProducts, useFavourites } from "./use-favourites";
 export type { FavouriteProductsStatus, UseFavouriteProductsResult, UseFavouritesResult } from "./use-favourites";

@@ -28,6 +28,8 @@ export interface UseCheckoutResult {
   orderId: string | null;
   /** Set with orderId for a card order: where the shopper pays. The theme sends the browser there. */
   checkoutUrl: string | null;
+  /** Set with orderId: lets this tab read the order back without a phone number. */
+  accessToken: string | null;
   isCartReady: boolean;
   isCartEmpty: boolean;
   lines: CartLineVM[];
@@ -65,6 +67,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
   const [isChecking, setIsChecking] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const inFlight = useRef(false);
   const attempt = useRef<Attempt | null>(null);
 
@@ -115,6 +118,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
       attempt.current = null;
       clear();
       setCheckoutUrl(placed.checkoutUrl ?? null);
+      setAccessToken(placed.accessToken ?? null);
       setOrderId(placed.orderId);
       setStatus("success");
     } catch (error) {
@@ -137,6 +141,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
     failure,
     orderId,
     checkoutUrl,
+    accessToken,
     isCartReady: isHydrated,
     isCartEmpty: cart.isEmpty,
     lines,

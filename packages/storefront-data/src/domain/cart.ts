@@ -25,6 +25,9 @@ export interface CartableProduct {
 
 export const MAX_LINE_QTY = 99;
 
+/** The most lines a cart holds, which is also the most an order takes. Keeps what is stored in the browser small. */
+export const MAX_CART_LINES = 50;
+
 export function normaliseQty(qty: number): number {
   if (!Number.isFinite(qty)) return 1;
   return Math.min(MAX_LINE_QTY, Math.max(1, Math.floor(qty)));
@@ -34,6 +37,7 @@ export function addCartLine(lines: CartLine[], item: CartableProduct, qty: numbe
   const amount = normaliseQty(qty);
   const existing = lines.find((line) => line.id === item.variantId);
   if (!existing) {
+    if (lines.length >= MAX_CART_LINES) return lines;
     return [
       ...lines,
       {
@@ -54,6 +58,12 @@ export function addCartLine(lines: CartLine[], item: CartableProduct, qty: numbe
       ? { ...line, unitPrice: item.unitPrice, qty: normaliseQty(line.qty + amount) }
       : line,
   );
+}
+
+/** Writes the server's current prices over the ones remembered when each line was added. */
+export function applyLinePrices(lines: CartLine[], prices: ReadonlyArray<{ lineId: string; unitPrice: number }>): CartLine[] {
+  const byLine = new Map(prices.map((price) => [price.lineId, price.unitPrice]));
+  return lines.map((line) => (byLine.has(line.id) ? { ...line, unitPrice: byLine.get(line.id) as number } : line));
 }
 
 export function removeCartLine(lines: CartLine[], lineId: string): CartLine[] {

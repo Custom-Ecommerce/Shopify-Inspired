@@ -6,6 +6,7 @@ import type { ProductListPage, ProductQuery } from "./types";
 import type {
   CartQuote,
   CartQuoteInput,
+  OrderConfirmationInput,
   OrderLookupInput,
   OrderRejection,
   OrderTransport,
@@ -309,6 +310,17 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
       return unwrap(result, WireOrderLookup, "order lookup").data;
     },
 
+    async confirmOrder(input: OrderConfirmationInput): Promise<StorefrontOrder | null> {
+      requireHttp();
+      const result = await exchange("POST", "/orders/confirmation", {
+        body: { orderNumber: input.orderNumber, token: input.token },
+        retry: true,
+      });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfRefused(result);
+      return unwrap(result, WireOrderLookup, "order confirmation").data;
+    },
+
     async trackOrder(input: OrderLookupInput): Promise<StorefrontOrderTracking | null> {
       requireHttp();
       const result = await exchange("POST", "/orders/track", {
@@ -339,6 +351,7 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
  *   POST /cart/quote            price a cart without moving stock
  *   POST /orders                create order, with an Idempotency-Key header; refusals become OrderRejectedError
  *   POST /orders/lookup         the shopper's order by id and phone; 404 ORDER_NOT_FOUND becomes null
+ *   POST /orders/confirmation   the tab that placed an order reading it back with its token; 404 ORDER_NOT_FOUND becomes null
  *   POST /orders/track          customer tracking by id and phone (journey only); 404 ORDER_NOT_FOUND becomes null
  *   GET  /products?ids=         the Live products among these ids
  *
@@ -378,6 +391,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     quoteCart: orders.quoteCart,
     submitOrder: orders.submitOrder,
     lookupOrder: orders.lookupOrder,
+    confirmOrder: orders.confirmOrder,
     trackOrder: orders.trackOrder,
     getProductsByIds: orders.getProductsByIds,
 

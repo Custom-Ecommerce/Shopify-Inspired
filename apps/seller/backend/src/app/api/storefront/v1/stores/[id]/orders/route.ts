@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { storefrontOrderCreatedResponseSchema } from '@/lib/contracts';
 import { PRIVATE_NO_STORE_HEADERS, StorefrontHttpError, previewOrderBlocked } from '@/lib/storefront/errors';
 import { cardCheckoutUrl } from '@/lib/storefront/card-payment';
+import { issueOrderAccessToken } from '@/lib/storefront/order-access';
 import { toOrderCreatedDto } from '@/lib/storefront/order-dto';
 import { parseCreateOrderRequest, readJsonBody } from '@/lib/storefront/order-request';
 import { placeOrder } from '@/lib/storefront/order-service';
@@ -61,7 +62,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     const checkoutUrl = order.paymentMethod === 'card' ? await cardCheckoutUrl(id, order, replayed) : null;
 
-    const body = storefrontOrderCreatedResponseSchema.parse({ data: { ...toOrderCreatedDto(order), checkoutUrl } });
+    const accessToken = issueOrderAccessToken(order.orderId, id, order.createdAt);
+
+    const body = storefrontOrderCreatedResponseSchema.parse({ data: { ...toOrderCreatedDto(order), checkoutUrl, accessToken } });
     return NextResponse.json(body, {
       status: replayed ? 200 : 201,
       headers: replayed ? { ...PRIVATE_NO_STORE_HEADERS, 'Idempotent-Replayed': 'true' } : PRIVATE_NO_STORE_HEADERS,

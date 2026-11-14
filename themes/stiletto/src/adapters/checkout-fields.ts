@@ -3,45 +3,48 @@ import type { CheckoutValues } from "@markaz/storefront-data";
 import type { AddressDetails } from "../model";
 
 export interface StilettoCheckoutInput {
+  email: string;
+  /** Used for delivery, and for WhatsApp updates unless the customer gives another number. */
+  phone: string;
+  sameOnWhatsapp: boolean;
+  /** Read only when sameOnWhatsapp is off. */
   whatsapp: string;
   shippingAddress: AddressDetails;
-  billingAddress: AddressDetails;
-  sameAsShipping: boolean;
   notes: string;
   /** Left out means cash on delivery. */
   paymentMethod?: "cod" | "card";
 }
 
 /** The boxes of Stiletto's form that can carry a message, top of the page first. */
-export const STILETTO_CHECKOUT_FIELDS = ["whatsapp", "firstName", "lastName", "address1", "city", "phone", "notes"] as const;
+export const STILETTO_CHECKOUT_FIELDS = ["email", "phone", "whatsapp", "firstName", "lastName", "address1", "city", "notes"] as const;
 export type StilettoCheckoutField = (typeof STILETTO_CHECKOUT_FIELDS)[number];
 export type StilettoFieldErrors = Partial<Record<StilettoCheckoutField, string>>;
 
-/** The form's boxes joined into what the store keeps: one name, one phone, one address and the city. */
+/** The form's boxes joined into what the store keeps. */
 export function toCheckoutValues(input: StilettoCheckoutInput): CheckoutValues {
   const a = input.shippingAddress;
   return {
     customerName: (a.firstName + " " + a.lastName).trim(),
-    phone: input.whatsapp.trim() || a.phone,
+    phone: input.phone,
+    whatsapp: input.sameOnWhatsapp ? "" : input.whatsapp,
     address: [a.address1, a.address2, a.zip].map((part) => (part ?? "").trim()).filter(Boolean).join(", "),
     city: a.city,
-    email: "",
+    email: input.email,
     note: input.notes,
   };
 }
 
-/** The box that holds the number being used. WhatsApp comes first; the shipping phone is used when WhatsApp is empty. */
-function phoneBox(input: StilettoCheckoutInput): StilettoCheckoutField {
-  return input.whatsapp.trim() === "" && input.shippingAddress.phone.trim() !== "" ? "phone" : "whatsapp";
-}
-
-/** Which box a refusal of a stored field belongs to. A field the form has no box for has no answer. */
-export function boxForField(field: string, input: StilettoCheckoutInput): StilettoCheckoutField | null {
+/** Which box a refusal of a stored field belongs to. */
+export function boxForField(field: string): StilettoCheckoutField | null {
   switch (field) {
     case "customerName":
       return "firstName";
     case "phone":
-      return phoneBox(input);
+      return "phone";
+    case "whatsapp":
+      return "whatsapp";
+    case "email":
+      return "email";
     case "address":
       return "address1";
     case "city":
@@ -62,12 +65,14 @@ export function stilettoFieldErrors(input: StilettoCheckoutInput): StilettoField
   const a = input.shippingAddress;
   if (a.firstName.trim() === "") errors.firstName = "Enter your first name";
   if (a.lastName.trim() === "") errors.lastName = "Enter your last name";
+  // Empty means "use the phone" to the server, but here the customer said it is a different number.
+  if (!input.sameOnWhatsapp && input.whatsapp.trim() === "") errors.whatsapp = "Enter your WhatsApp number";
 
   const validation = validateCheckout(toCheckoutValues(input));
   if (validation.ok) return errors;
 
   for (const [field, message] of Object.entries(validation.errors)) {
-    const box = boxForField(field, input);
+    const box = boxForField(field);
     if (box !== null && errors[box] === undefined && !(box === "firstName" && errors.lastName !== undefined)) {
       errors[box] = message;
     }

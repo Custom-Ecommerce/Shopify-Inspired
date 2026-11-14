@@ -35,6 +35,8 @@ function bff(onSubmit: (payload: SubmitOrderPayload) => void, rejection?: OrderR
       if (rejection) throw rejection;
       return { orderId: "ORD-1", total: 1 };
     },
+    trackOrder: async () => null,
+    confirmOrder: async () => null,
   } as unknown as OrderTransport;
   return createBffRoutes({ lookupStore: async () => ({ outcome: "ok", transport }) });
 }
@@ -116,7 +118,7 @@ check("the BFF hands on the cleaned customer, with city, and no price the browse
   assert.equal(response.status, 201);
   assert.ok(sent);
   const payload = sent as SubmitOrderPayload;
-  assert.deepEqual(payload.customer, { ...good, phone: STORED, email: null, note: "Ring the bell" });
+  assert.deepEqual(payload.customer, { ...good, phone: STORED, whatsapp: null, email: null, note: "Ring the bell" });
   assert.deepEqual(payload.lines, lines);
 });
 

@@ -1115,6 +1115,14 @@ export default function OrderDetailPage() {
           {order.phone ? <p className="font-mono">{order.phone}</p> : null}
           {order.address ? <p className="break-words">{order.address}</p> : null}
           {order.city ? <p>{order.city}</p> : null}
+          {order.customerWhatsapp ? <p className="font-mono">WhatsApp: {order.customerWhatsapp}</p> : null}
+          {order.customerEmail ? <p className="break-all">{order.customerEmail}</p> : null}
+          {order.customerNote ? (
+            <div className="mt-2 rounded-xl border bg-muted/40 p-3">
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Note from the customer</p>
+              <p className="whitespace-pre-wrap break-words">{order.customerNote}</p>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

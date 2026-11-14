@@ -218,6 +218,7 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       city: request.customer.city,
       customerEmail: request.customer.email,
       customerNote: request.customer.note,
+      customerWhatsapp: request.customer.whatsapp,
       items: lines.map((l, i) => ({
         productId: l.productId,
         variantId: l.variantId,

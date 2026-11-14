@@ -18,7 +18,7 @@ export interface ParsedOrderRequest {
   /** Hash of the semantic content, so a reused key with a different body is detectable. */
   fingerprint: string;
   /** As the checkout contract outputs it: the phone in E.164 and the text cleaned, ready to store. */
-  customer: { customerName: string; phone: string; address: string; city: string; email: string | null; note: string | null };
+  customer: { customerName: string; phone: string; whatsapp: string | null; address: string; city: string; email: string | null; note: string | null };
   paymentMethod: 'cod' | 'card';
   /** In capitals. Null when the shopper used none. */
   discountCode: string | null;
@@ -121,6 +121,7 @@ export function fingerprintOf(
     // Added only when present, so a retry of an order placed before these fields existed still matches.
     ...(customer.email === null ? {} : { e: customer.email }),
     ...(customer.note === null ? {} : { o: customer.note }),
+    ...(customer.whatsapp === null ? {} : { w: customer.whatsapp }),
     ...(discountCode === null ? {} : { d: discountCode }),
     m: paymentMethod,
     l: lines.map((l) => [l.productId, l.variantId, l.qty] as const).sort((x, y) => (String(x) < String(y) ? -1 : String(x) > String(y) ? 1 : 0)),

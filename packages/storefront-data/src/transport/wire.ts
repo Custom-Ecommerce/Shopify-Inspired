@@ -74,6 +74,7 @@ export const WireProductVariant = z.object({
   price,
   compareAtPrice: price.nullable(),
   availability: stockStatus,
+  onlyLeft: z.number().int().positive().nullable().optional(),
   optionValues: z.array(z.string()),
   imageId: z.string().nullable(),
 });
@@ -114,6 +115,7 @@ export const WireOrderCreated = z.object({
     orderId: z.string().min(1),
     total: z.number().nonnegative(),
     checkoutUrl: z.string().min(1).nullable().optional(),
+    accessToken: z.string().min(1).nullable().optional(),
   }),
 });
 

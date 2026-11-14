@@ -1,5 +1,5 @@
 import type { OrderStockRestore } from '@markaz/contracts';
-import { cancelRefusal } from '@/lib/contracts';
+import { cancelRefusal, paidCardOrder } from '@/lib/contracts';
 import { restoreOrderStock, stockRestoreSummary, type RestoreLine } from '@/lib/order-stock';
 import { Order, writeAuditLog } from '@/lib/services';
 import { returnDiscountUse } from '@/lib/storefront/discount-service';
@@ -30,6 +30,8 @@ export interface CancelOrderInput {
 export type CancelOrderResult =
   | { outcome: 'cancelled'; order: unknown; stockRestore: OrderStockRestore }
   | { outcome: 'not_found' }
+  /** A paid card order, which stays until refunds exist. */
+  | { outcome: 'paid'; status: string }
   /** This status cannot be cancelled, or the order is already cancelled. */
   | { outcome: 'illegal'; status: string }
   /** The order moved on between the read and the write. */
@@ -39,6 +41,8 @@ interface StoredOrder {
   _id: unknown;
   orderId?: string;
   status?: unknown;
+  paymentMethod?: unknown;
+  paymentStatus?: unknown;
   items?: RestoreLine[];
   discountCode?: string | null;
   discountSnapshot?: { discountId?: string } | null;
@@ -106,6 +110,7 @@ export async function cancelOrder(input: CancelOrderInput): Promise<CancelOrderR
   if (!current) return { outcome: 'not_found' };
   const from = String(current.status ?? '');
   if (cancelRefusal(from) !== null) return { outcome: 'illegal', status: from };
+  if (paidCardOrder(current)) return input.onlyIfUnpaid ? { outcome: 'changed', status: from } : { outcome: 'paid', status: from };
 
   const now = new Date();
   const cancelled = await Order.findOneAndUpdate(
@@ -115,7 +120,8 @@ export async function cancelOrder(input: CancelOrderInput): Promise<CancelOrderR
       status: from,
       stockRestoredAt: { $exists: false },
       discountRestoredAt: { $exists: false },
-      ...(input.onlyIfUnpaid ? { paymentStatus: 'unpaid' } : {}),
+      // In the write itself, so a payment landing after the read still wins.
+      ...(input.onlyIfUnpaid ? { paymentStatus: 'unpaid' } : current.paymentMethod === 'card' ? { paymentStatus: { $ne: 'paid' } } : {}),
     },
     {
       $set: {
@@ -134,7 +140,8 @@ export async function cancelOrder(input: CancelOrderInput): Promise<CancelOrderR
     const latest = await readOrder(orderId, storeId);
     if (!latest) return { outcome: 'not_found' };
     const status = String(latest.status ?? '');
-    return status === 'cancelled' ? { outcome: 'illegal', status } : { outcome: 'changed', status };
+    if (status === 'cancelled') return { outcome: 'illegal', status };
+    return paidCardOrder(latest) && !input.onlyIfUnpaid ? { outcome: 'paid', status } : { outcome: 'changed', status };
   }
 
   // Only the winner gets here. The lines come from the order as it was cancelled.
