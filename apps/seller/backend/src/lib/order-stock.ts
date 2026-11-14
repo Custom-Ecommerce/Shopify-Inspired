@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import type { OrderStockRestore, OrderStockSkipReason } from '@markaz/contracts';
 import { Product } from '@/lib/services';
 import { revalidateStoreProduct } from '@/lib/revalidate';
-import { recordMovement } from '@/lib/storefront/stock';
+import { recordMovement, stockShownChanged } from '@/lib/storefront/stock';
 
 /*
  * EP-02 OB-3 (D-066): gives a cancelled order's units back to stock.
@@ -68,7 +68,7 @@ export async function restoreOrderStock(
   lines: readonly RestoreLine[],
 ): Promise<OrderStockRestore> {
   const result: OrderStockRestore = { restored: [], skipped: [], failed: [] };
-  const backInStock = new Set<string>();
+  const pageChanged = new Set<string>();
 
   for (const line of lines) {
     const name = lineName(line);
@@ -102,7 +102,7 @@ export async function restoreOrderStock(
 
       if (after) {
         const quantity = stockOf(after, line.variantId);
-        if (quantity !== null && quantity > 0 && quantity - qty <= 0) backInStock.add(line.productId);
+        if (quantity !== null && stockShownChanged(quantity - qty, quantity)) pageChanged.add(line.productId);
         await recordMovement(storeId, line.productId, line.variantId, quantity, qty, ORDER_CANCELLED_REASON, actorId, orderId);
         result.restored.push({ name, sku: line.sku ?? null, qty });
         continue;
@@ -117,7 +117,7 @@ export async function restoreOrderStock(
     }
   }
 
-  for (const productId of backInStock) revalidateStoreProduct(storeId, productId);
+  for (const productId of pageChanged) revalidateStoreProduct(storeId, productId);
   return result;
 }
 

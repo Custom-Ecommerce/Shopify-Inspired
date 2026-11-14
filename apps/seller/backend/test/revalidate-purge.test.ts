@@ -6,6 +6,7 @@ import { Order, Product, StockMovement, Store, AuditLog } from '@/lib/services';
 import { revalidateStore, revalidateStoreCategories, revalidateStoreProduct, settleRevalidations } from '../src/lib/revalidate';
 import { placeOrder } from '../src/lib/storefront/order-service';
 import { restoreOrderStock } from '../src/lib/order-stock';
+import { stockShownChanged } from '../src/lib/storefront/stock';
 import { restoreModeratedProduct, takedownProduct } from '../src/lib/moderation';
 import type { ParsedOrderRequest } from '../src/lib/storefront/order-request';
 
@@ -208,8 +209,34 @@ test('an order that takes the last unit purges the product', async () => {
   }
 });
 
-test('an order that leaves stock behind purges nothing', async () => {
-  const undo = stubCheckout(5);
+test('an order well above the low-stock line (20 to 19) purges nothing', async () => {
+  const undo = stubCheckout(20);
+  try {
+    await placeOrder(STORE, commerce, request());
+    assert.deepEqual(await purged(), []);
+  } finally {
+    undo();
+  }
+});
+
+for (const [before, qty, label] of [
+  [6, 1, '6 to 5, crossing into the low-stock line'],
+  [5, 1, '5 to 4, inside the line'],
+  [8, 3, '8 to 5, a larger order landing on the line'],
+] as const) {
+  test('an order taking stock ' + label + ' purges the product page', async () => {
+    const undo = stubCheckout(before);
+    try {
+      await placeOrder(STORE, commerce, request({ lines: [{ productId: PRODUCT, variantId: VARIANT, qty }] }));
+      assert.deepEqual(await purged(), [PRODUCT_TAGS]);
+    } finally {
+      undo();
+    }
+  });
+}
+
+test('an order that leaves 6 (7 to 6) purges nothing: the page shows no count above 5', async () => {
+  const undo = stubCheckout(7);
   try {
     await placeOrder(STORE, commerce, request());
     assert.deepEqual(await purged(), []);
@@ -288,14 +315,42 @@ test('a cancel that brings a variant back from zero purges the product', async (
   }
 });
 
-test('a cancel on a variant that still had stock purges nothing', async () => {
-  const undo = stubRestore({ [VARIANT]: 5 });
+test('a cancel well above the low-stock line (19 to 20) purges nothing', async () => {
+  const undo = stubRestore({ [VARIANT]: 20 });
   try {
-    await restoreOrderStock(STORE, 'order-1', 'actor', [restoreLine(PRODUCT, VARIANT, 2)]);
+    await restoreOrderStock(STORE, 'order-1', 'actor', [restoreLine(PRODUCT, VARIANT, 1)]);
     assert.deepEqual(await purged(), []);
   } finally {
     undo();
   }
+});
+
+for (const [after, qty, label] of [
+  [6, 1, '5 to 6, leaving the low-stock line'],
+  [5, 2, '3 to 5, inside the line'],
+  [9, 6, '3 to 9, a large return leaving the line'],
+] as const) {
+  test('a cancel returning stock ' + label + ' purges the product page', async () => {
+    const undo = stubRestore({ [VARIANT]: after });
+    try {
+      await restoreOrderStock(STORE, 'order-1', 'actor', [restoreLine(PRODUCT, VARIANT, qty)]);
+      assert.deepEqual(await purged(), [PRODUCT_TAGS]);
+    } finally {
+      undo();
+    }
+  });
+}
+
+test('the low-stock rule: a change matters when either side is 5 or fewer', () => {
+  assert.equal(stockShownChanged(6, 5), true);
+  assert.equal(stockShownChanged(5, 4), true);
+  assert.equal(stockShownChanged(5, 6), true);
+  assert.equal(stockShownChanged(1, 0), true);
+  assert.equal(stockShownChanged(0, 3), true);
+  assert.equal(stockShownChanged(20, 19), false);
+  assert.equal(stockShownChanged(7, 6), false);
+  assert.equal(stockShownChanged(6, 7), false);
+  assert.equal(stockShownChanged(4, 4), false);
 });
 
 test('two lines of one product coming back from zero purge it once', async () => {

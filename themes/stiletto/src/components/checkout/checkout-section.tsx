@@ -10,7 +10,6 @@ import {
   ArrowLeft,
   Building2,
   ExternalLink,
-  Globe,
   Hash,
   Mail,
   MapPin,
@@ -43,7 +42,6 @@ const createEmptyAddress = (): AddressDetails => ({
   address2: "",
   city: "",
   zip: "",
-  country: "Pakistan",
 });
 
 const inputBaseClasses =
@@ -169,7 +167,7 @@ function DiscountCodeBox({ storedCode, appliedCode, error, busy, onApply, onRemo
 
 /**
  * Reusable set of address input fields (First/Last name, Street Address,
- * Apartment, City, Zip, Country).
+ * Apartment, City, Zip). There is no Country box: stores sell in Pakistan only, and the box was never sent (CB-6).
  */
 interface AddressFieldsProps {
   idPrefix: string;
@@ -315,25 +313,6 @@ function AddressFields({ idPrefix, values, onChange, errors = {} }: AddressField
           </div>
         </div>
       </div>
-
-      <div className="space-y-1.5">
-          <label htmlFor={`${idPrefix}-country`} className={labelBaseClasses}>
-            Country *
-          </label>
-          <div className="relative flex items-center">
-            <Globe className="w-4 h-4 absolute left-3.5 text-(--text-primary)/40 pointer-events-none" />
-            <input
-              id={`${idPrefix}-country`}
-              type="text"
-              name={`${idPrefix}-country`}
-              required
-              placeholder="Pakistan"
-              value={values.country}
-              onChange={handleChange("country")}
-              className={inputBaseClasses}
-            />
-          </div>
-        </div>
     </div>
   );
 }

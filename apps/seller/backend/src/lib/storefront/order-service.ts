@@ -190,12 +190,12 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
   const orderObjectId = new Types.ObjectId().toHexString();
 
   const reserved: Reservation[] = [];
-  const soldOut = new Set<string>();
+  const pageChanged = new Set<string>();
   try {
     for (const line of lines) {
       const taken = await reserveStock(storeId, line.productId, line.variantId, line.qty, orderObjectId);
       reserved.push({ productId: line.productId, variantId: line.variantId, qty: line.qty, deducted: taken.deducted });
-      if (taken.soldOut) soldOut.add(line.productId);
+      if (taken.pageChanged) pageChanged.add(line.productId);
     }
   } catch (err) {
     await releaseAll(storeId, reserved, orderObjectId);
@@ -237,7 +237,7 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       ...(request.paymentMethod === 'card' ? { stripeSessionExpiresAt: new Date(Date.now() + CARD_SESSION_LIFETIME_MS) } : {}),
     });
     // Only once the order is saved: until then a failure would give the units back.
-    for (const productId of soldOut) revalidateStoreProduct(storeId, productId);
+    for (const productId of pageChanged) revalidateStoreProduct(storeId, productId);
     return { order, replayed: false };
   } catch (err) {
     await releaseAll(storeId, reserved, orderObjectId);

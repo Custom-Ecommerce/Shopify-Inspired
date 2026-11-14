@@ -7,11 +7,12 @@
  * Exits non-zero on the first failing check.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { boxForField, firstErrorBox, stilettoFieldErrors, toCheckoutValues } from "../src/adapters/checkout-fields";
 import type { StilettoCheckoutInput } from "../src/adapters/checkout-fields";
 import { paymentSummary, readLastOrder, rememberLastOrder, whatHappensNext } from "../src/adapters/last-order";
 
-const address = { firstName: "Sara", lastName: "Khan", address1: "House 12, Street 4", address2: "", city: "Karachi", zip: "", country: "Pakistan" };
+const address = { firstName: "Sara", lastName: "Khan", address1: "House 12, Street 4", address2: "", city: "Karachi", zip: "" };
 
 const input = (shipping: Partial<StilettoCheckoutInput["shippingAddress"]> = {}, rest: Partial<StilettoCheckoutInput> = {}): StilettoCheckoutInput => ({
   email: "",
@@ -29,6 +30,13 @@ const checks: Array<[string, () => void]> = [];
 const check = (name: string, run: () => void): void => {
   checks.push([name, run]);
 };
+
+check("the form has no Country box: it was required but never sent", () => {
+  const form = readFileSync(new URL("../src/components/checkout/checkout-section.tsx", import.meta.url), "utf8");
+  assert.equal(form.includes("-country"), false, "no Country input");
+  assert.equal(form.includes("Country *"), false, "no Country label");
+  assert.equal("country" in address, false);
+});
 
 check("a complete form has no messages", () => {
   assert.deepEqual(stilettoFieldErrors(input()), {});
