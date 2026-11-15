@@ -34,6 +34,10 @@ const FULL: TemplateVars = {
   validFor: '30 minutes',
   newEmail: 'new@example.com',
   storefrontLink: 'https://zara.markazify.com',
+  payoutAmount: 'Rs. 12,500',
+  payoutMethod: 'JazzCash',
+  payoutReference: 'JC-778812',
+  voidReason: 'Sent to the wrong account',
 };
 
 test('every template uses only variables it declares, and every declared variable is known', () => {
@@ -127,4 +131,24 @@ test('store_live renders English and Urdu with the store name and both links', (
   assert.ok(rendered.text.includes('https://zara.markazify.com'));
   assert.ok(rendered.text.includes('https://seller.markazify.com/s/1/orders/2'));
   assert.match(rendered.text, /[؀-ۿ]/);
+});
+
+test('payout_paid says how much, how and under which reference, in English then Urdu', () => {
+  const out = renderTemplate('payout_paid', FULL);
+  assert.match(out.subject, /Zara Lawn: we sent you Rs\. 12,500/);
+  for (const part of ['Rs. 12,500', 'JazzCash', 'JC-778812', 'https://seller.markazify.com/s/1/orders/2']) assert.ok(out.text.includes(part), part);
+  assert.ok(out.text.indexOf('---') < out.text.search(/[؀-ۿ]/));
+  assert.ok(out.html.includes('<a href="https://seller.markazify.com/s/1/orders/2">'));
+  assert.ok(out.whatsapp.includes('JC-778812'));
+  assert.throws(() => renderTemplate('payout_paid', { ...FULL, payoutReference: ' ' }), TemplateError);
+});
+
+test('payout_voided gives the reason, escaped in HTML and as it is in the text', () => {
+  const out = renderTemplate('payout_voided', { ...FULL, voidReason: 'Wrong <b>account</b> & amount' });
+  assert.ok(out.text.includes('Wrong <b>account</b> & amount'));
+  assert.equal(out.html.includes('<b>account</b>'), false);
+  assert.ok(out.html.includes('Wrong &lt;b&gt;account&lt;/b&gt; &amp; amount'));
+  assert.match(out.subject, /a payout of Rs\. 12,500 was cancelled/);
+  assert.match(out.text, /[؀-ۿ]/);
+  assert.throws(() => renderTemplate('payout_voided', { ...FULL, voidReason: '' }), TemplateError);
 });

@@ -28,6 +28,19 @@ import { listStateToQuery, type StoreListState } from "@/lib/stores";
 import { ledgerStateToQuery, ratesStateToQuery, type CommissionListState } from "@/lib/commission";
 import { subscriptionStateToQuery, type SubscriptionListState } from "@/lib/subscriptions";
 import { adminOverviewSchema, type AdminOverview } from "@/lib/contracts";
+import {
+  commissionReportSchema,
+  payoutBalanceListSchema,
+  payoutFullDetailsSchema,
+  payoutListSchema,
+  payoutRowSchema,
+  type CommissionReport,
+  type PayoutBalanceList,
+  type PayoutFullDetails,
+  type PayoutList,
+  type PayoutRow,
+} from "@/lib/contracts";
+import { reportQuery, type ReportPeriodValue } from "@/lib/payouts";
 import { historyParser, loose, type RateHistoryList } from "@/lib/commission-rates";
 import {
   moderationPermanentDeleteResponseSchema,
@@ -181,4 +194,70 @@ export function updateSettings(input: AdminSettingsUpdateRequest): Promise<Admin
 /** The platform's headline numbers: stores, sellers, ledger totals, and outbox health, in one call. */
 export function getOverview(signal?: AbortSignal): Promise<AdminOverview> {
   return call("/api/overview", adminOverviewSchema as Parser<AdminOverview>, { signal });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 4 EP-05.US03, US06: payouts and the commission report
+
+export function listPayoutBalances(page: number, q: string, signal?: AbortSignal): Promise<PayoutBalanceList> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (page > 1) params.set("page", String(page));
+  if (q !== "") params.set("q", q);
+  return call("/api/payouts/balances?" + params.toString(), payoutBalanceListSchema as Parser<PayoutBalanceList>, { signal });
+}
+
+export function listPayoutHistory(page: number, status: string, signal?: AbortSignal): Promise<PayoutList> {
+  const params = new URLSearchParams({ limit: "20" });
+  if (page > 1) params.set("page", String(page));
+  if (status !== "") params.set("status", status);
+  return call("/api/payouts?" + params.toString(), payoutListSchema as Parser<PayoutList>, { signal });
+}
+
+/** Records that a store was paid its whole balance. expectedBalance is the balance the operator saw. */
+export function createPayout(input: { storeId: string; expectedBalance: number; method: string; reference: string; note: string }): Promise<PayoutRow> {
+  const body = { ...input, note: input.note.trim() === "" ? null : input.note.trim(), reference: input.reference.trim() };
+  return call("/api/payouts", payoutRowSchema as Parser<PayoutRow>, { method: "POST", body: JSON.stringify(body) }, (payload) => (payload as { payout?: unknown } | null)?.payout);
+}
+
+export function voidPayout(id: string, reason: string): Promise<PayoutRow> {
+  return call(
+    "/api/payouts/" + encodeURIComponent(id) + "/void",
+    payoutRowSchema as Parser<PayoutRow>,
+    { method: "POST", body: JSON.stringify({ reason }) },
+    (payload) => (payload as { payout?: unknown } | null)?.payout,
+  );
+}
+
+/** Finish or release a payout stuck in pending_settle. */
+export function finishPayout(id: string): Promise<PayoutRow> {
+  return call(
+    "/api/payouts/" + encodeURIComponent(id) + "/finish",
+    payoutRowSchema as Parser<PayoutRow>,
+    { method: "POST" },
+    (payload) => (payload as { payout?: unknown } | null)?.payout,
+  );
+}
+
+/** The full payout account of a store. Audited by the backend on every call; the caller keeps it on screen only while needed. */
+export function fetchPayoutDetails(storeId: string): Promise<PayoutFullDetails> {
+  return call(
+    "/api/payouts/details",
+    payoutFullDetailsSchema as Parser<PayoutFullDetails>,
+    { method: "POST", body: JSON.stringify({ storeId }) },
+    (payload) => (payload as { details?: unknown } | null)?.details,
+  );
+}
+
+export function getCommissionReport(input: { storeId: string; period: ReportPeriodValue; from: string; to: string }, signal?: AbortSignal): Promise<CommissionReport> {
+  return call(
+    "/api/commission/report?" + reportQuery(input),
+    commissionReportSchema as Parser<CommissionReport>,
+    { signal },
+    (payload) => (payload as { report?: unknown } | null)?.report,
+  );
+}
+
+/** The link of the CSV download of the same report. */
+export function commissionReportCsvUrl(input: { storeId: string; period: ReportPeriodValue; from: string; to: string }): string {
+  return "/api/commission/report?" + reportQuery(input, "csv");
 }

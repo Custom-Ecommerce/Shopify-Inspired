@@ -122,6 +122,23 @@ export async function requireVerifiedEmail(ctx: AuthContext): Promise<void> {
   }
 }
 
+/**
+ * Whether the account with this id has a verified email. SB-7: an admin pays a store out, so the check is about the store
+ * owner's account, not about the signed-in session. A missing account counts as not verified.
+ */
+export async function isUserEmailVerified(userId: string): Promise<boolean> {
+  if (!mongoose.isValidObjectId(userId)) return false;
+  const user = (await User.findById(userId).select('emailVerifiedAt').lean()) as { emailVerifiedAt?: unknown } | null;
+  return Boolean(user && user.emailVerifiedAt);
+}
+
+/** The payout form of requireVerifiedEmail: 403 EMAIL_NOT_VERIFIED, worded for the operator, unless the owner is verified. */
+export async function requireUserEmailVerified(userId: string): Promise<void> {
+  if (!(await isUserEmailVerified(userId))) {
+    throw new HttpError(403, 'The seller has not verified their email address yet, so no payout can be made.', ACCOUNT_CODES.EMAIL_NOT_VERIFIED);
+  }
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Body parsing for the account routes: 400 with the field name (the standard route order)
 

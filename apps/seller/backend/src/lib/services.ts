@@ -71,6 +71,8 @@ export const NotificationOutbox = db.NotificationOutbox;
 export const SellerAlert = db.SellerAlert;
 // Sprint 4 EP-05 (D-088): the new commission ledger. The old commissionLedger is never used from the seller backend.
 export const CommissionEntry = db.CommissionEntry;
+// Sprint 4 EP-05.US03 (D-090): payouts to stores, settled against the ledger above.
+export const Payout = db.Payout;
 
 // Sprint 4 EP-08: account links, the per-request session guard, the account-route limits and the account flows.
 export const AuthToken = db.AuthToken;

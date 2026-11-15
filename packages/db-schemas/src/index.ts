@@ -42,3 +42,5 @@ export * from './models/auth-token';
 // Sprint 4 EP-05: the seller-side commission ledger (whole rupees) and the admin's rate change history.
 export * from './models/commission-entry';
 export * from './models/commission-rate-history';
+// Sprint 4 EP-05.US03: payouts to stores, settled against the commission ledger.
+export * from './models/payout';

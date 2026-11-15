@@ -439,3 +439,39 @@ Object.assign(POLICY_MATRIX, {
     delete: { actors: ['system'], fields: { system: '*' } },
   },
 });
+
+// Sprint 4 EP-05.US03, US04, US06 (D-088, D-090, D-100): payouts, the full payout account, earnings and the commission report.
+//   payouts          read: the admin's balances and history, and the seller's own payout list (only these fields; which store,
+//                    the route decides). create is making a payout and update is voiding or finishing one: admin only.
+//                    Nobody deletes a payout.
+//   payoutDetails    read: the FULL payout account of a store. Admin only, and every read is audited by the route.
+//   earnings         read: a seller's own earnings summary and entry list. An admin has no row (the admin console reads the
+//                    commission report instead), as for orders (D-067).
+//   commissionReport read: the per-store commission report and its CSV. Admin only.
+export const SELLER_PAYOUT_READABLE_FIELDS = ['amount', 'method', 'reference', 'status', 'createdAt'] as const;
+Object.assign(POLICY_MATRIX, {
+  payouts: {
+    read: { actors: ['admin', 'seller'], fields: { admin: '*', seller: SELLER_PAYOUT_READABLE_FIELDS } },
+    create: { actors: ['admin'], fields: { admin: '*' } },
+    update: { actors: ['admin'], fields: { admin: '*' } },
+    delete: { actors: [], fields: {} },
+  },
+  payoutDetails: {
+    read: { actors: ['admin'], fields: { admin: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+  earnings: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+  commissionReport: {
+    read: { actors: ['admin'], fields: { admin: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+});

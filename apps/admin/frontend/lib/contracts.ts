@@ -79,3 +79,16 @@ export type { ModerationProduct, ModerationProductList, ModerationPermanentDelet
 
 export const { adminOverviewSchema, ADMIN_OVERVIEW_NEW_SELLER_DAYS } = contracts;
 export type { AdminOverview } from "@markaz/contracts";
+
+// Sprint 4 EP-05.US03, US06: payouts and the commission report.
+export const { payoutBalanceListSchema, payoutListSchema, payoutRowSchema, payoutFullDetailsSchema, commissionReportSchema, EARNINGS_PERIODS } = contracts;
+export type {
+  CommissionReport,
+  EarningsPeriod,
+  PayoutBalanceList,
+  PayoutBalanceRow,
+  PayoutFullDetails,
+  PayoutList,
+  PayoutRow,
+  PayoutStatusValue,
+} from "@markaz/contracts";

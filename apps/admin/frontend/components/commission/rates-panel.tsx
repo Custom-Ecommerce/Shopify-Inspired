@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import type { PanelProps } from "@/components/commission/ledger-panel";
 import { RateDialog, type RateTarget } from "@/components/commission/rate-dialog";
+import { ReportDialog } from "@/components/commission/report-dialog";
 import { DataTable, TablePagination, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +21,7 @@ import { formatPercent } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
 import { useDebouncedSearch } from "@/lib/hooks/use-debounced-search";
 
-function columns(onChange: (store: AdminCommissionRateItem) => void): Array<Column<AdminCommissionRateItem>> {
+function columns(onChange: (store: AdminCommissionRateItem) => void, onReport: (store: AdminCommissionRateItem) => void): Array<Column<AdminCommissionRateItem>> {
   return [
   {
     key: "store",
@@ -52,9 +53,14 @@ function columns(onChange: (store: AdminCommissionRateItem) => void): Array<Colu
     header: "Action",
     className: "text-right",
     cell: (store) => (
-      <Button variant="outline" size="sm" onClick={() => onChange(store)} aria-label={"Change the rate of " + store.name}>
-        Change
-      </Button>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => onReport(store)} aria-label={"Commission report of " + store.name}>
+          Report
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => onChange(store)} aria-label={"Change the rate of " + store.name}>
+          Change
+        </Button>
+      </div>
     ),
   },
   ];
@@ -63,6 +69,7 @@ function columns(onChange: (store: AdminCommissionRateItem) => void): Array<Colu
 /** The platform default rate and the rate of every store, with a dialog to change either (Sprint 4 EP-05.US02). */
 export function RatesPanel({ state, go }: PanelProps) {
   const [target, setTarget] = useState<RateTarget | null>(null);
+  const [reporting, setReporting] = useState<AdminCommissionRateItem | null>(null);
   const [search, setSearch] = useDebouncedSearch(state.q, (q) => go({ ...state, q, page: 1 }));
   const { data, error, loading, refetch } = useAdminFetch((signal) => listCommissionRates(state, signal), [state.page, state.q, state.mode]);
 
@@ -135,7 +142,10 @@ export function RatesPanel({ state, go }: PanelProps) {
       ) : null}
       <DataTable
         label="Store commission rates"
-        columns={columns((store) => setTarget({ kind: "store", id: store.id, name: store.name, customRate: store.commissionMode === "custom" ? store.commissionRate : null, defaultRate }))}
+        columns={columns(
+          (store) => setTarget({ kind: "store", id: store.id, name: store.name, customRate: store.commissionMode === "custom" ? store.commissionRate : null, defaultRate }),
+          setReporting,
+        )}
         rows={data?.docs ?? []}
         rowKey={(store) => store.id}
         loading={loading}
@@ -146,6 +156,7 @@ export function RatesPanel({ state, go }: PanelProps) {
       />
 
       {data ? <TablePagination page={data.page} totalPages={data.totalPages} totalDocs={data.totalDocs} noun="store" disabled={loading} onPage={(page) => go({ ...state, page })} /> : null}
+      {reporting ? <ReportDialog store={{ id: reporting.id, name: reporting.name }} onClose={() => setReporting(null)} /> : null}
       {target ? (
         <RateDialog
           target={target}

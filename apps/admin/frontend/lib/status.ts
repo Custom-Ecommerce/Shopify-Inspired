@@ -14,6 +14,11 @@ export const STATUS_TONES: Record<string, Tone> = {
   sent: "success",
   settled: "success",
   dead: "danger",
+  // Sprint 4 EP-05.US03: payouts. pending_settle is a payout a request died on: it needs the operator.
+  paid: "success",
+  pending_settle: "warning",
+  voided: "neutral",
+  failed: "danger",
 };
 
 export function toneOf(status: string): Tone {

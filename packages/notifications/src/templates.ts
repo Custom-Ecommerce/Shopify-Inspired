@@ -23,6 +23,9 @@ export const TEMPLATE_NAMES = [
   'email_change_verify',
   // Sprint 4 EP-04.US06: the seller's store went live.
   'store_live',
+  // Sprint 4 EP-05.US03: the platform paid the seller, or took a payment back.
+  'payout_paid',
+  'payout_voided',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -46,6 +49,10 @@ export const TEMPLATE_VARIABLES = [
   'validFor',
   'newEmail',
   'storefrontLink',
+  'payoutAmount',
+  'payoutMethod',
+  'payoutReference',
+  'voidReason',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
@@ -268,8 +275,45 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'آپ کا اسٹور: {{storefrontLink}}',
       'آپ کا ڈیش بورڈ: {{dashboardLink}}',
     ],
-    whatsapp: '{{storeName}} is live: {{storefrontLink}}
-آپ کا اسٹور لائیو ہو گیا ہے۔',
+    whatsapp: '{{storeName}} is live: {{storefrontLink}}\nآپ کا اسٹور لائیو ہو گیا ہے۔',
+  },
+  payout_paid: {
+    variables: ['storeName', 'payoutAmount', 'payoutMethod', 'payoutReference', 'dashboardLink'],
+    subject: '{{storeName}}: we sent you {{payoutAmount}}',
+    en: [
+      'Good news! Markazify has paid out your earnings from {{storeName}}.',
+      '',
+      'Amount: {{payoutAmount}}',
+      'Sent by: {{payoutMethod}}',
+      'Reference: {{payoutReference}}',
+      '',
+      'See your earnings: {{dashboardLink}}',
+    ],
+    ur: [
+      'خوشخبری! Markazify نے {{storeName}} کی کمائی آپ کو ادا کر دی ہے۔',
+      'رقم: {{payoutAmount}}',
+      'ذریعہ: {{payoutMethod}}',
+      'حوالہ نمبر: {{payoutReference}}',
+      'اپنی کمائی دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Markazify paid {{payoutAmount}} to you for {{storeName}} ({{payoutMethod}}, ref {{payoutReference}}). {{dashboardLink}}\nآپ کو {{payoutAmount}} ادا کر دیے گئے ہیں۔',
+  },
+  payout_voided: {
+    variables: ['storeName', 'payoutAmount', 'voidReason', 'dashboardLink'],
+    subject: '{{storeName}}: a payout of {{payoutAmount}} was cancelled',
+    en: [
+      'The payout of {{payoutAmount}} for {{storeName}} was cancelled by Markazify.',
+      '',
+      'Reason: {{voidReason}}',
+      '',
+      'The amount is back in your balance and will be included in your next payout. See your earnings: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{storeName}} کی {{payoutAmount}} کی ادائیگی Markazify نے منسوخ کر دی ہے۔',
+      'وجہ: {{voidReason}}',
+      'یہ رقم آپ کے بیلنس میں واپس آ گئی ہے اور اگلی ادائیگی میں شامل ہو گی۔ اپنی کمائی دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'The payout of {{payoutAmount}} for {{storeName}} was cancelled: {{voidReason}}. {{dashboardLink}}\nآپ کی ادائیگی منسوخ کر دی گئی ہے۔',
   },
 };
 

@@ -327,3 +327,62 @@ export async function sendStoreLive(storeId: string): Promise<void> {
 export function notifyStoreLive(storeId: string): void {
   runAfterResponse('store_live', () => sendStoreLive(storeId));
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Payouts (Sprint 4 EP-05.US03, B9)
+
+export const PAYOUT_METHOD_LABELS: Readonly<Record<string, string>> = { bank: 'Bank transfer', jazzcash: 'JazzCash', easypaisa: 'Easypaisa' };
+
+export interface PayoutMessageFields {
+  id: string;
+  amount: number;
+  method: string;
+  reference: string;
+  voidReason?: string | null;
+}
+
+/** One email to the store owner when a payout is made. The key payout_paid:<id> makes a second call a no-op. */
+export async function sendPayoutPaid(storeId: string, payout: PayoutMessageFields): Promise<void> {
+  const store = await loadStoreNotifyInfo(storeId);
+  if (!store || store.ownerEmail === null) return;
+  await enqueueEmail({
+    template: 'payout_paid',
+    to: store.ownerEmail,
+    vars: {
+      storeName: store.name,
+      payoutAmount: notifications.formatRupees(payout.amount),
+      payoutMethod: PAYOUT_METHOD_LABELS[payout.method] ?? payout.method,
+      payoutReference: payout.reference,
+      dashboardLink: sellerDashboardLink(storeId, '/earnings') ?? DASHBOARD_FALLBACK,
+    },
+    store: storeId,
+    dedupeKey: 'payout_paid:' + payout.id,
+  });
+}
+
+/** One email to the store owner when a payout is taken back, with the admin's reason. Key payout_voided:<id>. */
+export async function sendPayoutVoided(storeId: string, payout: PayoutMessageFields): Promise<void> {
+  const store = await loadStoreNotifyInfo(storeId);
+  if (!store || store.ownerEmail === null) return;
+  await enqueueEmail({
+    template: 'payout_voided',
+    to: store.ownerEmail,
+    vars: {
+      storeName: store.name,
+      payoutAmount: notifications.formatRupees(payout.amount),
+      voidReason: payout.voidReason ?? 'No reason was given.',
+      dashboardLink: sellerDashboardLink(storeId, '/earnings') ?? DASHBOARD_FALLBACK,
+    },
+    store: storeId,
+    dedupeKey: 'payout_voided:' + payout.id,
+  });
+}
+
+/** Queued after the response, best effort: a failed email never changes the payout. */
+export function notifyPayoutPaid(storeId: string, payout: PayoutMessageFields): void {
+  runAfterResponse('payout_paid', () => sendPayoutPaid(storeId, payout));
+}
+
+export function notifyPayoutVoided(storeId: string, payout: PayoutMessageFields): void {
+  runAfterResponse('payout_voided', () => sendPayoutVoided(storeId, payout));
+}

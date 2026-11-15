@@ -1,10 +1,16 @@
 import { readChoice, readPage, readSearch } from "@/lib/list-state";
 import { PAGE_SIZE } from "@/lib/stores";
 
-export const COMMISSION_VIEWS = ["ledger", "rates", "history"] as const;
+export const COMMISSION_VIEWS = ["ledger", "rates", "history", "payouts", "payout-history"] as const;
 export type CommissionView = (typeof COMMISSION_VIEWS)[number];
 
-export const VIEW_LABELS: Record<CommissionView, string> = { ledger: "Ledger", rates: "Store rates", history: "Rate history" };
+export const VIEW_LABELS: Record<CommissionView, string> = {
+  ledger: "Ledger",
+  rates: "Store rates",
+  history: "Rate history",
+  payouts: "Payouts due",
+  "payout-history": "Payout history",
+};
 
 export const LEDGER_STATUS_VALUES = ["pending", "settled"] as const;
 export type LedgerStatusValue = (typeof LEDGER_STATUS_VALUES)[number];

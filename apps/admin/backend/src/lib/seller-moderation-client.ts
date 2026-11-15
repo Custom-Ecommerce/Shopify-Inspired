@@ -4,6 +4,14 @@ import { unwrapCjs } from '@/lib/cjs';
 // Type-only and erased at build: this app has no dependency on @markaz/contracts yet. The seller backend and the admin
 // console validate against the runtime schemas of this file.
 import type {
+  CommissionReport,
+  CreatePayoutRequest,
+  PayoutBalanceList,
+  PayoutFullDetails,
+  PayoutList,
+  PayoutRow,
+} from '../../../../../packages/contracts/src/payouts';
+import type {
   ModerationPermanentDeleteResponse,
   ModerationProduct,
   ModerationProductList,
@@ -57,7 +65,11 @@ async function send<T>(method: 'GET' | 'POST', path: string, adminId: string, in
     return payload as T;
   }
   if (response.status === 401 || response.status === 503) throw new AdminHttpError(503, label + ' is unavailable');
-  if ([403, 404, 409, 422].includes(response.status)) throw new AdminHttpError(response.status, refusalMessage(payload));
+  if ([403, 404, 409, 422].includes(response.status)) {
+    // The seller backend's own code (PAYOUT_BALANCE_CHANGED, EMAIL_NOT_VERIFIED, ...) travels with the message.
+    const code = (payload as { code?: unknown } | null)?.code;
+    throw new AdminHttpError(response.status, refusalMessage(payload), typeof code === 'string' ? code : undefined);
+  }
   throw new AdminHttpError(502, 'The seller backend could not complete the request');
 }
 
@@ -93,3 +105,35 @@ export const setSellerAccountStatus = (
   input: { userId: string; status: 'active' | 'suspended'; reason: string | null },
 ): Promise<{ userId: string; status: string; changed: boolean }> => send('POST', '/api/internal/accounts/status', adminId, input, 'Seller account control');
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 4 EP-05.US03, US06 (D-090): payouts and the commission report. The ledger and the payouts live in the seller
+// database, so each of these is one signed call to the seller backend (the same signature as moderation).
+
+const PAYOUT_LABEL = 'Payouts';
+const query = (params: Record<string, string | number | undefined>): string => {
+  const search = new URLSearchParams();
+  for (const [name, value] of Object.entries(params)) if (value !== undefined && value !== '') search.set(name, String(value));
+  const text = search.toString();
+  return text === '' ? '' : '?' + text;
+};
+
+export const listPayoutBalances = (adminId: string, params: { page?: number; limit?: number; q?: string }): Promise<PayoutBalanceList> =>
+  send('GET', '/api/internal/payouts/balances' + query(params), adminId, undefined, PAYOUT_LABEL);
+
+export const listPayoutHistory = (adminId: string, params: { page?: number; limit?: number; storeId?: string; status?: string }): Promise<PayoutList> =>
+  send('GET', '/api/internal/payouts' + query(params), adminId, undefined, PAYOUT_LABEL);
+
+export const createPayout = (adminId: string, input: CreatePayoutRequest): Promise<PayoutRow> => send('POST', '/api/internal/payouts', adminId, input, PAYOUT_LABEL);
+
+export const voidPayout = (adminId: string, input: { payoutId: string; reason: string }): Promise<PayoutRow> =>
+  send('POST', '/api/internal/payouts/void', adminId, input, PAYOUT_LABEL);
+
+export const finishPayout = (adminId: string, input: { payoutId: string }): Promise<PayoutRow> =>
+  send('POST', '/api/internal/payouts/finish', adminId, input, PAYOUT_LABEL);
+
+/** The full payout account of one store. The seller backend audits every call; this one only forwards it. */
+export const readPayoutDetails = (adminId: string, input: { storeId: string }): Promise<PayoutFullDetails> =>
+  send('POST', '/api/internal/payouts/details', adminId, input, PAYOUT_LABEL);
+
+export const readCommissionReport = (adminId: string, params: { storeId: string; period: string; from?: string; to?: string }): Promise<CommissionReport> =>
+  send('GET', '/api/internal/commission/report' + query(params), adminId, undefined, 'Commission report');
