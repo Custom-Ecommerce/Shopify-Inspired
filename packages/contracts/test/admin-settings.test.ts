@@ -79,6 +79,6 @@ test('the update answer carries the settings and the queued event, or null', () 
   assert.equal(adminSettingsUpdateResponseSchema.safeParse({ settings, queued: { eventId: 'e', revision: 0 } }).success, false);
 });
 
-test('the writable field list is the three settings the policy matrix allows, and no revision', () => {
-  assert.deepEqual([...ADMIN_SETTINGS_FIELDS], ['defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote']);
+test('the writable field list is the four settings the policy matrix allows, and no revision', () => {
+  assert.deepEqual([...ADMIN_SETTINGS_FIELDS], ['defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired']);
 });

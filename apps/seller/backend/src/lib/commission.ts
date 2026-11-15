@@ -85,7 +85,8 @@ export function commissionBase(order: LedgerOrder): number {
 const ledgerReady = (): boolean => databaseReady();
 
 const isDuplicateKey = (err: unknown): boolean => typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 11000;
-const errorName = (err: unknown): string => (err instanceof Error ? err.name + ': ' + err.message.slice(0, 200) : 'unknown');
+/** The error's class name only: a driver message can carry the connection string, so it is never logged. */
+const errorName = (err: unknown): string => (err instanceof Error ? err.name : 'unknown');
 
 interface NewEntry {
   store: unknown;

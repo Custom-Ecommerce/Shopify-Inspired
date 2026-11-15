@@ -2,11 +2,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
-import { SELLER_STORE_READABLE_FIELDS } from '@markaz/auth';
 import { authenticate } from '@/lib/auth';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
-import { assertCan, Media, Store, writeAuditLog } from '@/lib/services';
+import { assertCan, Media, SELLER_STORE_READABLE_FIELDS, Store, writeAuditLog } from '@/lib/services';
 import { plainDoc, toWire } from '@/lib/seller-scope';
 import { readAccountBody } from '@/lib/account-support';
 import { storeSettingsUpdateSchema } from '@/lib/contracts';

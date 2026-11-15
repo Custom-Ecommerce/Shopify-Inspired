@@ -1,11 +1,15 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createMongooseSyncPersistence, StaleRevisionError } from '@markaz/sync-core';
+import * as syncCoreNs from '@markaz/sync-core';
+import { unwrapCjs } from '@/lib/cjs';
 import type { SyncEnvelope } from '@markaz/sync-core';
 import { PlatformSettingsModel } from '@/lib/services';
 import { readPlatformSettings } from '../src/lib/platform-settings';
 import { quoteDelivery } from '@/lib/contracts';
 import { computeTotals } from '../src/lib/storefront/pricing';
+
+const syncCore: any = unwrapCjs(syncCoreNs);
+const { createMongooseSyncPersistence, StaleRevisionError } = syncCore;
 
 // D-098 A1: the seller backend keeps the platform settings the admin console sends, and reads them with fallbacks.
 // The model is stubbed in memory; no database.

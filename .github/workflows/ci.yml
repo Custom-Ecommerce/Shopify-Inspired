@@ -71,7 +71,7 @@ jobs:
           - { name: admin frontend, filter: "@markaz/admin-frontend" }
     env:
       # Placeholders only. The long values are fake and only satisfy "32 characters or more" checks.
-      NODE_ENV: production
+      # NODE_ENV is NOT set here: at job level it makes pnpm skip devDependencies. It is set on the build step only.
       NEXT_TELEMETRY_DISABLED: "1"
       STOREFRONT_DATA_SOURCE: remote
       STOREFRONT_REMOTE_MODE: stub
@@ -116,4 +116,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: next build
+        env:
+          NODE_ENV: production
         run: pnpm --filter "${{ matrix.app.filter }}" run build

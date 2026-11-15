@@ -4,7 +4,7 @@
   "private": true,
   "description": "Markaz monorepo — Payload CMS admin, Next.js storefront, and shared core packages.",
   "engines": {
-    "node": ">=18.20.0",
+    "node": ">=22",
     "pnpm": ">=9.0.0"
   },
   "packageManager": "pnpm@9.12.0",

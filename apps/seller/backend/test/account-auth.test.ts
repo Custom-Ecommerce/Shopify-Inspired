@@ -25,6 +25,7 @@ type Account = { role: string; accountStatus: 'active' | 'suspended' | 'blocked'
 let account: Account;
 let reads = 0;
 let stored: Record<string, any>;
+let baseHash = '';
 let audits: unknown[] = [];
 let memory: ReturnType<typeof useMemoryAuthLimits>;
 let restore: () => void = () => {};
@@ -44,7 +45,8 @@ before(async () => {
     email: (await import('../src/app/api/users/me/email/route')).POST,
     revoke: (await import('../src/app/api/users/me/sessions/revoke-others/route')).POST,
   } as Record<string, (r: NextRequest) => Promise<Response>>;
-  stored = { _id: SELLER, name: 'Ayesha', email: 'ayesha@example.com', role: 'seller', passwordHash: await hashPassword(PASSWORD), tokenVersion: 0, loginAttempts: 0, lockUntil: null };
+  baseHash = await hashPassword(PASSWORD);
+  stored = { _id: SELLER, name: 'Ayesha', email: 'ayesha@example.com', role: 'seller', passwordHash: baseHash, tokenVersion: 0, loginAttempts: 0, lockUntil: null };
 });
 
 const chain = (value: () => unknown) => {
@@ -56,7 +58,7 @@ beforeEach(() => {
   account = { role: 'seller', accountStatus: 'active', tokenVersion: 0, emailVerifiedAt: null };
   reads = 0;
   audits = [];
-  stored = { ...stored, name: 'Ayesha', email: 'ayesha@example.com', tokenVersion: 0, pendingEmail: null, emailVerifiedAt: null, phone: null };
+  stored = { ...stored, name: 'Ayesha', email: 'ayesha@example.com', passwordHash: baseHash, tokenVersion: 0, pendingEmail: null, emailVerifiedAt: null, phone: null };
   setSessionUserLoader(async () => {
     reads += 1;
     return { ...account };

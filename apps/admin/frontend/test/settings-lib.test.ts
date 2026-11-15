@@ -12,7 +12,7 @@ import {
 } from "../lib/settings";
 
 const NOW = "2026-10-11T10:00:00.000Z";
-const settings = { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, settingsRevision: 2, updatedAt: NOW };
+const settings = { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, storeApprovalRequired: false, settingsRevision: 2, updatedAt: NOW };
 const withNote = { ...settings, stripeCommissionNote: "Stripe takes its own fee." };
 
 test("the form starts from the settings, with a blank note for none and no reason", () => {

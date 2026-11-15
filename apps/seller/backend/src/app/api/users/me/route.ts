@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { Store, User } from '@markaz/db-schemas';
 import { auditAccount, NO_STORE, readAccountBody } from '@/lib/account-support';
 import { authenticate } from '@/lib/auth';
 import { accountProfileUpdateSchema } from '@/lib/contracts';
-import { assertCan } from '@/lib/services';
+import { assertCan, Store, User } from '@/lib/services';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 

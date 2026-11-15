@@ -31,11 +31,12 @@ function envRate(): number {
  * environment, then the defaults (approval off, rate 4). Each value falls back on its own. Never throws on a read failure.
  */
 export async function readPlatformSettings(): Promise<PlatformSettingsView> {
-  let doc: { storeApprovalRequired?: unknown; defaultCommissionRate?: unknown } | null = null;
+  type SettingsDoc = { storeApprovalRequired?: unknown; defaultCommissionRate?: unknown };
+  let doc: SettingsDoc | null = null;
   try {
     doc = (await PlatformSettingsModel.findOne({ globalType: PLATFORM_SETTINGS_GLOBAL_TYPE })
       .select('storeApprovalRequired defaultCommissionRate')
-      .lean()) as typeof doc;
+      .lean()) as SettingsDoc | null;
   } catch {
     doc = null;
   }

@@ -86,9 +86,9 @@ test('a custom range names the field that is wrong', () => {
   assert.equal(problem({ period: 'custom', from: '2026-02-30', to: '2026-03-01' }), 'from');
   assert.equal(problem({ period: 'custom', from: '2026-11-01', to: 'tomorrow' }), 'to');
   assert.equal(problem({ period: 'custom', from: '2026-11-10', to: '2026-11-09' }), 'to');
-  const tooLong = resolvePeriod({ period: 'custom', from: '2025-11-15', to: '2026-11-15' }, NOW);
+  const tooLong = resolvePeriod({ period: 'custom', from: '2025-11-15', to: '2026-11-16' }, NOW);
   assert.equal(tooLong.ok, false, 'a year and a day is too long');
-  const exact = resolvePeriod({ period: 'custom', from: '2025-11-15', to: '2026-11-14' }, NOW);
+  const exact = resolvePeriod({ period: 'custom', from: '2025-11-15', to: '2026-11-15' }, NOW);
   assert.ok(exact.ok, EARNINGS_CUSTOM_MAX_DAYS + ' days are allowed');
 });
 

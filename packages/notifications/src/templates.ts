@@ -335,8 +335,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'یہ پیغام {{storeName}} کی طرف سے ہے، کیونکہ آپ نے وہاں سے آرڈر کیا تھا۔',
       'ایسی ای میلز بند کرنے کے لیے یہ لنک کھولیں: {{unsubscribeLink}}',
     ],
-    whatsapp: '{{broadcastMessage}}
-{{storeName}}',
+    whatsapp: '{{broadcastMessage}}\n{{storeName}}',
   },
 };
 
@@ -461,7 +460,10 @@ export function renderTemplate(name: TemplateName, vars: TemplateVars, options: 
   const values = requireValues(name, template, vars);
 
   const subject = fillText(template.subject, values, true).slice(0, 200);
-  const text = [...template.en.map((line) => fillText(line, values, false)), '', '---', '', ...template.ur.map((line) => fillText(line, values, false))].join('\n');
+  const footer = (options.footer ?? '').trim();
+  const baseText = [...template.en.map((line) => fillText(line, values, false)), '', '---', '', ...template.ur.map((line) => fillText(line, values, false))].join('\n');
+  const text = footer ? baseText + '\n\n---\n' + footer : baseText;
+  const footerHtml = footer ? '<div dir="auto" style="margin-top:16px;color:#555">' + escapeHtml(footer).replace(/\r?\n/g, '<br>') + '</div>' : '';
   const html =
     '<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111">' +
     htmlBlock(template.en, values, false) +

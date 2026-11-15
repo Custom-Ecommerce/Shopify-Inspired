@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
 import { AuditLog, CommissionEntry, Order, PlatformSettingsModel, Store, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
+import { setSessionUserLoader } from '@/lib/session-user';
 import * as dbNs from '@markaz/db-schemas';
 import { unwrapCjs } from '@/lib/cjs';
 import {
@@ -76,6 +77,8 @@ const isDup = (doc: Record<string, any>) =>
   entries.some((e) => String(e.order) === String(doc.order) && e.type === doc.type && (e.reversesType ?? null) === (doc.reversesType ?? null));
 
 beforeEach(() => {
+  // The session guard reads the account behind each token; a stub keeps these tests off the database.
+  setSessionUserLoader(async (id) => ({ role: id === ADMIN ? 'admin' : 'seller', accountStatus: 'active', tokenVersion: 0, emailVerifiedAt: new Date() }) as any);
   entries = [];
   storeRate = {};
   defaultRate = 4;
@@ -129,7 +132,10 @@ beforeEach(() => {
   };
 });
 
-afterEach(() => restore());
+afterEach(() => {
+  restore();
+  setSessionUserLoader(null);
+});
 
 const cod = (extra: Partial<LedgerOrder> = {}): LedgerOrder => ({
   _id: ORDER_1,

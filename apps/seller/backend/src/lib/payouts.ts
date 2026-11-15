@@ -36,7 +36,8 @@ export const payoutDeps: { port: () => SettlementPort; now: () => Date } = {
   now: () => new Date(),
 };
 
-const errorName = (err: unknown): string => (err instanceof Error ? err.name + ': ' + err.message.slice(0, 200) : 'unknown');
+/** The error's class name only: a driver message can carry the connection string, so it is never logged. */
+const errorName = (err: unknown): string => (err instanceof Error ? err.name : 'unknown');
 
 /** Best effort: the payout is already made or taken back, so a failed entry is logged and never answered. */
 async function auditQuietly(action: string, payoutId: string, adminId: string, details: Record<string, unknown>): Promise<void> {

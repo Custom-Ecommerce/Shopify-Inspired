@@ -48,7 +48,7 @@ export interface AccountFlowDeps {
 
 export type AccountFlowCode = 'TOKEN_INVALID' | 'EMAIL_TAKEN';
 
-export type AccountFlowResult<T = Record<string, never>> = ({ ok: true } & T) | { ok: false; code: AccountFlowCode };
+export type AccountFlowResult<T = unknown> = ({ ok: true } & T) | { ok: false; code: AccountFlowCode };
 
 const LINK_FALLBACK = 'the link could not be built: ask the support team';
 

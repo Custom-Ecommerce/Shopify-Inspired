@@ -301,7 +301,7 @@ export async function createBroadcast(ctx: AuthContext, store: BroadcastStore, i
     // The count only: never an email address, never the message.
     await writeAuditLog('broadcast.create', 'broadcast', id, 'seller:' + ctx.userId, { storeId: store.id, recipientCount: recipients.length, queueErrors, at: now.toISOString() });
   } catch (err) {
-    console.error('[seller-backend] could not write the broadcast audit entry', err instanceof Error ? err.message : 'unknown');
+    console.error('[seller-backend] could not write the broadcast audit entry', err instanceof Error ? err.name : 'unknown');
   }
   return toRow(created);
 }
