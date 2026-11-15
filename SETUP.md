@@ -132,6 +132,7 @@ Every other script points to a file that exists.
 | Job | Call | Secret | How often |
 | --- | --- | --- | --- |
 | Email outbox retry (EP-07.US01.T02) | `POST` or `GET https://<seller backend>/api/internal/notifications/flush` | `OUTBOX_CRON_SECRET`, sent as `x-cron-secret: <secret>` or `Authorization: Bearer <secret>` | every 5 minutes |
+| Commission ledger retry (EP-05.US01) | `POST` or `GET https://<seller backend>/api/internal/commission/backfill` | `OUTBOX_CRON_SECRET`, sent like the outbox flush | every 15 minutes |
 | Trash retention | `POST https://<seller backend>/api/internal/retention` | `RETENTION_CRON_SECRET` in `x-retention-secret` | daily |
 | Sync drain (admin) | `GET https://<admin backend>/api/internal/sync/drain` | `CRON_SECRET` as a bearer token (`apps/admin/backend/vercel.json`) | every minute |
 

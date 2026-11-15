@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import type { PanelProps } from "@/components/commission/ledger-panel";
+import { RateDialog, type RateTarget } from "@/components/commission/rate-dialog";
 import { DataTable, TablePagination, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,8 @@ import { formatPercent } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
 import { useDebouncedSearch } from "@/lib/hooks/use-debounced-search";
 
-const COLUMNS: Array<Column<AdminCommissionRateItem>> = [
+function columns(onChange: (store: AdminCommissionRateItem) => void): Array<Column<AdminCommissionRateItem>> {
+  return [
   {
     key: "store",
     header: "Store",
@@ -45,10 +47,22 @@ const COLUMNS: Array<Column<AdminCommissionRateItem>> = [
     cell: (store) =>
       store.effectiveRate === null ? <Badge variant="danger">Unresolved</Badge> : <span className="font-medium tabular-nums">{formatPercent(store.effectiveRate)}</span>,
   },
-];
+  {
+    key: "actions",
+    header: "Action",
+    className: "text-right",
+    cell: (store) => (
+      <Button variant="outline" size="sm" onClick={() => onChange(store)} aria-label={"Change the rate of " + store.name}>
+        Change
+      </Button>
+    ),
+  },
+  ];
+}
 
-/** The platform default rate and the rate that applies to every store. Read only: rates change through the store and settings writes. */
+/** The platform default rate and the rate of every store, with a dialog to change either (Sprint 4 EP-05.US02). */
 export function RatesPanel({ state, go }: PanelProps) {
+  const [target, setTarget] = useState<RateTarget | null>(null);
   const [search, setSearch] = useDebouncedSearch(state.q, (q) => go({ ...state, q, page: 1 }));
   const { data, error, loading, refetch } = useAdminFetch((signal) => listCommissionRates(state, signal), [state.page, state.q, state.mode]);
 
@@ -57,6 +71,7 @@ export function RatesPanel({ state, go }: PanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
+  const defaultRate = data?.defaultRate ?? 4;
   const filtered = state.q !== "" || state.mode !== "";
 
   return (
@@ -68,7 +83,12 @@ export function RatesPanel({ state, go }: PanelProps) {
             <CardDescription>Applies to every store whose rate source is the platform default.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold tabular-nums tracking-tight text-foreground">{data.defaultRate === null ? "Not set" : formatPercent(data.defaultRate)}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-3xl font-bold tabular-nums tracking-tight text-foreground">{data.defaultRate === null ? "Not set" : formatPercent(data.defaultRate)}</p>
+              <Button variant="outline" size="sm" onClick={() => setTarget({ kind: "platform", defaultRate })}>
+                Change default rate
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : loading ? (
@@ -115,7 +135,7 @@ export function RatesPanel({ state, go }: PanelProps) {
       ) : null}
       <DataTable
         label="Store commission rates"
-        columns={COLUMNS}
+        columns={columns((store) => setTarget({ kind: "store", id: store.id, name: store.name, customRate: store.commissionMode === "custom" ? store.commissionRate : null, defaultRate }))}
         rows={data?.docs ?? []}
         rowKey={(store) => store.id}
         loading={loading}
@@ -126,6 +146,16 @@ export function RatesPanel({ state, go }: PanelProps) {
       />
 
       {data ? <TablePagination page={data.page} totalPages={data.totalPages} totalDocs={data.totalDocs} noun="store" disabled={loading} onPage={(page) => go({ ...state, page })} /> : null}
+      {target ? (
+        <RateDialog
+          target={target}
+          onClose={() => setTarget(null)}
+          onDone={() => {
+            setTarget(null);
+            refetch();
+          }}
+        />
+      ) : null}
     </>
   );
 }

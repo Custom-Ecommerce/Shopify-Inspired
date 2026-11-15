@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { HistoryPanel } from "@/components/commission/history-panel";
 import { LedgerPanel } from "@/components/commission/ledger-panel";
 import { RatesPanel } from "@/components/commission/rates-panel";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ export function CommissionPageView() {
         ))}
       </div>
 
-      {state.view === "ledger" ? <LedgerPanel state={state} go={go} /> : <RatesPanel state={state} go={go} />}
+      {state.view === "ledger" ? <LedgerPanel state={state} go={go} /> : state.view === "rates" ? <RatesPanel state={state} go={go} /> : <HistoryPanel state={state} go={go} />}
     </div>
   );
 }

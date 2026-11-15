@@ -28,6 +28,7 @@ import { listStateToQuery, type StoreListState } from "@/lib/stores";
 import { ledgerStateToQuery, ratesStateToQuery, type CommissionListState } from "@/lib/commission";
 import { subscriptionStateToQuery, type SubscriptionListState } from "@/lib/subscriptions";
 import { adminOverviewSchema, type AdminOverview } from "@/lib/contracts";
+import { historyParser, loose, type RateHistoryList } from "@/lib/commission-rates";
 import {
   moderationPermanentDeleteResponseSchema,
   moderationProductListSchema,
@@ -145,6 +146,22 @@ export function listCommissionLedger(state: CommissionListState, signal?: AbortS
 
 export function listCommissionRates(state: CommissionListState, signal?: AbortSignal): Promise<AdminCommissionRates> {
   return call("/api/commission/rates?" + ratesStateToQuery(state, true), adminCommissionRatesSchema as Parser<AdminCommissionRates>, { signal });
+}
+
+/** Sprint 4 EP-05.US02: sets (rate) or clears (rate null) a store's custom commission rate. A reason is required. */
+export function changeStoreRate(id: string, input: { rate: number | null; reason: string }): Promise<Record<string, unknown>> {
+  const url = "/api/commission/stores/" + encodeURIComponent(id);
+  const init = input.rate === null ? { method: "DELETE", body: JSON.stringify({ reason: input.reason }) } : { method: "PUT", body: JSON.stringify(input) };
+  return call(url, loose, init);
+}
+
+/** Changes the platform default commission rate. A reason is required. */
+export function changeDefaultRate(input: { rate: number; reason: string }): Promise<Record<string, unknown>> {
+  return call("/api/commission/default", loose, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function listRateHistory(page: number, signal?: AbortSignal): Promise<RateHistoryList> {
+  return call("/api/commission/history?page=" + page, historyParser, { signal });
 }
 
 export function listSubscriptionPlans(state: SubscriptionListState, signal?: AbortSignal): Promise<AdminSubscriptionPlanList> {

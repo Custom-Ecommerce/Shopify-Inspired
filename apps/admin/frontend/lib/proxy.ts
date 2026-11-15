@@ -41,7 +41,7 @@ function fail(status: number, error: string, extra: Record<string, unknown> = {}
 }
 
 export interface ProxyInit {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: string;
 }
 
