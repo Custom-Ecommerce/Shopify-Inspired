@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server';
 import { AuditLog, Media, Order, PlatformSettingsModel, Product, signSession, Store, User } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { settleRevalidations } from '../src/lib/revalidate';
+import { settleAdminCalls } from '../src/lib/admin-go-live';
 import { newStoreStatus } from '../src/lib/workspace';
 import { computeTotals, priceCart } from '../src/lib/storefront/pricing';
 
@@ -281,6 +282,81 @@ test('go-live with approval required keeps the store pending and says it waits f
   assert.deepEqual([body.status, body.waitingForApproval], ['pending', true]);
   assert.equal(stores[STORE_A]!.status, 'pending');
   assert.ok(stores[STORE_A]!.goLiveRequestedAt instanceof Date);
+});
+
+// D-098 A2: the admin backend is told once, and a failure never fails go-live.
+const ADMIN_PATH = '/api/internal/stores/go-live';
+const withAdminBridge = (): (() => void) => {
+  process.env.ADMIN_BACKEND_API_URL = 'http://admin.test';
+  process.env.SYNC_KEY_ID_CURRENT = 'k-test';
+  process.env.SYNC_SECRET_CURRENT = 'y'.repeat(40);
+  return () => {
+    delete process.env.ADMIN_BACKEND_API_URL;
+    delete process.env.SYNC_KEY_ID_CURRENT;
+    delete process.env.SYNC_SECRET_CURRENT;
+  };
+};
+
+test('go-live tells the admin backend once; a repeat go-live is a no-op and does not call again', async () => {
+  const done = withAdminBridge();
+  try {
+    complete();
+    assert.equal((await goLive()).status, 200);
+    await settleAdminCalls();
+    assert.equal(purges.filter((url) => url.includes(ADMIN_PATH)).length, 1);
+    const again = await goLive();
+    assert.equal(again.status, 200);
+    await settleAdminCalls();
+    assert.equal(purges.filter((url) => url.includes(ADMIN_PATH)).length, 1);
+    assert.equal(stores[STORE_A]!.status, 'active');
+  } finally {
+    done();
+  }
+});
+
+test('an approval request is reported to the admin backend as pending', async () => {
+  const done = withAdminBridge();
+  const original = globalThis.fetch;
+  let sent: { body: any; headers: Record<string, string> } | null = null;
+  globalThis.fetch = (async (url: string, init: any) => {
+    if (String(url).includes(ADMIN_PATH)) sent = { body: JSON.parse(init.body), headers: init.headers };
+    return new Response('{}', { status: 200 });
+  }) as typeof fetch;
+  try {
+    complete();
+    approvalRequired = true;
+    await goLive();
+    await settleAdminCalls();
+    assert.ok(sent);
+    assert.equal(sent!.body.status, 'pending');
+    assert.equal(sent!.body.storeId, STORE_A);
+    assert.ok(sent!.headers['x-sync-signature']);
+  } finally {
+    globalThis.fetch = original;
+    done();
+  }
+});
+
+test('a failing admin call does not fail go-live', async () => {
+  const done = withAdminBridge();
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    if (String(url).includes(ADMIN_PATH)) throw new Error('connect ECONNREFUSED');
+    return new Response('{}', { status: 200 });
+  }) as typeof fetch;
+  const log = console.error;
+  console.error = () => {};
+  try {
+    complete();
+    const res = await goLive();
+    await settleAdminCalls();
+    assert.equal(res.status, 200);
+    assert.equal(stores[STORE_A]!.status, 'active');
+  } finally {
+    console.error = log;
+    globalThis.fetch = original;
+    done();
+  }
 });
 
 test('a new store starts pending in every environment (CO-26)', () => {

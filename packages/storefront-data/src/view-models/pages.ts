@@ -10,6 +10,13 @@ export interface StoreVM {
   announcement: string | null;
   currency: string;
   locale: string;
+  /** Sprint 4 SB-5: what the seller saved in settings. Optional, so a theme or a demo that has none still works. */
+  description?: string | null;
+  bannerUrl?: string | null;
+  contact?: { phone: string | null; whatsapp: string | null; email: string | null; address: string | null; city: string | null };
+  social?: { facebook: string | null; instagram: string | null; tiktok: string | null; whatsapp: string | null } | null;
+  /** The seller's delivery time text, for example "2 to 4 days". */
+  deliveryEstimate?: string | null;
 }
 
 export interface NavLinkVM {

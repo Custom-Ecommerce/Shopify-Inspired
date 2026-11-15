@@ -49,10 +49,16 @@ function failureMessage(f: CheckoutFailure): string {
  * the fields the store keeps, prices the cart on the server, places the order and moves to the order page. Each message
  * goes on the box it is about. Billing address is shown for design parity and is not sent.
  */
-export function useStilettoCheckout() {
+export function useStilettoCheckout(shippingCity = "") {
   const router = useRouter();
   const { isEmpty, lines, discountCode, setDiscountCode } = useCart();
-  const { quote, status: quoteStatus } = useCartQuote();
+  // The quote follows the shipping city once the shopper has paused typing, so each letter is not a request.
+  const [quotedCity, setQuotedCity] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setQuotedCity(shippingCity.trim().length >= 2 ? shippingCity.trim() : ""), 600);
+    return () => clearTimeout(timer);
+  }, [shippingCity]);
+  const { quote, status: quoteStatus } = useCartQuote({ city: quotedCity });
   const checkout = useCheckout();
   const [fieldErrors, setFieldErrors] = useState<StilettoFieldErrors>({});
   // Goes up whenever messages appear, so the form can move the shopper to the first one.
@@ -141,6 +147,8 @@ export function useStilettoCheckout() {
     cardAvailable,
     subtotal,
     deliveryCharges,
+    /** True while the delivery charge is for a city the shopper has not given yet (the store's default rate). */
+    deliveryCityKnown: quotedCity !== "",
     discount,
     /** What the shopper entered, accepted or not. */
     storedCode: discountCode,

@@ -1,5 +1,5 @@
 import type { StorefrontDiscountError, StorefrontDiscountRefusal, StorefrontQuoteTotals } from '@markaz/contracts';
-import { cityKey, discountRefusalMessage, toWholeRupees } from '@/lib/contracts';
+import { deliveryRateFor, discountRefusalMessage, quoteDelivery, toWholeRupees } from '@/lib/contracts';
 
 /**
  * Server-side cart and order pricing. Pure: no database, and the time is passed in. Prices come from the catalog rows the
@@ -36,11 +36,7 @@ export interface PricingStore {
 
 /** The store's rate for this parcel: the city's override when there is one, else the default rate. */
 export function storeRateFor(store: PricingStore): number {
-  if (store.city && store.cityRates) {
-    const override = store.cityRates[cityKey(store.city)];
-    if (typeof override === 'number' && Number.isFinite(override) && override >= 0) return override;
-  }
-  return store.deliveryRate;
+  return deliveryRateFor(store.deliveryRate, store.cityRates, store.city);
 }
 
 /** A Discount row as pricing reads it. */
@@ -87,20 +83,17 @@ export function roundMoney(value: number): number {
 export function computeTotals(lines: PricingLine[], store: PricingStore, discount = 0): StorefrontQuoteTotals {
   const subtotal = roundMoney(lines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0));
 
-  const threshold = store.freeDeliveryThreshold;
   const itemsAfterDiscount = Math.max(0, subtotal - discount);
-  const freeDelivery = threshold !== null && threshold > 0 && itemsAfterDiscount >= threshold;
-
-  const rate = storeRateFor(store);
-  let deliveryCharges = 0;
-  if (!freeDelivery) {
-    for (const line of lines) {
-      const charge = line.deliveryCharge ?? rate;
-      if (charge > deliveryCharges) deliveryCharges = charge;
-    }
-  }
+  const quote = quoteDelivery({
+    defaultRate: store.deliveryRate,
+    freeOver: store.freeDeliveryThreshold,
+    cityRates: store.cityRates,
+    city: store.city,
+    itemsAfterDiscount,
+    lineCharges: lines.map((line) => line.deliveryCharge),
+  });
   // Whole rupees (D-004), as the contract requires of an older product or store whose rate still has decimals.
-  deliveryCharges = toWholeRupees(deliveryCharges) ?? 0;
+  const deliveryCharges = toWholeRupees(quote.charge) ?? 0;
 
   const afterDiscount = Math.max(0, subtotal - discount);
   return { subtotal, deliveryCharges, discount, total: roundMoney(afterDiscount + deliveryCharges) };

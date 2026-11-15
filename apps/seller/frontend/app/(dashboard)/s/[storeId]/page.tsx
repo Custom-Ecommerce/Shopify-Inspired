@@ -183,12 +183,7 @@ export default async function DashboardOverviewPage({
       </div>
 
       {/* ── Onboarding checklist (only shows until dismissed or complete) */}
-      <OnboardingChecklist
-        hasProducts={totalProducts > 0}
-        hasDomain={!!store.domain}
-        hasLogo={!!fullStore?.storefront?.logo}
-        hasWhatsApp={!!fullStore?.storefront?.whatsappNumber}
-      />
+      <OnboardingChecklist />
 
       {/* ── Metric tiles ──────────────────────────────────────────────── */}
       {/*

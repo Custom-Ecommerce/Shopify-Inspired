@@ -33,6 +33,7 @@ const FULL: TemplateVars = {
   actionLink: 'https://seller.markazify.com/reset-password?token=abc',
   validFor: '30 minutes',
   newEmail: 'new@example.com',
+  storefrontLink: 'https://zara.markazify.com',
 };
 
 test('every template uses only variables it declares, and every declared variable is known', () => {
@@ -118,4 +119,12 @@ test('Sprint 4 account emails: the link is an anchor, values are escaped, and Ur
   const change = renderTemplate('email_change_verify', FULL);
   assert.ok(change.text.includes('new@example.com'));
   assert.throws(() => renderTemplate('password_reset', { ...FULL, actionLink: '' }), TemplateError);
+});
+
+test('store_live renders English and Urdu with the store name and both links', () => {
+  const rendered = renderTemplate('store_live', FULL);
+  assert.match(rendered.subject, /Zara Lawn is live/);
+  assert.ok(rendered.text.includes('https://zara.markazify.com'));
+  assert.ok(rendered.text.includes('https://seller.markazify.com/s/1/orders/2'));
+  assert.match(rendered.text, /[؀-ۿ]/);
 });

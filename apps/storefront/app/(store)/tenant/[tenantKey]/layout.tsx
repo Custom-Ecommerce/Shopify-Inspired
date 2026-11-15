@@ -1,6 +1,7 @@
 import "../../../globals.css";
 import React from 'react';
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { StorefrontProvider } from '@markaz/storefront-data/client';
 import { loadStoreChrome } from '@markaz/storefront-data/server';
@@ -15,16 +16,43 @@ import { PreviewBanner } from '@/components/preview-banner';
 /** Fallback when a store has no free-delivery threshold configured. */
 const DEFAULT_FREE_DELIVERY_THRESHOLD = 5000;
 
+/** The address this request came in on (the store's own host), for absolute links in the head tags. Null when it cannot be read. */
+async function requestOrigin(): Promise<string | null> {
+  try {
+    const h = await headers();
+    const host = h.get('x-forwarded-host') ?? h.get('host');
+    if (!host) return null;
+    const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+    return proto + '://' + host;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Every page of a store is titled with the store's name, not the platform's (GAP 13). resolveStore is wrapped in React
- * cache(), so this shares the layout's own read: no extra request. A page with its own title (product pages, from their
- * SEO fields) overrides this one.
+ * The head tags of every page of a store (GAP 13, Sprint 4 SB-5): the title and description from the store's SEO fields
+ * (the name and profile description when empty), Open Graph and Twitter tags, and robots. A store that is not live, and
+ * any Preview, is noindex (D-078). resolveStore is wrapped in React cache(), so this shares the layout's own read. A page
+ * with its own title (product pages) overrides the title; the home page adds the canonical link.
  */
 export async function generateMetadata({ params }: { params: Promise<{ tenantKey: string }> }): Promise<Metadata> {
   const { tenantKey } = await params;
   const result = await resolveStore(tenantKey, 'slug');
-  if (result.outcome !== 'ok') return {};
-  return { title: { absolute: result.store.name } };
+  if (result.outcome !== 'ok') return { robots: { index: false, follow: false } };
+  const store = result.store;
+  const title = store.seo.title ?? store.name;
+  const description = store.seo.description ?? store.profile?.description ?? undefined;
+  const image = store.seo.imageUrl ?? store.branding.bannerUrl ?? store.branding.logoUrl ?? null;
+  const origin = await requestOrigin();
+  const live = store.status === 'active' && result.previewToken === null;
+  return {
+    title: { absolute: title },
+    description,
+    ...(origin ? { metadataBase: new URL(origin) } : {}),
+    openGraph: { type: 'website', siteName: store.name, title, description, ...(image ? { images: [{ url: image }] } : {}) },
+    twitter: { card: image ? 'summary_large_image' : 'summary', title, description, ...(image ? { images: [image] } : {}) },
+    robots: live ? { index: true, follow: true } : { index: false, follow: false },
+  };
 }
 
 export default async function TenantLayout({
@@ -56,7 +84,7 @@ export default async function TenantLayout({
     storeName: store.name,
     storeStatus: store.status,
     checkoutEnabled: store.status === 'active',
-    noindex: false,
+    noindex: store.status !== 'active' || result.previewToken !== null,
     effectiveTheme,
     commerce: {
       currency: store.commerce.currency,
@@ -66,9 +94,13 @@ export default async function TenantLayout({
       deliveryRate: store.commerce.deliveryRate,
       freeDeliveryThreshold: store.commerce.freeDeliveryThreshold ?? DEFAULT_FREE_DELIVERY_THRESHOLD,
       whatsappNumber: store.commerce.whatsappNumber,
+      deliveryEstimate: store.commerce.deliveryEstimate ?? null,
     },
+    profile: store.profile,
+    social: store.social,
     branding: {
       logoUrl: store.branding.logoUrl,
+      bannerUrl: store.branding.bannerUrl ?? null,
       announcementText: store.branding.announcementText,
       socialProofEnabled: store.features.socialProofEnabled,
     },

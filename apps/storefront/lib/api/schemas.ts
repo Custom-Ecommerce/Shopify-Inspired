@@ -39,6 +39,7 @@ export const StorefrontStore = z.object({
   isThemeDemo: z.boolean(),
   branding: z.object({
     logoUrl: z.string().nullable(),
+    bannerUrl: z.string().nullable().optional(),
     announcementText: nullableText,
     heroBanners: z.array(
       z.object({
@@ -61,7 +62,18 @@ export const StorefrontStore = z.object({
     deliveryRate: price,
     freeDeliveryThreshold: price.nullable(),
     whatsappNumber: nullableText,
+    deliveryEstimate: nullableText.optional(),
   }),
+  profile: z
+    .object({
+      description: nullableText,
+      contactPhone: nullableText,
+      contactEmail: nullableText,
+      address: nullableText,
+      city: nullableText,
+    })
+    .optional(),
+  social: z.object({ facebook: nullableText, instagram: nullableText, tiktok: nullableText, whatsapp: nullableText }).optional(),
   features: z.object({
     socialProofEnabled: z.boolean(),
   }),

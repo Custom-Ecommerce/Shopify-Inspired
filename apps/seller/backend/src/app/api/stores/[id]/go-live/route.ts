@@ -3,22 +3,17 @@ import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { loadOwnedStore, requireSellerActor, SETTINGS_SELECT } from '@/lib/owned-store';
+import { notifyAdminStoreGoLive } from '@/lib/admin-go-live';
+import { notifyStoreLive } from '@/lib/notifications';
+import { readPlatformSettings } from '@/lib/platform-settings';
 import { revalidateStore } from '@/lib/revalidate';
-import { assertCan, PLATFORM_SETTINGS_GLOBAL_TYPE, PlatformSettingsModel, Store, writeAuditLog } from '@/lib/services';
+import { assertCan, Store, writeAuditLog } from '@/lib/services';
 import { storeReadiness } from '@/lib/store-readiness';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
-
-/** D-095: false (the default, and when the setting is missing) means go-live is immediate. */
-async function approvalRequired(): Promise<boolean> {
-  const settings = (await PlatformSettingsModel.findOne({ globalType: PLATFORM_SETTINGS_GLOBAL_TYPE }).select('storeApprovalRequired').lean()) as {
-    storeApprovalRequired?: unknown;
-  } | null;
-  return settings?.storeApprovalRequired === true;
-}
 
 /**
  * POST /api/stores/:id/go-live (Sprint 4 EP-04.US06, D-094, D-095).
@@ -53,7 +48,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     const now = new Date();
-    const waiting = await approvalRequired();
+    const waiting = (await readPlatformSettings()).storeApprovalRequired;
+    // A repeat while the request is already waiting is a no-op: nothing is written and the admin console is not called again.
+    if (waiting && (doc as { goLiveRequestedAt?: unknown }).goLiveRequestedAt) {
+      return NextResponse.json({ status: 'pending', waitingForApproval: true, message: 'Thank you. Your store goes live as soon as our team approves it.' }, { headers: NO_STORE });
+    }
     const updated = await Store.findOneAndUpdate(
       { _id: storeId, owner: ctx.userObjectId, status: 'pending' },
       waiting ? { $set: { goLiveRequestedAt: now } } : { $set: { status: 'active', statusChangedAt: now, goLiveRequestedAt: now } },
@@ -63,7 +62,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       .lean();
     if (!updated) throw new HttpError(409, 'The store changed meanwhile. Reload and try again.');
 
-    if (!waiting) revalidateStore(storeId);
+    if (!waiting) {
+      revalidateStore(storeId);
+      notifyStoreLive(storeId);
+    }
+    notifyAdminStoreGoLive({ storeId, status: waiting ? 'pending' : 'active', goLiveRequestedAt: now.toISOString() });
     try {
       await writeAuditLog(waiting ? 'store.go_live_requested' : 'store.go_live', 'store', storeId, 'seller:' + ctx.userId, { at: now.toISOString() });
     } catch (err) {

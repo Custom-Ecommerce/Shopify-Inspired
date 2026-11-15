@@ -21,6 +21,8 @@ export const TEMPLATE_NAMES = [
   'password_changed',
   'email_verify',
   'email_change_verify',
+  // Sprint 4 EP-04.US06: the seller's store went live.
+  'store_live',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -43,6 +45,7 @@ export const TEMPLATE_VARIABLES = [
   'actionLink',
   'validFor',
   'newEmail',
+  'storefrontLink',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
@@ -50,7 +53,7 @@ export type TemplateVars = Partial<Record<TemplateVariable, string>>;
 /** Variables whose value is several lines (one order line each); HTML keeps the line breaks. */
 const MULTILINE: ReadonlySet<string> = new Set(['items']);
 /** Variables that are links: in HTML they become a link, and only http(s) is accepted. */
-const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink', 'actionLink']);
+const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink', 'actionLink', 'storefrontLink']);
 
 export interface TemplateDefinition {
   /** The variables the texts may use; every one must have a value when rendering. */
@@ -250,6 +253,23 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'جب تک آپ کنفرم نہیں کرتے، پرانا ای میل ہی آپ کا لاگ اِن رہے گا۔ یہ لنک صرف ایک بار اور {{validFor}} تک چلے گا۔',
     ],
     whatsapp: 'Confirm {{newEmail}} for {{appName}}: {{actionLink}}\nنیا ای میل کنفرم کریں: {{actionLink}}',
+  },
+  store_live: {
+    variables: ['storeName', 'storefrontLink', 'dashboardLink'],
+    subject: '{{storeName}} is live',
+    en: [
+      'Congratulations! {{storeName}} is now live and open to shoppers.',
+      '',
+      'Your store: {{storefrontLink}}',
+      'Your dashboard: {{dashboardLink}}',
+    ],
+    ur: [
+      'مبارک ہو! {{storeName}} اب لائیو ہے اور خریداروں کے لیے کھلا ہے۔',
+      'آپ کا اسٹور: {{storefrontLink}}',
+      'آپ کا ڈیش بورڈ: {{dashboardLink}}',
+    ],
+    whatsapp: '{{storeName}} is live: {{storefrontLink}}
+آپ کا اسٹور لائیو ہو گیا ہے۔',
   },
 };
 

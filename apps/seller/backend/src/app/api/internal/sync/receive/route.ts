@@ -19,6 +19,7 @@ parseSyncEnvelope,
 } from '@markaz/platform-kit/sync-schemas';
 import type { SyncGroup } from '@markaz/platform-kit/sync-schemas';
 import { connectSellerDb } from '@/lib/mongo';
+import { notifyStoreLive } from '@/lib/notifications';
 import { revalidateStore } from '@/lib/revalidate';
 
 /**
@@ -135,6 +136,8 @@ return fail(503, 'Seller database unavailable');
 
 const persistence = createMongooseSyncPersistence();
 const changedStores = new Set<string>();
+// A store an admin made active: its owner is told once (the store_live key makes a repeat a no-op).
+const activatedStores = new Set<string>();
 
 async function applyEnvelope(envelope: SyncEnvelope): Promise<SyncOutcome> {
 const stored = await persistence.load(envelope.entity, envelope.entityId, envelope.group);
@@ -155,6 +158,7 @@ JSON.stringify({ eventId: envelope.eventId, group: envelope.group, strays }),
 try {
 await persistence.save({ ...envelope, data });
 if (envelope.entity === 'store') changedStores.add(envelope.entityId);
+if (envelope.entity === 'store' && envelope.group === 'governance' && (data as { status?: unknown }).status === 'active') activatedStores.add(envelope.entityId);
 return 'applied';
 } catch (err) {
 if (err instanceof StaleRevisionError) return 'stale';
@@ -167,6 +171,7 @@ const result = await processBatch(batch, applyEnvelope);
 
 // A store's status and identity come from the admin side and reach shoppers here, when this database has them.
 for (const storeId of changedStores) revalidateStore(storeId);
+for (const storeId of activatedStores) notifyStoreLive(storeId);
 
 return NextResponse.json(result, { status: 200 });
 }

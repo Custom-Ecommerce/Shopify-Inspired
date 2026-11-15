@@ -297,3 +297,60 @@ export type StoreGoLiveResponse = z.output<typeof storeGoLiveResponseSchema>;
 export const themeListResponseSchema = z.object({
   themes: z.array(z.object({ slug: z.string(), name: z.string(), tier: z.string(), previewImage: z.string().nullable(), isDefaultForNewStores: z.boolean() })),
 });
+
+// ------------------------------------------------------------------------------------------------- delivery quote
+
+export interface DeliveryQuoteInput {
+  defaultRate: number;
+  /** Free when the items after discount reach this. null or 0: no offer. */
+  freeOver: number | null;
+  /** The store's rate per city, keyed by cityKey(). */
+  cityRates?: Readonly<Record<string, number>>;
+  /** The shipping city; unlisted or missing pays the default rate. */
+  city?: string | null;
+  itemsAfterDiscount: number;
+  /** Each line's own charge, or null to use the store's rate. Default: one line without its own charge. */
+  lineCharges?: ReadonlyArray<number | null>;
+}
+
+export interface DeliveryQuote {
+  /** The store's rate for this city (the override when set, else the default). */
+  rate: number;
+  free: boolean;
+  /** Whole rupees: 0 when free, else the highest line charge (an order ships as one parcel). */
+  charge: number;
+}
+
+/** The store's rate for a city: its override when there is one, else the default rate. */
+export function deliveryRateFor(defaultRate: number, cityRates: Readonly<Record<string, number>> | undefined, city: string | null | undefined): number {
+  if (city && cityRates) {
+    const override = cityRates[cityKey(city)];
+    if (typeof override === 'number' && Number.isFinite(override) && override >= 0) return override;
+  }
+  return defaultRate;
+}
+
+/**
+ * The ONE delivery rule (D-094): the server prices carts and orders with it and the settings screen previews with it, so the
+ * preview can never disagree with checkout.
+ */
+export function quoteDelivery(input: DeliveryQuoteInput): DeliveryQuote {
+  const rate = deliveryRateFor(input.defaultRate, input.cityRates, input.city);
+  const threshold = input.freeOver;
+  const free = threshold !== null && threshold > 0 && input.itemsAfterDiscount >= threshold;
+  let charge = 0;
+  if (!free) {
+    for (const own of input.lineCharges ?? [null]) {
+      const line = own ?? rate;
+      if (line > charge) charge = line;
+    }
+  }
+  return { rate, free, charge: Math.max(0, Math.round(charge)) };
+}
+
+/** The city rows of the settings screen as the map quoteDelivery reads. */
+export function cityRateMap(rows: ReadonlyArray<{ city: string; rate: number }>): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const row of rows) map[cityKey(row.city)] = row.rate;
+  return map;
+}

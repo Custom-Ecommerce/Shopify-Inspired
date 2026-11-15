@@ -16,7 +16,24 @@ const socialIconMap = {
   site: MoveUpRight,
 } as const;
 
+/** A store's own social links, in the order they are shown. Only the ones the seller saved. */
+function liveSocialLinks(social: NonNullable<FooterProps["config"]["social"]>) {
+  const entries: Array<{ key: string; label: string; href: string | null; icon: keyof typeof socialIconMap }> = [
+    { key: "facebook", label: "Facebook", href: social.facebook, icon: "facebook" },
+    { key: "instagram", label: "Instagram", href: social.instagram, icon: "instagram" },
+    { key: "tiktok", label: "TikTok", href: social.tiktok, icon: "site" },
+    { key: "whatsapp", label: "WhatsApp", href: social.whatsapp, icon: "site" },
+  ];
+  return entries.filter((entry): entry is typeof entry & { href: string } => entry.href !== null);
+}
+
+/** wa.me wants digits only. */
+const whatsappLink = (number: string) => "https://wa.me/" + number.replace(/\D/g, "");
+
 export function Footer({ config }: FooterProps) {
+  const contact = config.contact;
+  const live = contact !== undefined;
+  const hasContact = live && Boolean(contact.phone || contact.whatsapp || contact.email || contact.address || contact.city);
   return (
     <footer data-source="partial" data-source-note="Brand name and logo come from the store; links, newsletter and copy are theme content." data-section="footer" className="bg-[var(--surface-inverse)] text-primary-foreground py-20 px-margin-mobile md:px-margin-desktop">
       <div className="max-w-container-max w-full mx-auto">
@@ -26,6 +43,31 @@ export function Footer({ config }: FooterProps) {
             <div className="h-13 w-20 md:h-18 md:w-25"> 
               <BrandDisplay brand={config.brand} />
             </div>
+
+            {config.brand.description ? (
+              <p className="font-sans text-[14px] leading-relaxed opacity-80 max-w-[420px] whitespace-pre-line">{config.brand.description}</p>
+            ) : null}
+
+            {hasContact && contact ? (
+              <ul data-section="contact" className="flex flex-col gap-2 font-sans text-[13px] opacity-90">
+                {contact.phone ? (
+                  <li>
+                    <a href={"tel:" + contact.phone} className="hover:underline">Call {contact.phone}</a>
+                  </li>
+                ) : null}
+                {contact.whatsapp ? (
+                  <li>
+                    <a href={whatsappLink(contact.whatsapp)} target="_blank" rel="noopener noreferrer" className="hover:underline">WhatsApp {contact.whatsapp}</a>
+                  </li>
+                ) : null}
+                {contact.email ? (
+                  <li>
+                    <a href={"mailto:" + contact.email} className="hover:underline">{contact.email}</a>
+                  </li>
+                ) : null}
+                {contact.address || contact.city ? <li>{[contact.address, contact.city].filter(Boolean).join(", ")}</li> : null}
+              </ul>
+            ) : null}
 
             <ul className="flex flex-col gap-5 mt-2">
               {footerDictionary.navLinks.map((link) => (
@@ -78,14 +120,25 @@ export function Footer({ config }: FooterProps) {
             </form>
 
             <div className="flex items-center gap-6 mt-16">
-              {footerDictionary.socialLinks.map(({ platform, href }) => {
-                const Icon = socialIconMap[platform];
-                return (
-                  <Link key={platform} href={href} className="opacity-80 hover:opacity-100 transition-opacity">
-                    <Icon size={20} />
-                  </Link>
-                );
-              })}
+              {live
+                ? config.social
+                  ? liveSocialLinks(config.social).map(({ key, label, href, icon }) => {
+                      const Icon = socialIconMap[icon];
+                      return (
+                        <a key={key} href={href} target="_blank" rel="noopener noreferrer" aria-label={label} className="opacity-80 hover:opacity-100 transition-opacity">
+                          <Icon size={20} />
+                        </a>
+                      );
+                    })
+                  : null
+                : footerDictionary.socialLinks.map(({ platform, href }) => {
+                    const Icon = socialIconMap[platform];
+                    return (
+                      <Link key={platform} href={href} className="opacity-80 hover:opacity-100 transition-opacity">
+                        <Icon size={20} />
+                      </Link>
+                    );
+                  })}
             </div>
           </div>
         </div>

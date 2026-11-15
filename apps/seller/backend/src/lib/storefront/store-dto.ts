@@ -46,7 +46,8 @@ async function mediaUrl(ref: unknown, storeId: unknown): Promise<string | null> 
 export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | 'pending' = 'active') {
   const sf = record(store.storefront);
   const pay = record(store.paymentSettings);
-  const [logoUrl, seoImageUrl] = await Promise.all([mediaUrl(sf.logo, store._id), mediaUrl(sf.seoImage, store._id)]);
+  const [logoUrl, bannerUrl, seoImageUrl] = await Promise.all([mediaUrl(sf.logo, store._id), mediaUrl(sf.banner, store._id), mediaUrl(sf.seoImage, store._id)]);
+  const social = record(sf.social);
 
   return storefrontStoreSchema.parse({
     id: String(store._id),
@@ -57,6 +58,7 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
     isThemeDemo: store.isThemeDemo === true,
     branding: {
       logoUrl,
+      bannerUrl,
       announcementText: text(sf.announcementText),
       // No source for banners yet: the storefront renders none.
       heroBanners: [],
@@ -71,7 +73,16 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
       deliveryRate: amount(sf.deliveryRate) ?? 0,
       freeDeliveryThreshold: amount(sf.freeDeliveryThreshold),
       whatsappNumber: text(sf.whatsappNumber),
+      deliveryEstimate: text(sf.deliveryEstimate),
     },
+    profile: {
+      description: text(sf.description),
+      contactPhone: text(sf.contactPhone),
+      contactEmail: text(sf.contactEmail),
+      address: text(sf.address),
+      city: text(sf.city),
+    },
+    social: { facebook: text(social.facebook), instagram: text(social.instagram), tiktok: text(social.tiktok), whatsapp: text(social.whatsapp) },
     features: { socialProofEnabled: false },
     theme: { activeTheme: text(sf.activeTheme) },
   });

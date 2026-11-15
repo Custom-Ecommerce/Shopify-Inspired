@@ -296,3 +296,34 @@ export function notifyOrderStatus(storeId: string, order: unknown, status: strin
   if (!STATUS_EMAIL_TEMPLATES[status]) return;
   runAfterResponse('order_status', () => sendOrderStatus(storeId, order, status));
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Store live (Sprint 4 EP-04.US06, B5)
+
+/** The storefront of a store: <slug>.<STOREFRONT_URL host>. */
+export function storefrontHomeLink(slug: string): string | null {
+  const root = baseUrl(process.env.STOREFRONT_URL);
+  if (root === null || slug === '') return null;
+  return root.protocol + '//' + slug + '.' + root.host.replace(/^www\./, '');
+}
+
+/** One email to the owner when the store goes live. The key store_live:<id> makes a second call a no-op. */
+export async function sendStoreLive(storeId: string): Promise<void> {
+  const store = await loadStoreNotifyInfo(storeId);
+  if (!store || store.ownerEmail === null) return;
+  await enqueueEmail({
+    template: 'store_live',
+    to: store.ownerEmail,
+    vars: {
+      storeName: store.name,
+      storefrontLink: storefrontHomeLink(store.slug) ?? 'your store address',
+      dashboardLink: sellerDashboardLink(storeId, '') ?? DASHBOARD_FALLBACK,
+    },
+    store: storeId,
+    dedupeKey: 'store_live:' + storeId,
+  });
+}
+
+export function notifyStoreLive(storeId: string): void {
+  runAfterResponse('store_live', () => sendStoreLive(storeId));
+}

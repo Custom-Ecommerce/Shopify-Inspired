@@ -1,4 +1,4 @@
-import { Store, SyncOutbox } from '@markaz/db-schemas';
+import { PLATFORM_SETTINGS_GLOBAL_TYPE, PlatformSettingsModel, Store, SyncOutbox } from '@markaz/db-schemas';
 import { SYNC_GROUP_ALLOWLISTS, filterToAllowlist, isAllowlistedPath } from '@markaz/platform-kit';
 import type { OutboxRecord, SyncEnvelope, SyncPersistence } from './index';
 
@@ -45,6 +45,50 @@ const STORE_REVISION_FIELDS: Readonly<Record<string, string>> = {
 governance: 'govRevision',
 operations: 'opsRevision',
 };
+
+/** The one platform settings document (admin -> seller, group settings). Its revision is settingsRevision. */
+function isPlatformSettings(entity: string, group: string): boolean {
+return entity === 'platform' && group === 'settings';
+}
+
+async function loadPlatformRevision(): Promise<number | null> {
+const doc = await PlatformSettingsModel.findOne({ globalType: PLATFORM_SETTINGS_GLOBAL_TYPE })
+.select({ settingsRevision: 1 })
+.lean<Record<string, unknown> | null>();
+if (!doc) return null;
+return typeof doc.settingsRevision === 'number' ? doc.settingsRevision : 0;
+}
+
+/**
+* Idempotent upsert guarded by settingsRevision: an older or equal revision never overwrites a newer one. A missing
+* document is created once (setOnInsert), so two racing first deliveries cannot make two documents.
+*/
+async function savePlatformSettings(envelope: SyncEnvelope): Promise<void> {
+const { entity, entityId, group, revision } = envelope;
+const allowlist = allowlistFor(group);
+const { data } = filterToAllowlist(envelope.data, allowlist);
+if (hasUnsafeKey(data)) throw new UnsafeSyncPayloadError();
+const set = toSetPaths(allowlist, data);
+set.settingsRevision = revision;
+
+const guarded = await PlatformSettingsModel.updateOne(
+{
+globalType: PLATFORM_SETTINGS_GLOBAL_TYPE,
+$or: [{ settingsRevision: { $lt: revision } }, { settingsRevision: { $exists: false } }, { settingsRevision: null }],
+},
+{ $set: set },
+{ runValidators: true },
+);
+if (guarded.matchedCount === 1) return;
+
+const existing = await PlatformSettingsModel.exists({ globalType: PLATFORM_SETTINGS_GLOBAL_TYPE });
+if (existing) throw new StaleRevisionError(entity, entityId, group, revision);
+await PlatformSettingsModel.updateOne(
+{ globalType: PLATFORM_SETTINGS_GLOBAL_TYPE },
+{ $setOnInsert: { globalType: PLATFORM_SETTINGS_GLOBAL_TYPE, ...set } },
+{ upsert: true },
+);
+}
 
 const OBJECT_ID = /^[0-9a-fA-F]{24}$/;
 const MAX_PAYLOAD_DEPTH = 32;
@@ -113,6 +157,7 @@ return out;
 export function createMongooseSyncPersistence(): SyncPersistence {
 return {
 async load(entity: string, entityId: string, group: string): Promise<number | null> {
+if (isPlatformSettings(entity, group)) return loadPlatformRevision();
 const field = revisionFieldFor(entity, group);
 if (!OBJECT_ID.test(entityId)) return null;
 
@@ -126,6 +171,7 @@ return typeof value === 'number' ? value : 0;
 },
 
 async save(envelope: SyncEnvelope): Promise<void> {
+if (isPlatformSettings(envelope.entity, envelope.group)) return savePlatformSettings(envelope);
 const { entity, entityId, group, revision } = envelope;
 const field = revisionFieldFor(entity, group);
 if (!OBJECT_ID.test(entityId)) throw new SyncEntityNotFoundError(entity, entityId);

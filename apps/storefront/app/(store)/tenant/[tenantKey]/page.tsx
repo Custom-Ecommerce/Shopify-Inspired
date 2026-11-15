@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { loadHomePage } from "@markaz/storefront-data/server";
 import { resolveTransport } from "@/lib/sources";
 import { getTenantTheme } from "@/lib/themes";
+
+/** The home page is the store's canonical address; the layout's metadataBase makes it absolute. */
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 /** The live store's home page, rendered by the store's theme from the store's own catalogue. */
 export default async function TenantPage({

@@ -1,114 +1,158 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Check, Loader2 } from "lucide-react";
 import { Surface } from "@/components/shared/Surface";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { Check } from "lucide-react";
 import { useActiveStoreId, useStoreHref } from "@/lib/dashboard-context";
+import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
+import type { StoreReadiness } from "@markaz/contracts/store-settings";
 
-export function OnboardingChecklist({
-  hasProducts,
-  hasDomain,
-  hasLogo,
-  hasWhatsApp,
-}: {
-  hasProducts: boolean;
-  hasDomain: boolean;
-  hasLogo: boolean;
-  hasWhatsApp: boolean;
-}) {
+/** Where each readiness item is fixed. Settings tabs are /store?tab=<tab>; the rest are their own pages. */
+export function readinessHref(tab: string, href: (path?: string) => string): string {
+  if (tab === "products") return href("/products/new");
+  if (tab === "account") return href("/account");
+  return href("/store?tab=" + encodeURIComponent(tab));
+}
+
+type Chip = { label: string; tone: "warning" | "success" | "neutral" };
+
+/** The status chip: a pending store is "Not live yet", or "Waiting for approval" once the owner asked. */
+export function statusChip(status: string, waiting: boolean): Chip {
+  if (status === "active") return { label: "Live", tone: "success" };
+  if (status === "pending") return waiting ? { label: "Waiting for approval", tone: "warning" } : { label: "Not live yet", tone: "neutral" };
+  return { label: status.charAt(0).toUpperCase() + status.slice(1), tone: "neutral" };
+}
+
+const CHIP_TONE: Record<Chip["tone"], string> = {
+  success: "bg-success/15 text-success",
+  warning: "bg-warning/15 text-foreground",
+  neutral: "bg-muted text-muted-foreground",
+};
+
+/**
+ * Sprint 4 EP-04.US06 (D-094): the setup card on the dashboard. Progress and items come from GET .../readiness, each item
+ * links to the tab or page that fixes it, and "Go live" asks the server (which refuses a store that is not ready). The card
+ * is not shown once the store is live.
+ */
+export function OnboardingChecklist() {
   const storeId = useActiveStoreId();
   const href = useStoreHref();
-  // Per-store dismissal (Blueprint §6.7): dismissing the guide for one store
-  // must not hide it for the seller's other stores.
-  const dismissKey = `markaz-onboarding-dismissed:${storeId}`;
-  const [dismissed, setDismissed] = useState(true);
+  const storeFetch = useStoreFetch();
+  const [readiness, setReadiness] = useState<StoreReadiness | null>(null);
+  const [waiting, setWaiting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ error: boolean; text: string } | null>(null);
+  const [resend, setResend] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await storeFetch(`/api/proxy/stores/${encodeURIComponent(storeId)}/readiness`, { cache: "no-store" });
+      if (!res.ok) return;
+      setReadiness((await res.json()) as StoreReadiness);
+    } catch {
+      // The card is a helper: when it cannot load, the dashboard simply goes without it.
+    }
+  }, [storeFetch, storeId]);
 
   useEffect(() => {
-    setDismissed(localStorage.getItem(dismissKey) === "true");
-  }, [dismissKey]);
+    void load();
+  }, [load]);
 
-  const steps = [
-    { done: hasProducts, label: "Add your first product", cta: "Add Product", href: href("/products/new") },
-    { done: hasDomain, label: "Connect a custom domain", cta: "Connect Domain", href: href("/domain") },
-    { done: hasLogo, label: "Upload a store logo", cta: "Add Logo", href: href("/store") },
-    { done: hasWhatsApp, label: "Add a WhatsApp number", cta: "Add WhatsApp", href: href("/store") },
-  ];
-  const completedCount = steps.filter((s) => s.done).length;
+  if (readiness === null || readiness.status === "active") return null;
 
-  if (dismissed || completedCount === steps.length) return null;
+  const items = readiness.items;
+  const done = items.filter((item) => item.ok).length;
+  const chip = statusChip(readiness.status, waiting);
 
-  function dismiss() {
-    localStorage.setItem(dismissKey, "true");
-    setDismissed(true);
+  async function goLive() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const res = await storeFetch(`/api/proxy/stores/${encodeURIComponent(storeId)}/go-live`, { method: "POST" });
+      const data = (await res.json().catch(() => null)) as { status?: string; waitingForApproval?: boolean; message?: string; error?: string } | null;
+      if (!res.ok) {
+        setNotice({ error: true, text: data?.error ?? "Your store could not go live." });
+        await load();
+        return;
+      }
+      if (data?.waitingForApproval) setWaiting(true);
+      setNotice({ error: false, text: data?.message ?? "Done." });
+      await load();
+    } catch {
+      setNotice({ error: true, text: "Could not reach the server. Please try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendLink() {
+    setResend("Sending…");
+    try {
+      const res = await fetch("/api/auth/resend-verification", { method: "POST" });
+      setResend(res.ok ? "Sent. Check your inbox." : res.status === 429 ? "You asked a few times already. Try again in an hour." : "Could not send the link. Try again.");
+    } catch {
+      setResend("Could not reach the server. Try again.");
+    }
   }
 
   return (
-    <Surface
-      variant="clay"
-      level={2}
-      radius="2xl"
-      className="border-l-4 border-l-primary p-5 sm:p-6"
-    >
-      <div className="mb-4 flex items-start justify-between">
-        <div>
-          <h2 className="font-heading text-base font-semibold text-foreground sm:text-lg">
-            Store Setup Guide
-          </h2>
+    <Surface variant="clay" level={2} radius="2xl" className="border-l-4 border-l-primary p-5 sm:p-6">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-heading text-base font-semibold text-foreground sm:text-lg">Get your store ready</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Complete these steps to get your store ready for customers.
+            {done} of {items.length} done. Finish the steps, then go live.
           </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={dismiss} className="-mr-1 -mt-1">
-          Dismiss
-        </Button>
+        <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", CHIP_TONE[chip.tone])}>{chip.label}</span>
       </div>
 
-      <Progress
-        value={(completedCount / steps.length) * 100}
-        className="mb-5 h-2"
-      />
+      <Progress value={items.length === 0 ? 0 : (done / items.length) * 100} className="mb-5 h-2" />
 
-      <div className="flex flex-col gap-3">
-        {steps.map((step, i) => (
-          <div key={step.label} className="flex items-center gap-3">
-            {/* Step dot: semantic tokens instead of bg-green-100 */}
+      <ul className="flex flex-col gap-3">
+        {items.map((item, index) => (
+          <li key={item.key} className="flex items-center gap-3">
             <span
-              className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium",
-                step.done
-                  ? "bg-success/15 text-success"
-                  : "bg-muted text-muted-foreground"
-              )}
+              className={cn("flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium", item.ok ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}
               aria-hidden="true"
             >
-              {step.done ? <Check className="size-3.5" strokeWidth={2.5} /> : i + 1}
+              {item.ok ? <Check className="size-3.5" strokeWidth={2.5} /> : index + 1}
             </span>
-
-            <p
-              className={cn(
-                "flex-1 text-sm",
-                step.done ? "text-muted-foreground line-through" : "font-medium text-foreground"
-              )}
-            >
-              {step.label}
-            </p>
-
-            {!step.done && (
-              <Button
-                size="sm"
-                variant={i === 0 ? "clay" : "clay-soft"}
-                render={<Link href={step.href} />}
-                className="shrink-0"
-              >
-                {step.cta}
-              </Button>
-            )}
-          </div>
+            <div className="min-w-0 flex-1">
+              <p className={cn("text-sm", item.ok ? "text-muted-foreground line-through" : "font-medium text-foreground")}>{item.label}</p>
+              {item.key === "email" && !item.ok && resend ? <p className="text-xs text-muted-foreground">{resend}</p> : null}
+            </div>
+            {!item.ok ? (
+              item.key === "email" ? (
+                <Button size="sm" variant="clay-soft" className="min-h-9 shrink-0" onClick={() => void resendLink()}>
+                  Send link
+                </Button>
+              ) : (
+                <Button size="sm" variant={index === 0 ? "clay" : "clay-soft"} render={<Link href={readinessHref(item.tab, href)} />} className="min-h-9 shrink-0">
+                  Fix this
+                </Button>
+              )
+            ) : null}
+          </li>
         ))}
+      </ul>
+
+      {notice ? (
+        <p role={notice.error ? "alert" : "status"} className={cn("mt-4 text-sm", notice.error ? "text-destructive" : "text-foreground")}>
+          {notice.text}
+        </p>
+      ) : null}
+
+      <div className="mt-5">
+        <Button className="min-h-11 w-full sm:w-auto" disabled={busy || !readiness.ready || waiting} aria-busy={busy} onClick={() => void goLive()}>
+          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+          {waiting ? "Waiting for approval" : "Go live"}
+        </Button>
+        {!readiness.ready ? <p className="mt-2 text-xs text-muted-foreground">Finish every step above to go live.</p> : null}
       </div>
     </Surface>
   );

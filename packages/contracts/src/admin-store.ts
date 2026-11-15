@@ -23,6 +23,7 @@ export const adminStoreListItemSchema = z.object({
   commissionMode: z.enum(COMMISSION_MODES),
   owner: z.object({ id: objectIdSchema, name: z.string(), email: z.string() }).nullable(),
   statusChangedAt: isoDate.nullable(),
+  goLiveRequestedAt: isoDate.nullable().optional(),
   createdAt: isoDate,
 });
 

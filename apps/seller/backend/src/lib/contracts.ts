@@ -149,5 +149,7 @@ export const {
   maskAccountNumber,
   matchPakistanCity,
   cityKey,
+  quoteDelivery,
+  deliveryRateFor,
   STORE_READINESS_ITEMS,
 } = contracts;

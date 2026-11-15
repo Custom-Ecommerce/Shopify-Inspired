@@ -27,4 +27,4 @@ export async function loadOwnedStore(request: NextRequest, ctx: AuthContext, id:
   return doc;
 }
 
-export const SETTINGS_SELECT = 'name slug status owner storefront paymentSettings +payoutDetails updatedAt';
+export const SETTINGS_SELECT = 'name slug status owner storefront paymentSettings +payoutDetails goLiveRequestedAt updatedAt';

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 /*
  * Sprint 4 EP-08.US04.T02: the seller's own account. Three forms (profile, password, email) and "Sign out of all other
@@ -240,6 +241,81 @@ function SessionsCard() {
   );
 }
 
+type PrefKey = "emailNewOrder" | "emailLowStock";
+type Prefs = Record<PrefKey, boolean>;
+
+const PREF_ROWS: Array<{ key: PrefKey; label: string; text: string }> = [
+  { key: "emailNewOrder", label: "New order emails", text: "An email each time a customer places an order." },
+  { key: "emailLowStock", label: "Low stock emails", text: "An email when a product is running low or out of stock." },
+];
+
+/** Sprint 4 EP-07.US03.T03: the two email switches. In-app alerts cannot be switched off. Each switch saves at once. */
+function NotificationPrefsCard() {
+  const [prefs, setPrefs] = useState<Prefs | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const form = useSubmit();
+
+  const load = useCallback(async () => {
+    setLoadError(false);
+    try {
+      const res = await fetch("/api/account/notification-prefs", { cache: "no-store" });
+      const data = (await res.json().catch(() => null)) as { prefs?: Partial<Prefs> } | null;
+      if (!res.ok || !data?.prefs) throw new Error(String(res.status));
+      setPrefs({ emailNewOrder: data.prefs.emailNewOrder !== false, emailLowStock: data.prefs.emailLowStock !== false });
+    } catch {
+      setLoadError(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function change(key: PrefKey, on: boolean) {
+    if (prefs === null) return;
+    const before = prefs;
+    setPrefs({ ...prefs, [key]: on });
+    const done = (await form.run("/api/account/notification-prefs", "PATCH", { [key]: on }, "Saved.")) as { prefs?: Partial<Prefs> } | null;
+    if (done === null) setPrefs(before);
+    else if (done.prefs) setPrefs({ emailNewOrder: done.prefs.emailNewOrder !== false, emailLowStock: done.prefs.emailLowStock !== false });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Email notifications</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">Alerts inside your dashboard are always on. Choose which ones also reach your inbox.</p>
+        {loadError ? (
+          <FormAlert tone="error">
+            Could not load your email settings.{" "}
+            <button type="button" className="font-medium underline" onClick={() => void load()}>
+              Try again
+            </button>
+          </FormAlert>
+        ) : prefs === null ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Loading…
+          </p>
+        ) : (
+          PREF_ROWS.map((row) => (
+            <div key={row.key} className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <Label htmlFor={row.key}>{row.label}</Label>
+                <p className="text-sm text-muted-foreground">{row.text}</p>
+              </div>
+              <Switch id={row.key} checked={prefs[row.key]} disabled={form.busy} onCheckedChange={(on) => void change(row.key, on)} aria-label={row.label} />
+            </div>
+          ))
+        )}
+        {form.feedback ? <FormAlert tone={form.feedback.tone}>{form.feedback.text}</FormAlert> : null}
+        {Object.values(form.fieldErrors)[0] ? <FormAlert tone="error">{Object.values(form.fieldErrors)[0]}</FormAlert> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AccountPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -289,6 +365,7 @@ export default function AccountPage() {
           <ProfileForm me={me} onSaved={(next) => setMe({ ...me, ...next })} />
           <PasswordForm />
           <EmailForm me={me} onRequested={(pending) => setMe({ ...me, pendingEmail: pending })} />
+          <NotificationPrefsCard />
           <SessionsCard />
         </>
       )}

@@ -97,6 +97,21 @@ export function Footer(props: StoreLayoutProps) {
                 {store?.description ||
                   "Fresh products from local producers, delivered directly to your front door, daily."}
               </p>
+              {store?.contact?.phone || store?.contact?.whatsapp ? (
+                <p className="text-[length:var(--mu-text-small)] text-[var(--mu-color-ink-inverse-muted)] leading-relaxed">
+                  {store.contact.phone ? (
+                    <a href={"tel:" + store.contact.phone} className="underline underline-offset-4 hover:text-white">
+                      {store.contact.phone}
+                    </a>
+                  ) : null}
+                  {store.contact.phone && store.contact.whatsapp ? " · " : null}
+                  {store.contact.whatsapp ? (
+                    <a href={"https://wa.me/" + String(store.contact.whatsapp).replace(/\D/g, "")} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-white">
+                      WhatsApp
+                    </a>
+                  ) : null}
+                </p>
+              ) : null}
             </div>
 
             {/* Col 2: Quick Links */}
