@@ -10,6 +10,7 @@ import { useActiveStoreId } from "@/lib/dashboard-context";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import type { StoreSettings } from "@markaz/contracts/store-settings";
 import { DeliveryTab } from "./DeliveryTab";
+import { MessagesTab } from "./MessagesTab";
 import { PaymentsTab } from "./PaymentsTab";
 import { ProfileTab } from "./ProfileTab";
 import { SeoTab } from "./SeoTab";
@@ -22,6 +23,7 @@ export const SETTINGS_TABS = [
   { value: "payments", label: "Payments" },
   { value: "theme", label: "Theme" },
   { value: "seo", label: "SEO & Social" },
+  { value: "messages", label: "Messages" },
 ] as const;
 
 type TabValue = (typeof SETTINGS_TABS)[number]["value"];
@@ -144,6 +146,7 @@ export function StoreSettingsView() {
           {tab === "payments" ? <PaymentsTab settings={settings} save={save} onDirty={onDirty} /> : null}
           {tab === "theme" ? <ThemeTab settings={settings} save={save} onDirty={onDirty} /> : null}
           {tab === "seo" ? <SeoTab settings={settings} save={save} onDirty={onDirty} /> : null}
+          {tab === "messages" ? <MessagesTab settings={settings} save={save} onDirty={onDirty} /> : null}
         </>
       )}
     </div>

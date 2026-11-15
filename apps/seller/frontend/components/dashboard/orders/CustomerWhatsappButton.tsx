@@ -3,7 +3,10 @@
 import type { DashboardOrderDetail } from "@markaz/contracts";
 import { MessageCircle } from "lucide-react";
 import { sellerToCustomerWhatsappLink } from "@markaz/notifications/whatsapp";
+import { useEffect, useState } from "react";
+import type { StoreSettings } from "@markaz/contracts/store-settings";
 import { useDashboard } from "@/lib/dashboard-context";
+import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 
 /**
  * EP-07.US01.T05: "Message customer on WhatsApp" on the order page, for confirmed, dispatched (with courier and tracking
@@ -12,6 +15,26 @@ import { useDashboard } from "@/lib/dashboard-context";
  */
 export function CustomerWhatsappButton({ order }: { order: DashboardOrderDetail }) {
   const { activeStore } = useDashboard();
+  const storeFetch = useStoreFetch();
+  // EP-07.US02.T02: the seller's own WhatsApp text from the store settings. Until it is read, or when there is none, the
+  // platform text is used.
+  const [override, setOverride] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await storeFetch(`/api/proxy/stores/${encodeURIComponent(activeStore.id)}/settings`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { settings?: StoreSettings };
+        if (!cancelled) setOverride(data.settings?.messages?.whatsappTemplate ?? null);
+      } catch {
+        // The platform text is used.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storeFetch, activeStore.id]);
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN_URL || "localhost:3000";
   const protocol = root.includes("localhost") ? "http" : "https";
   const trackingLink = activeStore.slug ? `${protocol}://${activeStore.slug}.${root}/track?order=${encodeURIComponent(order.orderId)}` : null;
@@ -28,6 +51,7 @@ export function CustomerWhatsappButton({ order }: { order: DashboardOrderDetail 
       trackingLink,
     },
     activeStore.name,
+    override,
   );
   if (href === null) return null;
 

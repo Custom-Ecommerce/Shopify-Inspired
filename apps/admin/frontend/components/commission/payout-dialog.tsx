@@ -7,12 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createPayout, fetchPayoutDetails } from "@/lib/api/client";
 import type { PayoutBalanceRow, PayoutFullDetails } from "@/lib/contracts";
 import { useAdminMutation } from "@/lib/hooks/use-admin-mutation";
-import { NOTE_MAX, PAYOUT_METHODS, PAYOUT_METHOD_LABELS, REFERENCE_MAX, describePayout, formatRupees, payoutFormIssues, type PayoutFormIssues } from "@/lib/payouts";
+import { NOTE_MAX, PAYOUT_METHOD_LABELS, REFERENCE_MAX, describePayout, formatRupees, payoutFormIssues, type PayoutFormIssues } from "@/lib/payouts";
 
 /**
  * Sprint 4 EP-05.US03 (D-088, D-090): record that a store was paid its whole balance. Two steps: the transfer details, then a
@@ -21,7 +20,7 @@ import { NOTE_MAX, PAYOUT_METHODS, PAYOUT_METHOD_LABELS, REFERENCE_MAX, describe
  * state only, never in storage, and is gone when the dialog closes.
  */
 export function PayoutDialog({ row, onClose, onDone }: { row: PayoutBalanceRow; onClose: () => void; onDone: () => void }) {
-  const [method, setMethod] = useState<string>(row.payoutMethod ?? "bank");
+  const method: string = row.payoutMethod ?? "";
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
   const [issues, setIssues] = useState<PayoutFormIssues>({});
@@ -133,14 +132,8 @@ export function PayoutDialog({ row, onClose, onDone }: { row: PayoutBalanceRow; 
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="payout-method">Sent by</Label>
-            <Select id="payout-method" value={method} aria-invalid={issues.method !== undefined} onChange={(event) => setMethod(event.target.value)}>
-              {PAYOUT_METHODS.map((value) => (
-                <option key={value} value={value}>
-                  {PAYOUT_METHOD_LABELS[value]}
-                </option>
-              ))}
-            </Select>
+            <Label htmlFor="payout-method">Sent by (the seller&apos;s saved method)</Label>
+            <Input id="payout-method" readOnly value={PAYOUT_METHOD_LABELS[method as keyof typeof PAYOUT_METHOD_LABELS] ?? method} aria-invalid={issues.method !== undefined} />
             {issues.method !== undefined ? (
               <p role="alert" className="text-sm text-destructive">
                 {issues.method}

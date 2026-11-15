@@ -71,6 +71,8 @@ export interface EnqueueInput {
   order?: string | null;
   /** Unique when set: a second enqueue with the same key writes nothing and returns the first row. */
   dedupeKey?: string | null;
+  /** The store's own footer, added to the email (EP-07.US02.T02). Only order emails to customers pass it. */
+  footer?: string | null;
 }
 
 export interface OutboxOptions {
@@ -117,7 +119,7 @@ export async function enqueueNotification(model: NotificationOutboxModel, input:
     const to = typeof input.to === 'string' ? input.to.trim() : '';
     if (to === '' || to.length > 254 || !EMAIL_SHAPE.test(to)) return { outcome: 'no_recipient' };
 
-    const rendered = renderTemplate(input.template, input.vars);
+    const rendered = renderTemplate(input.template, input.vars, { footer: input.footer ?? null });
     const now = (options.now ?? (() => new Date()))();
     const dedupeKey = input.dedupeKey ? input.dedupeKey : undefined;
 

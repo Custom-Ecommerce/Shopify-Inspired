@@ -58,3 +58,5 @@ export * from './account';
 export * from './store-settings';
 // Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
 export * from './payouts';
+// Sprint 4 EP-07.US04: customers and email broadcasts.
+export * from './broadcast';

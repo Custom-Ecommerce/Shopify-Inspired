@@ -5,6 +5,7 @@ import type { EnqueueInput, EnqueueResult, NotificationOutboxModel, TemplateName
 import { unwrapCjs } from '@/lib/cjs';
 import { readNotificationPrefs } from '@/lib/contracts';
 import { NotificationOutbox, SellerAlert, Store, User } from '@/lib/services';
+import { readMessages } from '@/lib/store-settings';
 
 // The package is CommonJS, read through the default object like the other workspace packages (see services.ts).
 const notifications: typeof notificationsNs = unwrapCjs(notificationsNs);
@@ -49,8 +50,8 @@ const startNow = (run: () => Promise<void>): void => {
 };
 
 /** Queues one email (see @markaz/notifications enqueueNotification). Never throws. */
-export function enqueueEmail(input: EnqueueInput): Promise<EnqueueResult> {
-  return notifications.enqueueNotification(outboxModel(), input, { schedule: startNow });
+export function enqueueEmail(input: EnqueueInput, options: { sendNow?: boolean } = {}): Promise<EnqueueResult> {
+  return notifications.enqueueNotification(outboxModel(), input, { schedule: startNow, ...(options.sendNow === undefined ? {} : { sendNow: options.sendNow }) });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -90,10 +91,17 @@ export interface StoreNotifyInfo {
   ownerEmail: string | null;
   emailNewOrder: boolean;
   emailLowStock: boolean;
+  /** The store's own footer for the emails to its customers (EP-07.US02.T02), or null. */
+  emailFooter: string | null;
 }
 
 export async function loadStoreNotifyInfo(storeId: string): Promise<StoreNotifyInfo | null> {
-  const store = (await Store.findById(storeId).select('name slug owner').lean()) as { name?: unknown; slug?: unknown; owner?: unknown } | null;
+  const store = (await Store.findById(storeId).select('name slug owner storefront').lean()) as {
+    name?: unknown;
+    slug?: unknown;
+    owner?: unknown;
+    storefront?: unknown;
+  } | null;
   if (!store) return null;
   const owner = store.owner
     ? ((await User.findById(String(store.owner)).select('email notificationPrefs').lean()) as { email?: unknown; notificationPrefs?: unknown } | null)
@@ -105,6 +113,7 @@ export async function loadStoreNotifyInfo(storeId: string): Promise<StoreNotifyI
     ownerEmail: typeof owner?.email === 'string' && owner.email !== '' ? owner.email : null,
     emailNewOrder: prefs.emailNewOrder,
     emailLowStock: prefs.emailLowStock,
+    emailFooter: readMessages(store.storefront).emailFooter,
   };
 }
 
@@ -217,6 +226,7 @@ export async function sendOrderPlaced(storeId: string, order: unknown): Promise<
     store: storeId,
     order: o.id,
     dedupeKey: 'order_placed_customer:' + o.id + ':email',
+    footer: store.emailFooter,
   });
 
   if (store.emailNewOrder) {
@@ -289,6 +299,7 @@ export async function sendOrderStatus(storeId: string, order: unknown, status: s
     store: storeId,
     order: o.id,
     dedupeKey: template + ':' + o.id,
+    footer: store.emailFooter,
   });
 }
 

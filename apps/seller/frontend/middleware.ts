@@ -9,7 +9,8 @@ function parseJwt(token: string) {
   }
 }
 
-const PUBLIC_ACCOUNT_PAGES = ['/forgot-password', '/reset-password', '/verify-email'];
+// /unsubscribe (EP-07.US04): the link in a broadcast email, opened by a customer who has no seller session.
+const PUBLIC_ACCOUNT_PAGES = ['/forgot-password', '/reset-password', '/verify-email', '/unsubscribe'];
 
 export function middleware(request: NextRequest) {
   if (request.nextUrl.searchParams.has('clear')) {

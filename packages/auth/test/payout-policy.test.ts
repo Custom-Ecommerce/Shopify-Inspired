@@ -38,3 +38,21 @@ test('commissionReport: admin only, read only', () => {
   for (const actor of ['seller', 'system', 'public'] as const) assert.equal(can(actor, 'read', 'commissionReport'), false, actor);
   for (const operation of ['create', 'update', 'delete'] as const) assert.equal(can('admin', operation, 'commissionReport'), false, operation);
 });
+
+// Sprint 4 EP-07.US04 (SB-8): customers and broadcasts.
+
+test('customers: a seller reads them; an admin, the system and the public have no row; nothing writes them', () => {
+  assert.equal(can('seller', 'read', 'customers'), true);
+  for (const actor of ['admin', 'system', 'public'] as const) assert.equal(can(actor, 'read', 'customers'), false, actor);
+  for (const operation of ['create', 'update', 'delete'] as const) assert.equal(can('seller', operation, 'customers'), false, operation);
+});
+
+test('broadcasts: a seller reads and creates them; nobody else; nobody edits or deletes one', () => {
+  assert.equal(can('seller', 'read', 'broadcasts'), true);
+  assert.equal(can('seller', 'create', 'broadcasts'), true);
+  for (const actor of ['admin', 'system', 'public'] as const) {
+    assert.equal(can(actor, 'read', 'broadcasts'), false, actor);
+    assert.equal(can(actor, 'create', 'broadcasts'), false, actor);
+  }
+  for (const operation of ['update', 'delete'] as const) assert.equal(can('seller', operation, 'broadcasts'), false, operation);
+});

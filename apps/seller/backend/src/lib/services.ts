@@ -102,3 +102,7 @@ export const {
   requestEmailChange,
   confirmEmailToken,
 } = auth;
+
+// Sprint 4 EP-07.US04 (D-092): broadcasts and unsubscribes (seller database).
+export const Broadcast = db.Broadcast;
+export const EmailUnsubscribe = db.EmailUnsubscribe;

@@ -169,3 +169,14 @@ export const {
   resolvePeriod,
   voidPayoutRequestSchema,
 } = contracts;
+
+// Sprint 4 EP-07.US04 (D-092): customers and email broadcasts.
+export const {
+  BROADCAST_CODES,
+  BROADCAST_RECIPIENT_CAP,
+  broadcastListQuerySchema,
+  broadcastPreviewRequestSchema,
+  createBroadcastRequestSchema,
+  customerListQuerySchema,
+  unsubscribeRequestSchema,
+} = contracts;

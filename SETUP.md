@@ -42,6 +42,7 @@ preview links, cache purge, sync, Cloudinary uploads, email. Each example has a 
 | `RESEND_API_KEY` | seller backend, admin backend | Resend key when `EMAIL_PROVIDER=resend`. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | seller backend, admin backend | SMTP settings when `EMAIL_PROVIDER=smtp`. |
 | `OUTBOX_CRON_SECRET` | seller backend, admin backend | Bearer secret for the internal outbox retry route (EP-07.US01.T02). |
+| `UNSUBSCRIBE_SIGNING_SECRET` | seller backend | Signs the unsubscribe link of broadcast emails (EP-07.US04). 16 characters or more. Without it a broadcast cannot be sent (503) and every unsubscribe link answers 404. |
 | `PLATFORM_DEFAULT_COMMISSION_PERCENT` | seller backend, admin backend | Platform default commission in percent. The placeholder is 5; the owner sets the real value (A-019). |
 | `APP_BASE_URL_SELLER` | seller backend, admin backend | Seller portal base URL for links in emails. |
 | `APP_BASE_URL_ADMIN` | admin backend | Admin console base URL for operator password-reset links (Sprint 4 EP-08). |
@@ -141,6 +142,10 @@ wait of 2, 4, 8 and then 16 minutes between tries. Each email is claimed with a 
 same moment never send it twice. The route answers `401` when `OUTBOX_CRON_SECRET` is not set (or is shorter than 16
 characters) or does not match. The JSON answer counts what happened:
 `{ picked, sent, skipped, retry, failed, notClaimed, errors }`.
+
+Broadcasts (EP-07.US04): a seller's broadcast writes one outbox row per recipient (at most 500) and sends none of them at
+once. The flush sends 50 per call, so 500 recipients take at least ten flush runs; with the 5-minute schedule above that is
+about 50 minutes. The broadcast history in the seller dashboard shows how many are queued, sent, failed and skipped.
 
 Example (any scheduler: cron-job.org, GitHub Actions schedule, a server cron):
 

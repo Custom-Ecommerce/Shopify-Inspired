@@ -475,3 +475,22 @@ Object.assign(POLICY_MATRIX, {
     delete: { actors: [], fields: {} },
   },
 });
+
+// Sprint 4 EP-07.US04 (D-092): a seller's customers and email broadcasts. Seller only, and only of their own store (the route
+// checks the store). An admin has no row: the admin console never reads a store's customers or sends in a store's name.
+//   customers   read: the store's customers derived from its orders.
+//   broadcasts  read: the history and the preview; create: a new broadcast. Nobody updates or deletes one.
+Object.assign(POLICY_MATRIX, {
+  customers: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+  broadcasts: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: ['seller'], fields: { seller: '*' } },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+});

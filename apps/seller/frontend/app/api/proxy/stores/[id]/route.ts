@@ -5,7 +5,7 @@ import { apiError, proxyPatch, ProxyResponseError } from "@/lib/proxy";
  * Only these groups may be sent (Sprint 4 EP-04: the groups of contracts storeSettingsUpdateSchema; the backend checks
  * every field again, and refuses the slug).
  */
-const ALLOWED_GROUPS: ReadonlySet<string> = new Set(["profile", "branding", "social", "seo", "delivery", "payments", "payout", "theme"]);
+const ALLOWED_GROUPS: ReadonlySet<string> = new Set(["profile", "branding", "social", "seo", "delivery", "payments", "payout", "theme", "messages"]);
 
 /**
  * PATCH /api/proxy/stores/:id — goes through the shared proxy

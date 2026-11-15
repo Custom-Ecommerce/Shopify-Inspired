@@ -38,6 +38,10 @@ const FULL: TemplateVars = {
   payoutMethod: 'JazzCash',
   payoutReference: 'JC-778812',
   voidReason: 'Sent to the wrong account',
+  broadcastSubject: 'Eid sale',
+  broadcastMessage: 'Everything is 20% off this weekend.',
+  unsubscribeLink: 'https://seller.markazify.com/unsubscribe?s=1&e=a&t=b',
+  emailFooter: 'Zara Lawn, Lahore',
 };
 
 test('every template uses only variables it declares, and every declared variable is known', () => {

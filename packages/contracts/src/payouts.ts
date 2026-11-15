@@ -31,6 +31,8 @@ export const PAYOUT_CODES = {
   NOTHING_TO_PAY: 'PAYOUT_NOTHING_TO_PAY',
   /** 409: the seller has not saved payout details. */
   NO_PAYOUT_DETAILS: 'PAYOUT_NO_DETAILS',
+  /** 422: the payout method sent is not the method the seller saved (a payout is paid only by the saved method). */
+  METHOD_MISMATCH: 'PAYOUT_METHOD_MISMATCH',
   /** 409: the payout is not in a state this step applies to. */
   WRONG_STATE: 'PAYOUT_WRONG_STATE',
 } as const;

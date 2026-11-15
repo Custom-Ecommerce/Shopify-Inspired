@@ -26,6 +26,8 @@ export const TEMPLATE_NAMES = [
   // Sprint 4 EP-05.US03: the platform paid the seller, or took a payment back.
   'payout_paid',
   'payout_voided',
+  // Sprint 4 EP-07.US04: a store's broadcast to its customers (the seller's own subject and message).
+  'broadcast',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -53,14 +55,18 @@ export const TEMPLATE_VARIABLES = [
   'payoutMethod',
   'payoutReference',
   'voidReason',
+  'broadcastSubject',
+  'broadcastMessage',
+  'unsubscribeLink',
+  'emailFooter',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
 
 /** Variables whose value is several lines (one order line each); HTML keeps the line breaks. */
-const MULTILINE: ReadonlySet<string> = new Set(['items']);
+const MULTILINE: ReadonlySet<string> = new Set(['items', 'broadcastMessage', 'emailFooter']);
 /** Variables that are links: in HTML they become a link, and only http(s) is accepted. */
-const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink', 'actionLink', 'storefrontLink']);
+const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink', 'actionLink', 'storefrontLink', 'unsubscribeLink']);
 
 export interface TemplateDefinition {
   /** The variables the texts may use; every one must have a value when rendering. */
@@ -315,6 +321,23 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
     ],
     whatsapp: 'The payout of {{payoutAmount}} for {{storeName}} was cancelled: {{voidReason}}. {{dashboardLink}}\nآپ کی ادائیگی منسوخ کر دی گئی ہے۔',
   },
+  broadcast: {
+    variables: ['storeName', 'broadcastSubject', 'broadcastMessage', 'emailFooter', 'unsubscribeLink'],
+    subject: '{{broadcastSubject}}',
+    en: [
+      '{{broadcastMessage}}',
+      '',
+      '{{emailFooter}}',
+      '',
+      'You get this email because you ordered from {{storeName}}. To stop receiving these emails: {{unsubscribeLink}}',
+    ],
+    ur: [
+      'یہ پیغام {{storeName}} کی طرف سے ہے، کیونکہ آپ نے وہاں سے آرڈر کیا تھا۔',
+      'ایسی ای میلز بند کرنے کے لیے یہ لنک کھولیں: {{unsubscribeLink}}',
+    ],
+    whatsapp: '{{broadcastMessage}}
+{{storeName}}',
+  },
 };
 
 export class TemplateError extends Error {
@@ -424,7 +447,15 @@ export interface RenderedTemplate {
  * Renders one template. Throws TemplateError for an unknown name or a declared variable without a value; the outbox
  * catches it, so a caller is never failed by a message. Values that are not declared by the template are ignored.
  */
-export function renderTemplate(name: TemplateName, vars: TemplateVars): RenderedTemplate {
+export interface RenderOptions {
+  /**
+   * The store's own footer (EP-07.US02.T02), added at the end of the email: plain text, escaped in HTML, line breaks kept.
+   * Only the order emails to customers pass it.
+   */
+  footer?: string | null;
+}
+
+export function renderTemplate(name: TemplateName, vars: TemplateVars, options: RenderOptions = {}): RenderedTemplate {
   const template = TEMPLATES[name];
   if (!template) throw new TemplateError('unknown template ' + String(name));
   const values = requireValues(name, template, vars);
@@ -436,6 +467,7 @@ export function renderTemplate(name: TemplateName, vars: TemplateVars): Rendered
     htmlBlock(template.en, values, false) +
     '<hr style="border:none;border-top:1px solid #ddd;margin:16px 0">' +
     htmlBlock(template.ur, values, true) +
+    footerHtml +
     '</body></html>';
   const whatsapp = fillText(template.whatsapp, values, false);
   return { subject, text, html, whatsapp };

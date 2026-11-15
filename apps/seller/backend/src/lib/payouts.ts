@@ -231,6 +231,9 @@ export async function createPayout(input: CreatePayoutRequest, adminId: string):
   if (details === null) {
     throw new HttpError(409, 'This store has not saved payout details yet, so there is nowhere to send the money.', PAYOUT_CODES.NO_PAYOUT_DETAILS);
   }
+  if (input.method !== details.method) {
+    throw new HttpError(422, 'A payout is paid only by the method the seller saved (' + details.method + ').', PAYOUT_CODES.METHOD_MISMATCH);
+  }
   await requireUserEmailVerified(store.owner ? String(store.owner) : '');
 
   const payoutId = await settlePayout(payoutDeps.port(), {

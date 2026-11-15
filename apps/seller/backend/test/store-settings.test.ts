@@ -397,3 +397,37 @@ test('a rate change never changes an old order: the order keeps its own delivery
   assert.equal(order.deliveryCharges, 250);
   assert.equal(later.deliveryCharges, 999);
 });
+
+// --------------------------------------------------------------------------------- message overrides (SB-8, EP-07.US02.T02)
+
+test('the WhatsApp text and the email footer are saved in the messages group, read back, and cleared with an empty string', async () => {
+  const res = await save({ messages: { whatsappTemplate: 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}', emailFooter: 'Questions? Call 0300 1234567.' } });
+  assert.equal(res.status, 200);
+  const { settings } = (await res.json()) as { settings: any };
+  assert.deepEqual(settings.messages, { whatsappTemplate: 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}', emailFooter: 'Questions? Call 0300 1234567.' });
+  assert.equal(stores[STORE_A]!.storefront.whatsappTemplate, 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}');
+  assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the other storefront keys are kept');
+
+  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  assert.equal(((await read.json()) as { settings: any }).settings.messages.emailFooter, 'Questions? Call 0300 1234567.');
+
+  const cleared = await save({ messages: { whatsappTemplate: '' } });
+  assert.equal(((await cleared.json()) as { settings: any }).settings.messages.whatsappTemplate, null);
+  assert.equal(stores[STORE_A]!.storefront.emailFooter, 'Questions? Call 0300 1234567.', 'only the named field was cleared');
+});
+
+test('a WhatsApp text with a variable that does not exist is a 400 naming the field; so are too long and HTML', async () => {
+  assert.equal(await fieldOf(await save({ messages: { whatsappTemplate: 'Hi {customerName}, your {parcelColour} is ready' } })), 'messages.whatsappTemplate');
+  assert.equal(await fieldOf(await save({ messages: { whatsappTemplate: 'x'.repeat(501) } })), 'messages.whatsappTemplate');
+  assert.equal(await fieldOf(await save({ messages: { whatsappTemplate: 'Hi <b>there</b>' } })), 'messages.whatsappTemplate');
+  assert.equal(await fieldOf(await save({ messages: { emailFooter: 'x'.repeat(301) } })), 'messages.emailFooter');
+  assert.equal(await fieldOf(await save({ messages: { emailFooter: '<script>x</script>' } })), 'messages.emailFooter');
+  assert.equal((await save({ messages: { whatsappTemplate: 'x'.repeat(500), emailFooter: 'y'.repeat(300) } })).status, 200);
+  assert.equal(stores[STORE_A]!.storefront.whatsappTemplate, 'x'.repeat(500));
+});
+
+test('the messages group is for the owner only: Seller B and an admin cannot change it', async () => {
+  assert.equal((await save({ messages: { emailFooter: 'Hacked' } }, tokenB)).status, 403);
+  assert.equal((await save({ messages: { emailFooter: 'Hacked' } }, tokenAdmin)).status, 403);
+  assert.equal(stores[STORE_A]!.storefront.emailFooter, undefined);
+});

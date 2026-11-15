@@ -134,6 +134,14 @@ test('a seller with an unverified email cannot be paid (EMAIL_NOT_VERIFIED)', as
   assert.ok(world.entries.every(free));
 });
 
+test('a payout by a method other than the saved one is refused with 422 PAYOUT_METHOD_MISMATCH', async () => {
+  seed();
+  const err = await refused(createPayout(input(2110, { method: 'bank' }), ADMIN));
+  assert.deepEqual([err.status, err.errorCode], [422, 'PAYOUT_METHOD_MISMATCH']);
+  assert.equal(world.payouts.length, 0);
+  assert.ok(world.entries.every(free));
+});
+
 test('a negative or a zero balance cannot be paid: it carries forward', async () => {
   world.entry({ type: 'cod_commission', balanceEffect: -300 });
   let err = await refused(createPayout(input(1), ADMIN));

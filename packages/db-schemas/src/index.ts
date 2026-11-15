@@ -44,3 +44,6 @@ export * from './models/commission-entry';
 export * from './models/commission-rate-history';
 // Sprint 4 EP-05.US03: payouts to stores, settled against the commission ledger.
 export * from './models/payout';
+// Sprint 4 EP-07.US04: email broadcasts and the customers who unsubscribed from them.
+export * from './models/broadcast';
+export * from './models/email-unsubscribe';

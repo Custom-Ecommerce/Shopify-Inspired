@@ -118,6 +118,19 @@ export function maskPayout(payoutDetails: unknown): StoreSettings['payout'] {
   };
 }
 
+// ---------------------------------------------------------------------------------------------------- message overrides
+
+export interface MessageOverrides {
+  whatsappTemplate: string | null;
+  emailFooter: string | null;
+}
+
+/** EP-07.US02.T02: the seller's own WhatsApp text and email footer, both optional (null: the platform default). */
+export function readMessages(storefront: unknown): MessageOverrides {
+  const sf = record(storefront);
+  return { whatsappTemplate: text(sf.whatsappTemplate), emailFooter: text(sf.emailFooter) };
+}
+
 // ------------------------------------------------------------------------------------------------------------- theme
 
 export function installedThemeSlugs(): string[] {
@@ -166,6 +179,7 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     payments: { ...readPayments(doc.paymentSettings), cardAvailable: cardPaymentsAvailable() },
     payout: maskPayout(doc.payoutDetails),
     theme: { activeTheme: effectiveTheme(sf) },
+    messages: readMessages(sf),
     updatedAt: iso(doc.updatedAt),
   };
 }
@@ -188,7 +202,7 @@ export function settingsFieldsOf(update: StoreSettingsUpdate): string[] {
   const fields = new Set<string>();
   if (update.profile?.name !== undefined) fields.add('name');
   const profileRest = update.profile ? Object.keys(update.profile).filter((key) => key !== 'name') : [];
-  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme) fields.add('storefront');
+  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages) fields.add('storefront');
   if (update.payments) fields.add('paymentSettings');
   if (update.payout !== undefined) fields.add('payoutDetails');
   return [...fields];
@@ -253,6 +267,10 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
   if (update.theme) {
     if (!installedThemeSlugs().includes(update.theme.activeTheme)) throw invalid('theme.activeTheme', 'Choose a theme from the list.');
     put('activeTheme', update.theme.activeTheme);
+  }
+  if (update.messages) {
+    if (update.messages.whatsappTemplate !== undefined) put('whatsappTemplate', update.messages.whatsappTemplate);
+    if (update.messages.emailFooter !== undefined) put('emailFooter', update.messages.emailFooter);
   }
   if (storefrontChanged) {
     set.storefront = sf;

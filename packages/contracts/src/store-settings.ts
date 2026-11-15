@@ -196,6 +196,48 @@ export const payoutDetailsSchema = z
   });
 export type PayoutDetails = z.output<typeof payoutDetailsSchema>;
 
+// ---------------------------------------------------------------------------------------------------- message overrides
+
+export const WHATSAPP_TEMPLATE_MAX = 500;
+export const EMAIL_FOOTER_MAX = 300;
+
+/**
+ * Sprint 4 EP-07.US02.T02: the names a seller's own WhatsApp text may use, written {name}. They are the variables of the
+ * three order-status templates the seller can message about (confirmed, dispatched, delivered).
+ */
+export const MESSAGE_VARIABLES = ['storeName', 'customerName', 'orderNumber', 'courier', 'trackingNumber', 'trackingLink'] as const;
+export type MessageVariable = (typeof MESSAGE_VARIABLES)[number];
+
+const MESSAGE_PLACEHOLDER = /\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}/g;
+
+/** The {names} a seller's text uses that are not in MESSAGE_VARIABLES, each once. */
+export function unknownMessageVariables(text: string): string[] {
+  const unknown = new Set<string>();
+  for (const match of text.matchAll(MESSAGE_PLACEHOLDER)) {
+    if (!(MESSAGE_VARIABLES as readonly string[]).includes(match[1]!)) unknown.add(match[1]!);
+  }
+  return [...unknown];
+}
+
+const whatsappTemplateText = plainText(WHATSAPP_TEMPLATE_MAX, 'the WhatsApp message').superRefine((value, context) => {
+  const unknown = unknownMessageVariables(value);
+  if (unknown.length > 0) {
+    context.addIssue({
+      code: 'custom',
+      message: 'unknown variable {' + unknown[0] + '}; use only ' + MESSAGE_VARIABLES.map((name) => '{' + name + '}').join(', '),
+    });
+  }
+});
+
+/** The seller's own words: a WhatsApp text that replaces the default status text, and a footer for the order emails. Empty clears. */
+export const storeMessagesUpdateSchema = z
+  .object({
+    whatsappTemplate: clearable(whatsappTemplateText),
+    emailFooter: clearable(plainText(EMAIL_FOOTER_MAX, 'the email footer')),
+  })
+  .partial()
+  .strict();
+
 export const storeThemeUpdateSchema = z.object({ activeTheme: z.string().regex(/^[a-z0-9-]{2,40}$/, 'choose a theme from the list') }).strict();
 
 /**
@@ -213,6 +255,7 @@ export const storeSettingsUpdateSchema = z
     // nullable, not a union: a union would report a bad account number as "payout" instead of "payout.accountNumber".
     payout: payoutDetailsSchema.nullable(),
     theme: storeThemeUpdateSchema,
+    messages: storeMessagesUpdateSchema,
   })
   .partial()
   .strict()
@@ -268,6 +311,7 @@ export const storeSettingsSchema = z.object({
   }),
   payout: maskedPayoutSchema.nullable(),
   theme: z.object({ activeTheme: z.string() }),
+  messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable() }),
   updatedAt: z.string().nullable(),
 });
 export type StoreSettings = z.output<typeof storeSettingsSchema>;
