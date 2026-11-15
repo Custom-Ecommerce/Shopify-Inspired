@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./**/node_modules/**)",
+      "Read(./**/.next/**)",
+      "Read(./**/dist/**)",
+      "Read(./**/*.bak)",
+      "Read(./SB*_CHANGES.txt)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m graphify hook-guard search",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m graphify hook-guard read",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m graphify hook-guard compact",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

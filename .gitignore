@@ -56,3 +56,5 @@ verify/
 *_REPORT.txt
 *_CHANGES.txt
 _review/
+graphify-out/
+.graphify/
