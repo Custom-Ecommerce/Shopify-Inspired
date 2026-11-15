@@ -18,6 +18,7 @@
     "dev:seller-backend": "turbo run dev --filter=@markaz/seller-backend",
     "typecheck": "turbo run type-check --continue",
     "type-check:all": "pnpm -r run type-check",
+    "check:env": "node scripts/check-env-coverage.mjs",
     "test": "pnpm -r --if-present run test",
     "dev:admin-frontend": "pnpm --filter @markaz/admin-frontend dev"
   },

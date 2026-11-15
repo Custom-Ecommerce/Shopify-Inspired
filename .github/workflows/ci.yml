@@ -1,0 +1,119 @@
+# CI (Sprint 4 SB-9, D-087). Stages, each its own job so a failure is easy to read:
+#   typecheck -> test -> build (the five apps)
+# No secrets are used. Every value below is a placeholder written inline; nothing here can reach a real service.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    name: Typecheck and env coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Every env name read in source is listed in the app's .env.example
+        run: pnpm check:env
+      - name: tsc --noEmit, packages/contracts first
+        run: pnpm --filter @markaz/contracts run type-check
+      - name: tsc --noEmit, every other workspace
+        run: pnpm -r --workspace-concurrency=1 --filter "!@markaz/contracts" --if-present run type-check
+
+  test:
+    name: Tests
+    needs: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tests of every workspace (unit tests use stubbed models, no database)
+        run: pnpm -r --workspace-concurrency=1 --if-present run test
+
+  build:
+    name: Build ${{ matrix.app.name }}
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - { name: storefront, filter: "@markaz/storefront" }
+          - { name: seller backend, filter: "@markaz/seller-backend" }
+          - { name: seller frontend, filter: "@markaz/seller-portal" }
+          - { name: admin backend, filter: "@markaz/admin-backend-next" }
+          - { name: admin frontend, filter: "@markaz/admin-frontend" }
+    env:
+      # Placeholders only. The long values are fake and only satisfy "32 characters or more" checks.
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      STOREFRONT_DATA_SOURCE: remote
+      STOREFRONT_REMOTE_MODE: stub
+      SELLER_BACKEND_API_URL: http://127.0.0.1:4001
+      ADMIN_BACKEND_API_URL: http://127.0.0.1:4010
+      SELLER_PORTAL_URL: http://127.0.0.1:3002
+      STOREFRONT_URL: http://127.0.0.1:3000
+      APP_BASE_URL_SELLER: http://127.0.0.1:3002
+      APP_BASE_URL_ADMIN: http://127.0.0.1:4020
+      SELLER_BACKEND_URL: http://127.0.0.1:4001
+      MONGODB_URI: mongodb://127.0.0.1:27017/ci-placeholder
+      SELLER_MONGODB_URI: mongodb://127.0.0.1:27017/ci-placeholder
+      SELLER_AUTH_SECRET: ci-placeholder-seller-auth-secret-0000000000
+      ADMIN_AUTH_SECRET: ci-placeholder-admin-auth-secret-00000000000
+      PREVIEW_TOKEN_SECRET: ci-placeholder-preview-token-secret-000000
+      REVALIDATE_SECRET: ci-placeholder-revalidate-secret-0000000000
+      ORDER_ACCESS_SECRET: ci-placeholder-order-access-secret-00000000
+      CLIENT_ADDRESS_SIGNING_SECRET: ci-placeholder-client-address-secret-00000
+      MODERATION_API_SECRET: ci-placeholder-moderation-secret-000000000
+      SYNC_KEY_ID_CURRENT: ci-key
+      SYNC_SECRET_CURRENT: ci-placeholder-sync-secret-current-0000000
+      SYNC_HMAC_SECRET: ci-placeholder-sync-hmac-secret-000000000
+      RETENTION_CRON_SECRET: ci-placeholder-retention-cron-secret-0000
+      OUTBOX_CRON_SECRET: ci-placeholder-outbox-cron-secret-00000000
+      CRON_SECRET: ci-placeholder-cron-secret-00000000000000
+      UNSUBSCRIBE_SIGNING_SECRET: ci-placeholder-unsubscribe-secret-000000
+      STRIPE_SECRET_KEY: sk_test_ci_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+      STRIPE_ORDER_WEBHOOK_SECRET: whsec_ci_placeholder
+      CLOUDINARY_CLOUD_NAME: ci-placeholder
+      CLOUDINARY_API_KEY: "000000000000000"
+      CLOUDINARY_API_SECRET: ci-placeholder
+      EMAIL_PROVIDER: log
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: next build
+        run: pnpm --filter "${{ matrix.app.filter }}" run build
