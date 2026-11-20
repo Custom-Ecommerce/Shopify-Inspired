@@ -15,6 +15,7 @@ interface ThemeOption {
   tier: string;
   previewImage: string | null;
   isDefaultForNewStores: boolean;
+  supportsCardCheckout?: boolean;
 }
 
 /** Theme: the installed themes from GET /api/themes, a link to the existing store preview, and a save. */
@@ -83,6 +84,11 @@ export function ThemeTab({ settings, save, onDirty }: TabProps) {
             })}
           </fieldset>
         )}
+        {form.fieldErrors["theme.activeTheme"] ? (
+          <div className="mt-4">
+            <FormAlert tone="error">{form.fieldErrors["theme.activeTheme"]}</FormAlert>
+          </div>
+        ) : null}
         <div className="mt-5 grid max-w-xs gap-2">
           <p className="text-sm text-muted-foreground">The preview shows the saved theme. Save first, then preview.</p>
           <PreviewStoreButton />

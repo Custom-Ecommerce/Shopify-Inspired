@@ -200,6 +200,30 @@ test('an operator who was demoted after signing in is refused on the next call',
   }
 });
 
+test('me refuses a session from before the last password reset, and a suspended operator (found by the Sprint 4 verification)', async () => {
+  // The console's session check is this route: it must refuse what every data route refuses (authorizeAdmin).
+  const afterReset = install({ meDoc: await userDoc({ accountStatus: 'active', tokenVersion: 1 }) }, []);
+  try {
+    const oldToken = await signSession({ sub: OID, role: 'admin', tv: 0 }, SECRET, ADMIN_AUDIENCE);
+    const refused = await meGET(meRequest(oldToken));
+    assert.equal(refused.status, 401);
+    assert.equal(((await refused.json()) as { code?: string }).code, 'SESSION_REVOKED');
+    const freshToken = await signSession({ sub: OID, role: 'admin', tv: 1 }, SECRET, ADMIN_AUDIENCE);
+    assert.equal((await meGET(meRequest(freshToken))).status, 200);
+  } finally {
+    afterReset();
+  }
+  const suspended = install({ meDoc: await userDoc({ accountStatus: 'suspended', tokenVersion: 0 }) }, []);
+  try {
+    const token = await signSession({ sub: OID, role: 'admin', tv: 0 }, SECRET, ADMIN_AUDIENCE);
+    const refused = await meGET(meRequest(token));
+    assert.equal(refused.status, 401);
+    assert.equal(((await refused.json()) as { code?: string }).code, 'ACCOUNT_SUSPENDED');
+  } finally {
+    suspended();
+  }
+});
+
 test('an admin token is refused by the seller audience (cross-backend)', async () => {
   const token = await signSession({ sub: OID, role: 'admin' }, SECRET, ADMIN_AUDIENCE);
   await assert.rejects(verifySession(token, SECRET, SELLER_AUDIENCE));

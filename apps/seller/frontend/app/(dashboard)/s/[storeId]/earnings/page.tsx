@@ -175,6 +175,7 @@ export default function DashboardEarningsPage() {
 
   const periodSelector = (
     <Tabs
+      className="min-w-0 max-w-full"
       value={period}
       onValueChange={(value) => {
         if (value) {
@@ -183,7 +184,7 @@ export default function DashboardEarningsPage() {
         }
       }}
     >
-      <TabsList>
+      <TabsList className="max-w-full overflow-x-auto">
         {EARNINGS_PERIODS.map((value) => (
           <TabsTrigger key={value} value={value}>
             {PERIOD_LABELS[value]}

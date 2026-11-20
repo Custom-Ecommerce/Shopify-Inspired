@@ -31,9 +31,9 @@ export function storeStatusHref(status: StoreStatusValue): string {
   return withQuery("/stores", listStateToQuery({ page: 1, q: "", status }));
 }
 
-/** The commission ledger filtered to one status. */
-export function ledgerStatusHref(status: "pending" | "settled"): string {
-  return withQuery("/commission", commissionStateToUrl({ view: "ledger", page: 1, q: "", status, mode: "" }));
+/** The commission page. SB-11: the old ledger tab is gone, so a status no longer filters anything; the link opens the page. */
+export function ledgerStatusHref(_status: "pending" | "settled"): string {
+  return withQuery("/commission", commissionStateToUrl({ view: "rates", page: 1, q: "", status: "", mode: "" }));
 }
 
 /** The sync page on one status. Dead letters are the page's default, so they have no query. */

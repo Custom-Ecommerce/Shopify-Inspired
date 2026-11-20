@@ -90,10 +90,11 @@ test("every payout status has a label and a tone; a payout that needs the operat
 });
 
 test("the commission page has payout views, which keep the page and search in the URL and carry no ledger filter", () => {
-  assert.deepEqual([...COMMISSION_VIEWS], ["ledger", "rates", "history", "payouts", "payout-history"]);
+  assert.deepEqual([...COMMISSION_VIEWS], ["rates", "history", "payouts", "payout-history"]);
+  assert.ok(!(COMMISSION_VIEWS as readonly string[]).includes("ledger"), "the old ledger tab was removed (SB-11)");
   for (const view of COMMISSION_VIEWS) assert.ok(VIEW_LABELS[view], view);
   assert.deepEqual(parseCommissionState(new URLSearchParams("view=payouts&page=2&q=zara&status=settled&mode=custom")), { view: "payouts", page: 2, q: "zara", status: "", mode: "" });
   assert.equal(commissionStateToUrl({ view: "payout-history", page: 3, q: "", status: "", mode: "" }), "view=payout-history&page=3");
   assert.equal(parseCommissionState(new URLSearchParams("view=payout-history")).view, "payout-history");
-  assert.equal(parseCommissionState(new URLSearchParams("view=payout")).view, "ledger");
+  assert.equal(parseCommissionState(new URLSearchParams("view=payout")).view, "rates");
 });

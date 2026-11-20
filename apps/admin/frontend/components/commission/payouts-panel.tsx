@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
-import type { PanelProps } from "@/components/commission/ledger-panel";
+import type { PanelProps } from "@/lib/commission";
 import { PayoutDialog } from "@/components/commission/payout-dialog";
 import { ReportDialog } from "@/components/commission/report-dialog";
 import { DataTable, TablePagination, type Column } from "@/components/shared/data-table";

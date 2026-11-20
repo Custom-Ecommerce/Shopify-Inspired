@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Surface } from "@/components/shared/Surface";
+import { tooManyAttemptsMessage } from "@/lib/retry-after";
 
 /** Sprint 4 EP-08: the card the forgot, reset and verify pages share, in the same shell and style as /login. */
 export function AccountCard({ eyebrow = "Seller Portal", title, intro, children }: { eyebrow?: string; title: string; intro?: string; children: ReactNode }) {
@@ -36,9 +37,7 @@ export function FormAlert({ tone, children }: { tone: "error" | "success" | "inf
 export async function readApiError(res: Response): Promise<{ message: string; code: string | null; field: string | null }> {
   const data = (await res.json().catch(() => null)) as { error?: unknown; code?: unknown; field?: unknown } | null;
   if (res.status === 429) {
-    const seconds = Number(res.headers.get("retry-after") ?? "0");
-    const minutes = Math.max(1, Math.ceil(seconds / 60));
-    return { message: `Too many attempts. Try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.`, code: "RATE_LIMITED", field: null };
+    return { message: tooManyAttemptsMessage(res.headers.get("retry-after")), code: "RATE_LIMITED", field: null };
   }
   return {
     message: typeof data?.error === "string" ? data.error : "Something went wrong. Please try again.",

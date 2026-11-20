@@ -152,6 +152,9 @@ export const {
   quoteDelivery,
   deliveryRateFor,
   STORE_READINESS_ITEMS,
+  CARD_CHECKOUT_UNSUPPORTED_BY_THEME,
+  CARD_CHECKOUT_UNSUPPORTED_MESSAGE,
+  CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
 } = contracts;
 
 // Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.

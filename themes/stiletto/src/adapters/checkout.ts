@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { checkoutBlockReason } from "@markaz/storefront-data";
 import type { CheckoutFailure } from "@markaz/storefront-data/client";
-import { checkoutServerFieldError, useCardAvailable, useCart, useCartQuote, useCheckout } from "@markaz/storefront-data/client";
+import { checkoutServerFieldError, useCardAvailable, useCodAvailable, useCart, useCartQuote, useCheckout } from "@markaz/storefront-data/client";
 import { boxForField, firstErrorBox, stilettoFieldErrors, toCheckoutValues } from "./checkout-fields";
 import type { StilettoCheckoutField, StilettoCheckoutInput, StilettoFieldErrors } from "./checkout-fields";
 import { paths } from "./paths";
@@ -66,6 +66,7 @@ export function useStilettoCheckout(shippingCity = "") {
   // A refused code stops showing as soon as the shopper changes or removes it.
   const [dismissedFailure, setDismissedFailure] = useState<CheckoutFailure | null>(null);
   const cardAvailable = useCardAvailable();
+  const codAvailable = useCodAvailable();
 
   // Only the server's prices are shown once it has answered. The cart's own prices can be older than the catalog.
   const priced = !isEmpty && quote !== null ? quote : null;
@@ -145,6 +146,7 @@ export function useStilettoCheckout(shippingCity = "") {
     /** Why the order cannot be placed as it stands, for the button. */
     blockReason: priced ? checkoutBlockReason(lines, priced) : null,
     cardAvailable,
+    codAvailable,
     subtotal,
     deliveryCharges,
     /** True while the delivery charge is for a city the shopper has not given yet (the store's default rate). */

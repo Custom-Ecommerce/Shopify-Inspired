@@ -41,6 +41,11 @@ export interface ThemeManifestEntry {
   readonly installed?: boolean;
   /** Public path of a preview image, when there is one. */
   readonly previewImage?: string;
+  /**
+   * SB-11 (V-06): the theme's checkout can take a card payment (choose card, then go to the payment page). A theme without
+   * this flag is treated as NOT supporting it, so a store whose only payment method is card cannot use it.
+   */
+  readonly supportsCardCheckout?: boolean;
 }
 
 export const THEME_MANIFEST = [
@@ -59,6 +64,7 @@ export const THEME_MANIFEST = [
     status: "available",
     isDefault: false,
     installed: true,
+    supportsCardCheckout: true,
   },
   {
     slug: "mola",
@@ -142,6 +148,14 @@ export function listInstalledThemes(): readonly ThemeManifestEntry[] {
 
 export function isInstalledThemeSlug(value: unknown): boolean {
   return typeof value === "string" && listInstalledThemes().some((entry) => entry.slug === value);
+}
+
+/**
+ * SB-11 (V-06): whether a theme's checkout can take a card payment. Stiletto yes; Mustafa has no payment choice, so no.
+ * Default false for a theme without the flag, and for an unknown slug.
+ */
+export function themeSupportsCardCheckout(slug: unknown): boolean {
+  return typeof slug === "string" && getThemeEntry(slug)?.supportsCardCheckout === true;
 }
 
 /** Entries shown in the public `/themes` gallery (everything except archived). */

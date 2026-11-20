@@ -23,6 +23,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       tier: entry.tier,
       previewImage: entry.previewImage ?? null,
       isDefaultForNewStores: entry.slug === themes.NEW_STORE_THEME_SLUG,
+      supportsCardCheckout: themes.themeSupportsCardCheckout(entry.slug),
     }));
     return NextResponse.json({ themes: list }, { headers: { 'Cache-Control': 'private, max-age=300' } });
   } catch (err) {

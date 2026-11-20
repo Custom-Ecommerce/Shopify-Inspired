@@ -40,7 +40,7 @@ function get(path: string, cookie = "markaz-admin-session=tok"): NextRequest {
 
 const meta = { totalDocs: 1, totalPages: 1, page: 1, limit: 20, hasNextPage: false, hasPrevPage: false };
 const bucket = { count: 1, orderAmount: 125000, commissionAmount: 5000 };
-const ledgerState = { view: "ledger", page: 1, q: "", status: "", mode: "" } as const;
+const ledgerState = { view: "rates", page: 1, q: "", status: "", mode: "" } as const;
 
 const entry = {
   id: OID,

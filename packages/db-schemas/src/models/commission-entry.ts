@@ -69,6 +69,10 @@ export function assertSettlementOnlyUpdate(update: unknown): void {
   for (const key of Object.keys(doc)) {
     if (key === '$set' || key === '$unset') {
       for (const field of Object.keys((doc[key] ?? {}) as object)) if (!SETTLEMENT_FIELDS.has(field)) refuse('changing ' + field);
+    } else if (key === '$setOnInsert') {
+      // Mongoose adds { createdAt } to EVERY update of a schema with timestamps (it only matters on an upsert, which nothing here
+      // does). Refusing it refused the settlement update itself (found by the Sprint 4 verification); any other field is still refused.
+      for (const field of Object.keys((doc[key] ?? {}) as object)) if (field !== 'createdAt') refuse('changing ' + field);
     } else if (key.startsWith('$')) {
       refuse(key);
     } else if (!SETTLEMENT_FIELDS.has(key)) {

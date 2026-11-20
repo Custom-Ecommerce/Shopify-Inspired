@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { cartStorageKey, createStorefrontCartStore, DEMO_CART_KEY, DEMO_CART_STORE } from "./cart-store";
-import { CardAvailableProvider, CartStoreProvider, DEMO_FAVOURITES_STORE, FavouritesStoreProvider, OrderTransportProvider } from "./context";
+import { CardAvailableProvider, CartStoreProvider, CodAvailableProvider, DEMO_FAVOURITES_STORE, FavouritesStoreProvider, OrderTransportProvider } from "./context";
 import { createFavouritesStore, favouritesKey } from "../domain/favourites";
 import { createBffTransport } from "../transport/remote";
 import { createMockTransport, mockTransport } from "../transport/mock";
@@ -18,6 +18,7 @@ export function StorefrontProvider({
   storeKey,
   demoFixtures,
   cardEnabled = false,
+  codEnabled = true,
   preview = false,
   demoScope,
   children,
@@ -25,6 +26,8 @@ export function StorefrontProvider({
   storeKey?: string;
   /** From the store's answer: whether a card payment can be taken. */
   cardEnabled?: boolean;
+  /** From the store's answer: whether cash on delivery is on. A store may switch it off (card only). */
+  codEnabled?: boolean;
   /** A seller's preview of this store. It gets a cart of its own. */
   preview?: boolean;
   /** Which demo this is, so demo themes do not share a cart. */
@@ -50,7 +53,9 @@ export function StorefrontProvider({
     <OrderTransportProvider value={transport}>
       <CartStoreProvider value={cart}>
         <FavouritesStoreProvider value={favourites}>
-          <CardAvailableProvider value={cardEnabled}>{children}</CardAvailableProvider>
+          <CardAvailableProvider value={cardEnabled}>
+            <CodAvailableProvider value={codEnabled}>{children}</CodAvailableProvider>
+          </CardAvailableProvider>
         </FavouritesStoreProvider>
       </CartStoreProvider>
     </OrderTransportProvider>

@@ -185,7 +185,7 @@ export const payoutDetailsSchema = z
       .string()
       .transform((value) => value.replace(/[\s-]/g, '').toUpperCase())
       .pipe(z.string().regex(/^[A-Z0-9]{8,34}$/, 'account number or IBAN must be 8 to 34 letters and digits')),
-    bankName: clearable(plainLine(80, 'bank name')),
+    bankName: clearable(plainLine(80, 'bank name')).default(null),
   })
   .strict()
   .superRefine((value, context) => {
@@ -237,6 +237,13 @@ export const storeMessagesUpdateSchema = z
   })
   .partial()
   .strict();
+
+/** 422 on PATCH /api/stores/:id: the store would be card only on a theme whose checkout cannot take a card payment (SB-11, V-06). */
+export const CARD_CHECKOUT_UNSUPPORTED_BY_THEME = 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME';
+
+/** The sentences the seller sees for it; the server, the Payments tab and the Theme tab use these. */
+export const CARD_CHECKOUT_UNSUPPORTED_MESSAGE = 'This theme cannot take card payments yet, so cash on delivery has to stay on. Choose the Stiletto theme to accept card only.';
+export const CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE = 'This theme cannot take card payments yet. Turn cash on delivery on first, or choose the Stiletto theme.';
 
 export const storeThemeUpdateSchema = z.object({ activeTheme: z.string().regex(/^[a-z0-9-]{2,40}$/, 'choose a theme from the list') }).strict();
 
@@ -310,7 +317,7 @@ export const storeSettingsSchema = z.object({
     cardAvailable: z.boolean(),
   }),
   payout: maskedPayoutSchema.nullable(),
-  theme: z.object({ activeTheme: z.string() }),
+  theme: z.object({ activeTheme: z.string(), supportsCardCheckout: z.boolean() }),
   messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable() }),
   updatedAt: z.string().nullable(),
 });
@@ -339,7 +346,7 @@ export const storeGoLiveResponseSchema = z.object({
 export type StoreGoLiveResponse = z.output<typeof storeGoLiveResponseSchema>;
 
 export const themeListResponseSchema = z.object({
-  themes: z.array(z.object({ slug: z.string(), name: z.string(), tier: z.string(), previewImage: z.string().nullable(), isDefaultForNewStores: z.boolean() })),
+  themes: z.array(z.object({ slug: z.string(), name: z.string(), tier: z.string(), previewImage: z.string().nullable(), isDefaultForNewStores: z.boolean(), supportsCardCheckout: z.boolean() })),
 });
 
 // ------------------------------------------------------------------------------------------------- delivery quote

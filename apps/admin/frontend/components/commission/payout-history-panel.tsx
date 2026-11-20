@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import type { PanelProps } from "@/components/commission/ledger-panel";
+import type { PanelProps } from "@/lib/commission";
 import { PayoutVoidDialog } from "@/components/commission/payout-void-dialog";
 import { DataTable, TablePagination, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";

@@ -4,7 +4,7 @@
 //   MONGODB_URI=<a THROWAWAY database> node scripts/smoke/run.mjs
 //
 // It refuses to run unless the database the apps are using is a throwaway one: MONGODB_URI (and SELLER_MONGODB_URI, if set)
-// must contain the word "throwaway" or "test". The value is never printed. The checks only send requests that must be
+// must name a database that contains the word "throwaway" or "test" (only the database name is looked at). The value is never printed. The checks only send requests that must be
 // refused or that read nothing, so they write nothing to the database.
 
 const TIMEOUT_MS = 15_000;
@@ -14,12 +14,26 @@ function fail(message) {
   process.exit(2);
 }
 
+/** The database name of a MongoDB URI: the path after the host, before any "?". Empty when there is none. */
+function databaseNameOf(uri) {
+  const match = /^mongodb(?:\+srv)?:\/\/[^/?]+\/([^?]*)/i.exec(uri.trim());
+  if (!match) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+// Only the database NAME counts: a host, user, password or option that happens to contain "test" must not let a real database through.
+const THROWAWAY_NAME = /throwaway|(^|[^a-z0-9])test([^a-z0-9]|$)/i;
+
 function guardDatabase() {
   const values = [process.env.MONGODB_URI, process.env.SELLER_MONGODB_URI].filter((v) => typeof v === 'string' && v.trim() !== '');
   if (values.length === 0) fail('Refusing to run: set MONGODB_URI to the throwaway database the apps use (its value is never printed).');
   for (const value of values) {
-    if (!/throwaway|test/i.test(value)) {
-      fail('Refusing to run: the database URI does not contain "throwaway" or "test". Use a throwaway database.');
+    if (!THROWAWAY_NAME.test(databaseNameOf(value))) {
+      fail('Refusing to run: the database name in the URI does not contain "throwaway" or "test". Use a throwaway database.');
     }
   }
 }

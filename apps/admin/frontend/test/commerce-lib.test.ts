@@ -6,17 +6,20 @@ import { formatMoney } from "../lib/format";
 import { toneOf } from "../lib/status";
 import { NAV_GROUPS } from "../components/dashboard/nav-config";
 
-test("the commission state defaults to the ledger with no filters", () => {
-  assert.deepEqual(parseCommissionState(new URLSearchParams()), { view: "ledger", page: 1, q: "", status: "", mode: "" });
+test("the commission state defaults to the rates view with no filters (there is no ledger view since SB-11)", () => {
+  assert.deepEqual(parseCommissionState(new URLSearchParams()), { view: "rates", page: 1, q: "", status: "", mode: "" });
 });
 
-test("the ledger keeps a valid status and drops the rates filter, and the rates view does the reverse", () => {
-  assert.deepEqual(parseCommissionState(new URLSearchParams("status=settled&mode=custom&page=3&q=%20looms%20")), { view: "ledger", page: 3, q: "looms", status: "settled", mode: "" });
+test("the rates view keeps a valid mode and a stale ledger status is dropped; other views drop the mode", () => {
+  assert.deepEqual(parseCommissionState(new URLSearchParams("status=settled&mode=custom&page=3&q=%20looms%20")), { view: "rates", page: 3, q: "looms", status: "", mode: "custom" });
   assert.deepEqual(parseCommissionState(new URLSearchParams("view=rates&status=settled&mode=custom")), { view: "rates", page: 1, q: "", status: "", mode: "custom" });
+  assert.deepEqual(parseCommissionState(new URLSearchParams("view=history&mode=custom")), { view: "history", page: 1, q: "", status: "", mode: "" });
+  // An old bookmark to the removed ledger tab opens the default view.
+  assert.equal(parseCommissionState(new URLSearchParams("view=ledger")).view, "rates");
 });
 
 test("unreadable commission values fall back to the defaults", () => {
-  assert.equal(parseCommissionState(new URLSearchParams("view=ledgers")).view, "ledger");
+  assert.equal(parseCommissionState(new URLSearchParams("view=ledgers")).view, "rates");
   assert.equal(parseCommissionState(new URLSearchParams("status=paid")).status, "");
   assert.equal(parseCommissionState(new URLSearchParams("view=rates&mode=%24ne")).mode, "");
   assert.equal(parseCommissionState(new URLSearchParams("page=0")).page, 1);
@@ -24,14 +27,14 @@ test("unreadable commission values fall back to the defaults", () => {
 });
 
 test("the page URL leaves out the defaults and the filters of the other view", () => {
-  assert.equal(commissionStateToUrl({ view: "ledger", page: 1, q: "", status: "", mode: "" }), "");
-  assert.equal(commissionStateToUrl({ view: "ledger", page: 2, q: "a b", status: "pending", mode: "custom" }), "page=2&q=a+b&status=pending");
-  assert.equal(commissionStateToUrl({ view: "rates", page: 2, q: "", status: "settled", mode: "custom" }), "view=rates&page=2&mode=custom");
+  assert.equal(commissionStateToUrl({ view: "rates", page: 1, q: "", status: "", mode: "" }), "");
+  assert.equal(commissionStateToUrl({ view: "rates", page: 2, q: "a b", status: "pending", mode: "custom" }), "page=2&q=a+b&mode=custom");
+  assert.equal(commissionStateToUrl({ view: "history", page: 2, q: "", status: "", mode: "custom" }), "view=history&page=2");
 });
 
 test("the API queries carry only the filters of their own view, and the limit when asked", () => {
-  assert.equal(ledgerStateToQuery({ view: "ledger", page: 1, q: "", status: "", mode: "" }), "");
-  assert.equal(ledgerStateToQuery({ view: "ledger", page: 2, q: "a b", status: "settled", mode: "" }, true), "page=2&q=a+b&status=settled&limit=20");
+  assert.equal(ledgerStateToQuery({ view: "rates", page: 1, q: "", status: "", mode: "" }), "");
+  assert.equal(ledgerStateToQuery({ view: "rates", page: 2, q: "a b", status: "settled", mode: "" }, true), "page=2&q=a+b&status=settled&limit=20");
   assert.equal(ratesStateToQuery({ view: "rates", page: 1, q: "x", status: "", mode: "custom" }, true), "q=x&mode=custom&limit=20");
   assert.equal(ratesStateToQuery({ view: "rates", page: 1, q: "", status: "", mode: "" }), "");
 });

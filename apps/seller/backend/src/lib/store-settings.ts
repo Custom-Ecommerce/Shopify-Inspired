@@ -1,7 +1,14 @@
 import * as themesNs from '@markaz/platform-kit/themes';
 import type { StoreSettings, StoreSettingsUpdate } from '@markaz/contracts';
 import { unwrapCjs } from '@/lib/cjs';
-import { cityKey, maskAccountNumber, matchPakistanCity } from '@/lib/contracts';
+import {
+  CARD_CHECKOUT_UNSUPPORTED_BY_THEME,
+  CARD_CHECKOUT_UNSUPPORTED_MESSAGE,
+  CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
+  cityKey,
+  maskAccountNumber,
+  matchPakistanCity,
+} from '@/lib/contracts';
 import { HttpError } from '@/lib/http';
 import { Media } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
@@ -137,6 +144,11 @@ export function installedThemeSlugs(): string[] {
   return themes.listInstalledThemes().map((entry) => entry.slug);
 }
 
+/** Whether a theme's checkout can take a card payment (the manifest flag; false when the theme has none). */
+export function themeSupportsCardCheckout(slug: string): boolean {
+  return themes.themeSupportsCardCheckout(slug);
+}
+
 /** The theme a store renders with: its own if it is installed, else the platform default (as the storefront does). */
 export function effectiveTheme(storefront: unknown): string {
   const chosen = text(record(storefront).activeTheme);
@@ -178,7 +190,7 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     delivery: readDelivery(sf),
     payments: { ...readPayments(doc.paymentSettings), cardAvailable: cardPaymentsAvailable() },
     payout: maskPayout(doc.payoutDetails),
-    theme: { activeTheme: effectiveTheme(sf) },
+    theme: { activeTheme: effectiveTheme(sf), supportsCardCheckout: themeSupportsCardCheckout(effectiveTheme(sf)) },
     messages: readMessages(sf),
     updatedAt: iso(doc.updatedAt),
   };
@@ -187,6 +199,7 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
 // ------------------------------------------------------------------------------------------------------------ writing
 
 const invalid = (field: string, message: string): HttpError => new HttpError(400, message, SETTINGS_ERROR_CODE, field);
+const cardUnsupported = (field: string, message: string): HttpError => new HttpError(422, message, CARD_CHECKOUT_UNSUPPORTED_BY_THEME, field);
 
 export interface SettingsWrite {
   /** The top-level fields written, for the policy check and the audit entry. */
@@ -220,11 +233,14 @@ export function referencedMedia(update: StoreSettingsUpdate): Array<{ field: str
 /**
  * Merges an update into the stored settings and checks the rules that need both: at least one payment method stays on,
  * and the theme is an installed one. The whole storefront and paymentSettings objects are written (one $set), so a store
- * whose Mixed field is missing or null is handled the same as any other. Throws 400 STORE_SETTINGS_INVALID naming the field.
+ * whose Mixed field is missing or null is handled the same as any other. Throws 400 STORE_SETTINGS_INVALID naming the field, or 422 CARD_CHECKOUT_UNSUPPORTED_BY_THEME when the store would be card only on a theme without card checkout (SB-11).
  */
 export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, now: Date = new Date()): SettingsWrite {
   const sf = { ...record(doc.storefront) };
   const pay = { ...record(doc.paymentSettings) };
+  const before = readPayments(pay);
+  const themeBefore = effectiveTheme(sf);
+  const themeAfter = update.theme ? update.theme.activeTheme : themeBefore;
   const set: Record<string, unknown> = {};
   const fields = new Set<string>();
   const groups = Object.keys(update);
@@ -284,8 +300,16 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
     if (!after.codEnabled && !after.cardEnabled) {
       throw invalid(update.payments.codEnabled === false ? 'payments.codEnabled' : 'payments.cardEnabled', 'Keep at least one payment method on.');
     }
+    // SB-11 (V-06): COD going off leaves the store card only; a theme whose checkout has no card option cannot take any order then.
+    if (!after.codEnabled && before.codEnabled && !themeSupportsCardCheckout(themeAfter)) {
+      throw cardUnsupported('payments.codEnabled', CARD_CHECKOUT_UNSUPPORTED_MESSAGE);
+    }
     set.paymentSettings = pay;
     fields.add('paymentSettings');
+  }
+  // ...and the other way round: switching to such a theme while COD is off (a store already on it keeps working as it is).
+  if (update.theme && !readPayments(pay).codEnabled && themeAfter !== themeBefore && !themeSupportsCardCheckout(themeAfter)) {
+    throw cardUnsupported('theme.activeTheme', CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE);
   }
 
   let payoutChanged = false;

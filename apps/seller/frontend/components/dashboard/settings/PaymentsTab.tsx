@@ -5,6 +5,7 @@ import { SectionCard } from "@/components/dashboard/shared/SectionCard";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { CARD_CHECKOUT_UNSUPPORTED_MESSAGE } from "@markaz/contracts/store-settings";
 import { lastPaymentMethod, payoutProblem } from "@/lib/store-settings-form";
 import { Field, SaveBar, TextField, useTabSave, type TabProps } from "./shared";
 
@@ -21,6 +22,8 @@ function PaymentSwitches({ settings, save, onDirty }: TabProps) {
   const [draft, setDraft] = useState(saved);
   const [notice, setNotice] = useState<string | null>(null);
   const form = useTabSave(save);
+  // SB-11 (V-06): on a theme whose checkout has no card option, cash on delivery cannot be switched off (the server refuses it too).
+  const codLocked = !settings.theme.supportsCardCheckout && draft.codEnabled;
 
   useEffect(() => {
     setDraft(saved);
@@ -52,8 +55,20 @@ function PaymentSwitches({ settings, save, onDirty }: TabProps) {
             <div className="min-w-0">
               <Label htmlFor="cod">Cash on delivery</Label>
               <p className="text-sm text-muted-foreground">The shopper pays the courier when the parcel arrives. You keep the cash.</p>
+              {codLocked ? (
+                <p id="cod-reason" className="mt-1 text-sm text-muted-foreground">
+                  {CARD_CHECKOUT_UNSUPPORTED_MESSAGE}
+                </p>
+              ) : null}
             </div>
-            <Switch id="cod" checked={draft.codEnabled} onCheckedChange={(on) => toggle("codEnabled", on)} aria-label="Cash on delivery" />
+            <Switch
+              id="cod"
+              checked={draft.codEnabled}
+              disabled={codLocked}
+              onCheckedChange={(on) => toggle("codEnabled", on)}
+              aria-label="Cash on delivery"
+              aria-describedby={codLocked ? "cod-reason" : undefined}
+            />
           </div>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">

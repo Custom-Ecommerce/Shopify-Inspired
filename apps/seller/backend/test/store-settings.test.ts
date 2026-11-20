@@ -206,7 +206,70 @@ test('the last payment method cannot be switched off', async () => {
   const res = await save({ payments: { codEnabled: false } });
   assert.equal(res.status, 400);
   assert.equal(await fieldOf(res), 'payments.codEnabled');
+  // Card only needs a theme with card checkout (SB-11); the default theme has none, so this store uses Stiletto.
+  stores[STORE_A]!.storefront.activeTheme = 'stiletto';
   assert.equal((await save({ payments: { cardEnabled: true, codEnabled: false } })).status, 200);
+});
+
+type Body = { code?: string; field?: string; error?: string; errors?: Array<{ message: string }> };
+
+test('SB-11: COD cannot go off while the theme has no card checkout (422 CARD_CHECKOUT_UNSUPPORTED_BY_THEME, payments.codEnabled)', async () => {
+  // STORE_A has no theme set, so it renders with the default, Mustafa.
+  const res = await save({ payments: { codEnabled: false, cardEnabled: true } });
+  assert.equal(res.status, 422);
+  const body = (await res.json()) as Body;
+  assert.equal(body.code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
+  assert.equal(body.field, 'payments.codEnabled');
+  assert.match(body.errors?.[0]?.message ?? '', /cannot take card payments/);
+  assert.deepEqual(stores[STORE_A]!.paymentSettings, {}, 'nothing was written');
+  stores[STORE_A]!.storefront.activeTheme = 'mustafa';
+  assert.equal((await save({ payments: { codEnabled: false, cardEnabled: true } })).status, 422);
+  // Switching the theme in the same request makes it fine.
+  assert.equal((await save({ theme: { activeTheme: 'stiletto' }, payments: { codEnabled: false, cardEnabled: true } })).status, 200);
+  assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, false);
+  assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto');
+});
+
+test('SB-11: COD stays switchable and card can be added on a theme without card checkout', async () => {
+  assert.equal((await save({ payments: { codEnabled: true, cardEnabled: false } })).status, 200);
+  assert.equal((await save({ payments: { codEnabled: true, cardEnabled: true } })).status, 200);
+});
+
+test('SB-11: a switch to a theme without card checkout is refused 422 while COD is off (theme.activeTheme)', async () => {
+  stores[STORE_A]!.storefront.activeTheme = 'stiletto';
+  stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
+  const res = await save({ theme: { activeTheme: 'mustafa' } });
+  assert.equal(res.status, 422);
+  const body = (await res.json()) as Body;
+  assert.equal(body.code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
+  assert.equal(body.field, 'theme.activeTheme');
+  assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto', 'the theme is unchanged');
+  // With COD on again the same switch works.
+  assert.equal((await save({ payments: { codEnabled: true } })).status, 200);
+  assert.equal((await save({ theme: { activeTheme: 'mustafa' } })).status, 200);
+});
+
+test('SB-11: a store already card only on Mustafa can still save the same theme (the rule stops new switches only)', async () => {
+  stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
+  assert.equal((await save({ theme: { activeTheme: 'mustafa' } })).status, 200);
+  assert.equal((await save({ delivery: { defaultRate: 100 } })).status, 200);
+});
+
+test('SB-11: the settings and the theme list carry the flag; a theme without it counts as no card checkout', async () => {
+  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  assert.equal(((await read.json()) as { settings: any }).settings.theme.supportsCardCheckout, false);
+  stores[STORE_A]!.storefront.activeTheme = 'stiletto';
+  const again = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  assert.equal(((await again.json()) as { settings: any }).settings.theme.supportsCardCheckout, true);
+
+  const list = await (await import('../src/app/api/themes/route')).GET(
+    new NextRequest('http://seller.test/api/themes', { headers: { authorization: 'Bearer ' + tokenA } }),
+  );
+  assert.equal(list.status, 200);
+  const { themes } = (await list.json()) as { themes: Array<{ slug: string; supportsCardCheckout: boolean }> };
+  assert.equal(themes.find((t) => t.slug === 'stiletto')?.supportsCardCheckout, true);
+  assert.equal(themes.find((t) => t.slug === 'mustafa')?.supportsCardCheckout, false);
+  assert.ok(themes.every((t) => typeof t.supportsCardCheckout === 'boolean'));
 });
 
 test('payout details are shown masked and audited without the account number', async () => {
@@ -219,6 +282,15 @@ test('payout details are shown masked and audited without the account number', a
   assert.deepEqual(audits[0]!.details.payout, { method: 'bank', last4: '6702' });
   assert.equal(await fieldOf(await save({ payout: { method: 'jazzcash', accountTitle: 'Zara', accountNumber: '12345678', bankName: null } })), 'payout.accountNumber');
   assert.equal(await fieldOf(await save({ payout: { method: 'bank', accountTitle: 'Zara', accountNumber: 'PK36SCBL0000001123456702' } })), 'payout.bankName');
+});
+
+test('a wallet payout can be sent without a bank name (found by the Sprint 4 verification)', async () => {
+  const res = await save({ payout: { method: 'easypaisa', accountTitle: 'Zara', accountNumber: '03451234567' } });
+  assert.equal(res.status, 200);
+  const { settings } = (await res.json()) as { settings: any };
+  assert.equal(settings.payout.method, 'easypaisa');
+  assert.equal(settings.payout.bankName, null);
+  assert.equal(settings.payout.accountNumberMasked, '••••4567');
 });
 
 test('only an installed theme can be chosen; media must belong to the store', async () => {

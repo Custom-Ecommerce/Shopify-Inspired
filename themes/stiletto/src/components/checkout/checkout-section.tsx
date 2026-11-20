@@ -329,6 +329,7 @@ export function CheckoutSection({
   const {
     blockReason,
     cardAvailable,
+    codAvailable,
     subtotal,
     deliveryCharges,
     deliveryCityKnown,
@@ -357,8 +358,9 @@ export function CheckoutSection({
   const [whatsapp, setWhatsapp] = useState("");
   const [notes, setNotes] = useState("");
   const [chosenPayment, setChosenPayment] = useState<"cod" | "card">("cod");
-  // Card is hidden when the store cannot take it, so a choice made earlier cannot outlive the option.
-  const paymentMethod = cardAvailable ? chosenPayment : "cod";
+  // A method is hidden when the store does not offer it, so a choice made earlier cannot outlive the option. A store with
+  // cash on delivery switched off (Sprint 4) is card only: the card option is the one and only choice.
+  const paymentMethod: "cod" | "card" = !codAvailable && cardAvailable ? "card" : cardAvailable ? chosenPayment : "cod";
 
 
 
@@ -590,12 +592,14 @@ export function CheckoutSection({
               </div>
 
               <div className="space-y-3">
-                <PaymentOption
-                  selected={paymentMethod === "cod"}
-                  title="Cash on Delivery (COD)"
-                  description="Pay in cash when your parcel is delivered to your doorstep. No advance payment required."
-                  onSelect={() => setChosenPayment("cod")}
-                />
+                {codAvailable && (
+                  <PaymentOption
+                    selected={paymentMethod === "cod"}
+                    title="Cash on Delivery (COD)"
+                    description="Pay in cash when your parcel is delivered to your doorstep. No advance payment required."
+                    onSelect={() => setChosenPayment("cod")}
+                  />
+                )}
                 {cardAvailable && (
                   <PaymentOption
                     selected={paymentMethod === "card"}

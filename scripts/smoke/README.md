@@ -13,8 +13,8 @@ node scripts/smoke/run.mjs
 
 ## Safety
 
-- It refuses to run unless `MONGODB_URI` (and `SELLER_MONGODB_URI`, if set) contains the word `throwaway` or `test`.
-  The value is never printed.
+- It refuses to run unless the database NAME in `MONGODB_URI` (and in `SELLER_MONGODB_URI`, if set) contains the word `throwaway` or `test`.
+  Only the name is looked at, not the host, user, password or options. The value is never printed.
 - Every request is one that must be refused or that only reads, so the database is not written to.
 
 ## What it checks

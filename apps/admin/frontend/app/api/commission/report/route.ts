@@ -44,7 +44,9 @@ export async function GET(request: NextRequest): Promise<Response> {
       { status: known ? upstream.status : 502, headers: NO_STORE },
     );
   }
-  return new Response(await upstream.text(), {
+  // The bytes as they are: Response.text() would drop the UTF-8 byte order mark that the backend puts first, and a spreadsheet then
+  // misreads Urdu or other non-ASCII store names (found by the Sprint 4 verification).
+  return new Response(await upstream.arrayBuffer(), {
     status: 200,
     headers: {
       ...NO_STORE,

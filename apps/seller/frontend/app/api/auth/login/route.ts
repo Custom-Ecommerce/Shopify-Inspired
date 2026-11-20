@@ -50,6 +50,14 @@ export async function POST(req: NextRequest) {
     if (res.status === 401) {
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
+    // SB-11 (V-13): the throttle answers 429 with Retry-After; pass it on so the page can say how long to wait.
+    if (res.status === 429) {
+      const retryAfter = res.headers.get("retry-after");
+      return NextResponse.json(
+        { error: "Too many attempts. Please wait and try again.", code: "RATE_LIMITED" },
+        { status: 429, headers: { ...(retryAfter ? { "Retry-After": retryAfter } : {}), "Cache-Control": "no-store" } },
+      );
+    }
     if (res.status === 500 || res.status === 502 || res.status === 503) {
       return NextResponse.json({ error: "Backend unreachable. Please try again later." }, { status: 502 });
     }

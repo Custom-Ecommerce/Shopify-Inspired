@@ -1,6 +1,6 @@
 "use client";
 
-import type { PanelProps } from "@/components/commission/ledger-panel";
+import type { PanelProps } from "@/lib/commission";
 import { DataTable, TablePagination, type Column } from "@/components/shared/data-table";
 import { listRateHistory } from "@/lib/api/client";
 import type { RateHistoryRow } from "@/lib/commission-rates";

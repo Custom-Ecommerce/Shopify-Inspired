@@ -54,6 +54,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
  * write on updatedAt -> re-read -> revalidateStore() once -> audit (best effort; payout details as method and last 4 only).
  *
  *   200 the store settings (payout masked)   400 STORE_SETTINGS_INVALID | ACCOUNT_BODY_INVALID { field }
+ *   422 CARD_CHECKOUT_UNSUPPORTED_BY_THEME (COD off on a theme without card checkout, or a switch to one while COD is off)
  *   401 no session   403 admin, or another seller's store   404 unknown store   409 changed meanwhile   503 database
  *
  * The slug is not in the schema: it cannot change after creation, and sending it is a 400 naming "slug".

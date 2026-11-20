@@ -9,6 +9,7 @@ import { Surface } from "@/components/shared/Surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { tooManyAttemptsMessage } from "@/lib/retry-after";
 
 function LoginForm() {
   const router = useRouter();
@@ -39,6 +40,10 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
+      if (res.status === 429) {
+        setErrorMessage(tooManyAttemptsMessage(res.headers.get("retry-after")));
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setErrorMessage(data?.error ?? "Invalid email or password.");

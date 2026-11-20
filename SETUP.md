@@ -63,8 +63,8 @@ through the readiness checklist. Delete it from any environment that still has i
 - Unit tests never touch a database: every model is stubbed in the test file.
 - To run the apps, use a local `mongod` (for example `mongodb://127.0.0.1:27017/markaz_dev_seller` and `.../markaz_dev_admin`) or a
   throwaway Atlas database. Never point a local app at a production database.
-- Name every throwaway database with `verify` or `smoke` in it (for example `markaz_smoke_seller`). The smoke script
-  (`scripts/smoke`, EP-06.US06) refuses any other name.
+- Name every throwaway database with `throwaway` or `test` in it (for example `markaz_throwaway_seller`). The smoke script
+  (`scripts/smoke`, EP-06.US06) refuses any other name; it looks at the database name only.
 - Drop the database when you are done.
 
 ## 4. Run
@@ -164,6 +164,16 @@ Email in development: leave `EMAIL_PROVIDER` empty or set it to `log`. Every mes
 The admin backend has the same flush route (`/api/internal/notifications/flush`, same `OUTBOX_CRON_SECRET`) for
 the emails it queues (operator password reset). Schedule both.
 
+**Two secrets are required for broadcasts and the flush route.** Without them the feature does not work, and nothing in
+the build tells you:
+
+| Secret | App | Without it |
+| --- | --- | --- |
+| `UNSUBSCRIBE_SIGNING_SECRET` | seller backend | Every broadcast answers `503 BROADCAST_NOT_CONFIGURED`. The same signed link is the unsubscribe link in each mail, so no broadcast is sent without it. |
+| `OUTBOX_CRON_SECRET` (16 characters or more) | seller backend, admin backend | The flush route answers `401` to everyone, so queued, failed and broadcast emails are never sent (they stay queued) and the commission ledger retry route is refused too. |
+
+Both are in the production secrets table above and in each `.env.example`; set them before the first broadcast.
+
 ## 8. Accounts (Sprint 4 EP-08)
 
 ### Deploy notes
@@ -182,6 +192,12 @@ cd apps/seller/backend && node --env-file=.env --import tsx scripts/mark-sellers
 ```
 
    The first command is a dry run that prints how many accounts would change. The script prints counts only.
+
+   After `--apply`, a running seller backend can still see the old "not verified" value for up to 30 seconds: it
+   keeps each session's account in a short cache (`SESSION_USER_CACHE_MAX_MS`, 30 s). Go-live and payouts may keep
+   saying "verify your email" for that long. Nothing is wrong; wait half a minute or redeploy. The same 30 seconds
+   apply to suspending a seller: the instance that applies it refuses the seller at once, every other running
+   instance within 30 seconds.
 3. Set `APP_BASE_URL_SELLER` (seller backend) and `APP_BASE_URL_ADMIN` (admin backend), so the reset and
    verification links point to the right site.
 
@@ -222,4 +238,11 @@ signature. Deploy settings:
 Use `TRUSTED_CLIENT_IP_HEADER` instead of `TRUSTED_PROXY_HOPS` only behind a proxy that always sets that header itself.
 When no address can be known (no secret, or no setting), the per-IP bucket is skipped and only the per-account or
 per-email bucket applies. There is never one shared bucket for unknown callers.
+
+**Set `TRUSTED_PROXY_HOPS` on both portals. Do not leave it out.** With neither `TRUSTED_PROXY_HOPS` nor
+`TRUSTED_CLIENT_IP_HEADER`, the portal reads "the address of the connection itself", and behind a proxy or Vercel that is
+the proxy's address, not the shopper's. It signs that one address for every visitor, so **all portal users share one
+per-IP bucket**: a handful of forgot-password requests (5 per hour) or failed logins (30 per 15 minutes) from anyone
+locks every seller out of those pages with "Too many attempts". The Sprint 4 verification hit exactly this. After a deploy
+check it: open `/forgot-password` from two different networks; both must work, and one must not use up the other's five.
 

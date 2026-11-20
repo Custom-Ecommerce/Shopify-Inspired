@@ -1,11 +1,17 @@
 import { readChoice, readPage, readSearch } from "@/lib/list-state";
 import { PAGE_SIZE } from "@/lib/stores";
 
-export const COMMISSION_VIEWS = ["ledger", "rates", "history", "payouts", "payout-history"] as const;
+/**
+ * The commission page views. SB-11: there is no "ledger" view any more. The old ledger tab read the pre-Sprint-4 ledger
+ * (commissionLedger) and said "No commission recorded yet" while the new ledger (CommissionEntry) held rows; no admin
+ * route returns the new entries as rows, so the tab was removed. The new ledger's figures are in Payouts due, Payout
+ * history and the report.
+ */
+export const COMMISSION_VIEWS = ["rates", "history", "payouts", "payout-history"] as const;
 export type CommissionView = (typeof COMMISSION_VIEWS)[number];
+export const DEFAULT_COMMISSION_VIEW: CommissionView = "rates";
 
 export const VIEW_LABELS: Record<CommissionView, string> = {
-  ledger: "Ledger",
   rates: "Store rates",
   history: "Rate history",
   payouts: "Payouts due",
@@ -25,8 +31,8 @@ export const RATE_MODE_LABELS: Record<RateModeValue, string> = { inherit: "Platf
 export const PAYMENT_METHOD_LABELS: Record<string, string> = { card: "Card", cod: "Cash on delivery" };
 
 /**
- * The state of the commission page, held in the URL. The ledger uses status; the rates view uses mode. A value that
- * belongs to the other view is dropped, so switching views never carries a stale filter.
+ * The state of the commission page, held in the URL. The rates view uses mode (status is kept for the old ledger API
+ * helpers and is always empty). A value that belongs to the other view is dropped, so switching views never carries a stale filter.
  */
 export interface CommissionListState {
   view: CommissionView;
@@ -44,12 +50,12 @@ function readOptional<T extends string>(params: Params, name: string, allowed: r
 }
 
 export function parseCommissionState(params: Params): CommissionListState {
-  const view = readChoice(params, "view", COMMISSION_VIEWS, "ledger");
+  const view = readChoice(params, "view", COMMISSION_VIEWS, DEFAULT_COMMISSION_VIEW);
   return {
     view,
     page: readPage(params),
     q: readSearch(params),
-    status: view === "ledger" ? readOptional(params, "status", LEDGER_STATUS_VALUES) : "",
+    status: "",
     mode: view === "rates" ? readOptional(params, "mode", RATE_MODE_VALUES) : "",
   };
 }
@@ -57,10 +63,9 @@ export function parseCommissionState(params: Params): CommissionListState {
 /** The query string for the page URL. The default view and empty filters are left out. */
 export function commissionStateToUrl(state: CommissionListState): string {
   const params = new URLSearchParams();
-  if (state.view !== "ledger") params.set("view", state.view);
+  if (state.view !== DEFAULT_COMMISSION_VIEW) params.set("view", state.view);
   if (state.page > 1) params.set("page", String(state.page));
   if (state.q !== "") params.set("q", state.q);
-  if (state.view === "ledger" && state.status !== "") params.set("status", state.status);
   if (state.view === "rates" && state.mode !== "") params.set("mode", state.mode);
   return params.toString();
 }
@@ -87,4 +92,10 @@ export function ratesStateToQuery(state: CommissionListState, withLimit = false)
 
 export function entryCountLabel(count: number): string {
   return count + (count === 1 ? " entry" : " entries");
+}
+
+/** What every commission panel gets from the page: the URL state and a way to change it. */
+export interface PanelProps {
+  state: CommissionListState;
+  go: (next: CommissionListState) => void;
 }

@@ -294,6 +294,14 @@ test('the model refuses to change or delete an entry, except the settlement fiel
   }
 });
 
+test('the settlement update still passes with the { createdAt } that mongoose adds to every update, and nothing else does (found by the Sprint 4 verification)', () => {
+  // The real model hands the guard { $set: { settledAt, payoutId }, $setOnInsert: { createdAt } }; refusing it refused every payout.
+  assert.doesNotThrow(() => assertSettlementOnlyUpdate({ $set: { settledAt: new Date(), payoutId: '65a0000000000000000b0001' }, $setOnInsert: { createdAt: new Date() } }));
+  for (const update of [{ $setOnInsert: { rate: 1 } }, { $setOnInsert: { createdAt: new Date(), balanceEffect: 5 } }, { $set: { settledAt: new Date() }, $setOnInsert: { store: 'x' } }, { $addToSet: { x: 1 } }]) {
+    assert.throws(() => assertSettlementOnlyUpdate(update), /append only/);
+  }
+});
+
 // ------------------------------------------------------------------------------------------------------------ backfill
 
 const backfillRequest = (secret?: string) =>

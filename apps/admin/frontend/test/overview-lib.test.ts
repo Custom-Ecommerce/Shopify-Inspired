@@ -74,7 +74,7 @@ test("the sync tile follows the one health rule: healthy, backlog, then dead let
 
 test("each breakdown row links to its list on that status", () => {
   assert.equal(storeStatusHref("suspended"), "/stores?status=suspended");
-  assert.equal(ledgerStatusHref("pending"), "/commission?status=pending");
+  assert.equal(ledgerStatusHref("pending"), "/commission", "the ledger tab is gone, so the link opens the page");
   assert.equal(syncStatusHref("pending"), "/sync?status=pending");
   assert.equal(syncStatusHref("dead"), "/sync");
 });
@@ -97,7 +97,7 @@ test("the ledger rows show the entry count with the commission and the order val
     ["settled", "10 entries"],
   ]);
   assert.equal(rows[0].detail, formatMoney(4800) + " commission on " + formatMoney(120000));
-  assert.equal(rows[1].href, "/commission?status=settled");
+  assert.equal(rows[1].href, "/commission");
   assert.equal(ledgerRows(empty)[0].count, "0 entries");
 });
 
