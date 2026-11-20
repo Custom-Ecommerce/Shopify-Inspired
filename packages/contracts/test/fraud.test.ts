@@ -37,12 +37,27 @@ test('mode off: no flags and no confirmation, whatever the rules and the order s
   assert.deepEqual(result, { riskFlags: [], confirmationStatus: 'not_required' });
 });
 
-test('mode flagged: an order with no flag is not_required, an order with any flag is unconfirmed', () => {
+test('mode flagged: an order with no flag is not_required; high_value, flagged_city or repeat_returns make it unconfirmed', () => {
   assert.deepEqual(assess(), { riskFlags: [], confirmationStatus: 'not_required' });
-  for (const over of [{ total: 15001 }, { city: 'Karachi' }, { returnsCount: 2 }, { hasEarlierOrder: false }]) {
+  for (const over of [{ total: 15001 }, { city: 'Karachi' }, { returnsCount: 2 }]) {
     assert.equal(assess(over).confirmationStatus, 'unconfirmed', JSON.stringify(over));
     assert.equal(assess(over).riskFlags.length, 1, JSON.stringify(over));
   }
+});
+
+test('D-109: new_customer is a chip only: it never makes an order unconfirmed by itself, in any mode', () => {
+  const first = assess({ hasEarlierOrder: false });
+  assert.deepEqual(first.riskFlags, ['new_customer']);
+  assert.equal(first.confirmationStatus, 'not_required');
+  // Together with a rule that does count, the order is unconfirmed and keeps both flags.
+  const both = assess({ hasEarlierOrder: false, total: 15001 });
+  assert.deepEqual(both.riskFlags, ['high_value', 'new_customer']);
+  assert.equal(both.confirmationStatus, 'unconfirmed');
+  // Mode all confirms every COD order whatever the flags; mode off stores none.
+  assert.equal(assess({ mode: 'all', hasEarlierOrder: false }).confirmationStatus, 'unconfirmed');
+  assert.deepEqual(assess({ mode: 'off', hasEarlierOrder: false }), { riskFlags: [], confirmationStatus: 'not_required' });
+  // A card order is never unconfirmed.
+  assert.equal(assess({ paymentMethod: 'card', hasEarlierOrder: false, total: 99999 }).confirmationStatus, 'not_required');
 });
 
 test('mode all: every COD order is unconfirmed, flagged or not; a card order never is', () => {

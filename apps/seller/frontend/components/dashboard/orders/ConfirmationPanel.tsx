@@ -59,6 +59,8 @@ export function ConfirmationPanel({ storeId, order, onChanged }: { storeId: stri
   if (status === "not_required" && flags.length === 0 && log.length === 0) return null;
 
   const waiting = status === "unconfirmed" && order.status !== "cancelled";
+  // D-109: an unreachable decision is not final: the seller can call again and decide (confirmed and cancelled are final).
+  const canDecide = (status === "unconfirmed" || status === "unreachable") && order.status !== "cancelled";
   const problem = confirmationNoteProblem(note);
   const tel = telHref(order.phone);
   const wa = whatsappLink(
@@ -118,9 +120,13 @@ export function ConfirmationPanel({ storeId, order, onChanged }: { storeId: stri
           <p className="text-muted-foreground">Your store asks for a phone confirmation on every cash on delivery order.</p>
         ) : null}
 
-        {waiting ? (
+        {canDecide ? (
           <>
-            <p className="text-muted-foreground">You cannot dispatch this order until you have spoken to the customer. Call or message them, then record what happened.</p>
+            <p className="text-muted-foreground">
+              {waiting
+                ? "You cannot dispatch this order until you have spoken to the customer. Call or message them, then record what happened."
+                : "You could not reach this customer. Try again whenever you like and record what happened; you can also dispatch or cancel the order."}
+            </p>
             <div className="flex flex-col gap-2 sm:flex-row">
               {tel !== null ? (
                 <a href={tel} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-semibold hover:bg-muted sm:w-auto">

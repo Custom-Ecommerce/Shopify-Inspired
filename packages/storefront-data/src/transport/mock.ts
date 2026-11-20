@@ -1,3 +1,4 @@
+import { ReturnRefusedError } from "./errors";
 import type {
   CartQuote,
   CartQuoteInput,
@@ -11,9 +12,12 @@ import type {
   StorefrontProductDetail,
   StorefrontProductSummary,
   StorefrontProductVariant,
+  StorefrontReturnCreated,
+  StorefrontReturnEligibility,
   StorefrontTransport,
   SubmitOrderPayload,
   SubmitOrderResult,
+  SubmitReturnInput,
 } from "./types";
 import { OrderRejectedError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
@@ -389,6 +393,20 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
   }
 
 
+  /** Mock of the return eligibility: the demo's orders never leave pending, so nothing is returnable and the reason says so. */
+  async function getReturnEligibility(input: OrderLookupInput): Promise<StorefrontReturnEligibility | null> {
+    const order = await lookupOrder(input);
+    if (!order) return null;
+    return { eligible: false, reason: "not_delivered", windowDays: 7, deliveredAt: null, windowEndsAt: null, lines: [] };
+  }
+
+  /** Mock of POST returns: refused the way the backend refuses an order that was not delivered. */
+  async function submitReturn(input: SubmitReturnInput): Promise<StorefrontReturnCreated | null> {
+    const order = await lookupOrder({ orderId: input.orderId, phone: input.phone });
+    if (!order) return null;
+    throw new ReturnRefusedError("This order has not been delivered yet, so it cannot be returned.", "not_delivered");
+  }
+
   /** Like the backend: only categories that hold a product, in a fixed order. */
   async function listCategories(): Promise<StorefrontCategory[]> {
     const seen = new Map<string, StorefrontCategory>();
@@ -429,6 +447,8 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     lookupOrder,
     confirmOrder,
     trackOrder,
+    getReturnEligibility,
+    submitReturn,
   };
 }
 

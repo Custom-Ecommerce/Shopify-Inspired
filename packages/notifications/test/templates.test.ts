@@ -42,6 +42,9 @@ const FULL: TemplateVars = {
   broadcastMessage: 'Everything is 20% off this weekend.',
   unsubscribeLink: 'https://seller.markazify.com/unsubscribe?s=1&e=a&t=b',
   emailFooter: 'Zara Lawn, Lahore',
+  // Sprint 5 EP-13: the return templates.
+  returnNumber: 'RET-7KQ4M2XA',
+  returnReason: 'The item was used',
 };
 
 test('every template uses only variables it declares, and every declared variable is known', () => {

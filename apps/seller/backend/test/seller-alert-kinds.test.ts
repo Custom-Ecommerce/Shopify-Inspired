@@ -24,8 +24,8 @@ test('the model and the contracts list the same kinds, in the same order', () =>
   assert.deepEqual([...MODEL_KINDS], [...CONTRACT_KINDS]);
 });
 
-test('the kinds of Sprint 5 are there: unconfirmed_order next to the three of Sprint 4', () => {
-  for (const kind of ['new_order', 'low_stock', 'out_of_stock', 'unconfirmed_order']) {
+test('the kinds of Sprint 5 are there: unconfirmed_order (SB-2) and return_requested (SB-3) next to the three of Sprint 4', () => {
+  for (const kind of ['new_order', 'low_stock', 'out_of_stock', 'unconfirmed_order', 'return_requested']) {
     assert.ok(MODEL_KINDS.includes(kind), 'model ' + kind);
     assert.ok(CONTRACT_KINDS.includes(kind), 'contracts ' + kind);
   }
@@ -34,7 +34,7 @@ test('the kinds of Sprint 5 are there: unconfirmed_order next to the three of Sp
 test('the model accepts every kind of the contracts, and refuses one that is not listed', () => {
   const base = { store: '65a000000000000000000011', title: 'T', body: '', open: true };
   for (const kind of CONTRACT_KINDS) assert.equal(new (SellerAlert as any)({ ...base, kind }).validateSync(), undefined, kind);
-  assert.ok(new (SellerAlert as any)({ ...base, kind: 'return_requested' }).validateSync()?.errors.kind, 'a kind nobody listed is refused');
+  assert.ok(new (SellerAlert as any)({ ...base, kind: 'review_received' }).validateSync()?.errors.kind, 'a kind nobody listed (yet) is refused');
 });
 
 test('the alert wire keeps every kind; only a kind nobody listed becomes new_order (the silent fallback this test guards)', () => {
@@ -175,4 +175,18 @@ test('an order that needs no confirmation (none, not_required, confirmed) raises
     assert.equal(alerts[0]!.kind, 'new_order', String(confirmationStatus));
     assert.match(alerts[0]!.title, /^New order /);
   }
+});
+
+test('a return request raises ONE bell alert of the return_requested kind, which reaches the bell as that kind and not as new_order', async () => {
+  const { sendReturnRequested } = await import('@/lib/notifications');
+  await sendReturnRequested(STORE, { _id: '65a0000000000000000e0001', returnNumber: 'RET-7KQ4M2XA', order: ORDER_ID }, order());
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0]!.kind, 'return_requested');
+  assert.equal(alerts[0]!.dedupeKey, 'return:65a0000000000000000e0001:requested');
+  assert.equal(toAlertWire(alerts[0]).kind, 'return_requested');
+  assert.match(alerts[0]!.title, /RET-7KQ4M2XA/);
+  // The same return announced twice: nothing new.
+  await sendReturnRequested(STORE, { _id: '65a0000000000000000e0001', returnNumber: 'RET-7KQ4M2XA', order: ORDER_ID }, order());
+  assert.equal(alerts.length, 1);
+  assert.equal(outbox.filter((row) => row.template === 'return_requested_seller').length, 1);
 });

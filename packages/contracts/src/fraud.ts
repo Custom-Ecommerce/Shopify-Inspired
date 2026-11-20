@@ -112,7 +112,7 @@ export interface RiskAssessment {
 
 /**
  * The ONE rule for a new order (D-107). Mode off switches the whole feature off: no flags, not_required. Otherwise the four flags
- * are worked out; in mode flagged any flag makes a COD order unconfirmed, in mode all every COD order is. A card order is never
+ * are worked out; in mode flagged a COD order is unconfirmed when high_value, flagged_city or repeat_returns fired (new_customer is a chip only, D-109), in mode all every COD order is. A card order is never
  * unconfirmed. The flags never reject an order.
  */
 export function assessOrderRisk(input: RiskInput): RiskAssessment {
@@ -126,7 +126,9 @@ export function assessOrderRisk(input: RiskInput): RiskAssessment {
   if (rules.flagReturnsAtLeast !== null && input.returnsCount >= rules.flagReturnsAtLeast) flags.push('repeat_returns');
   if (!input.hasEarlierOrder) flags.push('new_customer');
   const cod = input.paymentMethod === 'cod';
-  const unconfirmed = cod && (input.mode === 'all' || flags.length > 0);
+  // D-109 (2): new_customer is shown as a chip but does NOT by itself make an order unconfirmed (every first-time buyer would need a call).
+  // high_value, flagged_city and repeat_returns do; mode all confirms every COD order.
+  const unconfirmed = cod && (input.mode === 'all' || flags.some((flag) => flag !== 'new_customer'));
   return { riskFlags: flags, confirmationStatus: unconfirmed ? 'unconfirmed' : 'not_required' };
 }
 

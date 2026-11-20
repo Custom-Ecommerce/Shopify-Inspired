@@ -16,8 +16,9 @@ export type ReversibleEntryType = (typeof REVERSIBLE_ENTRY_TYPES)[number];
  * and cod_commission = -commission (the seller owes it), reversal = the opposite sign of the entry it reverses.
  *
  * Append only. A row is never deleted and only settledAt / payoutId (the settlement compare-and-set of SB-7) ever change.
- * The unique index { order, type, reversesType } makes a repeat of any write a no-op: reversesType is null for every type
- * but a reversal, and a unique index treats null as a value.
+ * The unique index { order, type, reversesType, returnId } makes a repeat of any write a no-op: reversesType is null for every type
+ * but a reversal, returnId is null for every entry but the reversal of one RETURN (Sprint 5 EP-13, audit R1), and a unique index treats
+ * null (and a missing field) as a value. So an order still has one entry per type and one cancel reversal, plus one reversal per return.
  */
 export interface ICommissionEntry {
   _id: Types.ObjectId;
@@ -30,6 +31,8 @@ export interface ICommissionEntry {
   /** Percent, one decimal, as it was when the entry was written. */
   rate: number;
   reversesType: ReversibleEntryType | null;
+  /** Sprint 5 EP-13: the return a proportional reversal belongs to. Absent on every other entry (existing entries stay valid). */
+  returnId?: Types.ObjectId | null;
   settledAt: Date | null;
   payoutId: Types.ObjectId | null;
   createdAt: Date;
@@ -46,14 +49,16 @@ const CommissionEntrySchema = new Schema<ICommissionEntry>(
     baseAmount: { type: Number, required: true, min: 0, validate: wholeRupees },
     rate: { type: Number, required: true, min: 0, max: 100 },
     reversesType: { type: String, enum: [...REVERSIBLE_ENTRY_TYPES], default: null },
+    returnId: { type: Schema.Types.ObjectId, ref: 'Return', default: null },
     settledAt: { type: Date, default: null },
     payoutId: { type: Schema.Types.ObjectId, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false }, collection: 'commissionentries' },
 );
 
-// One entry per order, type and reversed type: a repeated or parallel write cannot add a second one.
-CommissionEntrySchema.index({ order: 1, type: 1, reversesType: 1 }, { unique: true, name: 'order_type_reverses_unique' });
+// One entry per order, type, reversed type and return: a repeated or parallel write cannot add a second one. The key used to be
+// { order, type, reversesType }; scripts/migrate-commission-index.mjs moves a live collection to this one (mongoose never alters an index).
+CommissionEntrySchema.index({ order: 1, type: 1, reversesType: 1, returnId: 1 }, { unique: true, name: 'order_type_reverses_return_unique' });
 // SB-7: the unsettled balance of a store.
 CommissionEntrySchema.index({ store: 1, settledAt: 1 });
 

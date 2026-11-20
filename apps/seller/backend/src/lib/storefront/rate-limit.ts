@@ -21,6 +21,12 @@ export interface RateLimitRule {
 export const ORDER_CREATE_LIMIT: RateLimitRule = { name: 'order-create', limit: 20, windowMs: 60_000 };
 /** Order lookup and customer tracking count together (D-069), so two endpoints do not double a client's guesses. */
 export const ORDER_LOOKUP_LIMIT: RateLimitRule = { name: 'order-lookup', limit: 10, windowMs: 60_000 };
+/**
+ * Sprint 5 EP-13.US01.T03: a return request is checked per client address (RETURN_LIMIT) AND per order number (RETURN_ORDER_LIMIT), so one
+ * address cannot guess phones for many orders and many addresses cannot hammer one order.
+ */
+export const RETURN_LIMIT: RateLimitRule = { name: 'return', limit: 10, windowMs: 60_000 };
+export const RETURN_ORDER_LIMIT: RateLimitRule = { name: 'return-order', limit: 10, windowMs: 60_000 };
 export const CART_QUOTE_LIMIT: RateLimitRule = { name: 'cart-quote', limit: 60, windowMs: 60_000 };
 export const FAVOURITES_LIMIT: RateLimitRule = { name: 'favourites', limit: 30, windowMs: 60_000 };
 /** Quotes that carry a code, on top of the quote's own limit. A cart with a code is quoted again on every change, so this leaves room for that. */
@@ -101,9 +107,14 @@ function clientKey(headers: Headers, storeId: string): string {
 
 /** Throws 429 RATE_LIMITED (with Retry-After) once the caller exceeds the rule. Must be awaited. */
 export async function enforceRateLimit(rule: RateLimitRule, storeId: string, headers: Headers, now: number = Date.now()): Promise<void> {
+  return enforceRateLimitFor(rule, storeId, clientKey(headers, storeId), now);
+}
+
+/** The same limiter keyed on any subject (for example an order number) instead of the client address. */
+export async function enforceRateLimitFor(rule: RateLimitRule, storeId: string, subject: string, now: number = Date.now()): Promise<void> {
   const windowStart = Math.floor(now / rule.windowMs) * rule.windowMs;
   const windowEnd = windowStart + rule.windowMs;
-  const key = rule.name + ':' + storeId + ':' + clientKey(headers, storeId) + ':' + windowStart;
+  const key = rule.name + ':' + storeId + ':' + subject + ':' + windowStart;
 
   let count: number;
   try {

@@ -28,6 +28,7 @@ import {
 import { HttpError, isDuplicateKeyError } from '@/lib/http';
 import { oid } from '@/lib/ledger-aggregates';
 import { serializeCsv } from '@/lib/product-csv';
+import { returnsCountFor } from '@/lib/returns';
 import { CustomerNote, EmailUnsubscribe, Order } from '@/lib/services';
 
 /**
@@ -215,7 +216,8 @@ async function notesFor(storeId: string, keys: readonly string[]): Promise<Map<s
 
 // ------------------------------------------------------------------------------------------------------------------- rows
 
-export function statsOf(group: CustomerGroup): CustomerStats {
+/** The statistics of a group. `returnsCount` is read by the caller (the one helper returnsCountFor) because it is not part of the orders pipeline. */
+export function statsOf(group: CustomerGroup, returnsCount: number = 0): CustomerStats {
   const delivered = whole(group.deliveredCount);
   const spent = whole(group.totalSpent);
   return {
@@ -226,8 +228,8 @@ export function statsOf(group: CustomerGroup): CustomerStats {
     averageOrderValue: delivered > 0 ? Math.round(spent / delivered) : 0,
     firstOrderAt: iso(group.firstOrderAt),
     lastOrderAt: iso(group.lastOrderAt),
-    // EP-13 (SB-3) reads the real returns count here.
-    returnsCount: 0,
+    // Sprint 5 EP-13.US03.T05: the real count of this customer's returns (not rejected), by phoneKey: returnsCountFor.
+    returnsCount: whole(returnsCount),
   };
 }
 
@@ -328,10 +330,12 @@ export async function getCustomerDetail(storeId: string, key: string): Promise<C
     { $project: { orderId: 1, createdAt: 1, status: 1, total: 1, paymentMethod: 1, paymentStatus: 1, address: 1, city: 1 } },
   ];
   const email = text(group.email);
-  const [orderLines, notes, unsubscribed] = await Promise.all([
+  const [orderLines, notes, unsubscribed, returnsCount] = await Promise.all([
     Order.aggregate(orderPipeline as unknown as PipelineStage[]) as unknown as Promise<OrderLine[]>,
     notesFor(storeId, [key]),
     unsubscribedAmong(storeId, email === null ? [] : [email]),
+    // A customer known only by email has no phone key, so no returns to count.
+    returnsCountFor(storeId, key),
   ]);
   const note = notes.get(key);
   const orders: CustomerOrderRow[] = orderLines.map((line) => ({
@@ -350,7 +354,7 @@ export async function getCustomerDetail(storeId: string, key: string): Promise<C
     phone: text(group.phone),
     whatsapp: text(group.whatsapp),
     unsubscribed: email !== null && unsubscribed.has(email),
-    stats: statsOf(group),
+    stats: statsOf(group, returnsCount),
     note: note?.note ?? '',
     tags: note?.tags ?? [],
     noteUpdatedAt: iso(note?.updatedAt),

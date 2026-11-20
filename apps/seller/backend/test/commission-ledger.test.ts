@@ -74,7 +74,7 @@ const chain = (value: () => unknown) => {
 };
 
 const isDup = (doc: Record<string, any>) =>
-  entries.some((e) => String(e.order) === String(doc.order) && e.type === doc.type && (e.reversesType ?? null) === (doc.reversesType ?? null));
+  entries.some((e) => String(e.order) === String(doc.order) && e.type === doc.type && (e.reversesType ?? null) === (doc.reversesType ?? null) && String(e.returnId ?? null) === String(doc.returnId ?? null));
 
 beforeEach(() => {
   // The session guard reads the account behind each token; a stub keeps these tests off the database.
@@ -286,7 +286,8 @@ test('reversing an order with no entries writes nothing', async () => {
 test('the model refuses to change or delete an entry, except the settlement fields', () => {
   const schema = (CommissionEntry as any).schema;
   const index = schema.indexes().find(([, options]: any[]) => options?.unique);
-  assert.deepEqual(index[0], { order: 1, type: 1, reversesType: 1 });
+  // Sprint 5 EP-13 (audit R1): the key gained returnId, so a second partial return does not collide with the first.
+  assert.deepEqual(index[0], { order: 1, type: 1, reversesType: 1, returnId: 1 });
   assert.ok(schema.indexes().some(([keys]: any[]) => keys.store === 1 && keys.settledAt === 1));
   assert.doesNotThrow(() => assertSettlementOnlyUpdate({ $set: { settledAt: new Date(), payoutId: '65a0000000000000000b0001' } }));
   for (const update of [{ $set: { balanceEffect: 0 } }, { $set: { rate: 1 } }, { $inc: { baseAmount: 1 } }, { type: 'reversal' }, { $unset: { order: 1 } }]) {

@@ -1,7 +1,7 @@
 "use client";
 
 import type { SellerAlertListResponse, SellerAlertWire } from "@markaz/contracts";
-import { Bell, CheckCheck, Loader2, Package, PhoneCall, ShoppingBag } from "lucide-react";
+import { Bell, CheckCheck, Loader2, Package, PhoneCall, RotateCcw, ShoppingBag } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,8 @@ function timeAgo(iso: string): string {
 function AlertIcon({ kind }: { kind: SellerAlertWire["kind"] }) {
   if (kind === "new_order") return <ShoppingBag className="size-4 shrink-0 text-primary" aria-hidden="true" />;
   // Sprint 5 EP-11: a COD order waiting for the seller's phone confirmation.
+  // Sprint 5 EP-13: a shopper asked for a return.
+  if (kind === "return_requested") return <RotateCcw className="size-4 shrink-0 text-amber-600" aria-hidden="true" />;
   if (kind === "unconfirmed_order") return <PhoneCall className="size-4 shrink-0 text-amber-600" aria-hidden="true" />;
   return <Package className={`size-4 shrink-0 ${kind === "out_of_stock" ? "text-destructive" : "text-amber-600"}`} aria-hidden="true" />;
 }

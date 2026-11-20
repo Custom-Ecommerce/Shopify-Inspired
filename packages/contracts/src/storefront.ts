@@ -58,6 +58,8 @@ export const STOREFRONT_ERROR_CODES = [
   'PAYMENT_NOT_STARTED',
   // Sprint 5 EP-11.US02: a blocked phone or email. Neutral on purpose: it does not say the contact is blocked.
   'CONTACT_BLOCKED',
+  // Sprint 5 EP-13.US01: a return request (the order is not delivered, outside the window, nothing left to return, a card order).
+  'RETURN_NOT_ELIGIBLE',
 ] as const;
 export type StorefrontErrorCode = (typeof STOREFRONT_ERROR_CODES)[number];
 

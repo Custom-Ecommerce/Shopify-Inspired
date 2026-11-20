@@ -209,3 +209,29 @@ export const WireRefusal = z.object({
   reason: z.string().optional(),
 });
 /* @theme-integration-patch:wire */
+
+/** Sprint 5 EP-13: the return eligibility and the return created. Mirror ReturnEligibility and ReturnCreated in @markaz/contracts. */
+export const WireReturnEligibilityEnvelope = z.object({
+  data: z.object({
+    eligible: z.boolean(),
+    reason: z.enum(["not_delivered", "window_closed", "returns_off", "card_order", "nothing_left"]).nullable(),
+    windowDays: z.number().int().min(0),
+    deliveredAt: z.string().nullable(),
+    windowEndsAt: z.string().nullable(),
+    lines: z.array(
+      z.object({
+        productId: z.string().min(1),
+        variantId: z.string().min(1),
+        productTitle: z.string(),
+        variantTitle: z.string(),
+        unitPrice: z.number().int().min(0),
+        deliveredQuantity: z.number().int().min(0),
+        returnableQuantity: z.number().int().min(0),
+      }),
+    ),
+  }),
+});
+
+export const WireReturnCreatedEnvelope = z.object({
+  data: z.object({ returnNumber: z.string().min(1), status: z.literal("requested") }),
+});

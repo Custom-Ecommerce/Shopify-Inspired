@@ -66,6 +66,8 @@ export async function restoreOrderStock(
   orderId: string,
   actorId: unknown,
   lines: readonly RestoreLine[],
+  /** The StockMovement reason: order_cancelled for a cancel (the default), return_restock for goods received back from a return. */
+  reason: string = ORDER_CANCELLED_REASON,
 ): Promise<OrderStockRestore> {
   const result: OrderStockRestore = { restored: [], skipped: [], failed: [] };
   const pageChanged = new Set<string>();
@@ -103,7 +105,7 @@ export async function restoreOrderStock(
       if (after) {
         const quantity = stockOf(after, line.variantId);
         if (quantity !== null && stockShownChanged(quantity - qty, quantity)) pageChanged.add(line.productId);
-        await recordMovement(storeId, line.productId, line.variantId, quantity, qty, ORDER_CANCELLED_REASON, actorId, orderId);
+        await recordMovement(storeId, line.productId, line.variantId, quantity, qty, reason, actorId, orderId);
         result.restored.push({ name, sku: line.sku ?? null, qty });
         continue;
       }

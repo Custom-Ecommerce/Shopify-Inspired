@@ -730,3 +730,47 @@ test("fraud: Seller B cannot change Seller A's fraud settings and an admin sessi
   assert.equal((await save({ fraud: { codConfirmation: 'all' } }, tokenAdmin)).status, 403);
   assert.equal((await readFraudSettings()).codConfirmation, 'off');
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 5 EP-13.US01.T02 (D-107): the 'returns' group (the return window)
+
+const readReturnsSettings = async () => ((await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any }).settings.returns;
+
+test('returns: a store that never saved the window reads 7 days', async () => {
+  assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
+});
+
+test('returns: the window is saved in storefront, audited by group and field, and read back; 0 means no returns, 30 is the most', async () => {
+  for (const days of [14, 0, 30]) {
+    const res = await save({ returns: { returnWindowDays: days } });
+    assert.equal(res.status, 200, String(days));
+    assert.deepEqual(((await res.json()) as { settings: any }).settings.returns, { returnWindowDays: days });
+    assert.equal(stores[STORE_A]!.storefront.returnWindowDays, days);
+  }
+  assert.equal(audits.length, 3);
+  assert.deepEqual(audits[0]!.details.groups, ['returns']);
+  assert.deepEqual(audits[0]!.details.fields, ['storefront']);
+  assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the other storefront settings are kept');
+});
+
+test('returns: a window outside 0 to 30, a decimal or a text is 400 naming the field, and nothing is written', async () => {
+  for (const returnWindowDays of [-1, 31, 7.5, '7', null]) {
+    const res = await save({ returns: { returnWindowDays } });
+    assert.equal(res.status, 400, String(returnWindowDays));
+    assert.equal(await fieldOf(res), 'returns.returnWindowDays');
+  }
+  assert.equal('returnWindowDays' in stores[STORE_A]!.storefront, false);
+  assert.equal((await save({ returns: { banana: 1 } })).status, 400);
+  assert.equal(audits.length, 0);
+});
+
+test("returns: a stored value that is not a whole number from 0 to 30 reads as the default, and Seller B cannot change Seller A's window", async () => {
+  stores[STORE_A]!.storefront.returnWindowDays = 99;
+  assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
+  stores[STORE_A]!.storefront.returnWindowDays = 'soon';
+  assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
+  delete stores[STORE_A]!.storefront.returnWindowDays;
+  assert.equal((await save({ returns: { returnWindowDays: 3 } }, tokenB)).status, 403);
+  assert.equal((await save({ returns: { returnWindowDays: 3 } }, tokenAdmin)).status, 403);
+  assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
+});

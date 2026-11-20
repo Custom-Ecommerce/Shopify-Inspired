@@ -8,6 +8,7 @@ import {
 } from '@/lib/contracts';
 import { oid } from '@/lib/ledger-aggregates';
 import { BlockedContact, Order } from '@/lib/services';
+import { returnsCountFor } from '@/lib/returns';
 import { phoneKeyOf } from '@/lib/storefront/order-phone';
 
 /*
@@ -89,11 +90,11 @@ export function toBlockedContactRow(doc: unknown): BlockedContactRow {
 // ------------------------------------------------------------------------------------------------------------ risk rules
 
 /**
- * How many returns this customer has. Reads 0 until EP-13 (SB-3) has real returns, so the "returns at least" rule cannot flag anyone
- * yet. It is a function so the rule's input is already in the right place when the count becomes real.
+ * How many returns this customer has in this store (returns that were not rejected, by their phoneKey). Real since Sprint 5 SB-3 (D-109):
+ * the SAME helper as the customer page's returns count, so the rule and the page cannot disagree. 0 for an order with no phone key.
  */
-export async function returnsCountOf(_storeId: string, _phoneKey: string | undefined): Promise<number> {
-  return 0;
+export async function returnsCountOf(storeId: string, phoneKey: string | undefined): Promise<number> {
+  return returnsCountFor(storeId, phoneKey);
 }
 
 export interface RiskContext {

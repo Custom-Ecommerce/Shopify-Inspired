@@ -2,7 +2,7 @@ import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { BlockedContact, Order, Product, StockMovement, Store } from '@/lib/services';
+import { BlockedContact, Order, Product, Return, StockMovement, Store } from '@/lib/services';
 import { storefrontOrderCreatedResponseSchema } from '@/lib/contracts';
 import { readFraud } from '@/lib/fraud';
 import { resetRateLimits } from '../src/lib/storefront/rate-limit';
@@ -21,6 +21,7 @@ const StoreModel = Store as any;
 const ProductModel = Product as any;
 const OrderModel = Order as any;
 const BlockModel = BlockedContact as any;
+const ReturnModel = Return as any;
 const MovementModel = StockMovement as any;
 
 type Row = Record<string, any>;
@@ -42,6 +43,8 @@ let productReads: number;
 let orderExistsCalls: Row[];
 let blockExistsCalls: Row[];
 let existsFails: boolean;
+/** The store's returns, read by the returns count (lib/returns.ts returnsCountFor). */
+let returnRows: Row[];
 let restore: () => void;
 
 function activeStore(pay: Row = {}, sf: Row = {}): Row {
@@ -77,6 +80,7 @@ beforeEach(() => {
   orderExistsCalls = [];
   blockExistsCalls = [];
   existsFails = false;
+  returnRows = [];
 
   const saved = {
     connect: (mongoose as any).connect,
@@ -89,6 +93,7 @@ beforeEach(() => {
     oCreate: OrderModel.create,
     oExists: OrderModel.exists,
     bExists: BlockModel.exists,
+    rCount: ReturnModel.countDocuments,
   };
   (mongoose as any).connect = async () => mongoose;
   StoreModel.findById = () => {
@@ -154,7 +159,10 @@ beforeEach(() => {
     const hit = blocked.find((row) => String(row.store) === String(filter.store) && (filter.$or as Row[]).some((b) => row.kind === b.kind && row.value === b.value));
     return hit ? { _id: 'b' } : null;
   };
+  ReturnModel.countDocuments = async (filter: any) =>
+    returnRows.filter((row) => String(row.store) === String(filter.store) && row.contactPhone === filter.contactPhone && row.status !== filter.status.$ne).length;
   restore = () => {
+    ReturnModel.countDocuments = saved.rCount;
     (mongoose as any).connect = saved.connect;
     StoreModel.findById = saved.sFindById;
     ProductModel.find = saved.pFind;
@@ -348,11 +356,11 @@ test('flagged_city: the shopper\'s free-text city is matched with the shared cit
   assert.equal('riskFlags' in saved(), false);
 });
 
-test('new_customer: no earlier order with the same phone key; spelling does not matter, another store\'s order does not count', async () => {
+test('new_customer: no earlier order with the same phone key; a chip only (D-109): it does not make the order unconfirmed; another store\'s order does not count', async () => {
   storeRow = activeStore(fraud('flagged'));
   await place();
   assert.deepEqual(saved().riskFlags, ['new_customer']);
-  assert.equal(saved().confirmationStatus, 'unconfirmed');
+  assert.equal(saved().confirmationStatus, 'not_required', 'a first-time buyer does not need a call by that alone');
   // The question was one indexed lookup on the store and the normalized phone.
   assert.equal(orderExistsCalls.length, 1);
   assert.equal(String(orderExistsCalls[0]!.store), STORE_ID);
@@ -370,11 +378,30 @@ test('new_customer: no earlier order with the same phone key; spelling does not 
   assert.equal('confirmationStatus' in saved(), false);
 });
 
-test('repeat_returns reads 0 until EP-13: a store with the rule on flags nobody yet', async () => {
+test('repeat_returns reads the real returns count (D-109, SB-3): at or above the rule flags and makes the order unconfirmed', async () => {
   earlierOrder();
-  storeRow = activeStore(fraud('flagged', { flagReturnsAtLeast: 1 }));
+  storeRow = activeStore(fraud('flagged', { flagReturnsAtLeast: 2 }));
+  returnRows = [{ store: STORE_ID, contactPhone: PHONE_KEY, status: 'refunded' }];
   assert.equal((await place()).status, 201);
-  assert.equal('riskFlags' in saved(), false);
+  assert.equal('riskFlags' in saved(), false, 'one return is below the rule');
+  returnRows.push({ store: STORE_ID, contactPhone: PHONE_KEY, status: 'requested' });
+  assert.equal((await place()).status, 201);
+  assert.deepEqual(saved().riskFlags, ['repeat_returns']);
+  assert.equal(saved().confirmationStatus, 'unconfirmed', 'an order of a flagged repeat returner waits for the seller\'s call');
+});
+
+test('repeat_returns: a rejected return does not count, another customer\'s and another store\'s returns do not count', async () => {
+  earlierOrder();
+  storeRow = activeStore(fraud('flagged', { flagReturnsAtLeast: 2 }));
+  returnRows = [
+    { store: STORE_ID, contactPhone: PHONE_KEY, status: 'rejected' },
+    { store: STORE_ID, contactPhone: PHONE_KEY, status: 'rejected' },
+    { store: STORE_ID, contactPhone: '+923009999999', status: 'refunded' },
+    { store: OTHER_STORE_ID, contactPhone: PHONE_KEY, status: 'refunded' },
+    { store: STORE_ID, contactPhone: PHONE_KEY, status: 'approved' },
+  ];
+  assert.equal((await place()).status, 201);
+  assert.equal('riskFlags' in saved(), false, 'only one counting return');
 });
 
 test('every rule together: all the flags are stored, in order, and the order is still placed', async () => {

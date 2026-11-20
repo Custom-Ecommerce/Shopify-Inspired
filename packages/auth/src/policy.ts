@@ -527,3 +527,16 @@ Object.assign(POLICY_MATRIX, {
     delete: { actors: ['seller'], fields: { seller: '*' } },
   },
 });
+
+// Sprint 5 EP-13 (D-107, D-108): the seller's return actions: approve, reject (with a reason), receive (what came back and what is restocked)
+// and record a refund. Each is its own route and its own compare-and-set; the seller never writes the status or the totals directly.
+// Seller only, of their own store (the route checks the store); an admin has no row. The generic PATCH on `returns` stays as it was.
+export const SELLER_RETURN_ACTION_FIELDS = ['reason', 'items', 'amount', 'method', 'reference'] as const;
+Object.assign(POLICY_MATRIX, {
+  returnActions: {
+    read: { actors: [], fields: {} },
+    create: { actors: [], fields: {} },
+    update: { actors: ['seller'], fields: { seller: SELLER_RETURN_ACTION_FIELDS } },
+    delete: { actors: [], fields: {} },
+  },
+});

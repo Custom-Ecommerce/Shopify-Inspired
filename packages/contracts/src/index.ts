@@ -21,6 +21,8 @@ export * from './discount';
 
 // B10.2: returns and referrals.
 export * from './return';
+// Sprint 5 EP-13: the arithmetic of returns (returned base, commission reversal, window, quantities).
+export * from './return-money';
 export * from './referral';
 
 // B10.3: media.

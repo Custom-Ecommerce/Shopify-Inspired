@@ -163,7 +163,7 @@ export function FraudTab({ settings, save, onDirty }: TabProps) {
               </ul>
             ) : null}
           </div>
-          <p className="text-sm text-muted-foreground">A customer with no earlier order from the same phone number is always flagged as a new customer.</p>
+          <p className="text-sm text-muted-foreground">A customer with no earlier order from the same phone number is marked as a new customer. That is only a mark: on its own it does not make an order wait for your call.</p>
         </div>
       </SectionCard>
 

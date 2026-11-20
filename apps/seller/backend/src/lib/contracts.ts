@@ -222,3 +222,27 @@ export const {
   readConfirmationStatus,
   readRiskFlags,
 } = contracts;
+
+// Sprint 5 EP-13 (D-107, D-108, D-109): returns, refunds and the arithmetic behind them.
+export const {
+  CARD_REFUND_UNSUPPORTED,
+  CARD_REFUND_UNSUPPORTED_MESSAGE,
+  RETURN_ITEMS_MAX,
+  RETURN_REASON_LABELS,
+  RETURN_STATUSES,
+  RETURN_WINDOW_DAYS_DEFAULT,
+  commissionReversal,
+  discountShare,
+  everythingReceived,
+  grossOf,
+  refundRoom,
+  returnCreateRequestSchema,
+  returnLineKey,
+  returnListQuerySchema,
+  returnReceiveRequestSchema,
+  returnRefundRequestSchema,
+  returnRejectRequestSchema,
+  returnWindow,
+  returnableQuantities,
+  returnedBase,
+} = contracts;

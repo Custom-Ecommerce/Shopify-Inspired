@@ -36,6 +36,10 @@ export type {
   StorefrontOrderItem,
   StorefrontOrderTracking,
   StorefrontOrderTrackingDates,
+  StorefrontReturnCreated,
+  StorefrontReturnEligibility,
+  StorefrontReturnableLine,
+  ReturnReasonCode,
   StorefrontTransport,
   TransportKind,
 } from "./transport/types";

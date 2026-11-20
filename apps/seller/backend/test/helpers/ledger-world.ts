@@ -36,7 +36,8 @@ function matchValue(value: unknown, cond: unknown): boolean {
       case '$in':
         return (arg as unknown[]).some((candidate) => same(value, candidate));
       case '$ne':
-        return !same(value, arg);
+        // $ne: null means "has a value": a missing field is null in MongoDB.
+        return arg === null ? !(value === null || value === undefined) : !same(value, arg);
       case '$gte':
         return value !== null && value !== undefined && when(value) >= when(arg);
       case '$lt':

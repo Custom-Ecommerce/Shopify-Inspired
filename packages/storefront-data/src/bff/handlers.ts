@@ -7,7 +7,7 @@ import {
   storefrontOrderLineRequestSchema,
 } from "@markaz/contracts/checkout";
 import { MAX_LINE_QTY } from "../domain/cart";
-import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError } from "../transport/errors";
+import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError, ReturnRefusedError } from "../transport/errors";
 import type { OrderRejection, OrderTransport } from "../transport/types";
 import { FAVOURITES_PAGE_SIZE } from "../domain/favourites";
 
@@ -48,6 +48,10 @@ export interface BffRoutes {
   confirmation(request: Request, context: BffRouteContext): Promise<Response>;
   /** Customer tracking (EP-02 OB-4, D-069): the same body and gates as lookup, the journey-only answer. */
   track(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Sprint 5 EP-13: what may still be returned from a delivered order ({ orderId, phone }). Same gates as lookup. */
+  returnEligibility(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Sprint 5 EP-13: asks for a return ({ orderId, phone, items, reasonCode, note? }). Same gates as lookup. */
+  requestReturn(request: Request, context: BffRouteContext): Promise<Response>;
   /** The Live products behind a browser's favourites: GET ?ids=a,b. Public data, so it has no origin gate. */
   products(request: Request, context: BffRouteContext): Promise<Response>;
 }
@@ -73,6 +77,18 @@ const submitBody = z.object({
 const lookupBody = z.object({
   orderId: z.string().trim().min(1).max(40),
   phone: z.string().trim().min(1).max(32),
+});
+
+/** Sprint 5 EP-13: a return request. Unknown keys are stripped, so nothing but these fields reaches the backend. */
+const returnBody = z.object({
+  orderId: z.string().trim().min(1).max(40),
+  phone: z.string().trim().min(1).max(32),
+  items: z
+    .array(z.object({ productId: z.string().trim().min(1).max(40), variantId: z.string().trim().min(1).max(40), quantity: z.number().int().min(1).max(99) }))
+    .min(1)
+    .max(50),
+  reasonCode: z.enum(["damaged", "wrong_item", "changed_mind", "other"]),
+  note: z.string().max(300).nullish(),
 });
 
 const confirmationBody = z.object({
@@ -302,6 +318,9 @@ async function handle<T>(
       const envelope = rejectionToEnvelope(error.rejection);
       return errorResponse(envelope.status, envelope.code, envelope.message, envelope.extra);
     }
+    if (error instanceof ReturnRefusedError) {
+      return errorResponse(422, "RETURN_NOT_ELIGIBLE", error.message, { ...(error.reason === null ? {} : { reason: error.reason }), ...(error.field === null ? {} : { field: error.field }) });
+    }
     if (error instanceof TransportUnavailableError) {
       // An order sent to a backend that never answered may still have been saved. Saying "unavailable" would read as failed.
       if (options.outcomeMayBeUnknown && (error.reason === "timeout" || error.reason === "network")) {
@@ -378,6 +397,20 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
           return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
         }
         return { kind: "data", status: 200, data: order };
+      }),
+
+    returnEligibility: (request, context) =>
+      handle(request, context, lookupBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        const eligibility = await transport.getReturnEligibility({ orderId: input.orderId, phone: input.phone });
+        if (eligibility === null) return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
+        return { kind: "data", status: 200, data: eligibility };
+      }),
+
+    requestReturn: (request, context) =>
+      handle(request, context, returnBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        const created = await transport.submitReturn({ orderId: input.orderId, phone: input.phone, items: input.items, reasonCode: input.reasonCode, note: input.note ?? null });
+        if (created === null) return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
+        return { kind: "data", status: 201, data: created };
       }),
 
     track: (request, context) =>

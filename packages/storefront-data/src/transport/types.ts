@@ -197,6 +197,43 @@ export interface OrderLookupInput {
   phone: string;
 }
 
+/** Sprint 5 EP-13.US01.T03: what a shopper may return from a delivered order. Mirrors ReturnEligibility in @markaz/contracts. */
+export interface StorefrontReturnableLine {
+  productId: string;
+  variantId: string;
+  productTitle: string;
+  variantTitle: string;
+  unitPrice: number;
+  deliveredQuantity: number;
+  returnableQuantity: number;
+}
+
+export type ReturnIneligibleReasonValue = "not_delivered" | "window_closed" | "returns_off" | "card_order" | "nothing_left";
+
+export interface StorefrontReturnEligibility {
+  eligible: boolean;
+  reason: ReturnIneligibleReasonValue | null;
+  windowDays: number;
+  deliveredAt: string | null;
+  windowEndsAt: string | null;
+  lines: StorefrontReturnableLine[];
+}
+
+export type ReturnReasonCode = "damaged" | "wrong_item" | "changed_mind" | "other";
+
+export interface SubmitReturnInput {
+  orderId: string;
+  phone: string;
+  items: Array<{ productId: string; variantId: string; quantity: number }>;
+  reasonCode: ReturnReasonCode;
+  note?: string | null;
+}
+
+export interface StorefrontReturnCreated {
+  returnNumber: string;
+  status: "requested";
+}
+
 /**
  * Why the server refused an order or an order lookup. productId is absent when the server did not
  * name a product. Each code comes from the seller backend's error envelope (see toOrderRejection in remote.ts).
@@ -266,6 +303,10 @@ export interface OrderTransport {
   confirmOrder(input: OrderConfirmationInput): Promise<StorefrontOrder | null>;
   /** Customer tracking (D-069): the parcel's journey only. null when no order matches both the id and the phone. */
   trackOrder(input: OrderLookupInput): Promise<StorefrontOrderTracking | null>;
+  /** Sprint 5 EP-13: what may still be returned from this order, and the state of the window. null when no order matches both the number and the phone. */
+  getReturnEligibility(input: OrderLookupInput): Promise<StorefrontReturnEligibility | null>;
+  /** Sprint 5 EP-13: asks for a return. null when no order matches. Rejects with ReturnRefusedError when it cannot be requested. */
+  submitReturn(input: SubmitReturnInput): Promise<StorefrontReturnCreated | null>;
   /** The Live products among these ids, at most 48 per call. An id with no Live product is simply absent from the answer. */
   getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]>;
 }

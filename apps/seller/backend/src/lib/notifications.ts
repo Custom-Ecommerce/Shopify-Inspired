@@ -404,3 +404,86 @@ export function notifyPayoutPaid(storeId: string, payout: PayoutMessageFields): 
 export function notifyPayoutVoided(storeId: string, payout: PayoutMessageFields): void {
   runAfterResponse('payout_voided', () => sendPayoutVoided(storeId, payout));
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Returns (Sprint 5 EP-13.US01.T04, US02.T02)
+
+interface ReturnFields {
+  id: string;
+  returnNumber: string;
+  orderObjectId: string;
+}
+
+function returnFields(doc: unknown): ReturnFields {
+  const row = (doc ?? {}) as Record<string, unknown>;
+  return { id: String(row._id ?? ''), returnNumber: str(row.returnNumber), orderObjectId: String(row.order ?? '') };
+}
+
+/**
+ * A shopper asked for a return: ONE email to the seller (unless new-order emails are switched off) and ONE bell alert of the return_requested
+ * kind, each under its own key (return:<id>:requested), so a repeat queues nothing. Never throws; run it after the response.
+ */
+export async function sendReturnRequested(storeId: string, returnDoc: unknown, order: unknown): Promise<void> {
+  const r = returnFields(returnDoc);
+  const o = orderFields(order);
+  if (r.id === '' || r.returnNumber === '') return;
+  const store = await loadStoreNotifyInfo(storeId);
+  if (!store) return;
+  if (store.emailNewOrder) {
+    await enqueueEmail({
+      template: 'return_requested_seller',
+      to: store.ownerEmail,
+      vars: {
+        storeName: store.name,
+        orderNumber: o.orderNumber,
+        returnNumber: r.returnNumber,
+        customerName: o.customerName,
+        dashboardLink: sellerDashboardLink(storeId, '/returns') ?? DASHBOARD_FALLBACK,
+      },
+      store: storeId,
+      order: r.orderObjectId,
+      dedupeKey: 'return:' + r.id + ':requested',
+    });
+  }
+  await createSellerAlert({
+    store: storeId,
+    kind: 'return_requested',
+    title: 'Return request ' + r.returnNumber,
+    body: o.customerName + ' asked to return items from order ' + o.orderNumber,
+    link: '/returns',
+    dedupeKey: 'return:' + r.id + ':requested',
+    order: r.orderObjectId === '' ? null : r.orderObjectId,
+  });
+}
+
+export function notifyReturnRequested(storeId: string, returnDoc: unknown, order: unknown): void {
+  runAfterResponse('return_requested', () => sendReturnRequested(storeId, returnDoc, order));
+}
+
+/** The seller's decision, told to the shopper by email when the order has one (most shoppers have none: the seller gets a wa.me link). */
+export async function sendReturnDecision(storeId: string, returnDoc: unknown, order: unknown, decision: 'approved' | 'rejected', reason: string | null): Promise<void> {
+  const r = returnFields(returnDoc);
+  const o = orderFields(order);
+  if (r.id === '' || r.returnNumber === '' || o.customerEmail === null) return;
+  const store = await loadStoreNotifyInfo(storeId);
+  if (!store) return;
+  await enqueueEmail({
+    template: decision === 'approved' ? 'return_approved_customer' : 'return_rejected_customer',
+    to: o.customerEmail,
+    vars: {
+      storeName: store.name,
+      customerName: o.customerName,
+      orderNumber: o.orderNumber,
+      returnNumber: r.returnNumber,
+      ...(decision === 'rejected' ? { returnReason: reason && reason.trim() !== '' ? reason : 'Not stated' } : {}),
+    },
+    store: storeId,
+    order: r.orderObjectId,
+    dedupeKey: 'return:' + r.id + ':' + decision,
+    footer: store.emailFooter,
+  });
+}
+
+export function notifyReturnDecision(storeId: string, returnDoc: unknown, order: unknown, decision: 'approved' | 'rejected', reason: string | null): void {
+  runAfterResponse('return_decision', () => sendReturnDecision(storeId, returnDoc, order, decision, reason));
+}

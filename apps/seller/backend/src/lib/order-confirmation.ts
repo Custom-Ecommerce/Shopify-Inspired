@@ -8,10 +8,11 @@ import { Order, writeAuditLog } from '@/lib/services';
  * Sprint 5 EP-11.US01.T03 (D-107): the seller's phone confirmation decision on a COD order. The seller phoned or messaged the
  * customer and says: confirmed, unreachable, or cancel.
  *
- * Exactly ONE decision per order. confirmed and unreachable are one compare-and-set on { _id, store, confirmationStatus:
- * unconfirmed, status: not cancelled }, which sets the new status and pushes the log entry together, so two parallel requests leave
+ * confirmed and cancel are final; unreachable is not (D-109): while the order is unconfirmed OR unreachable the seller may decide again, each
+ * decision logged. confirmed and unreachable are one compare-and-set on { _id, store, confirmationStatus: the value that was read,
+ * status: not cancelled }, which sets the new status and pushes the log entry together, so two parallel requests from the same state leave
  * one decision and one log entry (the loser reads 409). A cancel goes through cancelOrder, the one cancel path, whose compare-and-set
- * carries the same confirmationStatus condition and the log entry: stock and the discount use go back once, as for any cancel.
+ * accepts confirmationStatus unconfirmed or unreachable and pushes the log entry: stock and the discount use go back once, as for any cancel.
  *
  * The decision is the seller's call about the customer. It does not move the order's own status (pending, confirmed, ...): the
  * seller does that in the normal order flow, and a dispatch is only refused while the order is still unconfirmed.
@@ -46,11 +47,20 @@ const readOrder = async (orderId: string, storeId: string): Promise<StoredOrder 
 const closedOutcome = (order: StoredOrder): DecisionOutcome =>
   String(order.status) === 'cancelled' ? { outcome: 'closed', status: 'cancelled' } : { outcome: 'closed', status: confirmationStatusOf(order) };
 
+/** The filter on the log as it was read: absent, or exactly this many entries. */
+function logFilter(order: StoredOrder): Record<string, unknown> {
+  const log = (order as { confirmationLog?: unknown }).confirmationLog;
+  const size = Array.isArray(log) ? log.length : 0;
+  return size === 0 ? { confirmationLog: { $exists: false } } : { confirmationLog: { $size: size } };
+}
+
 export async function decideConfirmation(input: DecisionInput): Promise<DecisionOutcome> {
   const { storeId, orderId, actor, request } = input;
   const current = await readOrder(orderId, storeId);
   if (!current) return { outcome: 'not_found' };
-  if (confirmationStatusOf(current) !== 'unconfirmed' || String(current.status) === 'cancelled') return closedOutcome(current);
+  const observed = confirmationStatusOf(current);
+  // confirmed and cancelled are final; unreachable may be decided again (D-109).
+  if ((observed !== 'unconfirmed' && observed !== 'unreachable') || String(current.status) === 'cancelled') return closedOutcome(current);
 
   const at = new Date();
   const note = request.note;
@@ -75,7 +85,9 @@ export async function decideConfirmation(input: DecisionInput): Promise<Decision
 
   const result: 'confirmed' | 'unreachable' = request.result;
   const updated = await Order.findOneAndUpdate(
-    { _id: orderId, store: storeId, confirmationStatus: 'unconfirmed', status: { $ne: 'cancelled' } },
+    // The status AND the log length that were read: from unreachable, "unreachable again" does not change the status, so the log length is
+    // what makes two parallel decisions from the same state leave exactly one new entry.
+    { _id: orderId, store: storeId, confirmationStatus: observed, status: { $ne: 'cancelled' }, ...logFilter(current) },
     {
       $set: { confirmationStatus: result },
       $push: { confirmationLog: { $each: [{ at, by: actor.userObjectId, result, note }], $slice: -CONFIRMATION_LOG_MAX } },

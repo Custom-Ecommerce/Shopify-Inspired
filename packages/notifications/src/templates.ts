@@ -28,6 +28,10 @@ export const TEMPLATE_NAMES = [
   'payout_voided',
   // Sprint 4 EP-07.US04: a store's broadcast to its customers (the seller's own subject and message).
   'broadcast',
+  // Sprint 5 EP-13: a shopper asked for a return (to the seller), and the seller's decision (to the shopper).
+  'return_requested_seller',
+  'return_approved_customer',
+  'return_rejected_customer',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -59,6 +63,9 @@ export const TEMPLATE_VARIABLES = [
   'broadcastMessage',
   'unsubscribeLink',
   'emailFooter',
+  // Sprint 5 EP-13: the return's number, and the seller's reason when a return is declined.
+  'returnNumber',
+  'returnReason',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
@@ -282,6 +289,54 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'آپ کا ڈیش بورڈ: {{dashboardLink}}',
     ],
     whatsapp: '{{storeName}} is live: {{storefrontLink}}\nآپ کا اسٹور لائیو ہو گیا ہے۔',
+  },
+  return_requested_seller: {
+    variables: ['storeName', 'orderNumber', 'returnNumber', 'customerName', 'dashboardLink'],
+    subject: 'Return request {{returnNumber}} for order {{orderNumber}}',
+    en: [
+      '{{customerName}} asked to return items from order {{orderNumber}} on {{storeName}}.',
+      '',
+      'Return: {{returnNumber}}',
+      '',
+      'Review it and approve or decline: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}} نے {{storeName}} کے آرڈر {{orderNumber}} کی اشیاء واپس کرنے کی درخواست کی ہے۔',
+      'ریٹرن نمبر: {{returnNumber}}',
+      'دیکھیں اور منظور یا مسترد کریں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Return request {{returnNumber}} for order {{orderNumber}} on {{storeName}}. {{dashboardLink}}\nواپسی کی نئی درخواست آئی ہے۔',
+  },
+  return_approved_customer: {
+    variables: ['storeName', 'customerName', 'orderNumber', 'returnNumber'],
+    subject: '{{storeName}}: your return {{returnNumber}} is approved',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      '{{storeName}} approved your return {{returnNumber}} for order {{orderNumber}}. The store will contact you about sending the items back.',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      '{{storeName}} نے آپ کے آرڈر {{orderNumber}} کی واپسی {{returnNumber}} منظور کر لی ہے۔ سامان واپس بھیجنے کے بارے میں اسٹور آپ سے رابطہ کرے گا۔',
+    ],
+    whatsapp: 'Hi {{customerName}}, {{storeName}} approved your return {{returnNumber}} for order {{orderNumber}}.\nآپ کی واپسی منظور ہو گئی ہے۔',
+  },
+  return_rejected_customer: {
+    variables: ['storeName', 'customerName', 'orderNumber', 'returnNumber', 'returnReason'],
+    subject: '{{storeName}}: your return {{returnNumber}} was not approved',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      '{{storeName}} could not approve your return {{returnNumber}} for order {{orderNumber}}.',
+      '',
+      'Reason: {{returnReason}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      '{{storeName}} آپ کے آرڈر {{orderNumber}} کی واپسی {{returnNumber}} منظور نہیں کر سکا۔',
+      'وجہ: {{returnReason}}',
+    ],
+    whatsapp: 'Hi {{customerName}}, {{storeName}} could not approve return {{returnNumber}} for order {{orderNumber}}. Reason: {{returnReason}}\nآپ کی واپسی منظور نہیں ہوئی۔',
   },
   payout_paid: {
     variables: ['storeName', 'payoutAmount', 'payoutMethod', 'payoutReference', 'dashboardLink'],

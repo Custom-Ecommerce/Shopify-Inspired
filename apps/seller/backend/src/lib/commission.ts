@@ -1,3 +1,4 @@
+import { commissionReversal } from '@/lib/contracts';
 import { databaseReady } from '@/lib/notifications';
 import { readPlatformSettings } from '@/lib/platform-settings';
 import { CommissionEntry, Store, writeAuditLog } from '@/lib/services';
@@ -96,6 +97,8 @@ interface NewEntry {
   baseAmount: number;
   rate: number;
   reversesType?: 'cod_commission' | 'card_sale' | 'card_commission' | null;
+  /** Sprint 5 EP-13: set only on the reversal of one return. */
+  returnId?: unknown;
 }
 
 /** Writes one entry. 'exists' when the unique index says it is already there. Throws on any other failure. */
@@ -105,6 +108,7 @@ async function writeEntry(entry: NewEntry): Promise<'created' | 'exists'> {
       ...entry,
       balanceEffect: entry.balanceEffect === 0 ? 0 : entry.balanceEffect,
       reversesType: entry.reversesType ?? null,
+      returnId: entry.returnId ?? null,
       settledAt: null,
       payoutId: null,
     });
@@ -208,4 +212,72 @@ export async function reverseLedgerForOrder(orderId: string, reason: string): Pr
     console.error('[seller-backend] could not read the commission entries of an order', { orderId, error: errorName(err) });
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 5 EP-13.US03.T03 (D-107, audit R2): the proportional reversal of a return
+
+export interface ReturnReversalInput {
+  /** The return this reversal belongs to. One reversal per return, whatever the number of refunds recorded for it. */
+  returnId: unknown;
+  order: LedgerOrder;
+  /** The returned base of THIS return: the price of the returned quantities less their discount share, delivery excluded. */
+  returnedBase: number;
+}
+
+export type ReturnReversalResult =
+  | { outcome: 'created'; amount: number }
+  | { outcome: 'exists' }
+  /** The order has no commission entry (not delivered and collected, or a card order): nothing to give back. */
+  | { outcome: 'no_commission' }
+  /** The amount works out to 0 rupees, or the whole commission was already given back. */
+  | { outcome: 'nothing' }
+  | { outcome: 'failed' };
+
+/**
+ * When a refund is recorded for a cash on delivery order that has a commission entry, writes ONE reversal for the return: the opposite sign
+ * of the original (balanceEffect positive), in whole rupees, = round(commission x returned base / order commission base), see
+ * commissionReversal. The reversals of an order never add up to more than the original commission, and the one that brings the returned
+ * base up to the order's own base takes the remainder. A repeat call finds the entry (the unique index { order, type, reversesType, returnId }
+ * decides a race) and writes nothing. reverseLedgerForOrder (the full mirror of the cancel path) is left as it is. Never throws.
+ */
+export async function reverseForReturn(input: ReturnReversalInput): Promise<ReturnReversalResult> {
+  if (!ledgerReady()) return { outcome: 'failed' };
+  const orderId = String(input.order._id);
+  try {
+    const original = (await CommissionEntry.findOne({ order: input.order._id, type: 'cod_commission' }).lean()) as unknown as StoredEntry | null;
+    if (!original) return { outcome: 'no_commission' };
+    const reversals = (await CommissionEntry.find({ order: input.order._id, type: 'reversal', reversesType: 'cod_commission' }).lean()) as unknown as Array<StoredEntry & { returnId?: unknown }>;
+    if (reversals.some((entry) => entry.returnId !== undefined && entry.returnId !== null && String(entry.returnId) === String(input.returnId))) return { outcome: 'exists' };
+
+    const previousBase = reversals.reduce((sum, entry) => sum + num(entry.baseAmount), 0);
+    const previousAmount = reversals.reduce((sum, entry) => sum + num(entry.balanceEffect), 0);
+    const commission = Math.max(0, -num(original.balanceEffect));
+    const amount = commissionReversal({ commission, orderBase: num(original.baseAmount), returnedBase: input.returnedBase, previousBase, previousAmount });
+    if (amount <= 0) return { outcome: 'nothing' };
+
+    // The base recorded is what this return really adds to the order's returned base, so the next return's remainder check is exact.
+    const base = Math.min(Math.max(0, Math.round(input.returnedBase)), Math.max(0, num(original.baseAmount) - previousBase));
+    const outcome = await writeEntry({
+      store: original.store,
+      order: original.order,
+      type: 'reversal',
+      balanceEffect: amount,
+      baseAmount: base,
+      rate: original.rate,
+      reversesType: 'cod_commission',
+      returnId: input.returnId,
+    });
+    if (outcome === 'exists') return { outcome: 'exists' };
+    try {
+      // The audit entry holds ids and the rupee amount only.
+      await writeAuditLog('commission.reversal', 'order', orderId, 'system:commission', { returnId: String(input.returnId), amount, at: new Date().toISOString() });
+    } catch (err) {
+      console.error('[seller-backend] could not write the return reversal audit entry', { orderId, error: errorName(err) });
+    }
+    return { outcome: 'created', amount };
+  } catch (err) {
+    console.error('[seller-backend] could not write the return commission reversal', { orderId, error: errorName(err) });
+    return { outcome: 'failed' };
+  }
 }

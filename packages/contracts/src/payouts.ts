@@ -177,6 +177,8 @@ export interface EarningsResponse {
   period: { key: EarningsPeriod; from: string; to: string; start: string; end: string };
   /** Of the period, from the ledger. sales is the net item subtotal of commission entries; net = sales - commission. */
   summary: { sales: number; commission: number; net: number };
+  /** Sprint 5 EP-13: the part of the summary that came from returns (already netted into it): refunded returns, their returned base, the commission given back. */
+  returns?: { count: number; sales: number; commission: number };
   /** All time. balance is what is not yet paid out (negative: the seller owes the platform). */
   allTime: { balance: number; totalPaidOut: number };
   entries: { docs: EarningsEntryRow[]; page: number; limit: number; totalDocs: number; totalPages: number };

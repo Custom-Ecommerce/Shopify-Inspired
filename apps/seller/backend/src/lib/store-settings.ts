@@ -6,6 +6,7 @@ import {
   CARD_CHECKOUT_UNSUPPORTED_MESSAGE,
   CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
   NO_USABLE_PAYMENT_METHOD,
+  RETURN_WINDOW_DAYS_DEFAULT,
   NO_USABLE_PAYMENT_METHOD_MESSAGE,
   cityKey,
   maskAccountNumber,
@@ -141,6 +142,17 @@ export function readMessages(storefront: unknown): MessageOverrides {
   return { whatsappTemplate: text(sf.whatsappTemplate), emailFooter: text(sf.emailFooter) };
 }
 
+// ----------------------------------------------------------------------------------------------------------- returns
+
+/**
+ * Sprint 5 EP-13.US01.T02: how many days after delivery a shopper may ask for a return (0 = the store takes no returns, default 7). A
+ * stored value that is not a whole number from 0 to 30 reads as the default. Kept in storefront next to the other shopper-facing policy.
+ */
+export function readReturnWindowDays(storefront: unknown): number {
+  const value = record(storefront).returnWindowDays;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 30 ? value : (RETURN_WINDOW_DAYS_DEFAULT as number);
+}
+
 // ------------------------------------------------------------------------------------------------------------- theme
 
 export function installedThemeSlugs(): string[] {
@@ -197,6 +209,7 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     messages: readMessages(sf),
     // Sprint 5 EP-11: kept in paymentSettings (never in storefront, which the public storefront reads).
     fraud: readFraud(doc.paymentSettings),
+    returns: { returnWindowDays: readReturnWindowDays(sf) },
     updatedAt: iso(doc.updatedAt),
   };
 }
@@ -220,7 +233,7 @@ export function settingsFieldsOf(update: StoreSettingsUpdate): string[] {
   const fields = new Set<string>();
   if (update.profile?.name !== undefined) fields.add('name');
   const profileRest = update.profile ? Object.keys(update.profile).filter((key) => key !== 'name') : [];
-  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages) fields.add('storefront');
+  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns) fields.add('storefront');
   if (update.payments || update.fraud) fields.add('paymentSettings');
   if (update.payout !== undefined) fields.add('payoutDetails');
   return [...fields];
@@ -292,6 +305,9 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
   if (update.messages) {
     if (update.messages.whatsappTemplate !== undefined) put('whatsappTemplate', update.messages.whatsappTemplate);
     if (update.messages.emailFooter !== undefined) put('emailFooter', update.messages.emailFooter);
+  }
+  if (update.returns) {
+    if (update.returns.returnWindowDays !== undefined) put('returnWindowDays', update.returns.returnWindowDays);
   }
   if (storefrontChanged) {
     set.storefront = sf;

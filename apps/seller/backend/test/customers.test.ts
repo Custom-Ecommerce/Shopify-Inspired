@@ -161,7 +161,8 @@ test('statistics: delivered and cancelled counts, total spent is delivered items
 test('statsOf: no delivered order is an average of 0, and the average is rounded', () => {
   assert.equal(statsOf({ _id: 'x', orders: 2, deliveredCount: 0, totalSpent: 0 }).averageOrderValue, 0);
   assert.equal(statsOf({ _id: 'x', orders: 3, deliveredCount: 3, totalSpent: 1000 }).averageOrderValue, 333);
-  assert.equal(statsOf({ _id: 'x', orders: 1 }).returnsCount, 0, 'zero until EP-13');
+  assert.equal(statsOf({ _id: 'x', orders: 1 }).returnsCount, 0, 'zero unless the caller passes the real count');
+  assert.equal(statsOf({ _id: 'x', orders: 1 }, 3).returnsCount, 3, 'SB-3: the real count is passed in (lib/returns.ts returnsCountFor)');
 });
 
 // ------------------------------------------------------------------------------------------ list: search, filters, sort, paging
@@ -471,4 +472,32 @@ test('export: the same filters as the list, capped at 5000 rows with a truncatio
 test('export: a bad query is 400 with the field, and page and limit are not part of it', async () => {
   assert.equal((await json(await exportCsv(STORE_A, tokenA, '?sort=nope'))).field, 'sort');
   assert.equal((await json(await exportCsv(STORE_A, tokenA, '?page=2'))).field, 'page');
+});
+
+
+// ------------------------------------------------------------------------------------------------ Sprint 5 EP-13.US03.T05: returns count
+
+test('the customer page counts the customer's real returns: by phoneKey, in this store, rejected ones not counted', async () => {
+  sell(STORE_A, { phone: '0300 1234567', customerName: 'Ayesha' });
+  sell(STORE_B, { phone: '0300 1234567', customerName: 'Ayesha elsewhere' });
+  world.returns.push(
+    { store: STORE_A, contactPhone: AYESHA, status: 'requested' },
+    { store: STORE_A, contactPhone: AYESHA, status: 'refunded' },
+    { store: STORE_A, contactPhone: AYESHA, status: 'rejected' },
+    { store: STORE_A, contactPhone: BILAL, status: 'approved' },
+    { store: STORE_B, contactPhone: AYESHA, status: 'approved' },
+  );
+  const a = await json(await detail(STORE_A, tokenA, AYESHA));
+  assert.equal((a.stats as Row).returnsCount, 2);
+  // Any spelling of the phone in the URL is the same customer and the same count.
+  assert.equal(((await json(await detail(STORE_A, tokenA, '0300 1234567'))).stats as Row).returnsCount, 2);
+  const b = await json(await detail(STORE_B, tokenB, AYESHA));
+  assert.equal((b.stats as Row).returnsCount, 1, 'each store counts its own returns only');
+});
+
+test('a customer known only by email has no phone key and so no returns to count', async () => {
+  sell(STORE_A, { phone: '', customerEmail: 'walk@example.com' });
+  world.returns.push({ store: STORE_A, contactPhone: AYESHA, status: 'requested' });
+  const res = await json(await detail(STORE_A, tokenA, 'walk@example.com'));
+  assert.equal((res.stats as Row).returnsCount, 0);
 });

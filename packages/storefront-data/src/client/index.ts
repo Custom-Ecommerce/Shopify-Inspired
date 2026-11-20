@@ -17,6 +17,8 @@ export { useOrderLookup } from "./use-order-lookup";
 export type { OrderLookupFailure, OrderLookupStatus, UseOrderLookupResult } from "./use-order-lookup";
 export { useOrderTracking } from "./use-order-tracking";
 export type { UseOrderTrackingResult } from "./use-order-tracking";
+export { useReturnRequest } from "./use-return-request";
+export type { ReturnRequestStatus, UseReturnRequestResult } from "./use-return-request";
 export { StorefrontProvider } from "./provider";
 export { useCardAvailable, useCodAvailable, useOrderTransport } from "./context";
 export type { CartQuoteLineVM, CartQuoteVM } from "../view-models/cart-quote";

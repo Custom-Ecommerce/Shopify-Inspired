@@ -67,6 +67,8 @@ function matches(row: Row, filter: Row): boolean {
   return Object.entries(filter).every(([key, value]) => {
     if (value && typeof value === 'object' && '$exists' in value) return (row[key] !== undefined) === Boolean(value.$exists);
     if (value && typeof value === 'object' && '$ne' in value) return String(row[key]) !== String(value.$ne);
+    if (value && typeof value === 'object' && '$size' in value) return Array.isArray(row[key]) && row[key].length === value.$size;
+    if (value && typeof value === 'object' && '$in' in value) return (value.$in as unknown[]).some((candidate) => String(row[key]) === String(candidate));
     return String(row[key]) === String(value);
   });
 }
@@ -347,20 +349,70 @@ test('confirmation: unreachable is a decision too; an empty note is no note', as
   assert.equal(stored().confirmationLog[0].note, null);
 });
 
-test('confirmation: a second decision answers 409 and changes nothing', async () => {
+test('confirmation: confirmed and cancelled are final: a second decision answers 409 and changes nothing', async () => {
   seed();
-  assert.equal((await decide({ result: 'unreachable' })).status, 200);
+  assert.equal((await decide({ result: 'confirmed' })).status, 200);
   const writes = orderWrites;
   for (const result of ['confirmed', 'unreachable', 'cancel']) {
     const again = await decide({ result });
     assert.equal(again.status, 409, result);
     assert.equal(again.body.errors[0].code, 'ORDER_CONFIRMATION_DECIDED');
-    assert.equal(again.body.errors[0].status, 'unreachable');
+    assert.equal(again.body.errors[0].status, 'confirmed');
   }
   assert.equal(orderWrites, writes, 'no write was made');
   assert.equal(stored().confirmationLog.length, 1);
   assert.equal(stored().status, 'pending');
   assert.equal(variants[0]!.stockQuantity, 1);
+});
+
+// D-109 (3): an unreachable decision is not final.
+
+test('confirmation: unreachable is not final: the seller may decide again, each decision logged (unreachable, unreachable, confirmed)', async () => {
+  seed();
+  assert.equal((await decide({ result: 'unreachable', note: 'no answer' })).status, 200);
+  assert.equal(stored().confirmationStatus, 'unreachable');
+  assert.equal((await decide({ result: 'unreachable', note: 'still no answer' })).status, 200);
+  assert.equal(stored().confirmationStatus, 'unreachable');
+  const last = await decide({ result: 'confirmed', note: 'reached her' });
+  assert.equal(last.status, 200);
+  assert.equal(stored().confirmationStatus, 'confirmed');
+  assert.deepEqual(stored().confirmationLog.map((entry: Row) => [entry.result, entry.note]), [
+    ['unreachable', 'no answer'],
+    ['unreachable', 'still no answer'],
+    ['confirmed', 'reached her'],
+  ]);
+  // Now it is final.
+  assert.equal((await decide({ result: 'cancel' })).status, 409);
+  assert.equal(stored().confirmationLog.length, 3);
+});
+
+test('confirmation: an unreachable order can be cancelled: one cancel write, the stock goes back once, the log has both decisions', async () => {
+  seed();
+  assert.equal((await decide({ result: 'unreachable' })).status, 200);
+  const res = await decide({ result: 'cancel', note: 'declined' });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.result, 'cancelled');
+  assert.equal(stored().status, 'cancelled');
+  assert.equal(variants[0]!.stockQuantity, 3);
+  assert.equal(movements.length, 1);
+  assert.deepEqual(stored().confirmationLog.map((entry: Row) => entry.result), ['unreachable', 'cancelled']);
+  assert.equal((await decide({ result: 'cancel' })).status, 409, 'cancelled is final');
+  assert.equal(variants[0]!.stockQuantity, 3);
+});
+
+test('confirmation: the dispatch is refused only while unconfirmed: after unreachable it is allowed again', async () => {
+  seed({ status: 'processing' });
+  assert.equal((await transition(ORDER_A, DISPATCH)).status, 422);
+  assert.equal((await decide({ result: 'unreachable' })).status, 200);
+  assert.equal((await transition(ORDER_A, DISPATCH)).status, 200);
+});
+
+test('confirmation: two parallel decisions from the same unreachable state leave one new decision', async () => {
+  seed({ confirmationStatus: 'unreachable', confirmationLog: [{ at: new Date('2026-11-02T10:00:00Z'), by: USER_A, result: 'unreachable', note: null }] });
+  holdReads(2);
+  const results = await Promise.all([decide({ result: 'unreachable' }), decide({ result: 'confirmed' })]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+  assert.equal(stored().confirmationLog.length, 2, 'the old entry and exactly one new one');
 });
 
 test('confirmation: an order that never waited for a decision (card, older order) answers 409 too', async () => {

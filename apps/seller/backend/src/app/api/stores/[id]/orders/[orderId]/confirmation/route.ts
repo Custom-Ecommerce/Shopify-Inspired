@@ -29,8 +29,9 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
  *   400 ACCOUNT_BODY_INVALID { field }          bad JSON, an unknown field, a result that is not one of the three, a note over 200
  *   401 no session   403 an admin, or a store the seller does not own
  *   404 an order that is not in this store (another store's order id is simply not found)
- *   409 ORDER_CONFIRMATION_DECIDED { status }   a decision was already made (a second decision, or the order is cancelled), or the
- *                                               order never waited for one (a card order, an older order, mode off)
+ *   409 ORDER_CONFIRMATION_DECIDED { status }   the order is confirmed or cancelled (final), a parallel decision won, or the order never
+ *                                               waited for one (a card order, an older order, mode off). An order marked unreachable can
+ *                                               be decided again (D-109): confirmed, cancel, or unreachable once more, each logged.
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string; orderId: string }> }): Promise<Response> {
   try {

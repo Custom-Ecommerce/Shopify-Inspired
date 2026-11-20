@@ -241,6 +241,14 @@ export default function DashboardEarningsPage() {
             <MetricTile label="Net earnings" value={formatPkr(data.summary.net)} icon={Wallet} className="col-span-2 md:col-span-1" />
           </div>
 
+          {/* Sprint 5 EP-13.US03.T04: what returns took off the figures above (already netted into them). */}
+          {data.returns && data.returns.count > 0 ? (
+            <p className="rounded-xl border bg-muted/40 p-3 text-sm" data-slot="earnings-returns">
+              <span className="font-medium">Returns:</span> {data.returns.count} refunded {data.returns.count === 1 ? "return" : "returns"} took {formatPkr(data.returns.sales)} off your sales and gave back{" "}
+              {formatPkr(data.returns.commission)} of commission. Both are already counted in the figures above.
+            </p>
+          ) : null}
+
           <div className="grid grid-cols-2 gap-3 lg:gap-6">
             <MetricTile label="Waiting to be paid out" value={formatPkr(data.allTime.balance)} icon={Scale} action={<span className="text-xs text-muted-foreground">{balanceHint(data.allTime.balance)}</span>} />
             <MetricTile label="Paid out so far" value={formatPkr(data.allTime.totalPaidOut)} icon={Banknote} />

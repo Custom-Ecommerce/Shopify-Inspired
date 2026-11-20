@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { storeTags } from "@markaz/platform-kit/cache-tags";
 import { PREVIEW_CREDENTIAL_HEADER } from "@markaz/platform-kit/preview";
-import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError } from "./errors";
+import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, ReturnRefusedError, TransportUnavailableError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
 import type {
   CartQuote,
@@ -14,6 +14,9 @@ import type {
   StorefrontOrder,
   StorefrontOrderTracking,
   StorefrontProductDetail,
+  StorefrontReturnCreated,
+  StorefrontReturnEligibility,
+  SubmitReturnInput,
   StorefrontProductSummary,
   StorefrontTransport,
   SubmitOrderPayload,
@@ -25,6 +28,8 @@ import {
   WireOrderCreated,
   WireOrderLookup,
   WireOrderTrackingEnvelope,
+  WireReturnCreatedEnvelope,
+  WireReturnEligibilityEnvelope,
   WireCategoryList,
   WireProductDetailEnvelope,
   WireProductList,
@@ -270,8 +275,43 @@ function makeExchanger(options: {
  * The order operations, over any exchanger. The paths are the same on the seller backend (under a store) and on the
  * BFF (under /api/storefront), so one implementation serves both, and the error mapping cannot drift between them.
  */
-function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submitTimeoutMs: number): OrderTransport {
+function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submitTimeoutMs: number, returnStyle: "backend" | "bff" = "backend"): OrderTransport {
+  /** 422 RETURN_NOT_ELIGIBLE becomes a ReturnRefusedError carrying the store's sentence for the shopper. */
+  const throwIfReturnRefused = (result: Exchange): void => {
+    if (result.status !== 422 || errorCode(result.body) !== "RETURN_NOT_ELIGIBLE") return;
+    const body = (result.body ?? {}) as { error?: { message?: unknown }; reason?: unknown; field?: unknown };
+    throw new ReturnRefusedError(
+      typeof body.error?.message === "string" ? body.error.message : "This order cannot be returned.",
+      typeof body.reason === "string" ? body.reason : null,
+      typeof body.field === "string" ? body.field : null,
+    );
+  };
   return {
+    async getReturnEligibility(input: OrderLookupInput): Promise<StorefrontReturnEligibility | null> {
+      requireHttp();
+      // The seller backend has the order number in the path and the phone in the query; the BFF takes both in a POST body.
+      const result =
+        returnStyle === "backend"
+          ? await exchange("GET", "/orders/" + encodeURIComponent(input.orderId) + "/return-eligibility?phone=" + encodeURIComponent(input.phone), { retry: true })
+          : await exchange("POST", "/orders/return-eligibility", { body: { orderId: input.orderId, phone: input.phone }, retry: true });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfRefused(result);
+      return unwrap(result, WireReturnEligibilityEnvelope, "return eligibility").data;
+    },
+
+    async submitReturn(input: SubmitReturnInput): Promise<StorefrontReturnCreated | null> {
+      requireHttp();
+      const body = { phone: input.phone, items: input.items, reasonCode: input.reasonCode, ...(input.note ? { note: input.note } : {}) };
+      const result =
+        returnStyle === "backend"
+          ? await exchange("POST", "/orders/" + encodeURIComponent(input.orderId) + "/returns", { body, retry: false })
+          : await exchange("POST", "/orders/returns", { body: { orderId: input.orderId, ...body }, retry: false });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfReturnRefused(result);
+      throwIfRefused(result);
+      return unwrap(result, WireReturnCreatedEnvelope, "return request").data;
+    },
+
     async quoteCart(input: CartQuoteInput): Promise<CartQuote> {
       requireHttp();
       // Sprint 4 EP-04.US02: the shipping city, so the quote uses the same rate the order will.
@@ -396,6 +436,8 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     lookupOrder: orders.lookupOrder,
     confirmOrder: orders.confirmOrder,
     trackOrder: orders.trackOrder,
+    getReturnEligibility: orders.getReturnEligibility,
+    submitReturn: orders.submitReturn,
     getProductsByIds: orders.getProductsByIds,
 
     async getProducts(): Promise<StorefrontProductSummary[]> {
@@ -446,6 +488,6 @@ export function createBffTransport(options: BffTransportOptions = {}): OrderTran
     timeoutMs: options.timeoutMs ?? DEFAULT_BFF_TIMEOUT_MS,
     fetchImpl: options.fetchImpl ?? defaultFetch,
   });
-  return makeOrderTransport(exchange, () => undefined, options.submitTimeoutMs ?? DEFAULT_SUBMIT_BFF_TIMEOUT_MS);
+  return makeOrderTransport(exchange, () => undefined, options.submitTimeoutMs ?? DEFAULT_SUBMIT_BFF_TIMEOUT_MS, "bff");
 }
 /* @theme-integration-patch:remote */

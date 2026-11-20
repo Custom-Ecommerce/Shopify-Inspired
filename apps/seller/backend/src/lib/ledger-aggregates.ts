@@ -49,6 +49,29 @@ export async function commissionTotals(store: string, start: Date, end: Date): P
   return { sales: row?.sales ?? 0, commission: 0 - (row?.effect ?? 0), orders: Math.max(0, row?.orders ?? 0) };
 }
 
+export interface ReturnsTotals {
+  /** How many return reversals were written in the period (one per return that was refunded). */
+  count: number;
+  /** The commission given back by returns, positive. */
+  commission: number;
+  /** The returned base: the price of the returned quantities less their discount share. */
+  sales: number;
+}
+
+/**
+ * Sprint 5 EP-13.US03.T04: the part of the period's net commission that came from RETURNS (the proportional reversals, which carry a
+ * returnId). commissionTotals already nets them (a reversal subtracts); this only says how much of that was returns, for the seller's
+ * "Returns" line. The reversal of a cancelled order (no returnId) is not counted here.
+ */
+export async function returnsTotals(store: string, start: Date, end: Date): Promise<ReturnsTotals> {
+  const rows = (await CommissionEntry.aggregate([
+    { $match: { store: oid(store), createdAt: { $gte: start, $lt: end }, type: 'reversal', reversesType: { $in: [...COMMISSION_TYPES] }, returnId: { $ne: null } } },
+    { $group: { _id: null, commission: { $sum: '$balanceEffect' }, sales: { $sum: '$baseAmount' }, count: { $sum: 1 } } },
+  ])) as Array<{ commission?: number; sales?: number; count?: number }>;
+  const row = rows[0];
+  return { count: row?.count ?? 0, commission: row?.commission ?? 0, sales: row?.sales ?? 0 };
+}
+
 /** What the platform has not paid out yet: the sum of the unsettled entries (negative: the seller owes the platform). */
 export async function unsettledBalance(store: string): Promise<number> {
   const rows = (await CommissionEntry.aggregate([

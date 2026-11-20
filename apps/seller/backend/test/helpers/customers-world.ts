@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { normalizePhoneE164 } from '@/lib/contracts';
-import { CustomerNote, EmailUnsubscribe, Order } from '@/lib/services';
+import { CustomerNote, EmailUnsubscribe, Order, Return } from '@/lib/services';
 
 /**
  * Sprint 5 EP-10 test fixture: a store's orders, the customers' notes and the unsubscribes in memory, behind the Mongoose model
@@ -156,6 +156,8 @@ export interface CustomersWorld {
   unsubs: Row[];
   pipelines: Row[][];
   noteWrites: Row[];
+  /** Sprint 5 EP-13: the store's returns (store, contactPhone, status), read by the returns count. Empty by default. */
+  returns: Row[];
   restore: () => void;
 }
 
@@ -164,8 +166,9 @@ export function installCustomersWorld(): CustomersWorld {
   const OrderModel = Order as any;
   const NoteModel = CustomerNote as any;
   const UnsubModel = EmailUnsubscribe as any;
-  const saved = { aggregate: OrderModel.aggregate, find: NoteModel.find, upsert: NoteModel.findOneAndUpdate, unsubFind: UnsubModel.find };
-  const world: CustomersWorld = { orders: [], notes: [], unsubs: [], pipelines: [], noteWrites: [], restore: () => {} };
+  const ReturnModel = Return as any;
+  const saved = { aggregate: OrderModel.aggregate, find: NoteModel.find, upsert: NoteModel.findOneAndUpdate, unsubFind: UnsubModel.find, returnCount: ReturnModel.countDocuments };
+  const world: CustomersWorld = { orders: [], notes: [], unsubs: [], pipelines: [], noteWrites: [], returns: [], restore: () => {} };
 
   const chain = (read: () => unknown) => {
     let limited: number | null = null;
@@ -211,7 +214,17 @@ export function installCustomersWorld(): CustomersWorld {
       world.unsubs.filter((u) => same(u.store, filter.store) && (filter.email === undefined || (filter.email.$in as string[]).includes(u.email))),
     );
 
+  // The returns count of a customer: returns of the store, by contactPhone, whose status is not rejected (lib/returns.ts returnsCountFor).
+  ReturnModel.countDocuments = async (filter: Row) =>
+    world.returns.filter(
+      (row) =>
+        same(row.store, filter.store) &&
+        row.contactPhone === filter.contactPhone &&
+        (filter.status?.$ne === undefined || !same(row.status, filter.status.$ne)),
+    ).length;
+
   world.restore = () => {
+    ReturnModel.countDocuments = saved.returnCount;
     OrderModel.aggregate = saved.aggregate;
     NoteModel.find = saved.find;
     NoteModel.findOneAndUpdate = saved.upsert;

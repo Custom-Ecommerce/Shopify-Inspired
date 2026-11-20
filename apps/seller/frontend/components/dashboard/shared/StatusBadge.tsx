@@ -41,6 +41,8 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   draft: "info",
   confirmed: "info",
   dispatched: "info",
+  // Sprint 5 EP-13: a return that came back, and one that was refunded.
+  received: "info",
   // destructive
   suspended: "destructive",
   failed: "destructive",
@@ -50,7 +52,7 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   // neutral
   unset: "neutral",
   returned: "neutral",
-  refunded: "neutral",
+  refunded: "success",
   // order payment status (EP-02): COD still to collect, and collected
   unpaid: "warning",
   collected: "success",

@@ -6,7 +6,8 @@ import { z } from 'zod';
 
 // Sprint 5 EP-11 (D-108): unconfirmed_order is a COD order waiting for the seller's phone confirmation. The kinds live in FOUR places
 // (db-schemas seller-alert.ts, this list, seller backend lib/seller-alerts.ts and the NewSellerAlert type), which test/seller-alert-kinds.test.ts keeps in step.
-export const SELLER_ALERT_KINDS = ['new_order', 'low_stock', 'out_of_stock', 'unconfirmed_order'] as const;
+// Sprint 5 EP-13 (D-108): return_requested is a shopper's new return request.
+export const SELLER_ALERT_KINDS = ['new_order', 'low_stock', 'out_of_stock', 'unconfirmed_order', 'return_requested'] as const;
 export type SellerAlertKind = (typeof SELLER_ALERT_KINDS)[number];
 
 /** Default and largest page of GET /api/alerts. */

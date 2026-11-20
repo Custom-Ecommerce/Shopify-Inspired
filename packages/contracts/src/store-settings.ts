@@ -337,6 +337,24 @@ export const CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE = 'This theme cannot take c
 export const NO_USABLE_PAYMENT_METHOD = 'NO_USABLE_PAYMENT_METHOD';
 export const NO_USABLE_PAYMENT_METHOD_MESSAGE = 'Cash on delivery has to stay on: card payments are not available yet, so shoppers would have no way to pay.';
 
+// ---------------------------------------------------------------------------------------------------- returns (Sprint 5 EP-13)
+
+export const RETURN_WINDOW_DAYS_DEFAULT = 7;
+export const RETURN_WINDOW_DAYS_MAX = 30;
+
+/** The settings group 'returns': how many days after delivery a shopper may ask for a return. 0 means the store takes no returns. */
+export const storeReturnsUpdateSchema = z
+  .object({
+    returnWindowDays: z
+      .number({ error: 'the return window must be a number' })
+      .int('the return window must be a whole number of days')
+      .min(0, 'the return window cannot be negative')
+      .max(RETURN_WINDOW_DAYS_MAX, 'the return window can be at most ' + RETURN_WINDOW_DAYS_MAX + ' days'),
+  })
+  .partial()
+  .strict();
+export const storeReturnsSchema = z.object({ returnWindowDays: z.number().int().min(0).max(RETURN_WINDOW_DAYS_MAX) });
+
 export const storeThemeUpdateSchema = z.object({ activeTheme: z.string().regex(/^[a-z0-9-]{2,40}$/, 'choose a theme from the list') }).strict();
 
 /**
@@ -357,6 +375,8 @@ export const storeSettingsUpdateSchema = z
     messages: storeMessagesUpdateSchema,
     // Sprint 5 EP-11: phone confirmation mode and the risk rules.
     fraud: storeFraudUpdateSchema,
+    // Sprint 5 EP-13: the return window.
+    returns: storeReturnsUpdateSchema,
   })
   .partial()
   .strict()
@@ -414,6 +434,7 @@ export const storeSettingsSchema = z.object({
   theme: z.object({ activeTheme: z.string(), supportsCardCheckout: z.boolean() }),
   messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable() }),
   fraud: storeFraudSchema,
+  returns: storeReturnsSchema,
   updatedAt: z.string().nullable(),
 });
 export type StoreSettings = z.output<typeof storeSettingsSchema>;
