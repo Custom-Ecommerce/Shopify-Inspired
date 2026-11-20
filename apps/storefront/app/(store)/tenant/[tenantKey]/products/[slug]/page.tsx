@@ -49,5 +49,5 @@ export default async function TenantProductPage({
       />
     );
   }
-  return <Product slug={slug} product={outcome.product} />;
+  return <Product slug={slug} product={outcome.product} reviews={outcome.reviews ?? null} />;
 }

@@ -1,5 +1,5 @@
 import type { AnnouncementData, CartDrawerData, FooterConfig, HeroProps, NavItem, PhilosophyProps, PromoBannerProps, SearchDrawerData, TestimonialsProps, VideoStoryProps, FeatureItem, ProductShowcaseBanner } from "../types";
-import type { NormalizedCategory, ReviewItem, StoreData } from "../model";
+import type { NormalizedCategory, StoreData } from "../model";
 import { paths } from "../adapters/paths";
 import { STILETTO_LOGO, STILETTO_LOGO_LIGHT } from "../adapters/images";
 import { homeConfig } from "./home.config";
@@ -10,7 +10,7 @@ import { navConfig } from "./nav.config";
 import { shippingDetails } from "./product.config";
 import { promoBanner } from "./promo-banner.config";
 import { productShowcase } from "./product-showcase.config";
-import { feedbackImages, sampleReviews } from "./reviews";
+import { feedbackImages } from "./reviews";
 
 export interface StilettoContent {
   brandName: string;
@@ -29,7 +29,6 @@ export interface StilettoContent {
   promoBanner: PromoBannerProps;
   productShowcase: { banner: ProductShowcaseBanner };
   shippingDetails: string[];
-  sampleReviews: ReviewItem[];
   feedbackImages: string[];
 }
 
@@ -67,8 +66,6 @@ export function buildStilettoContent(store: StoreData, categories: NormalizedCat
     promoBanner,
     productShowcase: { banner: productShowcase.banner },
     shippingDetails,
-    // Sample reviews are the theme's demo data. The platform has no review list yet, so a live store shows none.
-    sampleReviews: demo ? sampleReviews : [],
     feedbackImages,
   };
 }

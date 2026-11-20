@@ -487,3 +487,56 @@ export async function sendReturnDecision(storeId: string, returnDoc: unknown, or
 export function notifyReturnDecision(storeId: string, returnDoc: unknown, order: unknown, decision: 'approved' | 'rejected', reason: string | null): void {
   runAfterResponse('return_decision', () => sendReturnDecision(storeId, returnDoc, order, decision, reason));
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Reviews (Sprint 5 EP-21.US02.T02)
+
+export interface ReviewMessageFields {
+  id: string;
+  productId: string;
+  productTitle: string;
+  rating: number;
+  /** The text the shopper wrote: plain text, escaped by the email template and by the dashboard. */
+  body: string;
+  displayName: string;
+}
+
+/**
+ * A shopper left a review: ONE email to the seller (unless new-order emails are switched off) and ONE bell alert of the review_received kind,
+ * each under the key review:<id>, so a repeat queues nothing. Never throws; run it after the response.
+ */
+export async function sendReviewReceived(storeId: string, review: ReviewMessageFields): Promise<void> {
+  if (review.id === '') return;
+  const store = await loadStoreNotifyInfo(storeId);
+  if (!store) return;
+  const rating = String(Math.round(review.rating)) + ' out of 5';
+  if (store.emailNewOrder) {
+    await enqueueEmail({
+      template: 'review_received_seller',
+      to: store.ownerEmail,
+      vars: {
+        storeName: store.name,
+        productName: review.productTitle,
+        customerName: review.displayName,
+        reviewRating: rating,
+        reviewText: review.body.slice(0, 500),
+        dashboardLink: sellerDashboardLink(storeId, '/reviews') ?? DASHBOARD_FALLBACK,
+      },
+      store: storeId,
+      dedupeKey: 'review:' + review.id,
+    });
+  }
+  await createSellerAlert({
+    store: storeId,
+    kind: 'review_received',
+    title: 'New review: ' + rating,
+    body: review.displayName + ' reviewed ' + review.productTitle,
+    link: '/reviews',
+    dedupeKey: 'review:' + review.id,
+    product: review.productId === '' ? null : review.productId,
+  });
+}
+
+export function notifyReviewReceived(storeId: string, review: ReviewMessageFields): void {
+  runAfterResponse('review_received', () => sendReviewReceived(storeId, review));
+}

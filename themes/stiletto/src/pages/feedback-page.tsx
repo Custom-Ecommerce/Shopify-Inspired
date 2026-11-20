@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import type { FeedbackPageProps } from "@markaz/storefront-data";
+import { useReviewRequest } from "@markaz/storefront-data/client";
 import Link from "next/link";
 import { paths } from "../adapters/paths";
 import { useStilettoChrome } from "../adapters/chrome-context";
@@ -24,8 +25,12 @@ function FeedbackFormContent() {
   const [rating, setRating] = useState<number>(5);
   const [author, setAuthor] = useState<string>("");
   const [comment, setComment] = useState<string>("");
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [submitted, setSubmitted] = useState<boolean>(false);
+  // Sprint 5 EP-21.US01.T04: the review is real now. The credential is the order number plus the phone (kept in React state only).
+  const [orderNumber, setOrderNumber] = useState<string>(orderId);
+  const [phone, setPhone] = useState<string>("");
+  const review = useReviewRequest();
+  const isSubmitting = review.status === "submitting";
+  const submitted = review.status === "done";
 
   // Fallback default images array
   const { content } = useStilettoChrome();
@@ -52,13 +57,10 @@ function FeedbackFormContent() {
       }
       return;
     }
-
-    setIsSubmitting(true);
-
-    // The platform has no review API yet: nothing is stored. The form keeps its success state so the design is complete.
-    console.warn("[stiletto] feedback is not stored: the platform has no review API yet", { orderId: orderId || "N/A", productHandle, rating });
-    setSubmitted(true);
-    setIsSubmitting(false);
+    // The product's id comes from the store's own catalogue: a review names a product of the order, never a handle.
+    const product = catalogProducts.find((p) => p.handle === productHandle);
+    if (!product) return;
+    await review.submit({ orderId: orderNumber.trim(), phone: phone.trim(), productId: product.id, rating, body: comment, displayName: author });
   };
 
   return (
@@ -210,6 +212,40 @@ function FeedbackFormContent() {
                     </div>
                   </div>
 
+                  {/* Order number and phone: the credential that proves the order was delivered to this shopper */}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label htmlFor="feedback-order" className="block text-[11px] uppercase tracking-wider font-bold text-[var(--featured-text,#111)] mb-1.5">
+                        Order Number:
+                      </label>
+                      <input
+                        id="feedback-order"
+                        type="text"
+                        required
+                        value={orderNumber}
+                        onChange={(e) => setOrderNumber(e.target.value)}
+                        placeholder="e.g. ORD-ABCD2345"
+                        className="w-full h-11 px-3.5 text-xs rounded border border-[var(--separator-border,#CCC)] bg-transparent text-[var(--featured-text,#111)] focus:border-[var(--featured-text,#111)] focus:outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="feedback-phone" className="block text-[11px] uppercase tracking-wider font-bold text-[var(--featured-text,#111)] mb-1.5">
+                        Phone Number:
+                      </label>
+                      <input
+                        id="feedback-phone"
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        required
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="e.g. 0300 1234567"
+                        className="w-full h-11 px-3.5 text-xs rounded border border-[var(--separator-border,#CCC)] bg-transparent text-[var(--featured-text,#111)] focus:border-[var(--featured-text,#111)] focus:outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
                   {/* Name */}
                   <div>
                     <label className="block text-[11px] uppercase tracking-wider font-bold text-[var(--featured-text,#111)] mb-1.5">
@@ -239,6 +275,17 @@ function FeedbackFormContent() {
                       className="w-full p-3.5 text-xs rounded border border-[var(--separator-border,#CCC)] bg-transparent text-[var(--featured-text,#111)] focus:border-[var(--featured-text,#111)] focus:outline-none transition-all leading-relaxed"
                     />
                   </div>
+
+                  {review.status === "not_found" ? (
+                    <p role="alert" className="text-xs text-rose-700">
+                      We could not find this order. Please check the order number and phone.
+                    </p>
+                  ) : null}
+                  {review.message ? (
+                    <p role="alert" className="text-xs text-rose-700">
+                      {review.message}
+                    </p>
+                  ) : null}
 
                   {/* Submit Button */}
                   <button

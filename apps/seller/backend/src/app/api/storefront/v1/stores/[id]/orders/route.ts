@@ -12,6 +12,8 @@ import { carriesPreviewCredential, storefrontFailure } from '@/lib/storefront/pr
 import { ORDER_CREATE_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
 import { notifyOrderPlaced } from '@/lib/notifications';
+import { markCartRecovered } from '@/lib/abandoned-carts';
+import { phoneKeyOf } from '@/lib/storefront/order-phone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -89,6 +91,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     // EP-07.US01.T03: after the response, never part of the result. A card order is announced when it is paid (card-webhook.ts),
     // so a shopper who leaves the Stripe page gets no confirmation for an order that is then cancelled.
     if (!replayed && order.paymentMethod !== 'card') notifyOrderPlaced(id, order);
+
+    // Sprint 5 EP-28.US01.T03: an order with the phone key of an open abandoned cart recovers that cart, with the order id, in this same request.
+    // Best effort: it logs and never fails the order.
+    if (!replayed) await markCartRecovered(id, phoneKeyOf(parsed.customer.phone), order._id);
 
     const checkoutUrl = order.paymentMethod === 'card' ? await cardCheckoutUrl(id, order, replayed) : null;
 

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { storePaths } from "@markaz/storefront-data";
+import { ABANDONED_CART_CONSENT_LINE, storePaths } from "@markaz/storefront-data";
 import type { CheckoutPageProps } from "@markaz/storefront-data";
 import { useCheckout } from "@markaz/storefront-data/client";
 import type { CheckoutFailure } from "@markaz/storefront-data/client";
@@ -46,7 +46,8 @@ const FIELDS: FormFieldSpec[] = [
     autoComplete: "tel",
     type: "tel",
     multiline: false,
-    hint: "You will need this number to track your order.",
+    // Sprint 5 EP-28: the consent line sits next to the phone box. useCheckout keeps the cart once this number is valid.
+    hint: "You will need this number to track your order. " + ABANDONED_CART_CONSENT_LINE + ".",
   },
   {
     name: "address",

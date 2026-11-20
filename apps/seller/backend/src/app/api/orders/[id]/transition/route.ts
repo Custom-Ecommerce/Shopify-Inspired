@@ -8,7 +8,7 @@ import { confirmationStatusOf } from '@/lib/fraud';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
-import { recordCodCommission } from '@/lib/commission';
+import { recordAndReconcile } from '@/lib/return-reconcile';
 import { notifyOrderStatus } from '@/lib/notifications';
 import { handleOrderError, OrderRequestError, toDashboardOrderDetail } from '@/lib/orders';
 import { assertCan, Order, ORDER_ACTIONS, writeAuditLog } from '@/lib/services';
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     // EP-07.US01.T04: only the winner of the compare-and-set gets here, so each status emails the customer once.
     notifyOrderStatus(storeId, updated, to);
     // EP-05 (D-088): a delivered order that is already collected owes its COD commission now. Best effort, never throws.
-    if (to === 'delivered') await recordCodCommission(updated as never);
+    if (to === 'delivered') await recordAndReconcile(updated);
     return NextResponse.json({ changed: true, order: toDashboardOrderDetail(updated) }, { headers: NO_STORE });
   } catch (err) {
     return handleOrderError(err);

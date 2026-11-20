@@ -7,7 +7,7 @@ import {
   storefrontOrderLineRequestSchema,
 } from "@markaz/contracts/checkout";
 import { MAX_LINE_QTY } from "../domain/cart";
-import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError, ReturnRefusedError } from "../transport/errors";
+import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError, ReturnRefusedError, ReviewRefusedError } from "../transport/errors";
 import type { OrderRejection, OrderTransport } from "../transport/types";
 import { FAVOURITES_PAGE_SIZE } from "../domain/favourites";
 
@@ -52,6 +52,14 @@ export interface BffRoutes {
   returnEligibility(request: Request, context: BffRouteContext): Promise<Response>;
   /** Sprint 5 EP-13: asks for a return ({ orderId, phone, items, reasonCode, note? }). Same gates as lookup. */
   requestReturn(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Sprint 5 EP-21: the delivered products of an order that have no review yet ({ orderId, phone }). Same gates as lookup. */
+  reviewEligibility(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Sprint 5 EP-21: reviews a product of a delivered order ({ orderId, phone, productId, rating, title?, body, displayName? }). Same gates as lookup. */
+  submitReview(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Sprint 5 EP-21: a product's approved reviews ({ slug, page? }). Public data, but it takes the same gates as the others (a POST from the store's own pages). */
+  productReviews(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Sprint 5 EP-28: keeps the shopper's cart for the seller ({ phone, email?, consent: true, lines }). Same gates as lookup; the backend prices the cart. */
+  abandonedCart(request: Request, context: BffRouteContext): Promise<Response>;
   /** The Live products behind a browser's favourites: GET ?ids=a,b. Public data, so it has no origin gate. */
   products(request: Request, context: BffRouteContext): Promise<Response>;
 }
@@ -89,6 +97,34 @@ const returnBody = z.object({
     .max(50),
   reasonCode: z.enum(["damaged", "wrong_item", "changed_mind", "other"]),
   note: z.string().max(300).nullish(),
+});
+
+/** Sprint 5 EP-21: a review. Unknown keys are stripped. The backend cleans and checks the text; here only the shapes and the sizes. */
+const reviewBody = z.object({
+  orderId: z.string().trim().min(1).max(40),
+  phone: z.string().trim().min(1).max(32),
+  productId: z.string().trim().min(1).max(40),
+  rating: z.number().int().min(1).max(5),
+  title: z.string().max(200).nullish(),
+  body: z.string().min(1).max(4000),
+  displayName: z.string().max(100).nullish(),
+});
+
+/** Sprint 5 EP-21: a product's reviews, one page at a time. */
+const productReviewsBody = z.object({
+  slug: z.string().trim().min(1).max(200),
+  page: z.number().int().min(1).max(10000).optional(),
+});
+
+/**
+ * Sprint 5 EP-28: a cart left behind. The consent must be literally true, and the lines are ids and quantities only: any price or total sent is
+ * stripped here and, in any case, never read by the backend, which prices the cart itself.
+ */
+const abandonedCartBody = z.object({
+  phone: z.string().trim().min(1).max(32),
+  email: z.string().trim().max(254).nullish(),
+  consent: z.literal(true),
+  lines: z.array(storefrontOrderLineRequestSchema).min(1).max(STOREFRONT_ORDER_MAX_LINES),
 });
 
 const confirmationBody = z.object({
@@ -321,6 +357,9 @@ async function handle<T>(
     if (error instanceof ReturnRefusedError) {
       return errorResponse(422, "RETURN_NOT_ELIGIBLE", error.message, { ...(error.reason === null ? {} : { reason: error.reason }), ...(error.field === null ? {} : { field: error.field }) });
     }
+    if (error instanceof ReviewRefusedError) {
+      return errorResponse(422, "REVIEW_NOT_ELIGIBLE", error.message, { ...(error.reason === null ? {} : { reason: error.reason }), ...(error.field === null ? {} : { field: error.field }) });
+    }
     if (error instanceof TransportUnavailableError) {
       // An order sent to a backend that never answered may still have been saved. Saying "unavailable" would read as failed.
       if (options.outcomeMayBeUnknown && (error.reason === "timeout" || error.reason === "network")) {
@@ -411,6 +450,44 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
         const created = await transport.submitReturn({ orderId: input.orderId, phone: input.phone, items: input.items, reasonCode: input.reasonCode, note: input.note ?? null });
         if (created === null) return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
         return { kind: "data", status: 201, data: created };
+      }),
+
+    reviewEligibility: (request, context) =>
+      handle(request, context, lookupBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        const eligibility = await transport.getReviewEligibility({ orderId: input.orderId, phone: input.phone });
+        if (eligibility === null) return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
+        return { kind: "data", status: 200, data: eligibility };
+      }),
+
+    submitReview: (request, context) =>
+      handle(request, context, reviewBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        const created = await transport.submitReview({
+          orderId: input.orderId,
+          phone: input.phone,
+          productId: input.productId,
+          rating: input.rating,
+          title: input.title ?? null,
+          body: input.body,
+          displayName: input.displayName ?? null,
+        });
+        if (created === null) return { kind: "error", status: 404, code: "ORDER_NOT_FOUND", message: "No order matches those details." };
+        return { kind: "data", status: 201, data: created };
+      }),
+
+    productReviews: (request, context) =>
+      handle(request, context, productReviewsBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        const reviews = await transport.getProductReviews(input.slug, input.page ?? 1);
+        return { kind: "data", status: 200, data: reviews };
+      }),
+
+    abandonedCart: (request, context) =>
+      handle(request, context, abandonedCartBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        await transport.saveAbandonedCart({
+          phone: input.phone,
+          email: input.email ?? null,
+          lines: input.lines.map((line) => ({ productId: line.productId, ...(line.variantId === undefined ? {} : { variantId: line.variantId }), qty: line.qty })),
+        });
+        return { kind: "data", status: 200, data: { saved: true } };
       }),
 
     track: (request, context) =>

@@ -234,6 +234,66 @@ export interface StorefrontReturnCreated {
   status: "requested";
 }
 
+/** Sprint 5 EP-21.US01: why a shopper cannot review an order's items. Mirrors REVIEW_INELIGIBLE_REASONS in @markaz/contracts. */
+export type ReviewIneligibleReasonValue = "not_delivered" | "nothing_to_review" | "already_reviewed" | "unknown_product";
+
+/** The delivered products of an order that have no review yet. Mirrors ReviewEligibility in @markaz/contracts. */
+export interface StorefrontReviewEligibility {
+  eligible: boolean;
+  reason: ReviewIneligibleReasonValue | null;
+  items: Array<{ productId: string; productTitle: string }>;
+}
+
+export interface SubmitReviewInput {
+  orderId: string;
+  phone: string;
+  productId: string;
+  /** A whole number from 1 to 5. */
+  rating: number;
+  title?: string | null;
+  body: string;
+  displayName?: string | null;
+}
+
+/** A review is published at once, so the answer is its id and the status approved. */
+export interface StorefrontReviewCreated {
+  id: string;
+  status: "approved";
+}
+
+/** One review as the storefront shows it. No customer, order, phone or email. Plain text: render it as text, never as markup. */
+export interface StorefrontReview {
+  id: string;
+  rating: number;
+  title: string | null;
+  body: string;
+  displayName: string;
+  verified: boolean;
+  /** ISO date-time. */
+  createdAt: string;
+  /** The seller's one reply. */
+  reply: { text: string; at: string } | null;
+}
+
+/** A product's approved reviews, newest first, with the average (one decimal) and the count of ALL its approved reviews. */
+export interface StorefrontProductReviews {
+  reviews: StorefrontReview[];
+  summary: { average: number; count: number };
+  page: number;
+  totalPages: number;
+}
+
+/**
+ * Sprint 5 EP-28.US01.T03: a cart the shopper left behind. The checkout sends it once (debounced) after a valid phone and the consent line. Only
+ * product ids, variant ids and quantities travel: the server prices the cart itself. The transport adds consent: true, because the call is only
+ * made while the consent line is shown.
+ */
+export interface SaveAbandonedCartInput {
+  phone: string;
+  email?: string | null;
+  lines: Array<{ productId: string; variantId?: string; qty: number }>;
+}
+
 /**
  * Why the server refused an order or an order lookup. productId is absent when the server did not
  * name a product. Each code comes from the seller backend's error envelope (see toOrderRejection in remote.ts).
@@ -307,6 +367,14 @@ export interface OrderTransport {
   getReturnEligibility(input: OrderLookupInput): Promise<StorefrontReturnEligibility | null>;
   /** Sprint 5 EP-13: asks for a return. null when no order matches. Rejects with ReturnRefusedError when it cannot be requested. */
   submitReturn(input: SubmitReturnInput): Promise<StorefrontReturnCreated | null>;
+  /** Sprint 5 EP-21: the delivered products of this order that have no review yet. null when no order matches both the number and the phone. */
+  getReviewEligibility(input: OrderLookupInput): Promise<StorefrontReviewEligibility | null>;
+  /** Sprint 5 EP-21: reviews a product of a delivered order, published at once. null when no order matches. Rejects with ReviewRefusedError when it cannot be reviewed. */
+  submitReview(input: SubmitReviewInput): Promise<StorefrontReviewCreated | null>;
+  /** Sprint 5 EP-21: a product's approved reviews, newest first, one page at a time (10 per page). A product with none has an empty list and a count of 0. */
+  getProductReviews(slug: string, page?: number): Promise<StorefrontProductReviews>;
+  /** Sprint 5 EP-28: keeps the shopper's cart for the seller to follow up (WhatsApp first). Resolves when saved; callers ignore failures. */
+  saveAbandonedCart(input: SaveAbandonedCartInput): Promise<void>;
   /** The Live products among these ids, at most 48 per call. An id with no Live product is simply absent from the answer. */
   getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]>;
 }

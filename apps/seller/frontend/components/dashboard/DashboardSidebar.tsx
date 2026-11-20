@@ -41,6 +41,7 @@ import {
   ExternalLink, UserCog,
   Contact,
   Ban,
+  ShoppingBasket,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -67,6 +68,8 @@ export const NAV_GROUPS = [
       { href: "/inventory", label: "Inventory", icon: Archive },
       { href: "/returns", label: "Returns", icon: RotateCcw },
       { href: "/reviews", label: "Reviews", icon: Star },
+      // Sprint 5 EP-28: carts shoppers left behind, with a WhatsApp link for each.
+      { href: "/abandoned-carts", label: "Abandoned carts", icon: ShoppingBasket },
     ],
   },
   {

@@ -2,7 +2,7 @@ import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { AuditLog, CommissionEntry, Order, PlatformSettingsModel, Store, signSession } from '@/lib/services';
+import { AuditLog, CommissionEntry, Order, PlatformSettingsModel, Return, Store, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { setSessionUserLoader } from '@/lib/session-user';
 import * as dbNs from '@markaz/db-schemas';
@@ -40,6 +40,7 @@ const StoreModel = Store as any;
 const SettingsModel = PlatformSettingsModel as any;
 const OrderModel = Order as any;
 const AuditModel = AuditLog as any;
+const ReturnModel = Return as any;
 
 let entries: Array<Record<string, any>> = [];
 let storeRate: { commissionMode?: string; commissionRate?: number } = {};
@@ -69,7 +70,7 @@ before(async () => {
 });
 
 const chain = (value: () => unknown) => {
-  const q: any = { select: () => q, sort: () => q, lean: async () => value() };
+  const q: any = { select: () => q, sort: () => q, limit: () => q, lean: async () => value() };
   return q;
 };
 
@@ -95,6 +96,8 @@ beforeEach(() => {
     sExists: StoreModel.exists,
     settings: SettingsModel.findOne,
     aggregate: OrderModel.aggregate,
+    oFindOne: OrderModel.findOne,
+    rFind: ReturnModel.find,
     audit: AuditModel.create,
   };
   Object.defineProperty(mongoose.connection, 'readyState', { value: 1, configurable: true });
@@ -111,6 +114,9 @@ beforeEach(() => {
     chain(() => entries.filter((e) => String(e.order) === String(filter.order) && (filter.type?.$ne === undefined || e.type !== filter.type.$ne)).map((e) => ({ ...e })));
   StoreModel.findById = () => chain(() => ({ ...storeRate }));
   SettingsModel.findOne = () => chain(() => ({ defaultCommissionRate: defaultRate }));
+  // Sprint 5 EP-13.US03.T07: the backfill also reconciles return reversals. These tests have no returns, so both reads find nothing.
+  OrderModel.findOne = () => chain(() => null);
+  ReturnModel.find = () => chain(() => []);
   OrderModel.aggregate = async () => aggregateOrders.filter((o) => entries.filter((e) => String(e.order) === String(o._id)).length < (o.paymentMethod === 'card' ? 2 : 1)).slice(0, 100);
   AuditModel.create = async (doc: Record<string, any>) => {
     audits.push(doc);
@@ -127,6 +133,8 @@ beforeEach(() => {
     StoreModel.exists = saved.sExists;
     SettingsModel.findOne = saved.settings;
     OrderModel.aggregate = saved.aggregate;
+    OrderModel.findOne = saved.oFindOne;
+    ReturnModel.find = saved.rFind;
     AuditModel.create = saved.audit;
     delete process.env.OUTBOX_CRON_SECRET;
   };

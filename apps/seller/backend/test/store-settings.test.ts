@@ -554,7 +554,7 @@ test('the WhatsApp text and the email footer are saved in the messages group, re
   const res = await save({ messages: { whatsappTemplate: 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}', emailFooter: 'Questions? Call 0300 1234567.' } });
   assert.equal(res.status, 200);
   const { settings } = (await res.json()) as { settings: any };
-  assert.deepEqual(settings.messages, { whatsappTemplate: 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}', emailFooter: 'Questions? Call 0300 1234567.' });
+  assert.deepEqual(settings.messages, { whatsappTemplate: 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}', emailFooter: 'Questions? Call 0300 1234567.', abandonedCartEmail: false });
   assert.equal(stores[STORE_A]!.storefront.whatsappTemplate, 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}');
   assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the other storefront keys are kept');
 
@@ -580,6 +580,41 @@ test('the messages group is for the owner only: Seller B and an admin cannot cha
   assert.equal((await save({ messages: { emailFooter: 'Hacked' } }, tokenB)).status, 403);
   assert.equal((await save({ messages: { emailFooter: 'Hacked' } }, tokenAdmin)).status, 403);
   assert.equal(stores[STORE_A]!.storefront.emailFooter, undefined);
+});
+
+// Sprint 5 EP-28.US01.T05 (D-107): the optional abandoned cart email switch, in the messages group.
+test('the abandoned cart email is OFF by default: the settings answer says false and nothing is stored until the seller turns it on', async () => {
+  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  assert.equal(((await read.json()) as { settings: any }).settings.messages.abandonedCartEmail, false);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, undefined);
+});
+
+test('the switch is saved in the messages group, kept private (paymentSettings, never the public storefront object), read back, and can be turned off again', async () => {
+  const on = await save({ messages: { abandonedCartEmail: true } });
+  assert.equal(on.status, 200);
+  assert.equal(((await on.json()) as { settings: any }).settings.messages.abandonedCartEmail, true);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, true);
+  assert.equal('abandonedCartEmail' in stores[STORE_A]!.storefront, false, 'the public storefront object never carries it');
+  assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the other storefront keys are kept');
+
+  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  assert.equal(((await read.json()) as { settings: any }).settings.messages.abandonedCartEmail, true);
+
+  const other = await save({ messages: { emailFooter: 'Questions? Call 0300 1234567.' } });
+  assert.equal(other.status, 200);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, true, 'a change of another message field leaves the switch alone');
+
+  const off = await save({ messages: { abandonedCartEmail: false } });
+  assert.equal(((await off.json()) as { settings: any }).settings.messages.abandonedCartEmail, false);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, false);
+});
+
+test('the switch must be a boolean, and only the owner can change it', async () => {
+  assert.equal((await save({ messages: { abandonedCartEmail: 'yes' } })).status, 400);
+  assert.equal((await save({ messages: { abandonedCartEmail: 1 } })).status, 400);
+  assert.equal((await save({ messages: { abandonedCartEmail: true } }, tokenB)).status, 403);
+  assert.equal((await save({ messages: { abandonedCartEmail: true } }, tokenAdmin)).status, 403);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, undefined);
 });
 
 

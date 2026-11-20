@@ -66,3 +66,6 @@ export * from './broadcast';
 export * from './customers';
 // Sprint 5 EP-11 (D-107): phone confirmation, risk rules, blocklist and the address book.
 export * from './fraud';
+
+// Sprint 5 EP-28: abandoned carts (the capture request, the seller's list).
+export * from './abandoned-cart';

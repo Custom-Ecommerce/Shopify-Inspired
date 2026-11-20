@@ -42,6 +42,15 @@ function matchValue(value: unknown, cond: unknown): boolean {
           return (arg as unknown[]).some((candidate) => (isNil(candidate) ? isNil(value) : same(value, candidate)));
         case '$exists':
           return (value !== undefined) === Boolean(arg);
+        // Sprint 5 SB-4: ranges on dates and numbers (the 30 day reconcile, the 2 hour abandoned cart delay, the 7 day expiry).
+        case '$gt':
+          return !isNil(value) && (value as any).valueOf() > (arg as any).valueOf();
+        case '$gte':
+          return !isNil(value) && (value as any).valueOf() >= (arg as any).valueOf();
+        case '$lt':
+          return !isNil(value) && (value as any).valueOf() < (arg as any).valueOf();
+        case '$lte':
+          return !isNil(value) && (value as any).valueOf() <= (arg as any).valueOf();
         default:
           throw new Error('returns-world: unknown condition ' + op);
       }

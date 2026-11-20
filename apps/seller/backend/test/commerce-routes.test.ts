@@ -2,7 +2,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { assertCan, signSession, User, Discount, Review, Product, Store } from '@/lib/services';
+import { AuditLog, assertCan, signSession, User, Discount, Review, Product, Store } from '@/lib/services';
 import { settleRevalidations } from '../src/lib/revalidate';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 
@@ -19,6 +19,7 @@ const DiscountModel = Discount as any;
 const ReviewModel = Review as any;
 const UserModel = User as any;
 const StoreModel = Store as any;
+const AuditModel = AuditLog as any;
 
 let discounts: Array<Record<string, any>> = [];
 let reviews: Array<Record<string, any>> = [];
@@ -77,7 +78,12 @@ function installStubs(): () => void {
     uFindById: UserModel.findById,
     sFindOne: StoreModel.findOne,
     sExists: StoreModel.exists,
+    pFind: (Product as any).find,
+    aCreate: AuditModel.create,
   };
+  // Sprint 5 EP-21: a review's product title is read with one Product.find, and a reply writes one audit entry (best effort).
+  (Product as any).find = () => query([]);
+  AuditModel.create = async (doc: any) => doc;
   StoreModel.findOne = () => query([{ _id: STORE }], true);
   StoreModel.exists = async (filter: any) => (String(filter._id) === STORE && String(filter.owner) === USER ? { _id: STORE } : null);
   (mongoose as any).connect = async () => mongoose;
@@ -119,6 +125,8 @@ function installStubs(): () => void {
     UserModel.findById = originals.uFindById;
     StoreModel.findOne = originals.sFindOne;
     StoreModel.exists = originals.sExists;
+    (Product as any).find = originals.pFind;
+    AuditModel.create = originals.aCreate;
   };
 }
 
@@ -262,20 +270,32 @@ test('the review list rejects an unknown status filter with 422', async () => {
   }
 });
 
-test('a seller can approve a review in their store', async () => {
+// Sprint 5 EP-21 (D-108): the seller no longer changes a review's status (approved = shown, rejected = hidden by an admin). They keep the reply.
+test('a seller can no longer change the status of a review: the status body is refused with 400 and nothing changes', async () => {
   seed();
   const restore = installStubs();
   try {
     const response = await reviewItem.PATCH(authed('PATCH', 'http://seller.test/api/reviews/' + REV1, { status: 'approved' }), params(REV1));
-    assert.equal(response.status, 200);
-    const body = (await response.json()) as { status: string };
-    assert.equal(body.status, 'approved');
+    assert.equal(response.status, 400);
+    assert.equal(reviews[0]!.status, 'pending', 'the review is untouched');
   } finally {
     restore();
   }
 });
 
-test('a review status change purges the product it belongs to', async () => {
+test('a seller edits their reply with PATCH { reply }: 409 REVIEW_NOT_REPLIED while there is none', async () => {
+  seed();
+  const restore = installStubs();
+  try {
+    const response = await reviewItem.PATCH(authed('PATCH', 'http://seller.test/api/reviews/' + REV1, { reply: 'Thank you!' }), params(REV1));
+    assert.equal(response.status, 409);
+    assert.equal(((await response.json()) as { code: string }).code, 'REVIEW_NOT_REPLIED');
+  } finally {
+    restore();
+  }
+});
+
+test('a reply purges the product it belongs to, so the storefront shows it', async () => {
   seed();
   reviews[0]!.product = '65a0000000000000000000b1';
   const restore = installStubs();
@@ -289,8 +309,10 @@ test('a review status change purges the product it belongs to', async () => {
   }) as typeof fetch;
   (Product as any).findById = () => ({ select: () => ({ lean: async () => ({ slug: 'blue-shirt' }) }) });
   try {
-    const response = await reviewItem.PATCH(authed('PATCH', 'http://seller.test/api/reviews/' + REV1, { status: 'approved' }), params(REV1));
-    assert.equal(response.status, 200);
+    const { POST: replyPOST } = (await import('../src/app/api/reviews/[id]/reply/route')) as any;
+    const response = await replyPOST(authed('POST', 'http://seller.test/api/reviews/' + REV1 + '/reply', { reply: 'Thank you!' }), params(REV1));
+    assert.equal(response.status, 201);
+    assert.equal(((await response.json()) as { reply: { text: string } }).reply.text, 'Thank you!');
     await settleRevalidations();
     assert.deepEqual(purged, [['store:' + STORE + ':product:blue-shirt', 'store:' + STORE + ':products', 'store:' + STORE + ':categories']]);
   } finally {
@@ -302,20 +324,23 @@ test('a review status change purges the product it belongs to', async () => {
   }
 });
 
-test('a seller cannot change a review body: only the status is accepted', async () => {
+test('a seller cannot change a review body: only the reply is accepted (strict)', async () => {
   seed();
   const restore = installStubs();
   try {
-    const response = await reviewItem.PATCH(authed('PATCH', 'http://seller.test/api/reviews/' + REV1, { status: 'approved', body: 'edited' }), params(REV1));
-    assert.equal(response.status, 422);
+    const response = await reviewItem.PATCH(authed('PATCH', 'http://seller.test/api/reviews/' + REV1, { reply: 'ok', body: 'edited' }), params(REV1));
+    assert.equal(response.status, 400);
+    assert.equal(reviews[0]!.body, 'Good');
   } finally {
     restore();
   }
 });
 
-test('the policy declares discounts and reviews, with sellers limited to the status of a review', () => {
+test('the policy declares discounts and reviews, with sellers limited to the reply of a review', () => {
   assert.doesNotThrow(() => assertCan('seller', 'read', 'discounts'));
-  assert.doesNotThrow(() => assertCan('seller', 'update', 'reviews', ['status']));
+  assert.doesNotThrow(() => assertCan('seller', 'update', 'reviews', ['reply']));
+  assert.throws(() => assertCan('seller', 'update', 'reviews', ['status']), 'the status is the admin\'s now');
+  assert.throws(() => assertCan('seller', 'update', 'reviews', ['reply', 'status']));
   assert.throws(() => assertCan('seller', 'delete', 'discounts'));
 });
 
@@ -483,7 +508,7 @@ test("Seller B naming Seller A's store id is refused on the review list, detail 
     const detail = await reviewItem.GET(foreign('GET', 'http://seller.test/api/reviews/' + FOREIGN_REVIEW), params(FOREIGN_REVIEW));
     assert.equal(detail.status, 403);
     assert.equal((await detail.text()).includes('Foreign review'), false);
-    const patch = await reviewItem.PATCH(foreign('PATCH', 'http://seller.test/api/reviews/' + FOREIGN_REVIEW, { status: 'approved' }), params(FOREIGN_REVIEW));
+    const patch = await reviewItem.PATCH(foreign('PATCH', 'http://seller.test/api/reviews/' + FOREIGN_REVIEW, { reply: 'Hello' }), params(FOREIGN_REVIEW));
     assert.equal(patch.status, 403);
     assert.equal(reviews.find((r) => r._id === FOREIGN_REVIEW)!.status, 'pending');
   }));

@@ -173,5 +173,7 @@ export function useStilettoCheckout(shippingCity = "") {
     focusTick,
     clearFieldError,
     submit,
+    /** Sprint 5 EP-28: the phone and email the shopper has typed so far, so the checkout can keep the cart for the seller once the phone is valid. */
+    noteContact: checkout.noteContact,
   };
 }

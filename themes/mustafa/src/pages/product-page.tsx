@@ -10,6 +10,7 @@ import { AddToCart } from "../components/add-to-cart";
 import { ProductCard } from "../components/product-card";
 import { StatusPanel } from "../components/status-panel";
 import { IconShoppingBag } from "../components/ui/icons";
+import { ProductReviews } from "../components/product-reviews";
 
 function formatCurrency(amount: number, currency = "PKR"): string {
   try {
@@ -453,6 +454,9 @@ export function ProductPage(props: ProductPageProps) {
           </div>
         </div>
       </div>
+
+      {/* Sprint 5 EP-21.US01.T03: the product's real reviews (the average, the count and the newest, with the seller's reply). */}
+      <ProductReviews slug={props.slug} initialReviews={props.reviews} />
 
       {/* Below Fold: "You may also like" 4-up Product Grid */}
       {relatedProducts.length > 0 && (

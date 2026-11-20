@@ -59,6 +59,24 @@ async function countUnconfirmed(token: string, storeId: string): Promise<number>
   }
 }
 
+/**
+ * Sprint 5 EP-28.US01.T04: how many carts shoppers left open (a phone and the consent line, not yet ordered or contacted). The carts list answers it as
+ * `openCount`. 0 when it cannot be read: the banner below is then simply not shown.
+ */
+async function countOpenCarts(token: string, storeId: string): Promise<number> {
+  try {
+    const res = await fetch(`${PAYLOAD_API_URL}/api/stores/${encodeURIComponent(storeId)}/abandoned-carts?status=open&limit=1`, {
+      headers: storeHeaders(token, storeId),
+      cache: "no-store",
+    });
+    if (!res.ok) return 0;
+    const data = (await res.json()) as { openCount?: unknown };
+    return typeof data.openCount === "number" ? data.openCount : 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function countProducts(token: string, storeId: string, query: string): Promise<number> {
   const res = await fetch(`${PAYLOAD_API_URL}/api/products?limit=1${query}`, {
     headers: storeHeaders(token, storeId),
@@ -171,7 +189,7 @@ export default async function DashboardOverviewPage({
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   // ── Data fetches (unchanged) ──────────────────────────────────────────────
-  const [ordersToday, pendingOrders, lowStockCount, revenue, recent, unconfirmed] =
+  const [ordersToday, pendingOrders, lowStockCount, revenue, recent, unconfirmed, openCarts] =
     await Promise.all([
       countOrders(token, storeId, { createdAt: { greater_than_equal: startOfToday } }),
       countOrders(token, storeId, { status: { equals: "pending" } }),
@@ -179,6 +197,7 @@ export default async function DashboardOverviewPage({
       revenueThisMonth(token, storeId, startOfMonth),
       recentOrders(token, storeId),
       countUnconfirmed(token, storeId),
+      countOpenCarts(token, storeId),
     ]);
 
   const monthName = now.toLocaleString("default", { month: "long" });
@@ -207,6 +226,19 @@ export default async function DashboardOverviewPage({
             {unconfirmed} {unconfirmed === 1 ? "order is" : "orders are"} waiting for your confirmation call
           </span>
           <span className="shrink-0 text-xs text-primary">Review →</span>
+        </Link>
+      ) : null}
+
+      {/* ── Carts shoppers left open (Sprint 5 EP-28.US01.T04) ───────────── */}
+      {openCarts > 0 ? (
+        <Link
+          href={storeHref(storeId, "/abandoned-carts")}
+          className="flex min-h-11 items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4 text-sm font-medium transition-colors hover:bg-primary/10"
+        >
+          <span>
+            {openCarts} {openCarts === 1 ? "cart was" : "carts were"} left open by shoppers you can message on WhatsApp
+          </span>
+          <span className="shrink-0 text-xs text-primary">Open →</span>
         </Link>
       ) : null}
 

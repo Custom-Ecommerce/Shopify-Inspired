@@ -246,3 +246,36 @@ export const {
   returnableQuantities,
   returnedBase,
 } = contracts;
+
+// Sprint 5 EP-21 (D-107, D-108): reviews of delivered orders, the seller's reply and the admin's hide.
+export const {
+  REVIEW_ALREADY_REPLIED,
+  REVIEW_BODY_MAX,
+  REVIEW_DEFAULT_DISPLAY_NAME,
+  REVIEW_INELIGIBLE_MESSAGES,
+  REVIEW_NOT_ELIGIBLE,
+  REVIEW_NOT_REPLIED,
+  REVIEW_PAGE_DEFAULT_LIMIT,
+  REVIEW_STATUS_CHANGED,
+  cleanReviewText,
+  productReviewsQuerySchema,
+  reviewCreateRequestSchema,
+  reviewHideRequestSchema,
+  reviewModerationListQuerySchema,
+  reviewReplyRequestSchema,
+  reviewUnhideRequestSchema,
+  sellerReviewListQuerySchema,
+} = contracts;
+
+// Sprint 5 EP-28 (D-107): abandoned carts.
+export const {
+  ABANDONED_CART_CONSENT_LINE,
+  ABANDONED_CART_EMAIL_DELAY_MS,
+  ABANDONED_CART_ITEMS_MAX,
+  ABANDONED_CART_NOT_FOUND,
+  ABANDONED_CART_STATUS_CHANGED,
+  ABANDONED_CART_TTL_DAYS,
+  abandonedCartContactedRequestSchema,
+  abandonedCartListQuerySchema,
+  abandonedCartRequestSchema,
+} = contracts;

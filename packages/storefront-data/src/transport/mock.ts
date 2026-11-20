@@ -1,4 +1,4 @@
-import { ReturnRefusedError } from "./errors";
+import { ReturnRefusedError, ReviewRefusedError } from "./errors";
 import type {
   CartQuote,
   CartQuoteInput,
@@ -14,6 +14,12 @@ import type {
   StorefrontProductVariant,
   StorefrontReturnCreated,
   StorefrontReturnEligibility,
+  SaveAbandonedCartInput,
+  StorefrontProductReviews,
+  StorefrontReview,
+  StorefrontReviewCreated,
+  StorefrontReviewEligibility,
+  SubmitReviewInput,
   StorefrontTransport,
   SubmitOrderPayload,
   SubmitOrderResult,
@@ -160,6 +166,8 @@ const MOCK_PRODUCT_INPUTS: MockProductInput[] = [
 export const DEFAULT_MOCK_PRODUCTS: StorefrontProductDetail[] = MOCK_PRODUCT_INPUTS.map(mockProduct);
 
 export interface MockFixtures {
+  /** Sprint 5 EP-21: sample reviews by product slug, for a theme's demo. Without them every product shows the empty state. */
+  reviews?: Record<string, StorefrontReview[]>;
   products: StorefrontProductDetail[];
 }
 
@@ -407,6 +415,34 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     throw new ReturnRefusedError("This order has not been delivered yet, so it cannot be returned.", "not_delivered");
   }
 
+  /** Mock of the review eligibility: the demo's orders never leave pending, so nothing can be reviewed and the reason says so. */
+  async function getReviewEligibility(input: OrderLookupInput): Promise<StorefrontReviewEligibility | null> {
+    const order = await lookupOrder(input);
+    if (!order) return null;
+    return { eligible: false, reason: "not_delivered", items: [] };
+  }
+
+  /** Mock of POST reviews: refused the way the backend refuses an order that was not delivered. */
+  async function submitReview(input: SubmitReviewInput): Promise<StorefrontReviewCreated | null> {
+    const order = await lookupOrder({ orderId: input.orderId, phone: input.phone });
+    if (!order) return null;
+    throw new ReviewRefusedError("You can review the items once this order has been delivered.", "not_delivered");
+  }
+
+  /** Mock of a product's reviews: the fixtures' samples for that slug (newest first, 10 a page), else none. */
+  async function getProductReviews(slug: string, page = 1): Promise<StorefrontProductReviews> {
+    const all = [...(fixtures.reviews?.[slug] ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const perPage = 10;
+    const count = all.length;
+    const average = count === 0 ? 0 : Math.round((all.reduce((sum, review) => sum + review.rating, 0) / count) * 10) / 10;
+    return { reviews: all.slice((page - 1) * perPage, page * perPage), summary: { average, count }, page, totalPages: Math.ceil(count / perPage) };
+  }
+
+  /** Mock of the abandoned cart save: the demo keeps nothing. */
+  async function saveAbandonedCart(input: SaveAbandonedCartInput): Promise<void> {
+    void input;
+  }
+
   /** Like the backend: only categories that hold a product, in a fixed order. */
   async function listCategories(): Promise<StorefrontCategory[]> {
     const seen = new Map<string, StorefrontCategory>();
@@ -449,6 +485,10 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     trackOrder,
     getReturnEligibility,
     submitReturn,
+    getReviewEligibility,
+    submitReview,
+    getProductReviews,
+    saveAbandonedCart,
   };
 }
 

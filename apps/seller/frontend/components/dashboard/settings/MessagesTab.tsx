@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { SectionCard } from "@/components/dashboard/shared/SectionCard";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { EMAIL_FOOTER_MAX, MESSAGE_VARIABLES, WHATSAPP_TEMPLATE_MAX, unknownMessageVariables } from "@markaz/contracts/store-settings";
 import { whatsappPreviewText } from "@markaz/notifications/whatsapp";
@@ -15,7 +17,11 @@ import { Field, SaveBar, useTabSave, type TabProps } from "./shared";
  * the variables listed below, written {name}. Both have a live preview and a "reset to default" (an empty field).
  */
 export function MessagesTab({ settings, save, onDirty }: TabProps) {
-  const saved = { whatsappTemplate: textOf(settings.messages.whatsappTemplate), emailFooter: textOf(settings.messages.emailFooter) };
+  const saved = {
+    whatsappTemplate: textOf(settings.messages.whatsappTemplate),
+    emailFooter: textOf(settings.messages.emailFooter),
+    abandonedCartEmail: settings.messages.abandonedCartEmail === true,
+  };
   const [values, setValues] = useState(saved);
   const form = useTabSave(save);
 
@@ -84,6 +90,23 @@ export function MessagesTab({ settings, save, onDirty }: TabProps) {
           <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto sm:self-start" onClick={() => setValues({ ...values, emailFooter: "" })} disabled={values.emailFooter === ""}>
             Reset to default
           </Button>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Abandoned cart email" description="Optional. Off by default. Most shoppers have no email, so the Abandoned carts page gives you a WhatsApp link for each cart.">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <Label htmlFor="abandonedCartEmail">Email shoppers about a cart they left</Label>
+            <p className="text-sm text-muted-foreground">
+              Only when the shopper gave an email and agreed to be messaged. One email, two hours after they left, and never to someone who unsubscribed.
+            </p>
+          </div>
+          <Switch
+            id="abandonedCartEmail"
+            checked={values.abandonedCartEmail}
+            onCheckedChange={(on) => setValues({ ...values, abandonedCartEmail: on })}
+            aria-label="Email shoppers about a cart they left"
+          />
         </div>
       </SectionCard>
 

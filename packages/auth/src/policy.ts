@@ -330,8 +330,10 @@ delete: { actors: ['system'], fields: '*' },
 },
 };
 
-// B10.0 declarations. Sellers may create and update their store's discounts, and may change only a review's
-// status (ID-21). Deletes are admin and system only. Creating a review is system-only (the storefront writes it).
+// B10.0 declarations. Sellers may create and update their store's discounts. Sprint 5 EP-21 (D-108): a seller no longer changes a review's
+// status (the admin hides and shows reviews); the seller keeps only the reply. Deletes are admin and system only. Creating a review is
+// system-only (the public review route writes it as the system actor).
+export const SELLER_REVIEW_UPDATABLE_FIELDS = ['reply'] as const;
 Object.assign(POLICY_MATRIX, {
   discounts: {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
@@ -352,7 +354,7 @@ Object.assign(POLICY_MATRIX, {
   reviews: {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
     create: { actors: ['system'], fields: { system: '*' } },
-    update: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: ['status'] } },
+    update: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: SELLER_REVIEW_UPDATABLE_FIELDS } },
     delete: { actors: ['admin', 'system'], fields: '*' },
   },
 });
@@ -538,5 +540,17 @@ Object.assign(POLICY_MATRIX, {
     create: { actors: [], fields: {} },
     update: { actors: ['seller'], fields: { seller: SELLER_RETURN_ACTION_FIELDS } },
     delete: { actors: [], fields: {} },
+  },
+});
+
+// Sprint 5 EP-28 (D-107): abandoned carts. The public checkout route writes one as the system actor (create and refresh); the store's owner
+// reads them, marks one contacted (the status field only: the route allows no other move) and deletes one. An admin has no row.
+export const SELLER_ABANDONED_CART_UPDATABLE_FIELDS = ['status'] as const;
+Object.assign(POLICY_MATRIX, {
+  abandonedCarts: {
+    read: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['seller', 'system'], fields: { seller: SELLER_ABANDONED_CART_UPDATABLE_FIELDS, system: '*' } },
+    delete: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
   },
 });

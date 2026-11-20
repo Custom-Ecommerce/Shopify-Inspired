@@ -142,6 +142,14 @@ export function readMessages(storefront: unknown): MessageOverrides {
   return { whatsappTemplate: text(sf.whatsappTemplate), emailFooter: text(sf.emailFooter) };
 }
 
+/**
+ * Sprint 5 EP-28.US01.T05 (D-107): whether the store wants the optional automatic email about a cart left behind. Kept in paymentSettings (like
+ * the fraud settings: the public storefront never reads it), shown to the seller in the messages group. OFF unless it is exactly true.
+ */
+export function readAbandonedCartEmail(paymentSettings: unknown): boolean {
+  return record(paymentSettings).abandonedCartEmail === true;
+}
+
 // ----------------------------------------------------------------------------------------------------------- returns
 
 /**
@@ -206,7 +214,7 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     payments: { ...readPayments(doc.paymentSettings), cardAvailable: cardPaymentsAvailable() },
     payout: maskPayout(doc.payoutDetails),
     theme: { activeTheme: effectiveTheme(sf), supportsCardCheckout: themeSupportsCardCheckout(effectiveTheme(sf)) },
-    messages: readMessages(sf),
+    messages: { ...readMessages(sf), abandonedCartEmail: readAbandonedCartEmail(doc.paymentSettings) },
     // Sprint 5 EP-11: kept in paymentSettings (never in storefront, which the public storefront reads).
     fraud: readFraud(doc.paymentSettings),
     returns: { returnWindowDays: readReturnWindowDays(sf) },
@@ -234,7 +242,7 @@ export function settingsFieldsOf(update: StoreSettingsUpdate): string[] {
   if (update.profile?.name !== undefined) fields.add('name');
   const profileRest = update.profile ? Object.keys(update.profile).filter((key) => key !== 'name') : [];
   if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns) fields.add('storefront');
-  if (update.payments || update.fraud) fields.add('paymentSettings');
+  if (update.payments || update.fraud || update.messages?.abandonedCartEmail !== undefined) fields.add('paymentSettings');
   if (update.payout !== undefined) fields.add('payoutDetails');
   return [...fields];
 }
@@ -305,6 +313,12 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
   if (update.messages) {
     if (update.messages.whatsappTemplate !== undefined) put('whatsappTemplate', update.messages.whatsappTemplate);
     if (update.messages.emailFooter !== undefined) put('emailFooter', update.messages.emailFooter);
+    // Sprint 5 EP-28: the switch is private (paymentSettings, never the public storefront object).
+    if (update.messages.abandonedCartEmail !== undefined) {
+      pay.abandonedCartEmail = update.messages.abandonedCartEmail;
+      set.paymentSettings = pay;
+      fields.add('paymentSettings');
+    }
   }
   if (update.returns) {
     if (update.returns.returnWindowDays !== undefined) put('returnWindowDays', update.returns.returnWindowDays);

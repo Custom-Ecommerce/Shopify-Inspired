@@ -234,6 +234,8 @@ export const storeMessagesUpdateSchema = z
   .object({
     whatsappTemplate: clearable(whatsappTemplateText),
     emailFooter: clearable(plainText(EMAIL_FOOTER_MAX, 'the email footer')),
+    /** Sprint 5 EP-28 (D-107): the optional automatic email about a cart left behind. Off unless the seller turns it on. */
+    abandonedCartEmail: z.boolean(),
   })
   .partial()
   .strict();
@@ -432,7 +434,7 @@ export const storeSettingsSchema = z.object({
   }),
   payout: maskedPayoutSchema.nullable(),
   theme: z.object({ activeTheme: z.string(), supportsCardCheckout: z.boolean() }),
-  messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable() }),
+  messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable(), abandonedCartEmail: z.boolean() }),
   fraud: storeFraudSchema,
   returns: storeReturnsSchema,
   updatedAt: z.string().nullable(),

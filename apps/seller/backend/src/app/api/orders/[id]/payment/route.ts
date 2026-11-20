@@ -6,7 +6,7 @@ import { nextStatuses, orderPaymentRequestSchema, paymentRefusal } from '@/lib/c
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
-import { recordCodCommission } from '@/lib/commission';
+import { recordAndReconcile } from '@/lib/return-reconcile';
 import { handleOrderError, OrderRequestError, readOrderBody, toDashboardOrderDetail } from '@/lib/orders';
 import { assertCan, Order, ORDER_ACTIONS, writeAuditLog } from '@/lib/services';
 
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     await audit(ctx, storeId, current, total, status);
     // EP-05 (D-088): an order that is already delivered owes its COD commission now. Best effort, never throws.
-    await recordCodCommission(updated as never);
+    await recordAndReconcile(updated);
     return NextResponse.json({ changed: true, order: toDashboardOrderDetail(updated) }, { headers: NO_STORE });
   } catch (err) {
     return handleOrderError(err);

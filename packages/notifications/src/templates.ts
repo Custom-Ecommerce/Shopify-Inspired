@@ -32,6 +32,9 @@ export const TEMPLATE_NAMES = [
   'return_requested_seller',
   'return_approved_customer',
   'return_rejected_customer',
+  // Sprint 5 EP-21: a shopper left a review (to the seller). EP-28: the optional email about a cart left behind (to the shopper).
+  'review_received_seller',
+  'abandoned_cart',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -66,12 +69,15 @@ export const TEMPLATE_VARIABLES = [
   // Sprint 5 EP-13: the return's number, and the seller's reason when a return is declined.
   'returnNumber',
   'returnReason',
+  // Sprint 5 EP-21: the rating ("5 out of 5") and the text of a new review, for the seller's email.
+  'reviewRating',
+  'reviewText',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
 
 /** Variables whose value is several lines (one order line each); HTML keeps the line breaks. */
-const MULTILINE: ReadonlySet<string> = new Set(['items', 'broadcastMessage', 'emailFooter']);
+const MULTILINE: ReadonlySet<string> = new Set(['items', 'broadcastMessage', 'emailFooter', 'reviewText']);
 /** Variables that are links: in HTML they become a link, and only http(s) is accepted. */
 const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink', 'actionLink', 'storefrontLink', 'unsubscribeLink']);
 
@@ -337,6 +343,46 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'وجہ: {{returnReason}}',
     ],
     whatsapp: 'Hi {{customerName}}, {{storeName}} could not approve return {{returnNumber}} for order {{orderNumber}}. Reason: {{returnReason}}\nآپ کی واپسی منظور نہیں ہوئی۔',
+  },
+  review_received_seller: {
+    variables: ['storeName', 'productName', 'customerName', 'reviewRating', 'reviewText', 'dashboardLink'],
+    subject: 'New review for {{productName}}: {{reviewRating}}',
+    en: [
+      '{{customerName}} reviewed {{productName}} on {{storeName}}: {{reviewRating}}.',
+      '',
+      '{{reviewText}}',
+      '',
+      'Read it and reply: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}} نے {{storeName}} پر {{productName}} کا ریویو دیا ہے: {{reviewRating}}۔',
+      '{{reviewText}}',
+      'دیکھیں اور جواب دیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'New review for {{productName}} on {{storeName}}: {{reviewRating}}. {{dashboardLink}}\nنیا ریویو آیا ہے۔',
+  },
+  abandoned_cart: {
+    variables: ['storeName', 'items', 'total', 'storefrontLink', 'unsubscribeLink'],
+    subject: '{{storeName}}: you left something in your cart',
+    en: [
+      'You left these items in your cart at {{storeName}}:',
+      '',
+      '{{items}}',
+      '',
+      'Total: {{total}}',
+      '',
+      'Pick up where you left off: {{storefrontLink}}',
+      '',
+      'You get this email because you left a cart at {{storeName}} and agreed to be messaged about it. To stop these emails: {{unsubscribeLink}}',
+    ],
+    ur: [
+      'آپ نے {{storeName}} پر اپنی کارٹ میں یہ اشیاء چھوڑی ہیں:',
+      '{{items}}',
+      'کل رقم: {{total}}',
+      'وہیں سے جاری رکھیں: {{storefrontLink}}',
+      'ایسی ای میلز بند کرنے کے لیے یہ لنک کھولیں: {{unsubscribeLink}}',
+    ],
+    whatsapp: 'You left items in your cart at {{storeName}}: {{storefrontLink}}\nآپ کی کارٹ میں سامان رہ گیا ہے۔',
   },
   payout_paid: {
     variables: ['storeName', 'payoutAmount', 'payoutMethod', 'payoutReference', 'dashboardLink'],

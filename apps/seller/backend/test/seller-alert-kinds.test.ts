@@ -24,8 +24,8 @@ test('the model and the contracts list the same kinds, in the same order', () =>
   assert.deepEqual([...MODEL_KINDS], [...CONTRACT_KINDS]);
 });
 
-test('the kinds of Sprint 5 are there: unconfirmed_order (SB-2) and return_requested (SB-3) next to the three of Sprint 4', () => {
-  for (const kind of ['new_order', 'low_stock', 'out_of_stock', 'unconfirmed_order', 'return_requested']) {
+test('the kinds of Sprint 5 are there: unconfirmed_order (SB-2), return_requested (SB-3) and review_received (SB-4) next to the three of Sprint 4', () => {
+  for (const kind of ['new_order', 'low_stock', 'out_of_stock', 'unconfirmed_order', 'return_requested', 'review_received']) {
     assert.ok(MODEL_KINDS.includes(kind), 'model ' + kind);
     assert.ok(CONTRACT_KINDS.includes(kind), 'contracts ' + kind);
   }
@@ -34,7 +34,7 @@ test('the kinds of Sprint 5 are there: unconfirmed_order (SB-2) and return_reque
 test('the model accepts every kind of the contracts, and refuses one that is not listed', () => {
   const base = { store: '65a000000000000000000011', title: 'T', body: '', open: true };
   for (const kind of CONTRACT_KINDS) assert.equal(new (SellerAlert as any)({ ...base, kind }).validateSync(), undefined, kind);
-  assert.ok(new (SellerAlert as any)({ ...base, kind: 'review_received' }).validateSync()?.errors.kind, 'a kind nobody listed (yet) is refused');
+  assert.ok(new (SellerAlert as any)({ ...base, kind: 'cart_abandoned' }).validateSync()?.errors.kind, 'a kind nobody listed (yet) is refused');
 });
 
 test('the alert wire keeps every kind; only a kind nobody listed becomes new_order (the silent fallback this test guards)', () => {
@@ -189,4 +189,35 @@ test('a return request raises ONE bell alert of the return_requested kind, which
   await sendReturnRequested(STORE, { _id: '65a0000000000000000e0001', returnNumber: 'RET-7KQ4M2XA', order: ORDER_ID }, order());
   assert.equal(alerts.length, 1);
   assert.equal(outbox.filter((row) => row.template === 'return_requested_seller').length, 1);
+});
+
+test('a new review raises ONE bell alert of the review_received kind (all four places agree), which reaches the bell as that kind and not as new_order', async () => {
+  const { sendReviewReceived } = await import('@/lib/notifications');
+  const review = { id: '65a0000000000000000f0001', productId: '65a0000000000000000c0001', productTitle: 'Lawn suit', rating: 5, body: 'Soft fabric <b>and</b> true to size', displayName: 'Ayesha K.' };
+  await sendReviewReceived(STORE, review);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0]!.kind, 'review_received');
+  assert.equal(alerts[0]!.dedupeKey, 'review:65a0000000000000000f0001');
+  assert.equal(alerts[0]!.link, '/reviews');
+  assert.equal(toAlertWire(alerts[0]).kind, 'review_received');
+  assert.match(alerts[0]!.title, /5 out of 5/);
+  // The seller's email is queued once, under the same key, with the review text escaped by the template.
+  const emails = outbox.filter((row) => row.template === 'review_received_seller');
+  assert.equal(emails.length, 1);
+  assert.equal(emails[0]!.dedupeKey, 'review:65a0000000000000000f0001');
+  assert.equal(String(emails[0]!.bodyHtml).includes('<b>and</b>'), false, 'the text is escaped in the HTML part');
+  assert.ok(String(emails[0]!.bodyHtml).includes('&lt;b&gt;and&lt;/b&gt;'));
+  // The same review announced twice: nothing new.
+  await sendReviewReceived(STORE, review);
+  assert.equal(alerts.length, 1);
+  assert.equal(outbox.filter((row) => row.template === 'review_received_seller').length, 1);
+});
+
+test('the seller who switched new-order emails off still gets the bell alert, and no email', async () => {
+  const { sendReviewReceived } = await import('@/lib/notifications');
+  UserModel.findById = (id: string) =>
+    lean(() => (String(id) === OWNER ? { _id: OWNER, role: 'seller', email: 'seller@example.com', notificationPrefs: { emailNewOrder: false, emailLowStock: true } } : null));
+  await sendReviewReceived(STORE, { id: '65a0000000000000000f0002', productId: '', productTitle: 'Lawn suit', rating: 4, body: 'Nice', displayName: 'Sana' });
+  assert.equal(alerts.length, 1);
+  assert.equal(outbox.filter((row) => row.template === 'review_received_seller').length, 0);
 });

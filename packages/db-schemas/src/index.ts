@@ -51,3 +51,5 @@ export * from './models/email-unsubscribe';
 export * from './models/customer-note';
 // Sprint 5 EP-11.US02 (D-107): the phones and emails a store refuses orders from.
 export * from './models/blocked-contact';
+// Sprint 5 EP-28 (D-107): carts a shopper left with a phone and the consent line (7 day TTL).
+export * from './models/abandoned-cart';

@@ -28,6 +28,22 @@ export class ReturnRefusedError extends Error {
 }
 
 /**
+ * The store refused a review (Sprint 5 EP-21): the order is not delivered, the item is already reviewed, or it is not part of the order.
+ * `message` is written for the shopper.
+ */
+export class ReviewRefusedError extends Error {
+  readonly reason: string | null;
+  readonly field: string | null;
+
+  constructor(message: string, reason: string | null = null, field: string | null = null) {
+    super(message);
+    this.name = "ReviewRefusedError";
+    this.reason = reason;
+    this.field = field;
+  }
+}
+
+/**
  * Why the remote transport could not produce data.
  * - not_implemented: stub mode. The backend is not wired yet, so nothing was sent.
  * - timeout / network: the seller backend did not answer (after one retry for reads).

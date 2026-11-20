@@ -112,3 +112,6 @@ export const CustomerNote = db.CustomerNote;
 
 // Sprint 5 EP-11.US02 (D-107): the phones and emails a store refuses orders from.
 export const BlockedContact = db.BlockedContact;
+
+// Sprint 5 EP-28 (D-107): carts a shopper left behind after typing a phone and seeing the consent line (7 day TTL).
+export const AbandonedCart = db.AbandonedCart;

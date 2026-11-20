@@ -1,3 +1,5 @@
+import type { ModerationReview, ModerationReviewList } from "@markaz/contracts";
+import { reviewStateToQuery, type ReviewAction, type ReviewListState } from "@/lib/reviews";
 import {
   adminStoreDetailSchema,
   adminStoreListEnvelopeSchema,
@@ -260,4 +262,31 @@ export function getCommissionReport(input: { storeId: string; period: ReportPeri
 /** The link of the CSV download of the same report. */
 export function commissionReportCsvUrl(input: { storeId: string; period: ReportPeriodValue; from: string; to: string }): string {
   return "/api/commission/report?" + reportQuery(input, "csv");
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 5 EP-21.US01.T05 (D-108): review moderation
+
+
+/** The answers are checked by the backends; here only that an object came back. */
+const looseReviews = {
+  safeParse(input: unknown): { success: true; data: ModerationReviewList } | { success: false } {
+    const docs = (input as { docs?: unknown } | null)?.docs;
+    return Array.isArray(docs) ? { success: true, data: input as ModerationReviewList } : { success: false };
+  },
+};
+
+const looseReview = {
+  safeParse(input: unknown): { success: true; data: ModerationReview } | { success: false } {
+    return input !== null && typeof input === "object" && typeof (input as { reviewId?: unknown }).reviewId === "string" ? { success: true, data: input as ModerationReview } : { success: false };
+  },
+};
+
+export function listModerationReviews(state: ReviewListState, signal?: AbortSignal): Promise<ModerationReviewList> {
+  return call("/api/reviews?" + reviewStateToQuery(state, true), looseReviews, { signal });
+}
+
+/** Hides (with a reason) or shows again one review. */
+export function runReviewAction(action: ReviewAction, reviewId: string, reason: string): Promise<ModerationReview> {
+  return call("/api/reviews/" + action, looseReview, { method: "POST", body: JSON.stringify(action === "unhide" ? { reviewId } : { reviewId, reason }) });
 }
