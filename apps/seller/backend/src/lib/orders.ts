@@ -26,6 +26,7 @@ import {
   nextStatuses,
   orderListDaySchema,
 } from '@/lib/contracts';
+import { confirmationLogOf, confirmationStatusOf, riskFlagsOf } from '@/lib/fraud';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { escapeRegex } from '@/lib/storefront/product-query';
 
@@ -50,6 +51,9 @@ export type OrderErrorCode =
   | 'ORDER_CANCEL_ILLEGAL'
   // A card order that has not been paid cannot be dispatched (D-082).
   | 'PAYMENT_PENDING'
+  // Sprint 5 EP-11.US01: a COD order that waits for the seller's phone confirmation cannot be dispatched; a second decision is a conflict.
+  | 'ORDER_NOT_CONFIRMED'
+  | 'ORDER_CONFIRMATION_DECIDED'
   // EP-02 OB-4: the tracking edit.
   | 'ORDER_TRACKING_ILLEGAL'
   // EP-02 OB-5a: payment and notes.
@@ -101,7 +105,7 @@ export async function readOrderBody<T>(request: Request, schema: BodySchema<T>):
 // Query
 
 /** The new list parameters. When any of them is sent, the legacy ?where and ?sort are ignored. */
-const LIST_FILTER_PARAMS = ['status', 'from', 'to', 'q'] as const;
+const LIST_FILTER_PARAMS = ['status', 'from', 'to', 'q', 'confirmation'] as const;
 const LIST_PARAMS = [...LIST_FILTER_PARAMS, 'page', 'limit'] as const;
 
 export type OrderListRequest = { mode: 'legacy' } | { mode: 'list'; query: DashboardOrderListQuery };
@@ -213,7 +217,12 @@ export function orderListFilters(storeId: string, query: DashboardOrderListQuery
   if (range) counts.createdAt = range;
   const search = orderSearchFilter(query.q);
   if (search) Object.assign(counts, search);
-  const list = query.status ? { ...counts, status: query.status } : { ...counts };
+  const list: Record<string, unknown> = query.status ? { ...counts, status: query.status } : { ...counts };
+  // Sprint 5 EP-11.US01: only the orders still waiting for the seller's call. A cancelled order is no longer waiting for anything.
+  if (query.confirmation === 'unconfirmed') {
+    list.confirmationStatus = 'unconfirmed';
+    if (query.status === undefined) list.status = { $ne: 'cancelled' };
+  }
   return { counts, list };
 }
 
@@ -336,7 +345,17 @@ export function toDashboardOrderListItem(doc: unknown): DashboardOrderListItem {
     courier: text(row.courier),
     trackingNumber: text(row.trackingNumber),
     createdAt: iso(row.createdAt) ?? new Date(0).toISOString(),
+    confirmationStatus: confirmationStatusOf(row),
+    riskFlags: riskFlagsOf(row),
   };
+}
+
+/** The customer an order belongs to, as the customers pages key them: the stored phoneKey, else the lower-case email, else null. */
+export function customerKeyOf(row: Row): string | null {
+  const phoneKey = text(row.phoneKey)?.trim();
+  if (phoneKey) return phoneKey;
+  const email = text(row.customerEmail)?.trim().toLowerCase();
+  return email ? email : null;
 }
 
 /**
@@ -393,11 +412,18 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     cancelReason: text(row.cancelReason),
     createdAt,
     updatedAt: iso(row.updatedAt) ?? createdAt,
-    allowedNext: nextStatuses(row.status).filter((next) => !(next === 'dispatched' && cardPaymentPending(row))),
+    // A dispatch is not offered while the card payment is pending or the seller's phone confirmation is (Sprint 5 EP-11.US01).
+    allowedNext: nextStatuses(row.status).filter(
+      (next) => !(next === 'dispatched' && (cardPaymentPending(row) || confirmationStatusOf(row) === 'unconfirmed')),
+    ),
     canCancel: canCancel(row.status) && !paidCardOrder(row),
     canEditTracking: row.status === 'dispatched',
     canMarkCollected: canMarkCollected(row),
     timeline: buildOrderTimeline({ createdAt, statusHistory: history, notes: orderNotes, cancelReason: text(row.cancelReason) }),
+    confirmationStatus: confirmationStatusOf(row),
+    riskFlags: riskFlagsOf(row),
+    confirmationLog: confirmationLogOf(row),
+    customerKey: customerKeyOf(row),
   };
 }
 

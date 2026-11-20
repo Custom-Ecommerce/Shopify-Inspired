@@ -23,7 +23,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/dashboard/shared/EmptyState";
+import { ConfirmationBadge, RiskFlagChips } from "@/components/dashboard/orders/ConfirmationBits";
+import { ConfirmationPanel } from "@/components/dashboard/orders/ConfirmationPanel";
 import { CustomerWhatsappButton } from "@/components/dashboard/orders/CustomerWhatsappButton";
+import { EarlierAddresses } from "@/components/dashboard/orders/EarlierAddresses";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
 import {
   ORDER_STATUS_LABEL,
@@ -955,9 +958,14 @@ export default function OrderDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <OrderStatusBadge status={order.status} />
           <PaymentStatusBadge status={order.paymentStatus} />
+          <ConfirmationBadge status={order.confirmationStatus} />
           <span className="text-sm text-muted-foreground">Placed {dateTime(order.createdAt)}</span>
         </div>
+        <RiskFlagChips flags={order.riskFlags} />
       </div>
+
+      {/* Sprint 5 EP-11.US01.T05: the phone confirmation, above the actions: a dispatch is refused until it is done. */}
+      <ConfirmationPanel storeId={params.storeId} order={order} onChanged={() => fetchOrder(true)} />
 
       {/* Actions: one button per allowedNext entry from the API, plus Cancel while canCancel (OB-3). Notes, payment and
           print arrive in OB-4 and OB-5. */}
@@ -1119,6 +1127,7 @@ export default function OrderDetailPage() {
           {order.customerWhatsapp ? <p className="font-mono">WhatsApp: {order.customerWhatsapp}</p> : null}
           {order.customerEmail ? <p className="break-all">{order.customerEmail}</p> : null}
           <CustomerWhatsappButton order={order} />
+          <EarlierAddresses storeId={params.storeId} order={order} />
           {order.customerNote ? (
             <div className="mt-2 rounded-xl border bg-muted/40 p-3">
               <p className="mb-1 text-xs font-medium text-muted-foreground">Note from the customer</p>

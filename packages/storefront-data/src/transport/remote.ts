@@ -194,6 +194,8 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
       return { code: "store_inactive" };
     case "PAYMENT_NOT_STARTED":
       return { code: "payment_not_started", message: message ?? "The card payment could not be started." };
+    case "CONTACT_BLOCKED":
+      return { code: "contact_blocked", message: message ?? "We cannot take this order. Please contact the store." };
     case "DISCOUNT_REJECTED":
     case "DISCOUNT_USED_UP":
       return { code: "discount_rejected", reason: code === "DISCOUNT_USED_UP" ? "used_up" : (reason ?? "unknown"), message: message ?? "This code cannot be used." };

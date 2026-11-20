@@ -2,7 +2,7 @@ import { after, afterEach, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { AuditLog, Discount, Order, Product, StockMovement, Store } from '@/lib/services';
+import { AuditLog, BlockedContact, Discount, Order, Product, StockMovement, Store } from '@/lib/services';
 import { resetRateLimits } from '../src/lib/storefront/rate-limit';
 import { stripeClient, type StripeClient } from '../src/lib/storefront/card-payment';
 import { toStorefrontStoreDto } from '../src/lib/storefront/store-dto';
@@ -65,6 +65,8 @@ let webhookPOST: (request: Request) => Promise<Response>;
 before(async () => {
   setCardEnv();
   process.env.SELLER_MONGODB_URI = 'mongodb://stub.invalid/seller';
+  // Sprint 5 EP-11.US02: the order route asks the blocklist one question before it places an order. These tests have no blocked contact.
+  (BlockedContact as any).exists = async () => null;
   stripe = await stripeClient();
   orderPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/route')).POST;
   webhookPOST = (await import('../src/app/api/webhooks/stripe-orders/route')).POST;

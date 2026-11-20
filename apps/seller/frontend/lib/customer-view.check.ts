@@ -36,3 +36,18 @@ assert.match(noteProblem("", ["1", "2", "3", "4", "5", "6"]) ?? "", /at most 5/)
 assert.match(noteProblem("", ["x".repeat(21)]) ?? "", /20/);
 
 console.log("customer view checks passed");
+
+// Address book insights (Sprint 5 EP-10.US03.T02): the same address on an earlier order, and the other addresses.
+import { addressInsights } from "./customer-view";
+const book = [
+  { address: "House 1, Street 2", city: "Lahore", orderCount: 3, lastUsedAt: "2026-11-07T10:00:00.000Z" },
+  { address: "Flat 7, Mall Road", city: "Karachi", orderCount: 1, lastUsedAt: "2026-11-03T10:00:00.000Z" },
+];
+assert.deepEqual(addressInsights(book, " house 1,  street 2 ", "LAHORE").repeat, true);
+assert.deepEqual(addressInsights(book, "house 1, street 2", "Lahore").others.map((entry) => entry.address), ["Flat 7, Mall Road"]);
+assert.equal(addressInsights(book, "Flat 7, Mall Road", "Karachi").repeat, false, "used once: this order is the only one");
+assert.equal(addressInsights(book, "Somewhere new", "Quetta").repeat, false);
+assert.equal(addressInsights(book, "Somewhere new", "Quetta").others.length, 2);
+assert.equal(addressInsights(book, "House 1, Street 2", "Karachi").repeat, false, "the same street in another city is another address");
+assert.equal(addressInsights([], null, null).others.length, 0);
+assert.equal(addressInsights(Array.from({ length: 9 }, (_, i) => ({ address: "A" + i, city: null, orderCount: 1, lastUsedAt: "2026-11-01T00:00:00.000Z" })), "x", null).others.length, 5);

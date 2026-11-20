@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { apiError, proxyGet, proxyPatch, proxyPost, ProxyResponseError, type ProxyAuthResult } from "@/lib/proxy";
+import { apiError, proxyDelete, proxyGet, proxyPatch, proxyPost, ProxyResponseError, type ProxyAuthResult } from "@/lib/proxy";
 
 /** The path id must be the verified active store, as for PATCH /api/proxy/stores/:id. */
 export function ownStoreGuard(id: string) {
@@ -67,5 +67,16 @@ export function proxyStorePostBody(req: NextRequest, id: string, tail: string, l
       }
       return incoming;
     },
+  });
+}
+
+/** DELETE /api/proxy/stores/:id/<tail> -> the seller backend's DELETE /api/stores/:id/<tail> (a blocklist entry, Sprint 5). No body. */
+export function proxyStoreDelete(req: NextRequest, id: string, tail: string, logScope: string) {
+  return proxyDelete(req, `/api/stores/${encodeURIComponent(id)}/${tail}`, {
+    auth: "dashboard",
+    storeScope: "required",
+    bindStore: false,
+    logScope,
+    guard: ownStoreGuard(id),
   });
 }

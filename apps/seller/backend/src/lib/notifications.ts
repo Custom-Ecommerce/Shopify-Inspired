@@ -2,8 +2,9 @@ import mongoose from 'mongoose';
 import { after } from 'next/server';
 import * as notificationsNs from '@markaz/notifications';
 import type { EnqueueInput, EnqueueResult, NotificationOutboxModel, TemplateName } from '@markaz/notifications';
+import type { SellerAlertKind } from '@markaz/contracts';
 import { unwrapCjs } from '@/lib/cjs';
-import { readNotificationPrefs } from '@/lib/contracts';
+import { readConfirmationStatus, readNotificationPrefs } from '@/lib/contracts';
 import { NotificationOutbox, SellerAlert, Store, User } from '@/lib/services';
 import { readMessages } from '@/lib/store-settings';
 
@@ -122,7 +123,8 @@ export async function loadStoreNotifyInfo(storeId: string): Promise<StoreNotifyI
 
 export interface NewSellerAlert {
   store: string;
-  kind: 'new_order' | 'low_stock' | 'out_of_stock';
+  /** One of SELLER_ALERT_KINDS (contracts), the same list the model and lib/seller-alerts.ts use; test/seller-alert-kinds.test.ts keeps the four places in step. */
+  kind: SellerAlertKind;
   title: string;
   body: string;
   link: string | null;
@@ -171,6 +173,8 @@ interface OrderFields {
   city: string;
   courier: string;
   trackingNumber: string;
+  /** Sprint 5 EP-11: an order waiting for the seller's phone confirmation. */
+  unconfirmed: boolean;
   items: Array<{ title: string; variantTitle: string | null; quantity: number; unitPrice: number }>;
 }
 
@@ -189,6 +193,7 @@ function orderFields(order: unknown): OrderFields {
     city: str(row.city).trim() || '-',
     courier: str(row.courier),
     trackingNumber: str(row.trackingNumber),
+    unconfirmed: readConfirmationStatus(row.confirmationStatus) === 'unconfirmed',
     items: items.map((item) => ({
       title: str(item.productTitle) || 'Item',
       variantTitle: str(item.variantTitle) || null,
@@ -249,10 +254,12 @@ export async function sendOrderPlaced(storeId: string, order: unknown): Promise<
     });
   }
 
+  // Sprint 5 EP-11 (D-108): ONE bell alert per order. A COD order waiting for the seller's phone confirmation raises the
+  // unconfirmed_order kind in place of new_order, under the same key, so the order never alerts twice.
   await createSellerAlert({
     store: storeId,
-    kind: 'new_order',
-    title: 'New order ' + o.orderNumber,
+    kind: o.unconfirmed ? 'unconfirmed_order' : 'new_order',
+    title: o.unconfirmed ? 'Order ' + o.orderNumber + ' needs a confirmation call' : 'New order ' + o.orderNumber,
     body: o.customerName + ', ' + o.city + ' - ' + total + ' (' + o.paymentMethod + ')',
     link: '/orders/' + o.id,
     dedupeKey: 'neworder:' + o.id,

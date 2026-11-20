@@ -18,6 +18,7 @@ const LABELS: Record<string, string> = {
   categories: "Categories",
   orders: "Orders",
   customers: "Customers",
+  blocklist: "Blocklist",
   inventory: "Inventory",
   reviews: "Reviews",
   discounts: "Discounts",

@@ -2,7 +2,7 @@ import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { Order, Product, StockMovement, Store } from '@/lib/services';
+import { BlockedContact, Order, Product, StockMovement, Store } from '@/lib/services';
 import { storefrontOrderCreatedResponseSchema, storefrontOrderLookupResponseSchema } from '@/lib/contracts';
 import { resetRateLimits } from '../src/lib/storefront/rate-limit';
 
@@ -27,6 +27,8 @@ let lookupPOST: (r: NextRequest, c: any) => Promise<Response>;
 before(async () => {
   process.env.SELLER_MONGODB_URI = 'mongodb://stub.invalid/seller';
   process.env.TRUSTED_PROXY_HOPS = '1';
+  // Sprint 5 EP-11.US02: the order route asks the blocklist one question before it places an order. These tests have no blocked contact.
+  (BlockedContact as any).exists = async () => null;
   createPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/route')).POST;
   lookupPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/lookup/route')).POST;
 });

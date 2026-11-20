@@ -3,7 +3,8 @@ import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import type { OrderTransitionRequest } from '@markaz/contracts';
 import { authenticate, type AuthContext } from '@/lib/auth';
-import { canTransition, cardPaymentPending, nextStatuses, orderTransitionRequestSchema, transitionRefusal, ORDER_TRANSITION_REFUSAL_MESSAGES } from '@/lib/contracts';
+import { canTransition, cardPaymentPending, nextStatuses, orderTransitionRequestSchema, transitionRefusal, ORDER_NOT_CONFIRMED, ORDER_NOT_CONFIRMED_MESSAGE, ORDER_TRANSITION_REFUSAL_MESSAGES } from '@/lib/contracts';
+import { confirmationStatusOf } from '@/lib/fraud';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -23,6 +24,7 @@ interface StoredOrder {
   status?: unknown;
   paymentMethod?: unknown;
   paymentStatus?: unknown;
+  confirmationStatus?: unknown;
 }
 
 const notFound = (): HttpError => new HttpError(404, 'Order not found');
@@ -82,6 +84,7 @@ async function audit(ctx: AuthContext, storeId: string, row: StoredOrder, from: 
  *   409 ORDER_STATUS_CHANGED { status, allowedNext }      the order changed between the read and the write
  *   422 ORDER_TRANSITION_ILLEGAL { from, to, allowedNext, reason }
  *   422 PAYMENT_PENDING   a card order that has not been paid cannot be dispatched
+ *   422 ORDER_NOT_CONFIRMED   a COD order still waiting for the seller's phone confirmation cannot be dispatched (Sprint 5 EP-11.US01)
  *
  * The write is one findOneAndUpdate filtered on { _id, store, status: from }: a compare-and-set, so two parallel requests can
  * never both move the order or add two history entries.
@@ -124,6 +127,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (to === 'dispatched' && cardPaymentPending(current)) {
       throw new OrderRequestError(422, 'PAYMENT_PENDING', 'This card order has not been paid yet, so it cannot be dispatched.', { from, to });
     }
+    // Sprint 5 EP-11.US01 (D-107): the dispatch waits for the phone confirmation. A check inside this same read-then-compare-and-set
+    // flow, with no extra write. Only the dispatch is refused; every other move is as before.
+    if (to === 'dispatched' && confirmationStatusOf(current) === 'unconfirmed') {
+      throw new OrderRequestError(422, ORDER_NOT_CONFIRMED, ORDER_NOT_CONFIRMED_MESSAGE, { from, to });
+    }
 
     const set: Record<string, unknown> = { status: to };
     if (body.courier !== undefined) set.courier = body.courier;
@@ -132,7 +140,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const entry = { from, to, by: ctx.userObjectId, at: new Date(), note: body.note ? body.note : null };
 
     const updated = await Order.findOneAndUpdate(
-      { _id: id, store: storeId, status: from },
+      // A stored confirmation status is part of the filter, so the dispatch is judged on the value that was checked above.
+      { _id: id, store: storeId, status: from, ...(current.confirmationStatus === undefined ? {} : { confirmationStatus: current.confirmationStatus }) },
       { $set: set, $push: { statusHistory: entry } },
       { new: true, runValidators: true },
     ).lean();

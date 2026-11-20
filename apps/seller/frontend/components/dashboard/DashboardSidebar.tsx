@@ -40,6 +40,7 @@ import {
   Globe,
   ExternalLink, UserCog,
   Contact,
+  Ban,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -61,6 +62,8 @@ export const NAV_GROUPS = [
       { href: "/orders", label: "Orders", icon: ShoppingCart },
       // Sprint 5 EP-10.US02: the customers who ordered, with private notes.
       { href: "/customers", label: "Customers", icon: Contact },
+      // Sprint 5 EP-11.US02: the phones and emails the store refuses orders from.
+      { href: "/blocklist", label: "Blocklist", icon: Ban },
       { href: "/inventory", label: "Inventory", icon: Archive },
       { href: "/returns", label: "Returns", icon: RotateCcw },
       { href: "/reviews", label: "Reviews", icon: Star },

@@ -239,6 +239,15 @@ update: { actors: ['seller'], fields: { seller: ['status', 'note', 'courier', 't
 delete: { actors: [], fields: {} },
 },
 
+// Sprint 5 EP-11.US01 (D-107): the seller confirms, marks unreachable or cancels an unconfirmed COD order. Seller only: an admin never
+// decides for a store. Not in ORDER_ACTIONS (the route calls assertCan on this row directly, as the customer note route does).
+orderConfirmation: {
+read: { actors: [], fields: {} },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['result', 'note'] } },
+delete: { actors: [], fields: {} },
+},
+
 orderCancel: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
@@ -504,5 +513,17 @@ Object.assign(POLICY_MATRIX, {
     create: { actors: [], fields: {} },
     update: { actors: ['seller'], fields: { seller: ['note', 'tags'] } },
     delete: { actors: [], fields: {} },
+  },
+});
+
+// Sprint 5 EP-11.US02 (D-107): the phones and emails a store refuses orders from. Seller only, of their own store (the route checks
+// the store); an admin has no row. Nobody updates a row: a contact is added or removed.
+export const SELLER_BLOCKED_CONTACT_CREATABLE_FIELDS = ['kind', 'value', 'reason'] as const;
+Object.assign(POLICY_MATRIX, {
+  blockedContacts: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: ['seller'], fields: { seller: SELLER_BLOCKED_CONTACT_CREATABLE_FIELDS } },
+    update: { actors: [], fields: {} },
+    delete: { actors: ['seller'], fields: { seller: '*' } },
   },
 });

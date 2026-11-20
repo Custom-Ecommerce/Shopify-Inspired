@@ -3,21 +3,32 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Loader2, MessageCircle } from "lucide-react";
+import { ArrowLeft, Ban, Loader2, MessageCircle } from "lucide-react";
 import type { CustomerDetail, CustomerNoteResult } from "@markaz/contracts";
 import { whatsappLink } from "@markaz/notifications/whatsapp";
 import { FormAlert } from "@/components/auth/AccountCard";
 import { PageHeader } from "@/components/dashboard/shared/PageHeader";
 import { SectionCard } from "@/components/dashboard/shared/SectionCard";
 import { ORDER_STATUS_LABEL, PAYMENT_METHOD_LABEL, StatusBadge } from "@/components/dashboard/shared/StatusBadge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useActiveStoreId } from "@/lib/dashboard-context";
-import { NOTE_MAX, displayName, displayPhone, noteProblem, parseTags } from "@/lib/customer-view";
+import { NOTE_MAX, displayName, displayPhone, noteProblem, parseTags, type AddressEntryView } from "@/lib/customer-view";
 import { formatRs } from "@/lib/format";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
+import { BLOCK_REASON_MAX } from "@/lib/fraud-view";
 import { storeHref } from "@/lib/store-routes";
 
 const dateOf = (iso: string | null): string => (iso === null ? "-" : new Date(iso).toLocaleDateString("en-GB"));
@@ -238,17 +249,9 @@ export default function DashboardCustomerPage() {
         </ul>
       </SectionCard>
 
-      <SectionCard title="Delivery addresses" description="Where this customer's orders were sent. Nothing is filled in for them at checkout.">
-        {detail.addresses.length === 0 ? <p className="text-sm text-muted-foreground">No address saved on these orders.</p> : null}
-        <ul className="flex flex-col gap-2">
-          {detail.addresses.map((address) => (
-            <li key={address.address + "|" + (address.city ?? "")} className="break-words rounded-xl bg-muted/40 p-3 text-sm">
-              {address.address}
-              {address.city ? <span className="text-muted-foreground">, {address.city}</span> : null}
-            </li>
-          ))}
-        </ul>
-      </SectionCard>
+      <AddressBook storeId={storeId} customerKey={key} fallback={detail.addresses} />
+
+      <BlockCustomer storeId={storeId} phone={detail.phone} email={detail.email} />
     </div>
   );
 }
@@ -259,5 +262,135 @@ function BackLink({ to }: { to: string }) {
       <ArrowLeft className="size-4" aria-hidden="true" />
       All customers
     </Link>
+  );
+}
+
+/**
+ * Sprint 5 EP-10.US03.T02: the customer's address book, newest first, with how many orders used each address and when it was last used.
+ * Seller side only: nothing is filled in for the customer at checkout. If the book cannot be read, the plain list from the detail shows.
+ */
+function AddressBook({ storeId, customerKey, fallback }: { storeId: string; customerKey: string; fallback: ReadonlyArray<{ address: string; city: string | null }> }) {
+  const storeFetch = useStoreFetch();
+  const [entries, setEntries] = useState<AddressEntryView[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await storeFetch(`/api/proxy/stores/${encodeURIComponent(storeId)}/customers/${encodeURIComponent(customerKey)}/addresses`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { addresses?: AddressEntryView[] };
+        if (!cancelled && Array.isArray(data.addresses)) setEntries(data.addresses);
+      } catch {
+        // The plain list below stays.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storeFetch, storeId, customerKey]);
+
+  const rows: AddressEntryView[] = entries ?? fallback.map((entry) => ({ address: entry.address, city: entry.city, orderCount: 0, lastUsedAt: "" }));
+  return (
+    <SectionCard title="Address book" description="Where this customer's orders were sent. Nothing is filled in for them at checkout.">
+      {rows.length === 0 ? <p className="text-sm text-muted-foreground">No address saved on these orders.</p> : null}
+      <ul className="flex flex-col gap-2">
+        {rows.map((entry) => (
+          <li key={entry.address + "|" + (entry.city ?? "")} className="flex min-w-0 flex-col gap-1 rounded-xl bg-muted/40 p-3 text-sm">
+            <span className="break-words">
+              {entry.address}
+              {entry.city ? <span className="text-muted-foreground">, {entry.city}</span> : null}
+            </span>
+            {entry.orderCount > 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {entry.orderCount} {entry.orderCount === 1 ? "order" : "orders"} · last used {dateOf(entry.lastUsedAt)}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
+  );
+}
+
+/**
+ * Sprint 5 EP-11.US02.T03: "Block this customer" with a confirmation. It adds the customer's phone (and email, when they have one) to the
+ * blocklist. A blocked shopper gets a neutral message at checkout and no order is placed. The seller can undo it on the Blocklist page.
+ */
+function BlockCustomer({ storeId, phone, email }: { storeId: string; phone: string | null; email: string | null }) {
+  const storeFetch = useStoreFetch();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+  const contacts = [phone === null ? null : { kind: "phone", value: phone }, email === null ? null : { kind: "email", value: email }].filter(
+    (entry): entry is { kind: string; value: string } => entry !== null,
+  );
+  if (contacts.length === 0) return null;
+  const reasonProblem = reason.length > BLOCK_REASON_MAX ? `The reason can be at most ${BLOCK_REASON_MAX} characters.` : /[<>]/.test(reason) ? "The reason cannot contain < or >." : null;
+
+  async function block() {
+    if (reasonProblem !== null) return;
+    setBusy(true);
+    setNotice(null);
+    let added = 0;
+    let failed: string | null = null;
+    for (const contact of contacts) {
+      try {
+        const res = await storeFetch(`/api/proxy/stores/${encodeURIComponent(storeId)}/blocklist`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: contact.kind, value: contact.value, ...(reason.trim() === "" ? {} : { reason: reason.trim() }) }),
+        });
+        // 409: already on the list, which is what the seller wanted.
+        if (res.ok || res.status === 409) added += 1;
+        else failed = await problemOf(res, "The customer could not be blocked.");
+      } catch {
+        failed = "Could not reach the server. Please try again.";
+      }
+    }
+    setBusy(false);
+    setOpen(false);
+    setReason("");
+    setNotice(
+      failed === null
+        ? { tone: "success", text: "Blocked. New orders from this phone or email are refused at checkout." }
+        : { tone: "error", text: added > 0 ? "Only part of it was blocked. " + failed : failed },
+    );
+  }
+
+  return (
+    <SectionCard title="Block this customer" description="Stops new orders from this customer's phone and email. Their earlier orders stay as they are.">
+      <div className="flex flex-col gap-3">
+        {notice ? <FormAlert tone={notice.tone}>{notice.text}</FormAlert> : null}
+        <Button variant="outline" className="min-h-11 w-full sm:w-auto sm:self-start" onClick={() => setOpen(true)}>
+          <Ban className="size-4" aria-hidden="true" />
+          Block this customer
+        </Button>
+      </div>
+      <AlertDialog open={open} onOpenChange={(next) => (!next && !busy ? setOpen(false) : undefined)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Block this customer?</AlertDialogTitle>
+            <AlertDialogDescription>
+              New orders from {contacts.map((contact) => (contact.kind === "phone" ? displayPhone(contact.value) : contact.value)).join(" and ")} will be refused at checkout. The
+              customer is only told to contact the store. You can remove the block on the Blocklist page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-1.5">
+            <Label htmlFor="block-reason">Reason (optional, only you see it)</Label>
+            <Input id="block-reason" className="h-11" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={BLOCK_REASON_MAX + 20} autoComplete="off" disabled={busy} />
+            {reasonProblem ? <p className="text-sm text-destructive">{reasonProblem}</p> : null}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-11 w-full sm:h-9 sm:w-auto" disabled={busy}>
+              Keep customer
+            </AlertDialogCancel>
+            <AlertDialogAction className="h-11 w-full sm:h-9 sm:w-auto" disabled={busy || reasonProblem !== null} onClick={() => void block()}>
+              {busy ? "Blocking…" : "Block"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </SectionCard>
   );
 }

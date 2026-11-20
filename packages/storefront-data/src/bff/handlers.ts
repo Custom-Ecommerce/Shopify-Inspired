@@ -179,6 +179,8 @@ export function rejectionToEnvelope(rejection: OrderRejection): {
       return { status: 400, code: "INVALID_REQUEST", message: rejection.message, extra: rejection.field ? { field: rejection.field } : {} };
     case "store_inactive":
       return { status: 403, code: "STORE_NOT_ACTIVE", message: "This store is not available.", extra: {} };
+    case "contact_blocked":
+      return { status: 422, code: "CONTACT_BLOCKED", message: rejection.message, extra: {} };
     case "payment_not_started":
       return { status: 502, code: "PAYMENT_NOT_STARTED", message: rejection.message, extra: {} };
     case "discount_rejected":

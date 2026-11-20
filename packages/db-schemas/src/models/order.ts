@@ -23,6 +23,20 @@ export type OrderPaymentStatus = (typeof ORDER_PAYMENT_STATUSES)[number];
 export const ORDER_HISTORY_KINDS = ['status', 'tracking', 'payment', 'stock'] as const;
 export type OrderHistoryKind = (typeof ORDER_HISTORY_KINDS)[number];
 
+/**
+ * Sprint 5 EP-11 (D-107): phone confirmation of a cash-on-delivery order. Same values as CONFIRMATION_STATUSES, RISK_FLAGS and
+ * CONFIRMATION_LOG_RESULTS in @markaz/contracts. Keep them identical. An order written before this existed has none of the fields
+ * and reads as not_required.
+ */
+export const ORDER_CONFIRMATION_STATUSES = ['not_required', 'unconfirmed', 'confirmed', 'unreachable'] as const;
+export type OrderConfirmationStatus = (typeof ORDER_CONFIRMATION_STATUSES)[number];
+export const ORDER_CONFIRMATION_LOG_RESULTS = ['confirmed', 'unreachable', 'cancelled'] as const;
+export type OrderConfirmationLogResult = (typeof ORDER_CONFIRMATION_LOG_RESULTS)[number];
+export const ORDER_RISK_FLAGS = ['high_value', 'flagged_city', 'repeat_returns', 'new_customer'] as const;
+export type OrderRiskFlag = (typeof ORDER_RISK_FLAGS)[number];
+export const ORDER_CONFIRMATION_NOTE_MAX = 200;
+export const ORDER_CONFIRMATION_LOG_MAX = 20;
+
 /** Field limits shared with the routes that will write these fields (EP-02 OB-2..OB-5). */
 export const ORDER_NOTE_MAX = 1000;
 export const ORDER_STATUS_NOTE_MAX = 500;
@@ -69,6 +83,14 @@ export interface IOrderStatusChange {
   kind?: OrderHistoryKind;
 }
 
+/** One phone confirmation decision (Sprint 5 EP-11). The note is the seller's own text and never reaches the storefront or the audit log. */
+export interface IOrderConfirmationEntry {
+  at: Date;
+  by: Types.ObjectId | null;
+  result: OrderConfirmationLogResult;
+  note?: string | null;
+}
+
 /** An internal seller note (EP-02 US06). Never shown to the customer. */
 export interface IOrderNote {
   text: string;
@@ -104,6 +126,15 @@ export interface IOrder extends Document {
   customerNote?: string | null;
   /** A WhatsApp number that differs from the phone. Null means the phone is used. */
   customerWhatsapp?: string | null;
+  /**
+   * Sprint 5 EP-11 (D-107): set at order creation from the store's confirmation mode and the risk rules. A card order is never
+   * unconfirmed. Absent on older orders, which read as not_required. A dispatch is refused while this is unconfirmed.
+   */
+  confirmationStatus?: OrderConfirmationStatus;
+  /** The seller's decisions, oldest first, at most ORDER_CONFIRMATION_LOG_MAX. */
+  confirmationLog?: IOrderConfirmationEntry[];
+  /** Why the order was flagged at checkout. Flags never reject an order. */
+  riskFlags?: OrderRiskFlag[];
   items: IOrderLine[];
   subtotal: number;
   deliveryCharges: number;
@@ -158,6 +189,16 @@ const OrderStatusChangeSchema = new Schema<IOrderStatusChange>(
   { _id: false },
 );
 
+const OrderConfirmationEntrySchema = new Schema<IOrderConfirmationEntry>(
+  {
+    at: { type: Date, required: true, default: () => new Date() },
+    by: { type: Schema.Types.ObjectId, default: null },
+    result: { type: String, required: true, enum: [...ORDER_CONFIRMATION_LOG_RESULTS] },
+    note: { type: String, trim: true, maxlength: ORDER_CONFIRMATION_NOTE_MAX, default: null },
+  },
+  { _id: false },
+);
+
 const OrderNoteSchema = new Schema<IOrderNote>({
   text: { type: String, required: true, trim: true, minlength: 1, maxlength: ORDER_NOTE_MAX },
   by: { type: Schema.Types.ObjectId, required: true },
@@ -187,6 +228,15 @@ const OrderSchema = new Schema<IOrder>(
     customerEmail: { type: String, trim: true, maxlength: 254, default: null },
     customerNote: { type: String, trim: true, maxlength: 500, default: null },
     customerWhatsapp: { type: String, trim: true, maxlength: 32, default: null },
+    // Sprint 5 EP-11. No defaults: an order written before these fields has none, and the unconfirmed filter and the dispatch
+    // check read the stored value only. The route that creates an order sets them explicitly.
+    confirmationStatus: { type: String, enum: [...ORDER_CONFIRMATION_STATUSES] },
+    confirmationLog: {
+      type: [OrderConfirmationEntrySchema],
+      default: undefined,
+      validate: { validator: (value: unknown[]) => value.length <= ORDER_CONFIRMATION_LOG_MAX, message: 'at most ' + ORDER_CONFIRMATION_LOG_MAX + ' entries' },
+    },
+    riskFlags: { type: [{ type: String, enum: [...ORDER_RISK_FLAGS] }], default: undefined },
     items: {
       type: [
         {
@@ -261,6 +311,8 @@ OrderSchema.index({ store: 1, phone: 1 });
 OrderSchema.index({ store: 1, customerName: 1 });
 // Sprint 5 EP-10 (D-108): the customer list, detail and statistics read one customer's orders by the normalized phone.
 OrderSchema.index({ store: 1, phoneKey: 1 });
+// Sprint 5 EP-11: the "waiting for confirmation" list and its dashboard count. Not unique, so building it cannot fail on data.
+OrderSchema.index({ store: 1, confirmationStatus: 1, createdAt: -1 });
 
 export const Order: Model<IOrder> =
   (mongoose.models.Order as Model<IOrder> | undefined) ?? mongoose.model<IOrder>('Order', OrderSchema);

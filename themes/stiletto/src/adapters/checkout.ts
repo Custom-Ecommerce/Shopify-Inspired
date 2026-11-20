@@ -34,6 +34,8 @@ function failureMessage(f: CheckoutFailure): string {
     case "payment_method_unavailable":
       return "Cash on delivery is not available for this store.";
     case "payment_not_started":
+    // Sprint 5 EP-11.US02: the server's neutral sentence is shown as it is.
+    case "contact_blocked":
       return f.message;
     case "unconfirmed":
       return "We could not confirm your order. Please try again; you will not be charged twice.";

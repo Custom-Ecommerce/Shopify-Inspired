@@ -109,3 +109,6 @@ export const EmailUnsubscribe = db.EmailUnsubscribe;
 
 // Sprint 5 EP-10.US01 (D-107): the seller's private note and tags on a customer. There is no customer collection.
 export const CustomerNote = db.CustomerNote;
+
+// Sprint 5 EP-11.US02 (D-107): the phones and emails a store refuses orders from.
+export const BlockedContact = db.BlockedContact;

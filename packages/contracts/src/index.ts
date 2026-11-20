@@ -62,3 +62,5 @@ export * from './payouts';
 export * from './broadcast';
 // Sprint 5 EP-10 (D-107): customers derived from orders, their notes and tags, the detail and the CSV export.
 export * from './customers';
+// Sprint 5 EP-11 (D-107): phone confirmation, risk rules, blocklist and the address book.
+export * from './fraud';

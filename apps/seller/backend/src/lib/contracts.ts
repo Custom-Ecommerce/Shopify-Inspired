@@ -195,3 +195,30 @@ export const {
   customerNoteRequestSchema,
   normalizeCustomerKey,
 } = contracts;
+
+// Sprint 5 EP-11 (D-107, D-108): phone confirmation, risk rules, the blocklist and the address book.
+export const {
+  ADDRESS_BOOK_MAX,
+  ADDRESS_BOOK_SCAN_MAX,
+  BLOCKLIST_MAX,
+  BLOCK_KINDS,
+  COD_CONFIRMATION_MODES,
+  CONFIRMATION_LOG_MAX,
+  CONFIRMATION_STATUSES,
+  CONTACT_BLOCKED,
+  CONTACT_BLOCKED_MESSAGE,
+  DEFAULT_FRAUD_SETTINGS,
+  NO_USABLE_PAYMENT_METHOD,
+  NO_USABLE_PAYMENT_METHOD_MESSAGE,
+  ORDER_CONFIRMATION_DECIDED,
+  ORDER_NOT_CONFIRMED,
+  ORDER_NOT_CONFIRMED_MESSAGE,
+  RISK_FLAGS,
+  SELLER_ALERT_KINDS,
+  assessOrderRisk,
+  blockedContactRequestSchema,
+  normalizeBlockValue,
+  orderConfirmationRequestSchema,
+  readConfirmationStatus,
+  readRiskFlags,
+} = contracts;

@@ -82,3 +82,31 @@ export function noteProblem(note: string, tags: readonly string[]): string | nul
   if (tags.some((tag) => /[<>]/.test(tag))) return "A tag cannot contain < or >.";
   return null;
 }
+
+// ------------------------------------------------------------------------------------------------------------ address book
+
+export interface AddressEntryView {
+  address: string;
+  city: string | null;
+  orderCount: number;
+  lastUsedAt: string;
+}
+
+const addressForm = (value: string | null | undefined): string => (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * Sprint 5 EP-10.US03.T02: what the order page says about the address of THIS order, from the customer's address book. `repeat` is
+ * true when the same address and city (trimmed, lower case) was used by at least two orders, that is by an earlier one as well. `others`
+ * are the customer's other addresses, newest first, at most `max`.
+ */
+export function addressInsights(entries: readonly AddressEntryView[], address: string | null, city: string | null, max = 5): { repeat: boolean; others: AddressEntryView[] } {
+  const here = addressForm(address) + "|" + addressForm(city);
+  let repeat = false;
+  const others: AddressEntryView[] = [];
+  for (const entry of entries) {
+    if (addressForm(entry.address) + "|" + addressForm(entry.city) === here) {
+      if (entry.orderCount >= 2) repeat = true;
+    } else if (others.length < max) others.push(entry);
+  }
+  return { repeat, others };
+}

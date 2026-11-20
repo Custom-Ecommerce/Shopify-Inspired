@@ -49,3 +49,5 @@ export * from './models/broadcast';
 export * from './models/email-unsubscribe';
 // Sprint 5 EP-10.US01 (D-107): the seller's private note and tags on a customer (customers themselves are derived from orders).
 export * from './models/customer-note';
+// Sprint 5 EP-11.US02 (D-107): the phones and emails a store refuses orders from.
+export * from './models/blocked-contact';

@@ -206,9 +206,10 @@ test('the last payment method cannot be switched off', async () => {
   const res = await save({ payments: { codEnabled: false } });
   assert.equal(res.status, 400);
   assert.equal(await fieldOf(res), 'payments.codEnabled');
-  // Card only needs a theme with card checkout (SB-11); the default theme has none, so this store uses Stiletto.
+  // Card only needs a theme with card checkout (SB-11); the default theme has none, so this store uses Stiletto. Sprint 5: and card has to be
+  // available on the platform (the switch and Stripe), or COD cannot go off at all (see the NO_USABLE_PAYMENT_METHOD tests below).
   stores[STORE_A]!.storefront.activeTheme = 'stiletto';
-  assert.equal((await save({ payments: { cardEnabled: true, codEnabled: false } })).status, 200);
+  await withCardEnv(CARD_ON, async () => assert.equal((await save({ payments: { cardEnabled: true, codEnabled: false } })).status, 200));
 });
 
 type Body = { code?: string; field?: string; error?: string; errors?: Array<{ message: string }> };
@@ -224,8 +225,10 @@ test('SB-11: COD cannot go off while the theme has no card checkout (422 CARD_CH
   assert.deepEqual(stores[STORE_A]!.paymentSettings, {}, 'nothing was written');
   stores[STORE_A]!.storefront.activeTheme = 'mustafa';
   assert.equal((await save({ payments: { codEnabled: false, cardEnabled: true } })).status, 422);
-  // Switching the theme in the same request makes it fine.
-  assert.equal((await save({ theme: { activeTheme: 'stiletto' }, payments: { codEnabled: false, cardEnabled: true } })).status, 200);
+  // Switching the theme in the same request makes it fine (Sprint 5: while card is available on the platform).
+  await withCardEnv(CARD_ON, async () =>
+    assert.equal((await save({ theme: { activeTheme: 'stiletto' }, payments: { codEnabled: false, cardEnabled: true } })).status, 200),
+  );
   assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, false);
   assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto');
 });
@@ -364,6 +367,8 @@ test('Sprint 5: with no published product at all there is the product item to fi
 
 // Sprint 5 EP-11.US04.T01 (D-107): COD-only mode in the settings answer and the checklist.
 const CARD_ENV = ['CARD_CHECKOUT_ENABLED', 'STRIPE_SECRET_KEY', 'STRIPE_ORDER_WEBHOOK_SECRET'] as const;
+/** The platform offers card: the switch is on and Stripe is configured (STOREFRONT_URL is set by every test). */
+const CARD_ON = { STRIPE_SECRET_KEY: 'sk_test_stub', STRIPE_ORDER_WEBHOOK_SECRET: 'whsec_stub', CARD_CHECKOUT_ENABLED: 'true' } as const;
 async function withCardEnv(values: Partial<Record<(typeof CARD_ENV)[number], string>>, run: () => Promise<void>): Promise<void> {
   const saved = Object.fromEntries(CARD_ENV.map((key) => [key, process.env[key]]));
   for (const key of CARD_ENV) delete process.env[key];
@@ -575,4 +580,153 @@ test('the messages group is for the owner only: Seller B and an admin cannot cha
   assert.equal((await save({ messages: { emailFooter: 'Hacked' } }, tokenB)).status, 403);
   assert.equal((await save({ messages: { emailFooter: 'Hacked' } }, tokenAdmin)).status, 403);
   assert.equal(stores[STORE_A]!.storefront.emailFooter, undefined);
+});
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 5 (D-107, SB-1 follow-up): COD cannot go off while card is not available
+
+test('Sprint 5: COD cannot go off while card is not available: 422 NO_USABLE_PAYMENT_METHOD on payments, and nothing is written', async () => {
+  stores[STORE_A]!.storefront.activeTheme = 'stiletto';
+  const stripe = { STRIPE_SECRET_KEY: 'sk_test_stub', STRIPE_ORDER_WEBHOOK_SECRET: 'whsec_stub' };
+  // Platform switch off (the default), the switch on without Stripe, and Stripe keys without the switch: card is not available in any of them.
+  for (const env of [{}, { CARD_CHECKOUT_ENABLED: 'true' }, { ...stripe }, { ...stripe, CARD_CHECKOUT_ENABLED: 'false' }]) {
+    await withCardEnv(env, async () => {
+      for (const payments of [{ codEnabled: false, cardEnabled: true }, { codEnabled: false }]) {
+        const res = await save({ payments });
+        assert.equal(res.status, 422, JSON.stringify(env) + JSON.stringify(payments));
+        const body = (await res.json()) as Body;
+        assert.equal(body.code, 'NO_USABLE_PAYMENT_METHOD');
+        assert.equal(body.field, 'payments');
+        assert.match(body.errors?.[0]?.message ?? '', /Cash on delivery has to stay on/);
+      }
+    });
+  }
+  assert.deepEqual(stores[STORE_A]!.paymentSettings, {}, 'nothing was written');
+  assert.equal(audits.length, 0);
+});
+
+test('Sprint 5: COD may go off when card is available, and COD only is always fine', async () => {
+  stores[STORE_A]!.storefront.activeTheme = 'stiletto';
+  await withCardEnv({}, async () => {
+    assert.equal((await save({ payments: { codEnabled: true, cardEnabled: false } })).status, 200);
+    assert.equal((await save({ payments: { codEnabled: true, cardEnabled: true } })).status, 200);
+  });
+  await withCardEnv(CARD_ON, async () => {
+    assert.equal((await save({ payments: { codEnabled: false, cardEnabled: true } })).status, 200);
+    assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, false);
+  });
+});
+
+test('Sprint 5: the old "keep one method on" 400 stays first, and the theme rule keeps its own 422 on a theme without card checkout', async () => {
+  await withCardEnv({}, async () => {
+    const both = await save({ payments: { codEnabled: false, cardEnabled: false } });
+    assert.equal(both.status, 400);
+    assert.equal(await fieldOf(both), 'payments.codEnabled');
+    // The default theme cannot take card, so the more specific SB-11 answer wins.
+    const theme = await save({ payments: { codEnabled: false, cardEnabled: true } });
+    assert.equal(theme.status, 422);
+    assert.equal(((await theme.json()) as Body).code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
+  });
+});
+
+test('Sprint 5: the rule judges a payments change only: a store already without a usable method can still save its profile', async () => {
+  stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
+  stores[STORE_A]!.storefront.activeTheme = 'stiletto';
+  await withCardEnv({}, async () => {
+    assert.equal((await save({ profile: { city: 'Lahore' } })).status, 200);
+    assert.equal((await save({ payments: { codEnabled: true } })).status, 200);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 5 EP-11.US01.T01 and US03.T01 (D-107): the 'fraud' group
+
+const readFraudSettings = async () => ((await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any }).settings.fraud;
+
+const THIRTY_CITIES = [
+  'Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad', 'Multan', 'Peshawar', 'Quetta', 'Hyderabad', 'Gujranwala',
+  'Sialkot', 'Sargodha', 'Bahawalpur', 'Sukkur', 'Larkana', 'Sheikhupura', 'Rahim Yar Khan', 'Jhang', 'Dera Ghazi Khan', 'Gujrat',
+  'Sahiwal', 'Wah Cantt', 'Mardan', 'Kasur', 'Okara', 'Mingora', 'Nawabshah', 'Chiniot', 'Kotri', 'Kamoke',
+];
+
+test('fraud: a store that never saved the group reads mode off and no rules', async () => {
+  assert.deepEqual(await readFraudSettings(), { codConfirmation: 'off', riskRules: { flagOrderValueAbove: null, flaggedCities: [], flagReturnsAtLeast: null } });
+});
+
+test('fraud: the mode and the rules are saved in paymentSettings (never in storefront), audited by group and field, and read back', async () => {
+  const res = await save({
+    fraud: { codConfirmation: 'flagged', riskRules: { flagOrderValueAbove: 15000, flaggedCities: ['karachi', 'Quetta'], flagReturnsAtLeast: 2 } },
+  });
+  assert.equal(res.status, 200);
+  const settings = ((await res.json()) as { settings: any }).settings;
+  assert.deepEqual(settings.fraud, {
+    codConfirmation: 'flagged',
+    riskRules: { flagOrderValueAbove: 15000, flaggedCities: ['Karachi', 'Quetta'], flagReturnsAtLeast: 2 },
+  });
+  assert.equal(stores[STORE_A]!.paymentSettings.fraud.codConfirmation, 'flagged');
+  assert.equal('fraud' in stores[STORE_A]!.storefront, false, 'the public storefront reads storefront, so the rules are not kept there');
+  assert.equal(JSON.stringify(stores[STORE_A]!.storefront).includes('Quetta'), false);
+  assert.deepEqual(await readFraudSettings(), settings.fraud);
+  assert.equal(audits.length, 1);
+  assert.deepEqual(audits[0]!.details.groups, ['fraud']);
+  assert.deepEqual(audits[0]!.details.fields, ['paymentSettings']);
+});
+
+test('fraud: only the fields sent change; null clears a rule; the payment switches saved before are kept', async () => {
+  stores[STORE_A]!.paymentSettings = { codEnabled: true, cardEnabled: false };
+  await save({ fraud: { codConfirmation: 'all', riskRules: { flagOrderValueAbove: 9000, flaggedCities: ['Lahore'], flagReturnsAtLeast: 3 } } });
+  await save({ fraud: { riskRules: { flagOrderValueAbove: null } } });
+  assert.deepEqual(await readFraudSettings(), {
+    codConfirmation: 'all',
+    riskRules: { flagOrderValueAbove: null, flaggedCities: ['Lahore'], flagReturnsAtLeast: 3 },
+  });
+  await save({ fraud: { codConfirmation: 'off' } });
+  assert.equal((await readFraudSettings()).codConfirmation, 'off');
+  assert.equal((await readFraudSettings()).riskRules.flaggedCities.length, 1, 'the rules stay while the mode is off');
+  assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, true);
+  assert.equal(stores[STORE_A]!.paymentSettings.cardEnabled, false);
+});
+
+test('fraud: a payments save keeps the saved fraud group', async () => {
+  await save({ fraud: { codConfirmation: 'flagged' } });
+  await save({ payments: { codEnabled: true, cardEnabled: false } });
+  assert.equal((await readFraudSettings()).codConfirmation, 'flagged');
+});
+
+test('fraud: bad values are 400 and name the field; nothing is written', async () => {
+  const cases: Array<[unknown, string]> = [
+    [{ codConfirmation: 'sometimes' }, 'fraud.codConfirmation'],
+    [{ riskRules: { flagOrderValueAbove: 0 } }, 'fraud.riskRules.flagOrderValueAbove'],
+    [{ riskRules: { flagOrderValueAbove: -5 } }, 'fraud.riskRules.flagOrderValueAbove'],
+    [{ riskRules: { flagOrderValueAbove: 1500.5 } }, 'fraud.riskRules.flagOrderValueAbove'],
+    [{ riskRules: { flagOrderValueAbove: '15000' } }, 'fraud.riskRules.flagOrderValueAbove'],
+    [{ riskRules: { flagReturnsAtLeast: 0 } }, 'fraud.riskRules.flagReturnsAtLeast'],
+    [{ riskRules: { flagReturnsAtLeast: 11 } }, 'fraud.riskRules.flagReturnsAtLeast'],
+    [{ riskRules: { flagReturnsAtLeast: 2.5 } }, 'fraud.riskRules.flagReturnsAtLeast'],
+    [{ riskRules: { flaggedCities: ['Atlantis'] } }, 'fraud.riskRules.flaggedCities.0'],
+    [{ riskRules: { flaggedCities: ['Karachi', 'karachi'] } }, 'fraud.riskRules.flaggedCities'],
+    [{ riskRules: { flaggedCities: [...THIRTY_CITIES, 'Hafizabad'] } }, 'fraud.riskRules.flaggedCities'],
+    [{ banana: true }, 'banana'],
+    [{ riskRules: { banana: 1 } }, 'banana'],
+  ];
+  for (const [fraud, field] of cases) {
+    const res = await save({ fraud });
+    assert.equal(res.status, 400, JSON.stringify(fraud).slice(0, 80));
+    assert.equal(await fieldOf(res), field, JSON.stringify(fraud).slice(0, 80));
+  }
+  assert.deepEqual(stores[STORE_A]!.paymentSettings, {});
+  assert.equal(audits.length, 0);
+});
+
+test('fraud: 30 cities are accepted, and so are the edges of the order value and the returns count', async () => {
+  const res = await save({ fraud: { riskRules: { flaggedCities: THIRTY_CITIES, flagOrderValueAbove: 1, flagReturnsAtLeast: 10 } } });
+  assert.equal(res.status, 200);
+  assert.equal((await readFraudSettings()).riskRules.flaggedCities.length, 30);
+});
+
+test("fraud: Seller B cannot change Seller A's fraud settings and an admin session is refused", async () => {
+  assert.equal((await save({ fraud: { codConfirmation: 'all' } }, tokenB)).status, 403);
+  assert.equal((await save({ fraud: { codConfirmation: 'all' } }, tokenAdmin)).status, 403);
+  assert.equal((await readFraudSettings()).codConfirmation, 'off');
 });

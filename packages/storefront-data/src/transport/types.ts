@@ -215,7 +215,9 @@ export type OrderRejection =
   | { code: "invalid_request"; message: string; field?: string }
   | { code: "store_inactive" }
   | { code: "discount_rejected"; reason: string; message: string }
-  | { code: "payment_not_started"; message: string };
+  | { code: "payment_not_started"; message: string }
+  /** Sprint 5 EP-11.US02: the order was refused. The message is neutral and never says the contact is blocked. */
+  | { code: "contact_blocked"; message: string };
 
 import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from "@markaz/contracts/checkout";
 

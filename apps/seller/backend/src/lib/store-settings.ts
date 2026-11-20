@@ -5,10 +5,13 @@ import {
   CARD_CHECKOUT_UNSUPPORTED_BY_THEME,
   CARD_CHECKOUT_UNSUPPORTED_MESSAGE,
   CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
+  NO_USABLE_PAYMENT_METHOD,
+  NO_USABLE_PAYMENT_METHOD_MESSAGE,
   cityKey,
   maskAccountNumber,
   matchPakistanCity,
 } from '@/lib/contracts';
+import { readFraud } from '@/lib/fraud';
 import { HttpError } from '@/lib/http';
 import { Media } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
@@ -192,6 +195,8 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     payout: maskPayout(doc.payoutDetails),
     theme: { activeTheme: effectiveTheme(sf), supportsCardCheckout: themeSupportsCardCheckout(effectiveTheme(sf)) },
     messages: readMessages(sf),
+    // Sprint 5 EP-11: kept in paymentSettings (never in storefront, which the public storefront reads).
+    fraud: readFraud(doc.paymentSettings),
     updatedAt: iso(doc.updatedAt),
   };
 }
@@ -216,7 +221,7 @@ export function settingsFieldsOf(update: StoreSettingsUpdate): string[] {
   if (update.profile?.name !== undefined) fields.add('name');
   const profileRest = update.profile ? Object.keys(update.profile).filter((key) => key !== 'name') : [];
   if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages) fields.add('storefront');
-  if (update.payments) fields.add('paymentSettings');
+  if (update.payments || update.fraud) fields.add('paymentSettings');
   if (update.payout !== undefined) fields.add('payoutDetails');
   return [...fields];
 }
@@ -232,7 +237,7 @@ export function referencedMedia(update: StoreSettingsUpdate): Array<{ field: str
 
 /**
  * Merges an update into the stored settings and checks the rules that need both: at least one payment method stays on,
- * and the theme is an installed one. The whole storefront and paymentSettings objects are written (one $set), so a store
+ * and the theme is an installed one; COD may not go off while card is unavailable (422 NO_USABLE_PAYMENT_METHOD, field payments). The whole storefront and paymentSettings objects are written (one $set), so a store
  * whose Mixed field is missing or null is handled the same as any other. Throws 400 STORE_SETTINGS_INVALID naming the field, or 422 CARD_CHECKOUT_UNSUPPORTED_BY_THEME when the store would be card only on a theme without card checkout (SB-11).
  */
 export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, now: Date = new Date()): SettingsWrite {
@@ -304,6 +309,22 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
     if (!after.codEnabled && before.codEnabled && !themeSupportsCardCheckout(themeAfter)) {
       throw cardUnsupported('payments.codEnabled', CARD_CHECKOUT_UNSUPPORTED_MESSAGE);
     }
+    // Sprint 5 (D-107, SB-1 follow-up): cash on delivery off while card is not available leaves shoppers no way to pay. Checked on the
+    // RESULT, after the SB-11 theme rule above, so a theme that cannot take card keeps its own, more specific answer.
+    if (!after.codEnabled && !cardPaymentsAvailable()) {
+      throw new HttpError(422, NO_USABLE_PAYMENT_METHOD_MESSAGE, NO_USABLE_PAYMENT_METHOD, 'payments');
+    }
+    set.paymentSettings = pay;
+    fields.add('paymentSettings');
+  }
+  // Sprint 5 EP-11 (D-107): the phone confirmation mode and the risk rules. Only the fields sent change; the rest keep their value.
+  if (update.fraud) {
+    const current = readFraud(pay);
+    const sent = Object.fromEntries(Object.entries(update.fraud.riskRules ?? {}).filter(([, value]) => value !== undefined));
+    pay.fraud = {
+      codConfirmation: update.fraud.codConfirmation ?? current.codConfirmation,
+      riskRules: { ...current.riskRules, ...sent },
+    };
     set.paymentSettings = pay;
     fields.add('paymentSettings');
   }

@@ -28,10 +28,11 @@ export const dynamic = 'force-dynamic';
  * The seller order list (EP-02 OB-1b): ?status=&from=&to=&q=&page=&limit=
  *   status   one of the order statuses
  *   from,to  YYYY-MM-DD, inclusive, Pakistan time (UTC+05:00)
+ *   confirmation  unconfirmed keeps only the orders waiting for the seller's phone confirmation (Sprint 5 EP-11.US01)
  *   q        trimmed and cut to 40 characters; ORD-... is an order number prefix, +?digits a phone prefix (03xx is also
  *            tried as +923xx), anything else a case-insensitive name match (D-070)
  *   page     default 1;  limit  default 20, capped at 100
- *   200 { docs, totalDocs, totalPages, page, limit, hasNextPage, hasPrevPage, counts }   newest first. counts covers the
+ *   200 { docs, totalDocs, totalPages, page, limit, hasNextPage, hasPrevPage, counts, unconfirmedCount }   newest first. counts covers the
  *       same store, dates and search, without the status filter.
  *   400 ORDER_STATUS_INVALID | ORDER_DATE_INVALID | ORDER_DATE_RANGE_INVALID | ORDER_PAGE_INVALID | ORDER_LIMIT_INVALID
  *
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     const { query } = mode;
     const filters = orderListFilters(storeId, query);
-    const [rows, totalDocs, groups] = await Promise.all([
+    const [rows, totalDocs, groups, unconfirmedCount] = await Promise.all([
       Order.find(filters.list)
         .sort(ORDER_LIST_SORT)
         .skip((query.page - 1) * query.limit)
@@ -81,11 +82,13 @@ export async function GET(request: NextRequest): Promise<Response> {
         { $match: filters.counts },
         { $group: { _id: '$status', count: { $sum: 1 } } },
       ]),
+      // Sprint 5 EP-11.US01: how many orders wait for the seller's phone confirmation (for the badge and the dashboard).
+      Order.countDocuments({ store: storeId, confirmationStatus: 'unconfirmed', status: { $ne: 'cancelled' } }),
     ]);
 
     const docs = (rows as unknown[]).map(toDashboardOrderListItem);
     return NextResponse.json(
-      { ...listEnvelope(docs, { page: query.page, limit: query.limit, totalDocs }), counts: toOrderCounts(groups) },
+      { ...listEnvelope(docs, { page: query.page, limit: query.limit, totalDocs }), counts: toOrderCounts(groups), unconfirmedCount },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (err) {

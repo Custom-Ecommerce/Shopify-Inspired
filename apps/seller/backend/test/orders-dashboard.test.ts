@@ -442,8 +442,8 @@ test('orders: the legacy ?where and ?sort behaviour still works, without counts'
 test('orders: a list row has exactly the dashboard fields', async () => {
   const { body } = await listJson('/api/orders?status=dispatched');
   assert.deepEqual(Object.keys(body.docs[0]).sort(), [
-    'city', 'courier', 'createdAt', 'customerName', 'id', 'itemCount', 'orderId', 'paymentMethod', 'paymentStatus',
-    'phone', 'status', 'total', 'trackingNumber',
+    'city', 'confirmationStatus', 'courier', 'createdAt', 'customerName', 'id', 'itemCount', 'orderId', 'paymentMethod', 'paymentStatus',
+    'phone', 'riskFlags', 'status', 'total', 'trackingNumber',
   ]);
   assert.equal(body.docs[0].courier, 'TCS');
   assert.equal(body.docs[0].trackingNumber, 'TCS123');
@@ -510,9 +510,9 @@ test('orders: the detail shape, with history and notes newest first', async () =
   const detail = (await res.json()) as any;
   assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
   assert.deepEqual(Object.keys(detail).sort(), [
-    'address', 'allowedNext', 'canCancel', 'canEditTracking', 'canMarkCollected', 'cancelReason', 'cancelledAt', 'city', 'collectedAmount', 'collectedAt', 'courier', 'createdAt',
-    'customerEmail', 'customerName', 'customerNote', 'customerWhatsapp', 'deliveryCharges', 'discountAmount', 'discountCode', 'id', 'items', 'notes', 'orderId', 'paidAt', 'paymentMethod', 'paymentStatus', 'phone',
-    'status', 'statusHistory', 'stripeSessionId', 'subtotal', 'timeline', 'total', 'trackingNumber', 'trackingUrl', 'updatedAt',
+    'address', 'allowedNext', 'canCancel', 'canEditTracking', 'canMarkCollected', 'cancelReason', 'cancelledAt', 'city', 'collectedAmount', 'collectedAt', 'confirmationLog', 'confirmationStatus', 'courier', 'createdAt',
+    'customerEmail', 'customerKey', 'customerName', 'customerNote', 'customerWhatsapp', 'deliveryCharges', 'discountAmount', 'discountCode', 'id', 'items', 'notes', 'orderId', 'paidAt', 'paymentMethod', 'paymentStatus', 'phone',
+    'riskFlags', 'status', 'statusHistory', 'stripeSessionId', 'subtotal', 'timeline', 'total', 'trackingNumber', 'trackingUrl', 'updatedAt',
   ]);
   assert.deepEqual(detail.allowedNext, ['delivered']);
   assert.deepEqual(detail.items.map((item: any) => item.lineTotal), [2400, 200]);

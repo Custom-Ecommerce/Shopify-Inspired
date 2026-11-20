@@ -1,6 +1,8 @@
 import type { PipelineStage } from 'mongoose';
 import type {
   CustomerAddress,
+  CustomerAddressBook,
+  CustomerAddressEntry,
   CustomerDetail,
   CustomerExportQuery,
   CustomerList,
@@ -15,6 +17,8 @@ import type {
 import type { AuthContext } from '@/lib/auth';
 import {
   ACCOUNT_CODES,
+  ADDRESS_BOOK_MAX,
+  ADDRESS_BOOK_SCAN_MAX,
   CUSTOMER_CSV_COLUMNS,
   CUSTOMER_DETAIL_ADDRESSES_MAX,
   CUSTOMER_DETAIL_ORDERS_MAX,
@@ -353,6 +357,54 @@ export async function getCustomerDetail(storeId: string, key: string): Promise<C
     orders,
     addresses: distinctAddresses(orderLines),
   };
+}
+
+// ------------------------------------------------------------------------------------------------------------ address book
+
+/** The form an address is compared in: trimmed, lower case, runs of space as one. */
+const addressForm = (value: string | null): string => (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * Sprint 5 EP-10.US03.T01: a customer's distinct delivery addresses taken from their orders. Two orders with the same address and city
+ * (trimmed, lower case) are one entry, with how many orders used it and when it was last used, newest first. The entry shows the
+ * spelling of the newest order that used it. An order with no address adds none. Pure: the route reads the orders.
+ */
+export function addressBookOf(orders: readonly OrderLine[], max: number = ADDRESS_BOOK_MAX): CustomerAddressEntry[] {
+  const dated = orders
+    .map((order) => ({ order, at: iso(order.createdAt) ?? '' }))
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  const groups = new Map<string, CustomerAddressEntry>();
+  for (const { order, at } of dated) {
+    const address = text(order.address);
+    if (address === null) continue;
+    const city = text(order.city);
+    const key = addressForm(address) + '|' + addressForm(city);
+    const found = groups.get(key);
+    if (found) {
+      found.orderCount += 1;
+      continue;
+    }
+    // The orders arrive newest first, so the first one seen is the newest: its spelling and date stand for the entry.
+    groups.set(key, { address, city, orderCount: 1, lastUsedAt: at });
+  }
+  return [...groups.values()].slice(0, max);
+}
+
+/**
+ * The address book of ONE customer of ONE store (D-107: seller side only, nothing is prefilled on the storefront). The store is in the
+ * first $match of the pipeline. Reads at most ADDRESS_BOOK_SCAN_MAX of the newest orders. Null when this store has no such customer
+ * (the route answers 404): another store's customer is simply not found.
+ */
+export async function getCustomerAddressBook(storeId: string, key: string): Promise<CustomerAddressBook | null> {
+  const pipeline = [
+    ...keyedOrderStages(storeId, key),
+    { $sort: { createdAt: -1, _id: -1 } },
+    { $limit: ADDRESS_BOOK_SCAN_MAX },
+    { $project: { address: 1, city: 1, createdAt: 1 } },
+  ];
+  const rows = (await Order.aggregate(pipeline as unknown as PipelineStage[])) as unknown as OrderLine[];
+  if (rows.length === 0) return null;
+  return { addresses: addressBookOf(rows) };
 }
 
 // -------------------------------------------------------------------------------------------------------------------- note

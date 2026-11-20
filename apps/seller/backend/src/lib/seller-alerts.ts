@@ -1,4 +1,5 @@
 import { HttpError } from '@/lib/http';
+import { SELLER_ALERT_KINDS } from '@/lib/contracts';
 import { connectSellerDb } from '@/lib/mongo';
 import { SellerAlert } from '@/lib/services';
 
@@ -15,7 +16,9 @@ const iso = (value: unknown): string | null => {
   return typeof value === 'string' && value !== '' ? value : null;
 };
 
-const KINDS = ['new_order', 'low_stock', 'out_of_stock'] as const;
+// The kinds the bell can show: the contracts list (which the model repeats). A stored kind outside it is read as new_order, so a kind added
+// to the model but not to the contracts would silently turn into new_order: test/seller-alert-kinds.test.ts fails when the lists differ.
+const KINDS = SELLER_ALERT_KINDS;
 
 /** An alert as the dashboard receives it (sellerAlertSchema): no store, key or bookkeeping fields. */
 export function toAlertWire(doc: unknown): {
