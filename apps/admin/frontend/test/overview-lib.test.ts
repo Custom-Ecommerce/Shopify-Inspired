@@ -2,8 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { formatMoney } from "../lib/format";
-import { ledgerRows, ledgerStatusHref, outboxRows, overviewTiles, storeRows, storeStatusHref, syncStatusHref, updatedLabel } from "../lib/overview";
+import { outboxRows, overviewTiles, storeRows, storeStatusHref, syncStatusHref, updatedLabel } from "../lib/overview";
 import type { AdminOverview } from "../lib/contracts";
 
 const NOW = new Date("2026-10-11T10:00:00.000Z");
@@ -28,10 +27,11 @@ const empty: AdminOverview = {
   generatedAt: NOW.toISOString(),
 };
 
-test("there are four tiles in a fixed order, each linking to its page", () => {
+test("there are three tiles in a fixed order, each linking to its page; none reads the old ledger", () => {
   const tiles = overviewTiles(overview, NOW);
-  assert.deepEqual(tiles.map((tile) => tile.key), ["stores", "sellers", "commission", "sync"]);
-  assert.deepEqual(tiles.map((tile) => tile.href), ["/stores", "/sellers", "/commission", "/sync"]);
+  assert.deepEqual(tiles.map((tile) => tile.key), ["stores", "sellers", "sync"]);
+  assert.deepEqual(tiles.map((tile) => tile.href), ["/stores", "/sellers", "/sync"]);
+  assert.equal(tiles.some((tile) => /commission|ledger/i.test(tile.title + tile.hint)), false);
 });
 
 test("the stores tile shows the total, the active and pending counts, and flags suspended stores", () => {
@@ -49,32 +49,19 @@ test("the sellers tile shows the total and the new sellers in the window", () =>
   assert.equal(sellers.badge, null);
 });
 
-test("the commission tile adds pending and settled commission and flags pending entries", () => {
-  const commission = overviewTiles(overview, NOW)[2];
-  assert.equal(commission.value, formatMoney(40800));
-  assert.equal(commission.hint, formatMoney(4800) + " pending across 3 entries");
-  assert.deepEqual(commission.badge, { label: "3 pending", tone: "warning" });
-  const one = overviewTiles({ ...overview, ledger: { ...overview.ledger, pending: { count: 1, orderAmount: 100, commissionAmount: 4 } } }, NOW)[2];
-  assert.equal(one.hint, formatMoney(4) + " pending across 1 entry");
-  const none = overviewTiles(empty, NOW)[2];
-  assert.equal(none.value, formatMoney(0));
-  assert.equal(none.badge, null);
-});
-
 test("the sync tile follows the one health rule: healthy, backlog, then dead letters", () => {
-  assert.equal(overviewTiles(overview, NOW)[3].value, "Healthy");
-  assert.equal(overviewTiles(overview, NOW)[3].badge, null);
-  const backlog = overviewTiles({ ...overview, outbox: { ...overview.outbox, oldestPendingAt: iso(30) } }, NOW)[3];
+  assert.equal(overviewTiles(overview, NOW)[2].value, "Healthy");
+  assert.equal(overviewTiles(overview, NOW)[2].badge, null);
+  const backlog = overviewTiles({ ...overview, outbox: { ...overview.outbox, oldestPendingAt: iso(30) } }, NOW)[2];
   assert.equal(backlog.value, "Backlog");
-  const dead = overviewTiles({ ...overview, outbox: { ...overview.outbox, counts: { pending: 1, sent: 10, dead: 2 } } }, NOW)[3];
+  const dead = overviewTiles({ ...overview, outbox: { ...overview.outbox, counts: { pending: 1, sent: 10, dead: 2 } } }, NOW)[2];
   assert.equal(dead.value, "Needs attention");
   assert.deepEqual(dead.badge, { label: "2 dead", tone: "danger" });
-  assert.equal(overviewTiles(empty, NOW)[3].value, "Healthy");
+  assert.equal(overviewTiles(empty, NOW)[2].value, "Healthy");
 });
 
 test("each breakdown row links to its list on that status", () => {
   assert.equal(storeStatusHref("suspended"), "/stores?status=suspended");
-  assert.equal(ledgerStatusHref("pending"), "/commission", "the ledger tab is gone, so the link opens the page");
   assert.equal(syncStatusHref("pending"), "/sync?status=pending");
   assert.equal(syncStatusHref("dead"), "/sync");
 });
@@ -88,17 +75,6 @@ test("stores by status lists all four statuses with their counts", () => {
     ["archived", "Archived", "0"],
   ]);
   assert.equal(rows[1].href, "/stores?status=active");
-});
-
-test("the ledger rows show the entry count with the commission and the order value", () => {
-  const rows = ledgerRows(overview);
-  assert.deepEqual(rows.map((row) => [row.status, row.count]), [
-    ["pending", "3 entries"],
-    ["settled", "10 entries"],
-  ]);
-  assert.equal(rows[0].detail, formatMoney(4800) + " commission on " + formatMoney(120000));
-  assert.equal(rows[1].href, "/commission");
-  assert.equal(ledgerRows(empty)[0].count, "0 entries");
 });
 
 test("the outbox rows list pending, sent, and dead letters with the sync page filter", () => {
@@ -119,4 +95,11 @@ test("the overview page is live: no placeholder copy, and it renders the overvie
   const page = fs.readFileSync(path.join(process.cwd(), "app", "(dashboard)", "page.tsx"), "utf8");
   assert.match(page, /OverviewView/);
   assert.doesNotMatch(page, /arrive with|AF1|AF2|Console foundation/);
+});
+
+test("the overview view shows no ledger tile or ledger rows (SB-12: they read the old ledger)", () => {
+  const view = fs.readFileSync(path.join(process.cwd(), "components", "overview", "overview-view.tsx"), "utf8");
+  assert.doesNotMatch(view, /ledgerRows|Commission ledger/);
+  const lib = fs.readFileSync(path.join(process.cwd(), "lib", "overview.ts"), "utf8");
+  assert.doesNotMatch(lib, /ledgerRows|ledgerStatusHref/);
 });

@@ -61,8 +61,9 @@ through the readiness checklist. Delete it from any environment that still has i
 ## 3. A throwaway database
 
 - Unit tests never touch a database: every model is stubbed in the test file.
-- To run the apps, use a local `mongod` (for example `mongodb://127.0.0.1:27017/markaz_dev_seller` and `.../markaz_dev_admin`) or a
-  throwaway Atlas database. Never point a local app at a production database.
+- To run the apps, use a local `mongod` (for example `mongodb://127.0.0.1:27017/markaz_throwaway_dev`) or a
+  throwaway Atlas database. Put the SAME database in `SELLER_MONGODB_URI` and `MONGODB_URI`, as production does (see
+  "One shared database"). Never point a local app at a production database.
 - Name every throwaway database with `throwaway` or `test` in it (for example `markaz_throwaway_seller`). The smoke script
   (`scripts/smoke`, EP-06.US06) refuses any other name; it looks at the database name only.
 - Drop the database when you are done.
@@ -99,7 +100,38 @@ dummy URL. To build without calling the backend at all, also set `STOREFRONT_REM
 3. **Seller backend**.
 4. **Seller frontend** and **admin frontend**: last; they only call the backends.
 
+5. **Admin data bootstrap**: once, after the first deploy to a database (see "One shared database" below).
+
 After a deploy that adds variables, set them on the platform first, then redeploy.
+
+### One shared database (D-087, D-098, D-105)
+
+Production uses ONE database. `SELLER_MONGODB_URI` (seller backend) and `MONGODB_URI` (admin backend) must point at the
+same database: both URIs must be the same database. Both backends use the same models and collection names (`users`,
+`stores`, `globals`, `sync-outbox`), so a seller user and a store written by the seller are the very documents the admin
+console reads. Nothing is copied between two databases.
+
+- The seller-to-admin sync groups (`store.operations`, `seller.profile`) are not used: nothing sends them and the admin
+  receiver is a stub. Do not rely on them.
+- The admin-to-seller groups (`store.governance`, `seller.controls`, `platform.settings`) still run through the outbox
+  and the drain cron, but on a shared database they write into the documents the seller already reads.
+- Two documents are created by no code and must exist in that database. Without them: the admin Commission settings
+  answer 404 "not set up", and a per-store rate change stays pending (`OWNER_TRANSLATION_PENDING`):
+  1. the platform-settings document (collection `globals`, `globalType: platformSettings`), and
+  2. the `sellers` mirror (one row per seller that owns a store; `_id` is the seller's user id, `sellerId` the same id as text).
+
+Deploy step (idempotent: it creates what is missing and never updates or deletes anything; it prints counts only):
+
+```bash
+node --env-file=apps/admin/backend/.env scripts/bootstrap-admin-data.mjs --i-know-this-is-real
+node --env-file=apps/admin/backend/.env scripts/bootstrap-admin-data.mjs --i-know-this-is-real --apply
+```
+
+(`pnpm bootstrap:admin -- --apply` runs the same script.) The first line is the dry run: it prints what it would create.
+The second writes it. A database whose name contains `throwaway` or `test` does not need `--i-know-this-is-real`. The
+script stops if `SELLER_MONGODB_URI` is set and names a different database than `MONGODB_URI`. No code creates the
+mirror row for a seller who signs up later, so re-run the script (it is safe) whenever a per-store rate change shows
+`OWNER_TRANSLATION_PENDING`.
 
 ### Required secrets (production)
 

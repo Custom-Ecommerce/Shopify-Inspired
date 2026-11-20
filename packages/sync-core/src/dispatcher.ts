@@ -288,7 +288,10 @@ async function deliver(row: OutboxRow, transport: Transport, acknowledged: Map<s
     return { kind: 'dead', error: 'STALE_REVISION ' + revision + ' is below seller acknowledged ' + ackRevision };
   }
 
-  const data = allowlistSnapshot(binding.group, source.prepared);
+  // SB-12: the hash is taken over the null-pruned snapshot (hashSnapshot), so the body must carry that same snapshot. A real
+  // store has null fields (referredBy, owner...), and the receiver hashes the body it gets: sending the nulls made every
+  // such envelope fail with 400 "dataHash does not match data".
+  const data = pruneNulls(allowlistSnapshot(binding.group, source.prepared));
   const candidate = {
     schemaVersion: SYNC_SCHEMA_VERSION,
     eventId: row.eventId,
