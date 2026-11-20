@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { backendFetch, BackendUnavailableError } from "@/lib/backend";
+import { clientAddressHeaders } from "@/lib/client-address";
 import { authResponseSchema, loginRequestSchema } from "@/lib/contracts";
 import { clearedSessionCookie, sessionCookie } from "@/lib/cookie";
 import { isSameOrigin } from "@/lib/proxy";
@@ -36,7 +37,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     upstream = await backendFetch("/api/admin/session", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...clientAddressHeaders(request.headers) },
       body: JSON.stringify(input.data),
     });
   } catch (err) {

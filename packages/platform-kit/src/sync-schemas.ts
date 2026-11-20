@@ -150,7 +150,7 @@ export const PROFILE_ALLOWLIST = ["email", "name"] as const;
 export const CONTROLS_ALLOWLIST = ["accountStatus", "storeLimitOverride"] as const;
 
 /** `platform.settings` — Admin → Seller. */
-export const SETTINGS_ALLOWLIST = ["defaultCommissionRate", "maxStoresPerSeller"] as const;
+export const SETTINGS_ALLOWLIST = ["defaultCommissionRate", "maxStoresPerSeller", "storeApprovalRequired"] as const;
 
 export const SYNC_GROUP_ALLOWLISTS = {
   governance: GOVERNANCE_ALLOWLIST,

@@ -18,11 +18,11 @@ export const SETTINGS_REASON_MAX = 500;
  * The fields an operator may write (ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS in the policy matrix). Passed to the
  * policy check, so a field added later is denied until declared. settingsRevision is not here: only the server moves it.
  */
-export const SETTINGS_FIELDS = ['defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote'] as const;
+export const SETTINGS_FIELDS = ['defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired'] as const;
 export type SettingsField = (typeof SETTINGS_FIELDS)[number];
 
 /** The fields in the seller sync allowlist (SETTINGS_ALLOWLIST in platform-kit). A change to the note is not sent. */
-export const SYNCED_SETTINGS_FIELDS: readonly SettingsField[] = ['defaultCommissionRate', 'maxStoresPerSeller'];
+export const SYNCED_SETTINGS_FIELDS: readonly SettingsField[] = ['defaultCommissionRate', 'maxStoresPerSeller', 'storeApprovalRequired'];
 
 /** What the model defaults to (platform-settings.ts), used when the stored document lacks a value. */
 export const DEFAULT_COMMISSION_RATE = 4;
@@ -34,7 +34,9 @@ export const NOT_SET_UP_MESSAGE = 'Platform settings have not been set up';
 export interface SettingsChange {
   defaultCommissionRate?: number;
   maxStoresPerSeller?: number;
-  stripeCommissionNote?: string | null;
+  stripeCommissionNote?: string | null;
+  /** Sprint 4 D-094/D-095: go-live waits for an admin when true. */
+  storeApprovalRequired?: boolean;
 }
 
 export interface SettingsUpdate {
@@ -84,7 +86,13 @@ export function parseSettingsUpdate(input: unknown): ParsedSettingsUpdate {
     else changes.stripeCommissionNote = value.trim() === '' ? null : value.trim();
   }
 
-  if ('reason' in record) {
+  if ('storeApprovalRequired' in record) {
+    const value = record.storeApprovalRequired;
+    if (typeof value !== 'boolean') issues.push({ path: 'storeApprovalRequired', message: 'must be true or false' });
+    else changes.storeApprovalRequired = value;
+  }
+
+  if ('reason' in record) {
     const value = record.reason;
     const text = typeof value === 'string' ? value.trim() : '';
     if (typeof value !== 'string' || text === '' || text.length > SETTINGS_REASON_MAX) {
@@ -112,8 +120,9 @@ export function toSettingsRow(doc: Doc) {
   return {
     defaultCommissionRate: isRate(doc.defaultCommissionRate) ? doc.defaultCommissionRate : DEFAULT_COMMISSION_RATE,
     maxStoresPerSeller: isStoreLimit(doc.maxStoresPerSeller) ? doc.maxStoresPerSeller : DEFAULT_MAX_STORES_PER_SELLER,
-    stripeCommissionNote: typeof note === 'string' && note !== '' ? note : null,
-    settingsRevision: typeof revision === 'number' && Number.isInteger(revision) && revision >= 0 ? revision : 0,
+    stripeCommissionNote: typeof note === 'string' && note !== '' ? note : null,
+    storeApprovalRequired: doc.storeApprovalRequired === true,
+    settingsRevision: typeof revision === 'number' && Number.isInteger(revision) && revision >= 0 ? revision : 0,
     updatedAt: toIso(doc.updatedAt),
   };
 }
@@ -125,8 +134,9 @@ export function settingsSnapshot(row: SettingsRow): Required<SettingsChange> {
   return {
     defaultCommissionRate: row.defaultCommissionRate,
     maxStoresPerSeller: row.maxStoresPerSeller,
-    stripeCommissionNote: row.stripeCommissionNote,
-  };
+    stripeCommissionNote: row.stripeCommissionNote,
+    storeApprovalRequired: row.storeApprovalRequired,
+  };
 }
 
 /** The fields whose value would change, in the order of SETTINGS_FIELDS. A value sent equal to the current one is not a change. */
@@ -138,6 +148,7 @@ export function changedFields(before: SettingsRow, changes: SettingsChange): Set
 function storedValueOf(stored: Doc, field: SettingsField): unknown {
   const value = stored[field];
   if (field === 'stripeCommissionNote') return typeof value === 'string' && value !== '' ? value : null;
+  if (field === 'storeApprovalRequired') return typeof value === 'boolean' ? value : null;
   return typeof value === 'number' ? value : null;
 }
 

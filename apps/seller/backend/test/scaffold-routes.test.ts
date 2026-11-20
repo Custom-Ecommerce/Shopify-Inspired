@@ -9,7 +9,6 @@ let signup: (request: Request) => Promise<Response>;
 let login: (request: Request) => Promise<Response>;
 let connect: (request: Request, ctx: Ctx) => Promise<Response>;
 let verify: (request: Request, ctx: Ctx) => Promise<Response>;
-let onboard: (request: Request, ctx: Ctx) => Promise<Response>;
 
 before(async () => {
   delete process.env.SELLER_AUTH_SECRET;
@@ -18,7 +17,6 @@ before(async () => {
   login = (await import('../src/app/api/users/login/route')).POST;
   connect = (await import('../src/app/api/stores/[id]/domain/connect/route')).POST;
   verify = (await import('../src/app/api/stores/[id]/domain/verify/route')).POST;
-  onboard = (await import('../src/app/api/stores/[id]/billing/onboard/route')).POST;
 });
 
 function json(body: unknown): Request {
@@ -65,12 +63,9 @@ test('domain verify is still 501 until the Vercel integration decision (ID-20)',
   assert.equal(response.status, 501);
 });
 
-test('billing onboard refuses a malformed store id with 422 before any auth check', async () => {
-  const response = await onboard(json({ storeId: STORE }), params('not-an-id'));
-  assert.equal(response.status, 422);
-});
-
-test('billing onboard without a session is refused with 401', async () => {
-  const response = await onboard(json({ storeId: STORE }), params(STORE));
-  assert.equal(response.status, 401);
+// Sprint 4 EP-04.US03.T03 (D-088): the Stripe Connect onboarding routes were removed, so their two tests are gone.
+test('the Stripe Connect onboarding routes no longer exist (D-088)', async () => {
+  const { existsSync } = await import('node:fs');
+  assert.equal(existsSync(new URL('../src/app/api/stores/[id]/billing/onboard/route.ts', import.meta.url)), false);
+  assert.equal(existsSync(new URL('../src/app/api/billing/onboard/route.ts', import.meta.url)), false);
 });

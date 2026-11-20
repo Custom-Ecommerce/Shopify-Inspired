@@ -27,7 +27,7 @@ export async function GET(request: Request): Promise<Response> {
 
     const [rows, totalDocs] = await Promise.all([
       User.find(filter)
-        .select('name email createdAt')
+        .select('name email createdAt accountStatus')
         .sort({ createdAt: -1, _id: -1 })
         .skip((query.page - 1) * query.limit)
         .limit(query.limit)

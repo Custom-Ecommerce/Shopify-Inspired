@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { connectDb } from '@/lib/db';
-import { SESSION_MIN_SECRET_LENGTH, hashPassword, signSession, verifySession } from '@/lib/workspace';
+import { RateLimitedError, SESSION_MIN_SECRET_LENGTH, SessionRejectedError, hashPassword, sessionTokenVersion, signSession, verifySession } from '@/lib/workspace';
 
 /** Sessions for the admin backend are bound to this audience. A seller token is refused here, and the reverse. */
 export const ADMIN_AUDIENCE = 'admin-backend';
@@ -8,17 +8,35 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
 
 export class AdminHttpError extends Error {
   readonly status: number;
+  /** Sprint 4: an optional machine code (ACCOUNT_CODES in contracts) and the body field it is about. */
+  readonly code: string | undefined;
+  readonly field: string | undefined;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string, field?: string) {
     super(message);
     this.name = 'AdminHttpError';
     this.status = status;
+    this.code = code;
+    this.field = field;
   }
 }
 
 export function errorResponse(err: unknown): Response {
   if (err instanceof AdminHttpError) {
-    return Response.json({ error: err.message }, { status: err.status, headers: NO_STORE });
+    return Response.json(
+      { error: err.message, ...(err.code === undefined ? {} : { code: err.code }), ...(err.field === undefined ? {} : { field: err.field }) },
+      { status: err.status, headers: NO_STORE },
+    );
+  }
+  // Sprint 4 EP-08 (D-093): a verified token whose account is suspended, gone, or on an older tokenVersion.
+  if (err instanceof SessionRejectedError) {
+    return Response.json({ error: err.message, code: err.code }, { status: 401, headers: NO_STORE });
+  }
+  if (err instanceof RateLimitedError) {
+    return Response.json(
+      { error: err.message, code: 'RATE_LIMITED', retryAfterSeconds: err.retryAfterSeconds },
+      { status: 429, headers: { ...NO_STORE, 'Retry-After': String(err.retryAfterSeconds) } },
+    );
   }
   console.error('admin session route failed:', err instanceof Error ? err.message : 'unknown error');
   return Response.json({ error: 'Internal error' }, { status: 500, headers: NO_STORE });
@@ -62,8 +80,9 @@ export async function requireDatabase(): Promise<void> {
   }
 }
 
-export async function issueAdminToken(userId: string): Promise<string> {
-  return signSession({ sub: userId, role: 'admin' }, requireAdminSecret(), ADMIN_AUDIENCE);
+/** tokenVersion is the account's current one (Sprint 4 EP-08): a token with an older one is refused by authorizeAdmin. */
+export async function issueAdminToken(userId: string, tokenVersion: number = 0): Promise<string> {
+  return signSession({ sub: userId, role: 'admin', tv: tokenVersion }, requireAdminSecret(), ADMIN_AUDIENCE);
 }
 
 export function extractBearer(request: Request): string | null {
@@ -74,7 +93,7 @@ export function extractBearer(request: Request): string | null {
 }
 
 /** Verifies signature, expiry, and audience, and that the token was minted for an admin. No database access. */
-export async function authenticateAdmin(request: Request): Promise<{ userId: string }> {
+export async function authenticateAdmin(request: Request): Promise<{ userId: string; tokenVersion: number }> {
   const secret = requireAdminSecret();
   const token = extractBearer(request);
   if (token === null) throw new AdminHttpError(401, 'Authentication required');
@@ -88,7 +107,7 @@ export async function authenticateAdmin(request: Request): Promise<{ userId: str
   if (claims.role !== 'admin' || !mongoose.isValidObjectId(claims.sub)) {
     throw new AdminHttpError(401, 'Invalid or expired session');
   }
-  return { userId: String(claims.sub) };
+  return { userId: String(claims.sub), tokenVersion: sessionTokenVersion(claims) };
 }
 
 let dummyHash: Promise<string> | null = null;

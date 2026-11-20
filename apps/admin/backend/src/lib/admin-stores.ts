@@ -149,6 +149,8 @@ export function toListItem(doc: Doc, people: Map<string, Person>) {
     commissionMode: mode !== null && COMMISSION_MODES.includes(mode) ? mode : 'inherit',
     owner: toOwner(doc.owner, people),
     statusChangedAt: toIso(doc.statusChangedAt),
+    /** Set when the owner asked to go live (D-098); with status pending it reads as waiting for approval. */
+    goLiveRequestedAt: toIso(doc.goLiveRequestedAt),
     createdAt: toIso(doc.createdAt) ?? new Date(0).toISOString(),
   };
 }

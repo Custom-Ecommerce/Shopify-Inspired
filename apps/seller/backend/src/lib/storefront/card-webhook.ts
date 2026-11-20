@@ -1,4 +1,6 @@
+import { recordCardEntries } from '@/lib/commission';
 import { connectSellerDb } from '@/lib/mongo';
+import { notifyOrderPlaced } from '@/lib/notifications';
 import { PAYMENT_NOT_COMPLETED_REASON, PAYMENT_SYSTEM_ACTOR, cancelOrder } from '@/lib/order-cancel';
 import { assertCan, Order, ORDER_ACTIONS, writeAuditLog } from '@/lib/services';
 import { cardPaymentsAvailable, orderWebhookSecret } from '@/lib/storefront/card-config';
@@ -66,7 +68,7 @@ async function auditPayment(row: CardOrderRow, storeId: string, session: Session
   }
 }
 
-/** Unpaid to paid, once. The compare-and-set is what makes a repeated event harmless. No commission ledger here (EP-05). */
+/** Unpaid to paid, once. The compare-and-set is what makes a repeated event harmless; its winner writes the card ledger entries. */
 async function onCompleted(session: SessionFields, eventId: string): Promise<void> {
   const found = await orderOfSession(session, eventId);
   if (!found) return;
@@ -107,6 +109,10 @@ async function onCompleted(session: SessionFields, eventId: string): Promise<voi
 
   if (!updated) return ignored('lost to another change', context);
   await auditPayment(row, storeId, session);
+  // EP-05 (D-088): the winner writes card_sale and card_commission, once. Best effort, never throws.
+  await recordCardEntries(updated as never);
+  // EP-07.US01.T03: a card order is announced once it is paid, by the winner of the unpaid-to-paid compare-and-set.
+  notifyOrderPlaced(storeId, updated);
 }
 
 /** A session that will never be paid. The order goes through the usual cancel, and only if it is still unpaid (A-016). */

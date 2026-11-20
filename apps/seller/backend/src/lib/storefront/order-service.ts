@@ -137,7 +137,9 @@ async function priceOrder(storeId: string, commerce: StoreCommerce, request: Par
   });
 
   const discount = request.discountCode === null ? null : { code: request.discountCode, rule: await findDiscountRule(storeId, request.discountCode) };
-  const { totals, applied, refusal } = priceCart(priced, commerce, discount);
+  // Sprint 4 EP-04.US02: the shipping city picks the store's rate. The order keeps the delivery amount (deliveryCharges),
+  // so a later rate change never changes it.
+  const { totals, applied, refusal } = priceCart(priced, { ...commerce, city: request.customer.city }, discount);
   // The shopper was shown a total that counted on this code, so the order is refused rather than charged without it.
   if (refusal !== null) throw discountRefused(refusal.reason, refusal.message);
 

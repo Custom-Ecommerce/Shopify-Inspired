@@ -74,7 +74,7 @@ function meRequest(token?: string): Request {
   return new Request('http://admin.test/api/admin/me', { headers: token ? { authorization: 'Bearer ' + token } : {} });
 }
 
-test('an admin signs in: 200, a token the admin audience accepts, no secret fields, counters reset', async () => {
+test('an admin signs in: 200, a token the admin audience accepts, no secret fields, no lockout counter written (D-097)', async () => {
   const updates: unknown[] = [];
   const restore = install({ findDoc: await userDoc({ loginAttempts: 3 }) }, updates);
   try {
@@ -86,19 +86,19 @@ test('an admin signs in: 200, a token the admin audience accepts, no secret fiel
     assert.equal('passwordHash' in payload.user, false);
     const claims = await verifySession(payload.token, SECRET, ADMIN_AUDIENCE);
     assert.equal(claims.sub, OID);
-    assert.deepEqual(updates[0], { $set: { loginAttempts: 0, lockUntil: null } });
+    assert.equal(updates.length, 0);
   } finally {
     restore();
   }
 });
 
-test('a wrong password is refused with 401 and counts one more attempt', async () => {
+test('a wrong password is refused with 401 and writes no lockout counter (the throttle counts it, D-097)', async () => {
   const updates: unknown[] = [];
   const restore = install({ findDoc: await userDoc() }, updates);
   try {
     const response = await loginPOST(loginRequest({ email: 'op@example.com', password: 'not-the-password' }));
     assert.equal(response.status, 401);
-    assert.equal((updates[0] as { $set: { loginAttempts: number } }).$set.loginAttempts, 1);
+    assert.equal(updates.length, 0);
   } finally {
     restore();
   }
@@ -127,12 +127,12 @@ test('a seller account cannot sign in to the admin backend, even with the right 
   }
 });
 
-test('a locked account is refused with 423 before any password check', async () => {
+test('a stored lockUntil no longer locks the account: the throttle is the only lock (D-097)', async () => {
   const updates: unknown[] = [];
   const restore = install({ findDoc: await userDoc({ loginAttempts: 8, lockUntil: new Date(Date.now() + 60000) }) }, updates);
   try {
     const response = await loginPOST(loginRequest({ email: 'op@example.com', password: PASSWORD }));
-    assert.equal(response.status, 423);
+    assert.equal(response.status, 200);
     assert.equal(updates.length, 0);
   } finally {
     restore();
@@ -197,6 +197,30 @@ test('an operator who was demoted after signing in is refused on the next call',
     assert.equal((await meGET(meRequest(token))).status, 401);
   } finally {
     restore();
+  }
+});
+
+test('me refuses a session from before the last password reset, and a suspended operator (found by the Sprint 4 verification)', async () => {
+  // The console's session check is this route: it must refuse what every data route refuses (authorizeAdmin).
+  const afterReset = install({ meDoc: await userDoc({ accountStatus: 'active', tokenVersion: 1 }) }, []);
+  try {
+    const oldToken = await signSession({ sub: OID, role: 'admin', tv: 0 }, SECRET, ADMIN_AUDIENCE);
+    const refused = await meGET(meRequest(oldToken));
+    assert.equal(refused.status, 401);
+    assert.equal(((await refused.json()) as { code?: string }).code, 'SESSION_REVOKED');
+    const freshToken = await signSession({ sub: OID, role: 'admin', tv: 1 }, SECRET, ADMIN_AUDIENCE);
+    assert.equal((await meGET(meRequest(freshToken))).status, 200);
+  } finally {
+    afterReset();
+  }
+  const suspended = install({ meDoc: await userDoc({ accountStatus: 'suspended', tokenVersion: 0 }) }, []);
+  try {
+    const token = await signSession({ sub: OID, role: 'admin', tv: 0 }, SECRET, ADMIN_AUDIENCE);
+    const refused = await meGET(meRequest(token));
+    assert.equal(refused.status, 401);
+    assert.equal(((await refused.json()) as { code?: string }).code, 'ACCOUNT_SUSPENDED');
+  } finally {
+    suspended();
   }
 });
 

@@ -45,7 +45,8 @@ export function buildStilettoContent(store: StoreData, categories: NormalizedCat
   const announcement: AnnouncementData = demo && !store.announcement
     ? navConfig.announcement
     : { messages: [store.announcement ?? "Welcome to " + store.name], showArrows: false };
-  const footerBrand = { ...footerConfig.brand, name: store.name, logo: menuLogo };
+  // A live store shows its own description (or none); the theme's demo sentence is for the demo only.
+  const footerBrand = { ...footerConfig.brand, name: store.name, logo: menuLogo, description: demo ? footerConfig.brand.description : (store.description ?? "") };
   return {
     brandName: store.name,
     navConfig: {
@@ -58,11 +59,11 @@ export function buildStilettoContent(store: StoreData, categories: NormalizedCat
     },
     homeConfig: {
       ...homeConfig,
-      hero: { ...homeConfig.hero, secondaryButtonLink: categories[0]?.href ?? paths.collections },
+      hero: { ...homeConfig.hero, secondaryButtonLink: categories[0]?.href ?? paths.collections, ...(store.bannerUrl ? { posterImage: store.bannerUrl } : {}) },
     },
     testimonials,
     featuresConfig,
-    footerConfig: { ...footerConfig, brand: footerBrand },
+    footerConfig: { ...footerConfig, brand: footerBrand, contact: demo ? undefined : store.contact, social: demo ? undefined : store.social },
     promoBanner,
     productShowcase: { banner: productShowcase.banner },
     shippingDetails,

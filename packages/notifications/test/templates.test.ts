@@ -1,0 +1,158 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  TEMPLATES,
+  TEMPLATE_NAMES,
+  TemplateError,
+  escapeHtml,
+  formatItems,
+  formatRupees,
+  renderTemplate,
+  templateProblems,
+  type TemplateDefinition,
+  type TemplateVars,
+} from '../src/index';
+
+// EP-07.US02.T01. Pure functions: no database, no network.
+
+const FULL: TemplateVars = {
+  storeName: 'Zara Lawn',
+  customerName: 'Ayesha',
+  orderNumber: 'ORD-ABCD2345',
+  items: 'Lawn suit (Blue) x 2 - Rs. 7,000\nDupatta x 1 - Rs. 1,200',
+  total: 'Rs. 8,450',
+  paymentMethod: 'Cash on delivery',
+  trackingLink: 'https://zara.markazify.com/track?order=ORD-ABCD2345',
+  courier: 'TCS',
+  trackingNumber: 'TCS-1001',
+  city: 'Lahore',
+  dashboardLink: 'https://seller.markazify.com/s/1/orders/2',
+  productName: 'Lawn suit (Blue)',
+  stockLeft: '3',
+  appName: 'Markazify',
+  actionLink: 'https://seller.markazify.com/reset-password?token=abc',
+  validFor: '30 minutes',
+  newEmail: 'new@example.com',
+  storefrontLink: 'https://zara.markazify.com',
+  payoutAmount: 'Rs. 12,500',
+  payoutMethod: 'JazzCash',
+  payoutReference: 'JC-778812',
+  voidReason: 'Sent to the wrong account',
+  broadcastSubject: 'Eid sale',
+  broadcastMessage: 'Everything is 20% off this weekend.',
+  unsubscribeLink: 'https://seller.markazify.com/unsubscribe?s=1&e=a&t=b',
+  emailFooter: 'Zara Lawn, Lahore',
+};
+
+test('every template uses only variables it declares, and every declared variable is known', () => {
+  assert.deepEqual(templateProblems(), []);
+});
+
+test('a template that uses an unknown or an undeclared variable is reported', () => {
+  const broken: Record<string, TemplateDefinition> = {
+    typo: { variables: ['storeName'], subject: '{{storName}}', en: ['{{storeName}}'], ur: [''], whatsapp: '' },
+    undeclared: { variables: ['storeName'], subject: '{{storeName}}', en: ['{{orderNumber}}'], ur: [''], whatsapp: '' },
+    declaresUnknown: { variables: ['storeName', 'shoeSize' as never], subject: '{{storeName}}', en: [''], ur: [''], whatsapp: '' },
+  };
+  const problems = templateProblems(broken);
+  assert.ok(problems.some((p) => p.startsWith('typo: uses unknown variable storName')), problems.join('; '));
+  assert.ok(problems.some((p) => p.startsWith('undeclared: uses undeclared variable orderNumber')), problems.join('; '));
+  assert.ok(problems.some((p) => p.startsWith('declaresUnknown: declares unknown variable shoeSize')), problems.join('; '));
+});
+
+test('every named template exists and renders with English first and Urdu below', () => {
+  assert.deepEqual(Object.keys(TEMPLATES).sort(), [...TEMPLATE_NAMES].sort());
+  for (const name of TEMPLATE_NAMES) {
+    const out = renderTemplate(name, FULL);
+    assert.ok(out.subject.length > 0 && out.subject.length <= 200, name);
+    assert.ok(out.text.includes('---'), name + ': the text has both parts');
+    const urduAt = out.text.search(/[؀-ۿ]/);
+    assert.ok(urduAt > out.text.indexOf('---'), name + ': Urdu comes after the English part');
+    assert.ok(out.html.includes('dir="rtl" lang="ur"'), name + ': the Urdu block is right to left');
+    assert.ok(out.whatsapp.length > 0, name);
+    assert.equal(/\{\{/.test(out.text + out.html + out.subject + out.whatsapp), false, name + ': no placeholder is left');
+  }
+});
+
+test('values are escaped in HTML and kept as they are in the text', () => {
+  const out = renderTemplate('order_confirmed', { ...FULL, customerName: '<script>alert("x")</script> & Co' });
+  assert.equal(out.html.includes('<script>'), false);
+  assert.ok(out.html.includes('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; Co'));
+  assert.ok(out.text.includes('<script>alert("x")</script> & Co'));
+});
+
+test('a link becomes an anchor only when it is http(s); anything else is plain escaped text', () => {
+  const good = renderTemplate('order_confirmed', FULL);
+  assert.ok(good.html.includes('<a href="https://zara.markazify.com/track?order=ORD-ABCD2345">'));
+  const bad = renderTemplate('order_confirmed', { ...FULL, trackingLink: 'javascript:alert(1)' });
+  assert.equal(bad.html.includes('<a href="javascript'), false);
+  assert.ok(bad.html.includes('javascript:alert(1)'));
+});
+
+test('the items block keeps its lines in HTML', () => {
+  const out = renderTemplate('order_placed_customer', FULL);
+  assert.ok(out.html.includes('Lawn suit (Blue) x 2 - Rs. 7,000<br>Dupatta x 1 - Rs. 1,200'));
+});
+
+test('a value cannot add a line to the subject', () => {
+  const out = renderTemplate('order_confirmed', { ...FULL, storeName: 'Zara\r\nBcc: someone@example.com' });
+  assert.equal(/[\r\n]/.test(out.subject), false);
+});
+
+test('a declared variable without a value is refused, so no message goes out with a hole', () => {
+  const { courier: _courier, ...rest } = FULL;
+  void _courier;
+  assert.throws(() => renderTemplate('order_dispatched', rest), TemplateError);
+  assert.throws(() => renderTemplate('order_dispatched', { ...FULL, trackingNumber: '   ' }), TemplateError);
+  assert.throws(() => renderTemplate('no_such_template' as never, FULL), TemplateError);
+});
+
+test('escapeHtml, formatRupees and formatItems', () => {
+  assert.equal(escapeHtml(`<a href='x'>&"`), '&lt;a href=&#39;x&#39;&gt;&amp;&quot;');
+  assert.equal(formatRupees(2600), 'Rs. 2,600');
+  assert.equal(formatRupees(1234.6), 'Rs. 1,235');
+  assert.equal(formatItems([
+    { title: 'Shirt', variantTitle: 'Default', quantity: 2, unitPrice: 1200 },
+    { title: 'Cap', variantTitle: 'Red', quantity: 1, unitPrice: 900 },
+  ]), 'Shirt x 2 - Rs. 2,400\nCap (Red) x 1 - Rs. 900');
+});
+
+test('Sprint 4 account emails: the link is an anchor, values are escaped, and Urdu follows English', () => {
+  for (const name of ['password_reset', 'password_changed', 'email_verify', 'email_change_verify'] as const) {
+    const out = renderTemplate(name, { ...FULL, customerName: '<img src=x onerror=alert(1)>' });
+    assert.ok(out.html.includes('<a href="https://seller.markazify.com/reset-password?token=abc">'), name);
+    assert.equal(out.html.includes('<img'), false, name + ': the name is escaped');
+    assert.ok(out.text.indexOf('---') < out.text.search(/[؀-ۿ]/), name);
+  }
+  const change = renderTemplate('email_change_verify', FULL);
+  assert.ok(change.text.includes('new@example.com'));
+  assert.throws(() => renderTemplate('password_reset', { ...FULL, actionLink: '' }), TemplateError);
+});
+
+test('store_live renders English and Urdu with the store name and both links', () => {
+  const rendered = renderTemplate('store_live', FULL);
+  assert.match(rendered.subject, /Zara Lawn is live/);
+  assert.ok(rendered.text.includes('https://zara.markazify.com'));
+  assert.ok(rendered.text.includes('https://seller.markazify.com/s/1/orders/2'));
+  assert.match(rendered.text, /[؀-ۿ]/);
+});
+
+test('payout_paid says how much, how and under which reference, in English then Urdu', () => {
+  const out = renderTemplate('payout_paid', FULL);
+  assert.match(out.subject, /Zara Lawn: we sent you Rs\. 12,500/);
+  for (const part of ['Rs. 12,500', 'JazzCash', 'JC-778812', 'https://seller.markazify.com/s/1/orders/2']) assert.ok(out.text.includes(part), part);
+  assert.ok(out.text.indexOf('---') < out.text.search(/[؀-ۿ]/));
+  assert.ok(out.html.includes('<a href="https://seller.markazify.com/s/1/orders/2">'));
+  assert.ok(out.whatsapp.includes('JC-778812'));
+  assert.throws(() => renderTemplate('payout_paid', { ...FULL, payoutReference: ' ' }), TemplateError);
+});
+
+test('payout_voided gives the reason, escaped in HTML and as it is in the text', () => {
+  const out = renderTemplate('payout_voided', { ...FULL, voidReason: 'Wrong <b>account</b> & amount' });
+  assert.ok(out.text.includes('Wrong <b>account</b> & amount'));
+  assert.equal(out.html.includes('<b>account</b>'), false);
+  assert.ok(out.html.includes('Wrong &lt;b&gt;account&lt;/b&gt; &amp; amount'));
+  assert.match(out.subject, /a payout of Rs\. 12,500 was cancelled/);
+  assert.match(out.text, /[؀-ۿ]/);
+  assert.throws(() => renderTemplate('payout_voided', { ...FULL, voidReason: '' }), TemplateError);
+});

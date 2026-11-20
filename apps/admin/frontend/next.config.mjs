@@ -10,7 +10,7 @@ const securityHeaders = [
 
 const nextConfig = {
   poweredByHeader: false,
-  transpilePackages: ['@markaz/contracts'],
+  transpilePackages: ['@markaz/contracts', '@markaz/platform-kit'],
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

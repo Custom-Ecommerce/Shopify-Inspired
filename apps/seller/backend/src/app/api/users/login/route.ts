@@ -1,8 +1,9 @@
 import { loginRequestSchema } from '@/lib/contracts';
-import { issueToken, requireDatabase, sessionUserOf } from '@/lib/accounts';
+import { issueToken, requireDatabase, sessionUserOf, tokenVersionOf } from '@/lib/accounts';
+import { authLimiter, clientAddress } from '@/lib/account-support';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { parseBody } from '@/lib/placeholder';
-import { isLocked, recordFailedAttempt, User, verifyPassword } from '@/lib/services';
+import { hashPassword, LOGIN_ACCOUNT_RULE, LOGIN_IP_RULE, User, verifyPassword } from '@/lib/services';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,49 +39,88 @@ async function resolvePasswordHash(user: { _id: unknown; passwordHash?: unknown 
   return null;
 }
 
-/** POST /api/users/login. Verifies the credentials and the lockout, and returns a session token. */
+let dummyHash: Promise<string> | null = null;
+
+/** A real hash to check against when the email is unknown, so an unknown email costs the same time as a wrong password. */
+function dummyPasswordHash(): Promise<string> {
+  if (dummyHash === null) {
+    const pending = hashPassword('a-password-nobody-uses-for-timing') as Promise<string>;
+    pending.catch(() => {
+      if (dummyHash === pending) dummyHash = null;
+    });
+    dummyHash = pending;
+  }
+  return dummyHash;
+}
+
+async function spendHashTime(password: string): Promise<void> {
+  try {
+    await verifyPassword(password, await dummyPasswordHash());
+  } catch {
+    /* timing equalisation is best effort; the 401 is still sent */
+  }
+}
+
+/**
+ * POST /api/users/login. Verifies the credentials and returns a session token.
+ *
+ * Sprint 4 EP-08.US05.T01 (D-093): failures are counted per account (10 per 15 minutes) and per IP (30 per 15 minutes)
+ * on the shared counters; past either limit the answer is 429 with Retry-After, before any password check. A successful
+ * login clears the account counter but not the IP counter. Unknown email, wrong password and a suspended or blocked
+ * account all get the same 401 text. The token carries the account's tokenVersion.
+ *
+ * D-097: that throttle is the only lock. The old 8-failure 423 lockout was removed because it answered differently
+ * for an existing account; loginAttempts and lockUntil stay on the User model but login no longer reads or writes them.
+ * Without a resolvable client address the per-IP bucket is skipped (the account bucket still applies).
+ */
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = await parseBody(request, loginRequestSchema);
     if (!body.ok) return body.response;
 
+    const email = body.data.email.toLowerCase();
+    const ip = clientAddress(request.headers);
+    if (ip !== null) await authLimiter.assertBelow(LOGIN_IP_RULE, ip);
+    await authLimiter.assertBelow(LOGIN_ACCOUNT_RULE, email);
+
     await requireDatabase();
 
-    const user = await User.findOne({ email: body.data.email.toLowerCase() })
-      .select('+passwordHash name email role store loginAttempts lockUntil')
-      .exec();
-    if (!user) throw new HttpError(401, INVALID_CREDENTIALS);
+    const failed = async (): Promise<never> => {
+      if (ip !== null) await authLimiter.record(LOGIN_IP_RULE, ip);
+      await authLimiter.record(LOGIN_ACCOUNT_RULE, email);
+      throw new HttpError(401, INVALID_CREDENTIALS);
+    };
 
-    const now = new Date();
-    const state = { loginAttempts: user.loginAttempts, lockUntil: user.lockUntil ?? null };
-    if (isLocked(state, now)) {
-      throw new HttpError(423, 'Account is temporarily locked. Try again later.');
+    const user = await User.findOne({ email })
+      .select('+passwordHash name email role store accountStatus tokenVersion emailVerifiedAt')
+      .exec();
+    if (!user) {
+      await spendHashTime(body.data.password);
+      return await failed();
     }
 
     /* patch_login_fix: resolve-password-hash */
     const passwordHash = await resolvePasswordHash(user);
     if (!passwordHash) {
-      // No usable hash on this account: treat as invalid credentials (401), never a 500.
-      console.error(
-        '[seller-backend] login: user ' + String(user._id) + ' (' + user.email + ') has no usable passwordHash in the database. ' +
-          'Re-create the account (sign up) or reseed it with a bcrypt hash stored in the "passwordHash" field.',
-      );
-      throw new HttpError(401, INVALID_CREDENTIALS);
+      // No usable hash on this account: treat as invalid credentials (401), never a 500. No email in the log.
+      console.error('[seller-backend] login: user ' + String(user._id) + ' has no usable passwordHash in the database.');
+      await spendHashTime(body.data.password);
+      return await failed();
     }
 
     const ok = await verifyPassword(body.data.password, passwordHash);
-    if (!ok) {
-      const next = recordFailedAttempt(state, now);
-      await User.updateOne(
-        { _id: user._id },
-        { $set: { loginAttempts: next.loginAttempts, lockUntil: next.lockUntil } },
-      );
-      throw new HttpError(401, INVALID_CREDENTIALS);
-    }
+    if (!ok) return await failed();
 
-    await User.updateOne({ _id: user._id }, { $set: { loginAttempts: 0, lockUntil: null } });
-    const token = await issueToken(String(user._id), user.role);
-    return Response.json({ token, user: sessionUserOf(user) }, { status: 200 });
+    // D-093: a suspended or blocked account cannot sign in, and is told nothing more than a wrong password would be.
+    const status = (user as { accountStatus?: unknown }).accountStatus;
+    if (status === 'suspended' || status === 'blocked') return await failed();
+
+    await authLimiter.reset(LOGIN_ACCOUNT_RULE, email);
+    const token = await issueToken(String(user._id), user.role, tokenVersionOf(user as { tokenVersion?: unknown }));
+    return Response.json(
+      { token, user: { ...sessionUserOf(user), emailVerified: Boolean((user as { emailVerifiedAt?: unknown }).emailVerifiedAt) } },
+      { status: 200 },
+    );
   } catch (err) {
     return handleRouteError(err);
   }

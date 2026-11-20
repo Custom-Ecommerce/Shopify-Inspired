@@ -24,9 +24,21 @@ export interface TenantSnapshot {
     deliveryRate: number;
     freeDeliveryThreshold: number;
     whatsappNumber?: string | null;
+    /** Sprint 4 SB-5: the seller's delivery time text. */
+    deliveryEstimate?: string | null;
   };
+  /** Sprint 4 SB-5: the store's public profile and social links (settings). */
+  profile?: {
+    description: string | null;
+    contactPhone: string | null;
+    contactEmail: string | null;
+    address: string | null;
+    city: string | null;
+  };
+  social?: { facebook: string | null; instagram: string | null; tiktok: string | null; whatsapp: string | null };
   branding: {
     logoUrl?: string | null;
+    bannerUrl?: string | null;
     announcementText?: string | null;
     socialProofEnabled: boolean;
   };

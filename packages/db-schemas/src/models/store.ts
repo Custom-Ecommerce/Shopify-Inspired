@@ -43,6 +43,10 @@ storefront?: unknown;
 courierSettings?: unknown;
 paymentSettings?: unknown;
 billing?: unknown;
+/** Sprint 4 D-088: where the platform pays the seller. Never selected by default: read only to mask it or to pay out. */
+payoutDetails?: unknown;
+/** Sprint 4 D-095: when the seller asked to go live while approval is required (the admin then activates). */
+goLiveRequestedAt?: Date | null;
 createdAt: Date;
 updatedAt: Date;
 }
@@ -75,6 +79,8 @@ storefront: { type: Schema.Types.Mixed },
 courierSettings: { type: Schema.Types.Mixed },
 paymentSettings: { type: Schema.Types.Mixed },
 billing: { type: Schema.Types.Mixed },
+payoutDetails: { type: Schema.Types.Mixed, select: false },
+goLiveRequestedAt: { type: Date, default: null },
 },
 { timestamps: true, collection: 'stores' },
 );

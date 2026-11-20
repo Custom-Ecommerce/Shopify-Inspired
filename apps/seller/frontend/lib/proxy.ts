@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { extractStoreIds, getDashboardUser, isImplicitDefaultEnabled } from "@/lib/dashboard-auth";
 import { ERROR_STATUS, type ApiErrorBody, type ErrorCode } from "@/lib/error-codes";
+import { clientAddressHeaders } from "@/lib/client-address";
 
 import type { DashboardUser } from "@/lib/types/dashboard";
 
@@ -108,15 +109,17 @@ export function apiError(
   status: number,
   code: ErrorCode | string,
   error: string,
-  opts: { details?: unknown; envelope?: boolean; requestId?: string } = {}
+  opts: { details?: unknown; envelope?: boolean; requestId?: string; field?: string; retryAfter?: string } = {}
 ): NextResponse {
-  const body: ApiErrorBody & { success?: false } = { error, code };
+  const body: ApiErrorBody & { success?: false; field?: string } = { error, code };
   if (opts.details !== undefined) body.details = opts.details;
   if (opts.envelope) body.success = false;
-  return NextResponse.json(body, {
-    status,
-    headers: opts.requestId ? { "x-request-id": opts.requestId } : undefined,
-  });
+  // Sprint 4 EP-08: the field a 400 is about, so a form can mark it.
+  if (opts.field !== undefined) body.field = opts.field;
+  const headers: Record<string, string> = {};
+  if (opts.requestId) headers["x-request-id"] = opts.requestId;
+  if (opts.retryAfter) headers["Retry-After"] = opts.retryAfter;
+  return NextResponse.json(body, { status, headers });
 }
 
 function codeError(code: ErrorCode, error: string, envelope = false): NextResponse {
@@ -164,7 +167,13 @@ async function normalizeUpstreamError(
     str(rec.error) ?? str(rec.message) ?? str(first?.message) ?? `Request failed with status ${res.status}.`;
   const details = rec.details ?? errors ?? rec.issues;
 
-  return apiError(res.status, code, message, { details, envelope, requestId });
+  return apiError(res.status, code, message, {
+    details,
+    envelope,
+    requestId,
+    field: str(rec.field),
+    retryAfter: res.headers.get("retry-after") ?? undefined,
+  });
 }
 
 /**
@@ -302,7 +311,8 @@ export async function proxyToBackend(req: NextRequest, options: ProxyOptions): P
     }
   }
 
-  const headers: Record<string, string> = { ...options.headers, "x-request-id": requestId };
+  // Sprint 4 A3: the browser's address, signed for the backend's per-IP limits.
+  const headers: Record<string, string> = { ...options.headers, ...clientAddressHeaders(req.headers), "x-request-id": requestId };
   if (auth.token) {
     const prefix = options.authHeaderPrefix || (authReq === "customer" ? "Bearer" : "JWT");
     headers["Authorization"] = `${prefix} ${auth.token}`;

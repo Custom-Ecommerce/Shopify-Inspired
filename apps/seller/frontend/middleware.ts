@@ -9,11 +9,20 @@ function parseJwt(token: string) {
   }
 }
 
+// /unsubscribe (EP-07.US04): the link in a broadcast email, opened by a customer who has no seller session.
+const PUBLIC_ACCOUNT_PAGES = ['/forgot-password', '/reset-password', '/verify-email', '/unsubscribe'];
+
 export function middleware(request: NextRequest) {
   if (request.nextUrl.searchParams.has('clear')) {
     const response = NextResponse.redirect(new URL('/login', request.url));
     response.cookies.set('markaz-session', '', { maxAge: 0, path: '/' });
     return response;
+  }
+
+  // Sprint 4 EP-08: the account links from emails open with or without a session.
+  const path = request.nextUrl.pathname;
+  if (PUBLIC_ACCOUNT_PAGES.some((page) => path === page || path.startsWith(page + '/'))) {
+    return NextResponse.next();
   }
 
   const token = request.cookies.get('markaz-session')?.value;

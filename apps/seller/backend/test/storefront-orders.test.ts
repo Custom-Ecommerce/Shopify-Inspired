@@ -708,12 +708,12 @@ test('a malformed or oversized body is 400, never 500', async () => {
 
 test('card payment is refused, and so is cash on delivery when the store turned it off', async () => {
   const card = await order({ paymentMethod: 'card' });
-  assert.equal(card.status, 400);
+  assert.equal(card.status, 422, 'Sprint 4 EP-04.US03: 422');
   assert.equal((await card.json()).error.code, 'PAYMENT_METHOD_UNAVAILABLE');
 
   storeRow = activeStore({}, { codEnabled: false });
   const cod = await order();
-  assert.equal(cod.status, 400);
+  assert.equal(cod.status, 422);
   assert.equal((await cod.json()).error.code, 'PAYMENT_METHOD_UNAVAILABLE');
   assert.equal(orders.length, 0);
   assert.equal(stock(SHIRT), 10);

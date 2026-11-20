@@ -23,6 +23,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/dashboard/shared/EmptyState";
+import { CustomerWhatsappButton } from "@/components/dashboard/orders/CustomerWhatsappButton";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
 import {
   ORDER_STATUS_LABEL,
@@ -1117,6 +1118,7 @@ export default function OrderDetailPage() {
           {order.city ? <p>{order.city}</p> : null}
           {order.customerWhatsapp ? <p className="font-mono">WhatsApp: {order.customerWhatsapp}</p> : null}
           {order.customerEmail ? <p className="break-all">{order.customerEmail}</p> : null}
+          <CustomerWhatsappButton order={order} />
           {order.customerNote ? (
             <div className="mt-2 rounded-xl border bg-muted/40 p-3">
               <p className="mb-1 text-xs font-medium text-muted-foreground">Note from the customer</p>

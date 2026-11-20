@@ -29,7 +29,8 @@
     "@markaz/contracts": "workspace:*",
     "@markaz/sync-core": "workspace:*",
     "@markaz/billing": "workspace:*",
-    "@markaz/api-compat": "workspace:*"
+    "@markaz/api-compat": "workspace:*",
+    "@markaz/notifications": "workspace:*"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

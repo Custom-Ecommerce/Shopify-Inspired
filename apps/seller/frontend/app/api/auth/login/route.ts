@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientAddressHeaders } from "@/lib/client-address";
 
 const PAYLOAD_API_URL = process.env.SELLER_BACKEND_API_URL || "http://localhost:4001";
 
@@ -35,7 +36,8 @@ export async function POST(req: NextRequest) {
   try {
     res = await fetch(`${PAYLOAD_API_URL}/api/users/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Sprint 4 A3: the browser's address, signed, so the login limit per IP sees the shopper and not this server.
+      headers: { "Content-Type": "application/json", ...clientAddressHeaders(req.headers) },
       body: JSON.stringify({ email, password }),
       cache: "no-store",
     });
@@ -47,6 +49,14 @@ export async function POST(req: NextRequest) {
   if (!res.ok) {
     if (res.status === 401) {
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+    }
+    // SB-11 (V-13): the throttle answers 429 with Retry-After; pass it on so the page can say how long to wait.
+    if (res.status === 429) {
+      const retryAfter = res.headers.get("retry-after");
+      return NextResponse.json(
+        { error: "Too many attempts. Please wait and try again.", code: "RATE_LIMITED" },
+        { status: 429, headers: { ...(retryAfter ? { "Retry-After": retryAfter } : {}), "Cache-Control": "no-store" } },
+      );
     }
     if (res.status === 500 || res.status === 502 || res.status === 503) {
       return NextResponse.json({ error: "Backend unreachable. Please try again later." }, { status: 502 });

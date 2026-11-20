@@ -4,7 +4,8 @@ import { authenticate } from '@/lib/auth';
 import { handleRouteError, parseIntParam, HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, listEnvelope, Referral } from '@/lib/services';
-import { plainDoc, requireSellerStoreId, toWire } from '@/lib/seller-scope';
+import { plainDoc, toWire } from '@/lib/seller-scope';
+import { resolveOwnedStoreId } from '@/lib/data-plane';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await requireSellerStoreId(ctx);
+    const storeId = await resolveOwnedStoreId(request, ctx, null);
 
     const params = request.nextUrl.searchParams;
     const page = parseIntParam(params.get('page'), 1, 1, 100000);

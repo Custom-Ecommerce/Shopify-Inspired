@@ -155,7 +155,9 @@ export async function middleware(request: NextRequest) {
     }
     if (url.searchParams.has(PREVIEW_QUERY_PARAM)) return enterPreview(request, label, host);
     const res = NextResponse.rewrite(new URL('/tenant/' + label + url.pathname + url.search, request.url), { request: { headers: requestHeaders } });
-    res.headers.set('x-robots-tag', 'noindex');
+    // D-078: only a preview is noindex here. A store that is not serving redirects to a page that is noindex itself, and a
+    // live store is indexable (the tenant layout also sets robots from the store's status).
+    if (hasPreviewCookie) res.headers.set('x-robots-tag', 'noindex');
     if (hasPreviewCookie) {
       res.headers.set('cache-control', PREVIEW_CACHE_CONTROL);
       res.headers.append('vary', 'Cookie');

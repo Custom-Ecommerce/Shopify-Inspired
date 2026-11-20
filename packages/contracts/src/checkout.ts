@@ -225,6 +225,8 @@ const text = z.string().nullable();
 /** The cart quote request: product ids and quantities only. The answer is priced by the server. */
 export const storefrontCartQuoteRequestSchema = z.object({
   lines: z.array(storefrontOrderLineRequestSchema).max(STOREFRONT_ORDER_MAX_LINES),
+  /** Sprint 4 EP-04.US02: the shipping city, so the quote uses the store's rate for it. Missing: the default rate. */
+  city: z.string().trim().max(CHECKOUT_CITY_MAX).nullish(),
   /** One code per cart. Empty counts as none. */
   discountCode: storefrontDiscountCodeSchema.nullish(),
 });

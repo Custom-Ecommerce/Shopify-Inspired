@@ -26,6 +26,17 @@ export function StoreShell({
     announcement: snapshot.branding.announcementText ?? null,
     currency: snapshot.commerce.currency,
     locale: snapshot.commerce.locale,
+    description: snapshot.profile?.description ?? null,
+    bannerUrl: snapshot.branding.bannerUrl ?? null,
+    contact: {
+      phone: snapshot.profile?.contactPhone ?? null,
+      whatsapp: snapshot.commerce.whatsappNumber ?? null,
+      email: snapshot.profile?.contactEmail ?? null,
+      address: snapshot.profile?.address ?? null,
+      city: snapshot.profile?.city ?? null,
+    },
+    social: snapshot.social ?? null,
+    deliveryEstimate: snapshot.commerce.deliveryEstimate ?? null,
   };
   const nav: NavVM = {
     links: [

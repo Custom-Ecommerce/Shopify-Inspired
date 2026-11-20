@@ -30,7 +30,7 @@ export const dynamic = 'force-dynamic';
 
 registerSyncOutboxModel(SyncOutbox as unknown as SyncOutboxModelPort);
 
-const SELECT = 'defaultCommissionRate maxStoresPerSeller stripeCommissionNote settingsRevision createdAt updatedAt';
+const SELECT = 'defaultCommissionRate maxStoresPerSeller stripeCommissionNote storeApprovalRequired settingsRevision createdAt updatedAt';
 const NOT_RECORDED = 'The change could not be recorded and was not applied';
 const NOT_UNDONE = 'The settings could not be recorded, and the change could not be put back. Check the settings before doing anything else.';
 /** The platform settings are one document; the sync outbox addresses it by this id (the dispatcher's platform binding). */
@@ -123,6 +123,7 @@ export async function PATCH(request: Request): Promise<Response> {
           payload: {
             defaultCommissionRate: after.defaultCommissionRate,
             maxStoresPerSeller: after.maxStoresPerSeller,
+            storeApprovalRequired: after.storeApprovalRequired,
           },
         });
         queued = { eventId: event.eventId, revision: event.revision };

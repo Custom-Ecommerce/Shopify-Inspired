@@ -2,7 +2,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { assertCan, signSession, User, StoreArticle, Order } from '@/lib/services';
+import { assertCan, signSession, User, StoreArticle, Order, Store } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 
 const SECRET = 'x'.repeat(40);
@@ -15,6 +15,7 @@ const ART_OTHER = '65a0000000000000000000e2';
 const ArticleModel = StoreArticle as any;
 const OrderModel = Order as any;
 const UserModel = User as any;
+const StoreModel = Store as any;
 
 let articles: Array<Record<string, any>> = [];
 let orders: Array<Record<string, any>> = [];
@@ -56,6 +57,8 @@ function installStubs(): () => void {
     aFindOne: ArticleModel.findOne,
     oFind: OrderModel.find,
     uFindById: UserModel.findById,
+    sFindOne: StoreModel.findOne,
+    sExists: StoreModel.exists,
   };
   (mongoose as any).connect = async () => mongoose;
   ArticleModel.find = (filter: any) => query(articles.filter((r) => matches(r, filter)));
@@ -63,6 +66,9 @@ function installStubs(): () => void {
   ArticleModel.findOne = (filter: any) => query(articles.filter((r) => matches(r, filter)), true);
   OrderModel.find = (filter: any) => query(orders.filter((r) => matches(r, filter)));
   UserModel.findById = () => ({ select: () => ({ lean: async () => ({ store: STORE }) }) });
+  /* CO-57: the store comes from resolveOwnedStoreId (x-store-id checked against Store.owner, else the first owned store). */
+  StoreModel.findOne = () => query([{ _id: STORE }], true);
+  StoreModel.exists = async (filter: any) => (String(filter._id) === STORE && String(filter.owner) === USER ? { _id: STORE } : null);
   return () => {
     (mongoose as any).connect = originals.connect;
     ArticleModel.find = originals.aFind;
@@ -70,6 +76,8 @@ function installStubs(): () => void {
     ArticleModel.findOne = originals.aFindOne;
     OrderModel.find = originals.oFind;
     UserModel.findById = originals.uFindById;
+    StoreModel.findOne = originals.sFindOne;
+    StoreModel.exists = originals.sExists;
   };
 }
 
@@ -205,4 +213,57 @@ test('the policy: sellers read articles and orders, and cannot write them', () =
   assert.doesNotThrow(() => assertCan('seller', 'read', 'orders'));
   assert.throws(() => assertCan('seller', 'create', 'storeArticles'));
   assert.throws(() => assertCan('seller', 'update', 'orders', ['status']));
+});
+
+/* ------------------------------ Sprint 4 SB-1 (CO-57): verified active store ------------------------------ */
+
+function foreignStore(url: string): NextRequest {
+  const request = authed(url);
+  request.headers.set('x-store-id', OTHER_STORE);
+  return request;
+}
+
+test("Seller B naming Seller A's store id is refused on the article list and detail, and nothing leaks", async () => {
+  seed();
+  const restore = installStubs();
+  try {
+    const list = await articlesGET(foreignStore('http://seller.test/api/storeArticles'));
+    assert.equal(list.status, 403);
+    assert.equal((await list.text()).includes(ART_OTHER), false);
+    const detail = await articleItem.GET(foreignStore('http://seller.test/api/storeArticles/' + ART_OTHER), params(ART_OTHER));
+    assert.equal(detail.status, 403);
+    assert.equal((await detail.text()).includes(ART_OTHER), false);
+  } finally {
+    restore();
+  }
+});
+
+test("Seller B naming Seller A's store id is refused on analytics, and the other store's orders are not counted", async () => {
+  seed();
+  const restore = installStubs();
+  try {
+    const response = await analyticsGET(foreignStore('http://seller.test/api/analytics?period=30d'));
+    assert.equal(response.status, 403);
+    assert.equal((await response.text()).includes('Multan'), false);
+  } finally {
+    restore();
+  }
+});
+
+test('a seller naming their own store id reads that store on articles and analytics', async () => {
+  seed();
+  const restore = installStubs();
+  try {
+    const own = (url: string) => {
+      const request = authed(url);
+      request.headers.set('x-store-id', STORE);
+      return request;
+    };
+    const list = await articlesGET(own('http://seller.test/api/storeArticles'));
+    assert.equal(list.status, 200);
+    assert.equal(((await list.json()) as { totalDocs: number }).totalDocs, 1);
+    assert.equal((await analyticsGET(own('http://seller.test/api/analytics?period=30d'))).status, 200);
+  } finally {
+    restore();
+  }
 });

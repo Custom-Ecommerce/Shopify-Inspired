@@ -272,7 +272,8 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
   return {
     async quoteCart(input: CartQuoteInput): Promise<CartQuote> {
       requireHttp();
-      const body = { lines: input.lines, ...(input.discountCode ? { discountCode: input.discountCode } : {}) };
+      // Sprint 4 EP-04.US02: the shipping city, so the quote uses the same rate the order will.
+      const body = { lines: input.lines, ...(input.discountCode ? { discountCode: input.discountCode } : {}), ...(input.city ? { city: input.city } : {}) };
       const result = await exchange("POST", "/cart/quote", { body, retry: true });
       throwIfRefused(result);
       return unwrap(result, WireCartQuoteEnvelope, "cart quote").data;

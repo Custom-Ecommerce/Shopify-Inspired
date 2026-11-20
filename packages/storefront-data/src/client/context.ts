@@ -19,15 +19,23 @@ export const DEMO_FAVOURITES_STORE: FavouritesStore = createFavouritesStore(DEMO
 const FavouritesStoreContext = createContext<FavouritesStore>(DEMO_FAVOURITES_STORE);
 
 const CardAvailableContext = createContext(false);
+/** Cash on delivery is on unless a live store has switched it off (Sprint 4 EP-04.US03). The demo keeps it on. */
+const CodAvailableContext = createContext(true);
 
 export const OrderTransportProvider = OrderTransportContext.Provider;
 export const CardAvailableProvider = CardAvailableContext.Provider;
+export const CodAvailableProvider = CodAvailableContext.Provider;
 export const CartStoreProvider = CartStoreContext.Provider;
 export const FavouritesStoreProvider = FavouritesStoreContext.Provider;
 
 /** Whether this store can take a card payment now. False on the demo. */
 export function useCardAvailable(): boolean {
   return useContext(CardAvailableContext);
+}
+
+/** Whether this store takes cash on delivery now. True on the demo. */
+export function useCodAvailable(): boolean {
+  return useContext(CodAvailableContext);
 }
 
 export function useOrderTransport(): OrderTransport {

@@ -18,8 +18,10 @@ export interface UseCartQuoteResult {
  * Asks the server to price the cart whenever its lines change, so stock and totals come from the source. The cart keeps
  * working when the quote cannot be had: checkout validates again when the order is placed.
  */
-export function useCartQuote(options: { enabled?: boolean } = {}): UseCartQuoteResult {
+export function useCartQuote(options: { enabled?: boolean; city?: string | null } = {}): UseCartQuoteResult {
   const enabled = options.enabled ?? true;
+  // Sprint 4 EP-04.US02: the shipping city, so the quote uses the store's rate for it. Blank counts as no city.
+  const city = options.city?.trim() ? options.city.trim() : null;
   const transport = useOrderTransport();
   const { lines, isHydrated, discountCode } = useCart();
   const requested = useMemo(
@@ -27,7 +29,7 @@ export function useCartQuote(options: { enabled?: boolean } = {}): UseCartQuoteR
     [lines],
   );
   // Keyed on the serialised lines and code, so an unchanged cart is not quoted again.
-  const key = JSON.stringify([requested, discountCode]);
+  const key = JSON.stringify([requested, discountCode, city]);
   const [state, setState] = useState<UseCartQuoteResult>({ status: "idle", quote: null });
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export function useCartQuote(options: { enabled?: boolean } = {}): UseCartQuoteR
     }
     let current = true;
     setState((previous) => ({ status: "loading", quote: previous.quote }));
-    transport.quoteCart({ lines: requested, discountCode }).then(
+    transport.quoteCart({ lines: requested, discountCode, city }).then(
       (quote) => {
         if (current) setState({ status: "ready", quote: toCartQuoteVM(quote) });
       },

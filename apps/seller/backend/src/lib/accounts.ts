@@ -23,9 +23,18 @@ export async function requireDatabase(): Promise<void> {
   }
 }
 
-/** Mints a session token for the seller backend. */
-export async function issueToken(userId: string, role: string): Promise<string> {
-  return signSession({ sub: userId, role }, requireSellerSecret(), SELLER_AUDIENCE);
+/**
+ * Mints a session token for the seller backend. tokenVersion is the account's current one (Sprint 4 EP-08): a token
+ * with an older version is refused by authenticate(). Missing means 0, as for accounts from before.
+ */
+export async function issueToken(userId: string, role: string, tokenVersion: number = 0): Promise<string> {
+  return signSession({ sub: userId, role, tv: tokenVersion }, requireSellerSecret(), SELLER_AUDIENCE);
+}
+
+/** A stored tokenVersion read leniently (missing or bad means 0). */
+export function tokenVersionOf(user: { tokenVersion?: unknown } | null | undefined): number {
+  const tv = user?.tokenVersion;
+  return typeof tv === 'number' && Number.isInteger(tv) && tv >= 0 ? tv : 0;
 }
 
 /** The session user, in the shape /api/users/me returns (id, not _id; no secret fields). */

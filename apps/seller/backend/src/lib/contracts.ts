@@ -122,5 +122,64 @@ export const { orderTrackingRequestSchema, storefrontOrderTrackingSchema, storef
 // EP-02 OB-5a: payment, notes and the timeline.
 export const { buildOrderTimeline, canMarkCollected, cardPaymentPending, paidCardOrder, orderNoteRequestSchema, orderPaymentRequestSchema, paymentRefusal } = contracts;
 
+// Sprint 4 EP-07: seller alerts and the email switches.
+export const { notificationPrefsUpdateSchema, readNotificationPrefs, SELLER_ALERT_PAGE_DEFAULT, SELLER_ALERT_PAGE_MAX } = contracts;
+
 // EP-02 OB-5b: print data.
 export const { labelCodAmount, ORDER_PRINT_MAX_IDS, orderPrintResponseSchema } = contracts;
+
+// Sprint 4 EP-08: seller account and auth.
+export const {
+  ACCOUNT_CODES,
+  FORGOT_PASSWORD_MESSAGE,
+  forgotPasswordRequestSchema,
+  resetPasswordRequestSchema,
+  verifyEmailRequestSchema,
+  accountProfileUpdateSchema,
+  passwordChangeRequestSchema,
+  emailChangeRequestSchema,
+  sellerAccountStatusRequestSchema,
+  internalAccountStatusRequestSchema,
+} = contracts;
+
+// Sprint 4 EP-04: store settings, delivery, payments, payout, readiness and go-live.
+export const {
+  storeSettingsUpdateSchema,
+  storeSettingsSchema,
+  maskAccountNumber,
+  matchPakistanCity,
+  cityKey,
+  quoteDelivery,
+  deliveryRateFor,
+  STORE_READINESS_ITEMS,
+  CARD_CHECKOUT_UNSUPPORTED_BY_THEME,
+  CARD_CHECKOUT_UNSUPPORTED_MESSAGE,
+  CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
+} = contracts;
+
+// Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
+export const {
+  EARNINGS_PAGE_DEFAULT_LIMIT,
+  PAYOUT_CODES,
+  commissionReportQuerySchema,
+  createPayoutRequestSchema,
+  earningsQuerySchema,
+  finishPayoutRequestSchema,
+  karachiDayLabel,
+  payoutBalanceListQuerySchema,
+  payoutDetailsRequestSchema,
+  payoutListQuerySchema,
+  resolvePeriod,
+  voidPayoutRequestSchema,
+} = contracts;
+
+// Sprint 4 EP-07.US04 (D-092): customers and email broadcasts.
+export const {
+  BROADCAST_CODES,
+  BROADCAST_RECIPIENT_CAP,
+  broadcastListQuerySchema,
+  broadcastPreviewRequestSchema,
+  createBroadcastRequestSchema,
+  customerListQuerySchema,
+  unsubscribeRequestSchema,
+} = contracts;

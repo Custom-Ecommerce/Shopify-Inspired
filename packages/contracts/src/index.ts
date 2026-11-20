@@ -50,3 +50,13 @@ export * from './admin-overview';
 export * from './checkout';
 // Track B: the public storefront API wire contract.
 export * from './storefront';
+// Sprint 4 EP-07: seller alerts and the email switches.
+export * from './notifications';
+// Sprint 4 EP-08: seller account and auth.
+export * from './account';
+// Sprint 4 EP-04: store settings, delivery, payments, payout, readiness and go-live.
+export * from './store-settings';
+// Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
+export * from './payouts';
+// Sprint 4 EP-07.US04: customers and email broadcasts.
+export * from './broadcast';

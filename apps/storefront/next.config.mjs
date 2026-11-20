@@ -4,6 +4,7 @@ const nextConfig = {
   // The shared workspace package ships TypeScript source (see its package.json `exports`).
   transpilePackages: [
     "@markaz/contracts",
+    "@markaz/notifications",
     "@markaz/platform-kit",
     "@markaz/storefront-data",
     "@markaz/storefront-theme-kit",

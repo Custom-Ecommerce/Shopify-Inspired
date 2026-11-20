@@ -5,6 +5,7 @@ transpilePackages: [
 '@markaz/auth',
 '@markaz/contracts',
 '@markaz/db-schemas',
+'@markaz/notifications',
 '@markaz/platform-kit',
 '@markaz/sync-core',
 ],

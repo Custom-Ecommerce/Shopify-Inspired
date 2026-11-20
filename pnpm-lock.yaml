@@ -23,9 +23,15 @@ importers:
       '@markaz/billing':
         specifier: workspace:*
         version: link:../../../packages/billing
+      '@markaz/contracts':
+        specifier: workspace:*
+        version: link:../../../packages/contracts
       '@markaz/db-schemas':
         specifier: workspace:*
         version: link:../../../packages/db-schemas
+      '@markaz/notifications':
+        specifier: workspace:*
+        version: link:../../../packages/notifications
       '@markaz/platform-kit':
         specifier: workspace:*
         version: link:../../../packages/platform-kit
@@ -66,6 +72,9 @@ importers:
       '@markaz/contracts':
         specifier: workspace:*
         version: link:../../../packages/contracts
+      '@markaz/platform-kit':
+        specifier: workspace:*
+        version: link:../../../packages/platform-kit
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
@@ -139,6 +148,9 @@ importers:
       '@markaz/db-schemas':
         specifier: workspace:*
         version: link:../../../packages/db-schemas
+      '@markaz/notifications':
+        specifier: workspace:*
+        version: link:../../../packages/notifications
       '@markaz/platform-kit':
         specifier: workspace:*
         version: link:../../../packages/platform-kit
@@ -215,6 +227,12 @@ importers:
       '@markaz/core':
         specifier: workspace:*
         version: link:../../../packages/core
+      '@markaz/notifications':
+        specifier: workspace:*
+        version: link:../../../packages/notifications
+      '@markaz/platform-kit':
+        specifier: workspace:*
+        version: link:../../../packages/platform-kit
       '@tailwindcss/postcss':
         specifier: ^4.0.0
         version: 4.3.3
@@ -291,9 +309,15 @@ importers:
       postcss:
         specifier: ^8.4.40
         version: 8.5.26
+      server-only:
+        specifier: 0.0.1
+        version: 0.0.1
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
+      tsx:
+        specifier: ^4.19.1
+        version: 4.23.12
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
@@ -309,6 +333,9 @@ importers:
       '@markaz/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@markaz/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@markaz/platform-kit':
         specifier: workspace:*
         version: link:../../packages/platform-kit
@@ -513,6 +540,28 @@ importers:
     devDependencies:
       typescript:
         specifier: ^5.5.4
+        version: 5.9.3
+
+  packages/notifications:
+    dependencies:
+      '@markaz/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      nodemailer:
+        specifier: ^6.9.16
+        version: 6.10.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      '@types/nodemailer':
+        specifier: ^6.4.17
+        version: 6.4.24
+      tsx:
+        specifier: ^4.19.1
+        version: 4.23.12
+      typescript:
+        specifier: ^5.6.3
         version: 5.9.3
 
   packages/platform-kit:
@@ -2429,6 +2478,9 @@ packages:
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
+  '@types/nodemailer@6.4.24':
+    resolution: {integrity: sha512-Ww4u0rT9wQNXh4JiQaIwx3QWdcOFXzOjQA2zc+jtFYNmQiT4mIUqcDin51bDFdkzKubFnQCZNK7FIHlPKQ/q9w==}
+
   '@types/papaparse@5.5.2':
     resolution: {integrity: sha512-gFnFp/JMzLHCwRf7tQHrNnfhN4eYBVYYI897CGX4MY1tzY9l2aLkVyx2IlKZ/SAqDbB3I1AOZW5gTMGGsqWliA==}
 
@@ -4270,6 +4322,10 @@ packages:
     resolution: {integrity: sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ==}
     engines: {node: '>=18'}
 
+  nodemailer@6.10.1:
+    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
+    engines: {node: '>=6.0.0'}
+
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
     engines: {node: '>=0.10.0'}
@@ -4723,6 +4779,9 @@ packages:
   serve-static@2.2.1:
     resolution: {integrity: sha512-xRXBn0pPqQTVQiC8wyQrKs2MOlX24zQ0POGaj0kultvoOCstBQM5yvOhAVSUwOMjQtTvsPWoNCHfPGwaaQJhTw==}
     engines: {node: '>= 18'}
+
+  server-only@0.0.1:
+    resolution: {integrity: sha512-qepMx2JxAa5jjfzxG79yPPq+8BuFToHd1hm7kI+Z4zAq1ftQiP7HcxMhDDItrbtwVeLg/cY2JnKnrcFkmiswNA==}
 
   set-function-length@1.2.2:
     resolution: {integrity: sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg==}
@@ -6899,6 +6958,10 @@ snapshots:
   '@types/node@22.20.1':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/nodemailer@6.4.24':
+    dependencies:
+      '@types/node': 22.20.1
 
   '@types/papaparse@5.5.2':
     dependencies:
@@ -9193,6 +9256,8 @@ snapshots:
 
   node-releases@2.0.53: {}
 
+  nodemailer@6.10.1: {}
+
   normalize-path@3.0.0:
     optional: true
 
@@ -9742,6 +9807,8 @@ snapshots:
       send: 1.2.1
     transitivePeerDependencies:
       - supports-color
+
+  server-only@0.0.1: {}
 
   set-function-length@1.2.2:
     dependencies:

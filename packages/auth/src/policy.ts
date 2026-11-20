@@ -25,7 +25,8 @@ readonly delete: PolicyRule;
 }
 
 // Blueprint v3 section 1.2, store.operations: what a seller may write.
-export const SELLER_STORE_WRITABLE_FIELDS = ['name', 'storefront', 'paymentSettings', 'courierSettings'] as const;
+// Sprint 4 EP-04.US03 (D-088): payoutDetails too. It is not in SELLER_STORE_READABLE_FIELDS: a seller reads it masked only.
+export const SELLER_STORE_WRITABLE_FIELDS = ['name', 'storefront', 'paymentSettings', 'courierSettings', 'payoutDetails'] as const;
 
 // Payload STORE_STAFF_WRITABLE_FIELDS (apps/admin/src/collections/Stores.ts).
 export const ADMIN_STORE_WRITABLE_FIELDS = [
@@ -59,7 +60,7 @@ export const ADMIN_LEDGER_READABLE_FIELDS = [
 
 // Payload PlatformSettings: settingsRevision has update access false, so it is excluded.
 export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
-'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote',
+'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired',
 ] as const;
 
 // What a seller may set on a category of their store. store and isDemo are never client-writable.
@@ -374,7 +375,8 @@ Object.assign(POLICY_MATRIX, {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
     create: { actors: ['system', 'seller'], fields: { system: '*', seller: ['alt'] } },
     update: { actors: ['system'], fields: { system: '*' } },
-    delete: { actors: ['admin', 'system'], fields: '*' },
+    // Sprint 4 CO-09: a seller deletes their own store's media (DELETE /api/media/:id, 409 while in use).
+    delete: { actors: ['admin', 'system', 'seller'], fields: '*' },
   },
 });
 
@@ -399,3 +401,96 @@ Object.assign(POLICY_MATRIX, {
     if (!(name in POLICY_MATRIX)) Object.assign(POLICY_MATRIX, { [name]: rule });
   }
 }
+
+// Sprint 4 EP-07.US03: the seller's in-app alerts and their email switches. Only the store owner reads and marks alerts
+// (an admin has no row, as for orders, D-067); alerts are written by the system only. The email switches live on the
+// seller's own user record and are the only part of it this row opens.
+export const SELLER_NOTIFICATION_PREF_FIELDS = ['emailNewOrder', 'emailLowStock'] as const;
+Object.assign(POLICY_MATRIX, {
+  sellerAlerts: {
+    read: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['seller', 'system'], fields: { seller: ['readAt'], system: '*' } },
+    delete: { actors: [], fields: {} },
+  },
+  notificationPrefs: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: ['seller'], fields: { seller: SELLER_NOTIFICATION_PREF_FIELDS } },
+    delete: { actors: [], fields: {} },
+  },
+});
+
+// Sprint 4 EP-08: the seller's own account (profile, password, email, sessions) and the single-use account tokens.
+// A seller changes only their own record, and only these fields. Tokens are written and read by the system only.
+// Suspending a seller is the existing sellers row (admin, accountStatus).
+export const SELLER_ACCOUNT_WRITABLE_FIELDS = ['name', 'phone', 'password', 'email', 'sessions'] as const;
+Object.assign(POLICY_MATRIX, {
+  sellerAccount: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: ['seller'], fields: { seller: SELLER_ACCOUNT_WRITABLE_FIELDS } },
+    delete: { actors: [], fields: {} },
+  },
+  authTokens: {
+    read: { actors: ['system'], fields: { system: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['system'], fields: { system: '*' } },
+    delete: { actors: ['system'], fields: { system: '*' } },
+  },
+});
+
+// Sprint 4 EP-05.US03, US04, US06 (D-088, D-090, D-100): payouts, the full payout account, earnings and the commission report.
+//   payouts          read: the admin's balances and history, and the seller's own payout list (only these fields; which store,
+//                    the route decides). create is making a payout and update is voiding or finishing one: admin only.
+//                    Nobody deletes a payout.
+//   payoutDetails    read: the FULL payout account of a store. Admin only, and every read is audited by the route.
+//   earnings         read: a seller's own earnings summary and entry list. An admin has no row (the admin console reads the
+//                    commission report instead), as for orders (D-067).
+//   commissionReport read: the per-store commission report and its CSV. Admin only.
+export const SELLER_PAYOUT_READABLE_FIELDS = ['amount', 'method', 'reference', 'status', 'createdAt'] as const;
+Object.assign(POLICY_MATRIX, {
+  payouts: {
+    read: { actors: ['admin', 'seller'], fields: { admin: '*', seller: SELLER_PAYOUT_READABLE_FIELDS } },
+    create: { actors: ['admin'], fields: { admin: '*' } },
+    update: { actors: ['admin'], fields: { admin: '*' } },
+    delete: { actors: [], fields: {} },
+  },
+  payoutDetails: {
+    read: { actors: ['admin'], fields: { admin: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+  earnings: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+  commissionReport: {
+    read: { actors: ['admin'], fields: { admin: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+});
+
+// Sprint 4 EP-07.US04 (D-092): a seller's customers and email broadcasts. Seller only, and only of their own store (the route
+// checks the store). An admin has no row: the admin console never reads a store's customers or sends in a store's name.
+//   customers   read: the store's customers derived from its orders.
+//   broadcasts  read: the history and the preview; create: a new broadcast. Nobody updates or deletes one.
+Object.assign(POLICY_MATRIX, {
+  customers: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+  broadcasts: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: ['seller'], fields: { seller: '*' } },
+    update: { actors: [], fields: {} },
+    delete: { actors: [], fields: {} },
+  },
+});

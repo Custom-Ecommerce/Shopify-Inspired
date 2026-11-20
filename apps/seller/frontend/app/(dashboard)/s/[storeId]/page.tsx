@@ -2,7 +2,6 @@ import type { Order as PayloadOrderDoc } from "@markaz/contracts";
 import type { ListEnvelope as PayloadFindResponse } from "@markaz/api-compat";
 import Link from "next/link";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
-import { getStoreFull } from "@/lib/dashboard-auth";
 import { resolveStorePage } from "@/lib/resolve-store-page";
 import { storeHref } from "@/lib/store-routes";
 
@@ -51,8 +50,6 @@ async function countProducts(token: string, storeId: string, query: string): Pro
   const data = await res.json();
   return data.totalDocs ?? 0;
 }
-
-const countTotalProducts = (token: string, storeId: string): Promise<number> => countProducts(token, storeId, "");
 
 const countLowStockProducts = (token: string, storeId: string): Promise<number> =>
   countProducts(token, storeId, "&stock=low");
@@ -150,23 +147,19 @@ export default async function DashboardOverviewPage({
   if (!resolved.ok) return resolved.view;
   const { token, user, store } = resolved.ctx;
 
-  // Owner-only fields (logo, WhatsApp number) for the onboarding checklist.
-  const fullStore = await getStoreFull(token, storeId).catch(() => null);
-
   // ── Date ranges (unchanged) ───────────────────────────────────────────────
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   // ── Data fetches (unchanged) ──────────────────────────────────────────────
-  const [ordersToday, pendingOrders, lowStockCount, revenue, recent, totalProducts] =
+  const [ordersToday, pendingOrders, lowStockCount, revenue, recent] =
     await Promise.all([
       countOrders(token, storeId, { createdAt: { greater_than_equal: startOfToday } }),
       countOrders(token, storeId, { status: { equals: "pending" } }),
       countLowStockProducts(token, storeId),
       revenueThisMonth(token, storeId, startOfMonth),
       recentOrders(token, storeId),
-      countTotalProducts(token, storeId),
     ]);
 
   const monthName = now.toLocaleString("default", { month: "long" });
@@ -183,12 +176,7 @@ export default async function DashboardOverviewPage({
       </div>
 
       {/* ── Onboarding checklist (only shows until dismissed or complete) */}
-      <OnboardingChecklist
-        hasProducts={totalProducts > 0}
-        hasDomain={!!store.domain}
-        hasLogo={!!fullStore?.storefront?.logo}
-        hasWhatsApp={!!fullStore?.storefront?.whatsappNumber}
-      />
+      <OnboardingChecklist />
 
       {/* ── Metric tiles ──────────────────────────────────────────────── */}
       {/*

@@ -17,15 +17,16 @@
   --card-foreground: oklch(0.3211 0 0);
   --popover: oklch(1.0000 0 0);
   --popover-foreground: oklch(0.3211 0 0);
-  --primary: oklch(0.8677 0.0735 7.0855);
-  --primary-foreground: oklch(0 0 0);
+  /* Contrast fix (SB-9): was oklch(0.8677 0.0735 7.0855) with black text, 1.4:1 as text on --background. Same hue, darker, white text. */
+  --primary: oklch(0.55 0.16 7.0855);
+  --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.8148 0.0819 225.7537);
   --secondary-foreground: oklch(0 0 0);
   --muted: oklch(0.8828 0.0285 98.1033);
-  --muted-foreground: oklch(0.5382 0 0);
+  --muted-foreground: oklch(0.47 0 0);
   --accent: oklch(0.9680 0.2110 109.7692);
   --accent-foreground: oklch(0 0 0);
-  --destructive: oklch(0.6368 0.2078 25.3313);
+  --destructive: oklch(0.56 0.19 25.3313);
   --destructive-foreground: oklch(1.0000 0 0);
   /* --success and --warning feed --color-success / --color-warning below. They were missing, so every success and warning pill (Live, Active, Pending) had no background or dot colour (GAP 13). */
   --success: oklch(0.5960 0.1270 163.2250);
@@ -33,8 +34,22 @@
   --warning: oklch(0.6660 0.1790 58.3180);
   --warning-foreground: oklch(0 0 0);
   --border: oklch(0.8699 0 0);
-  --input: oklch(0.8699 0 0);
+  --input: oklch(0.64 0 0);
   --ring: oklch(0.8677 0.0735 7.0855);
+
+  /* Status tones: text on a soft tint, both 4.5:1 or better. Used as bg-status-*, text-status-*. */
+  --status-success: oklch(0.42 0.10 163);
+  --status-success-soft: oklch(0.95 0.04 163);
+  --status-warning: oklch(0.44 0.10 70);
+  --status-warning-soft: oklch(0.96 0.05 85);
+  --status-danger: oklch(0.45 0.16 25);
+  --status-danger-soft: oklch(0.95 0.03 25);
+  --status-neutral: oklch(0.40 0 0);
+  --status-neutral-soft: oklch(0.95 0 0);
+
+  /* Brand accent: the one place to re-brand. A light and a dark value. */
+  --brand-accent: var(--primary);
+  --brand-accent-foreground: var(--primary-foreground);
 
   --chart-1: oklch(0.8677 0.0735 7.0855);
   --chart-2: oklch(0.8148 0.0819 225.7537);
@@ -91,18 +106,30 @@
   --secondary: oklch(0.7395 0.2268 142.8504);
   --secondary-foreground: oklch(0 0 0);
   --muted: oklch(0.3867 0 0);
-  --muted-foreground: oklch(0.7155 0 0);
+  --muted-foreground: oklch(0.77 0 0);
   --accent: oklch(0.8148 0.0819 225.7537);
   --accent-foreground: oklch(0 0 0);
-  --destructive: oklch(0.6368 0.2078 25.3313);
-  --destructive-foreground: oklch(1.0000 0 0);
+  --destructive: oklch(0.72 0.17 25.3313);
+  --destructive-foreground: oklch(0 0 0);
   --success: oklch(0.7650 0.1770 163.2230);
   --success-foreground: oklch(0 0 0);
   --warning: oklch(0.8280 0.1890 84.4290);
   --warning-foreground: oklch(0 0 0);
   --border: oklch(0.3867 0 0);
-  --input: oklch(0.3867 0 0);
+  --input: oklch(0.62 0 0);
   --ring: oklch(0.8027 0.1355 349.2347);
+
+  --status-success: oklch(0.85 0.10 163);
+  --status-success-soft: oklch(0.30 0.05 163);
+  --status-warning: oklch(0.87 0.10 85);
+  --status-warning-soft: oklch(0.30 0.05 85);
+  --status-danger: oklch(0.85 0.09 25);
+  --status-danger-soft: oklch(0.30 0.06 25);
+  --status-neutral: oklch(0.85 0 0);
+  --status-neutral-soft: oklch(0.30 0 0);
+
+  --brand-accent: var(--primary);
+  --brand-accent-foreground: var(--primary-foreground);
 
   --chart-1: oklch(0.8027 0.1355 349.2347);
   --chart-2: oklch(0.7395 0.2268 142.8504);
@@ -185,6 +212,17 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+
+  --color-status-success: var(--status-success);
+  --color-status-success-soft: var(--status-success-soft);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-soft: var(--status-warning-soft);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-soft: var(--status-danger-soft);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-soft: var(--status-neutral-soft);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-accent-foreground: var(--brand-accent-foreground);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

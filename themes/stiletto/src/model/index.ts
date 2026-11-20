@@ -91,4 +91,10 @@ export interface StoreData {
   currency: string;
   locale: string;
   mode: "demo" | "live";
+  /** Sprint 4 SB-5: what the seller saved in settings. */
+  description?: string | null;
+  bannerUrl?: string | null;
+  contact?: { phone: string | null; whatsapp: string | null; email: string | null; address: string | null; city: string | null };
+  social?: { facebook: string | null; instagram: string | null; tiktok: string | null; whatsapp: string | null } | null;
+  deliveryEstimate?: string | null;
 }

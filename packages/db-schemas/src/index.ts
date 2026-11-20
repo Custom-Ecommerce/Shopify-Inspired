@@ -31,3 +31,19 @@ export * from './models/archived-review';
 
 // CB-2: the shared rate-limit counters.
 export * from './models/rate-limit-counter';
+
+// Sprint 4 EP-07: the notification outbox and the seller's in-app alerts.
+export * from './models/notification-outbox';
+export * from './models/seller-alert';
+
+// Sprint 4 EP-08: single-use account links (password reset, email verification, email change).
+export * from './models/auth-token';
+
+// Sprint 4 EP-05: the seller-side commission ledger (whole rupees) and the admin's rate change history.
+export * from './models/commission-entry';
+export * from './models/commission-rate-history';
+// Sprint 4 EP-05.US03: payouts to stores, settled against the commission ledger.
+export * from './models/payout';
+// Sprint 4 EP-07.US04: email broadcasts and the customers who unsubscribed from them.
+export * from './models/broadcast';
+export * from './models/email-unsubscribe';

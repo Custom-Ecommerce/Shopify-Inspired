@@ -16,7 +16,7 @@ export const ADMIN_SETTINGS_NOTE_MAX = 500;
 export const ADMIN_SETTINGS_REASON_MAX = 500;
 
 /** The fields an operator may change, in the order the console lists them. */
-export const ADMIN_SETTINGS_FIELDS = ['defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote'] as const;
+export const ADMIN_SETTINGS_FIELDS = ['defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired'] as const;
 export type AdminSettingsField = (typeof ADMIN_SETTINGS_FIELDS)[number];
 
 const isoDate = z.string().datetime({ offset: true });
@@ -49,6 +49,8 @@ export const adminPlatformSettingsSchema = z.object({
   defaultCommissionRate: z.number().min(ADMIN_SETTINGS_RATE_MIN).max(ADMIN_SETTINGS_RATE_MAX),
   maxStoresPerSeller: z.number().int().min(ADMIN_SETTINGS_MAX_STORES_MIN),
   stripeCommissionNote: z.string().nullable(),
+  /** Sprint 4 D-094/D-095: go-live waits for an admin when true. An older backend sends none: false. */
+  storeApprovalRequired: z.boolean().default(false),
   /** Advanced by the server on every change; never writable. */
   settingsRevision: z.number().int().min(0),
   updatedAt: isoDate.nullable(),
@@ -65,6 +67,7 @@ export const adminSettingsUpdateRequestSchema = z
     defaultCommissionRate: rateSchema.optional(),
     maxStoresPerSeller: maxStoresSchema.optional(),
     stripeCommissionNote: noteSchema.optional(),
+    storeApprovalRequired: z.boolean({ error: 'Choose yes or no.' }).optional(),
     reason: reasonSchema.optional(),
   })
   .strict()

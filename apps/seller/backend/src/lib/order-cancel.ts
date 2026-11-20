@@ -1,5 +1,7 @@
 import type { OrderStockRestore } from '@markaz/contracts';
 import { cancelRefusal, paidCardOrder } from '@/lib/contracts';
+import { reverseLedgerForOrder } from '@/lib/commission';
+import { notifyOrderStatus } from '@/lib/notifications';
 import { restoreOrderStock, stockRestoreSummary, type RestoreLine } from '@/lib/order-stock';
 import { Order, writeAuditLog } from '@/lib/services';
 import { returnDiscountUse } from '@/lib/storefront/discount-service';
@@ -153,5 +155,10 @@ export async function cancelOrder(input: CancelOrderInput): Promise<CancelOrderR
   const finalRow = summary ? ((await noteStockSummary(orderId, storeId, actor, summary)) ?? cancelled) : cancelled;
 
   await audit(input, current, from, stockRestore, summary, discountUse);
+  // EP-05 (D-090): an order that had ledger entries gets one mirror entry for each. A no-op for an order with none.
+  await reverseLedgerForOrder(orderId, input.reason);
+  // EP-07.US01.T04: the winner only. An unpaid card order was never announced (see the storefront order route), so its
+  // cancel (an expired or failed Stripe session) sends nothing either.
+  if (!(row.paymentMethod === 'card' && row.paymentStatus !== 'paid')) notifyOrderStatus(storeId, finalRow, 'cancelled');
   return { outcome: 'cancelled', order: finalRow, stockRestore };
 }

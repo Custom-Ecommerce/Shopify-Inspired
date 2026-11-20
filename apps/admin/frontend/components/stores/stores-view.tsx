@@ -31,7 +31,7 @@ const COLUMNS: Array<Column<AdminStoreListItem>> = [
       </div>
     ),
   },
-  { key: "status", header: "Status", cell: (store) => <StatusBadge status={store.status} /> },
+  { key: "status", header: "Status", cell: (store) => <StatusBadge status={store.status} label={store.status === "pending" && store.goLiveRequestedAt ? "Waiting for approval" : undefined} /> },
   {
     key: "owner",
     header: "Owner",

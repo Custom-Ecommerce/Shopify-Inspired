@@ -25,6 +25,7 @@ import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { Button } from "../../shared/components/primitives/button";
 import { parseNumericPrice, useCartContext } from "../../shared/context/CartContext";
+import { useStoreData } from "../../shared/context/StoreDataContext";
 
 export interface CheckoutSectionProps {
   deliveryCharges?: number;
@@ -321,11 +322,17 @@ export function CheckoutSection({
   logoSrc = "/theme-assets/stiletto/logo/logo.png",
 }: CheckoutSectionProps) {
   const { cartItems } = useCartContext();
+  const { store: storeData } = useStoreData();
+  const [shippingAddress, setShippingAddress] = useState<AddressDetails>(
+    createEmptyAddress()
+  );
   const {
     blockReason,
     cardAvailable,
+    codAvailable,
     subtotal,
     deliveryCharges,
+    deliveryCityKnown,
     discount,
     storedCode,
     appliedCode,
@@ -343,7 +350,7 @@ export function CheckoutSection({
     focusTick,
     clearFieldError,
     submit,
-  } = useStilettoCheckout();
+  } = useStilettoCheckout(shippingAddress.city);
 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -351,12 +358,10 @@ export function CheckoutSection({
   const [whatsapp, setWhatsapp] = useState("");
   const [notes, setNotes] = useState("");
   const [chosenPayment, setChosenPayment] = useState<"cod" | "card">("cod");
-  // Card is hidden when the store cannot take it, so a choice made earlier cannot outlive the option.
-  const paymentMethod = cardAvailable ? chosenPayment : "cod";
+  // A method is hidden when the store does not offer it, so a choice made earlier cannot outlive the option. A store with
+  // cash on delivery switched off (Sprint 4) is card only: the card option is the one and only choice.
+  const paymentMethod: "cod" | "card" = !codAvailable && cardAvailable ? "card" : cardAvailable ? chosenPayment : "cod";
 
-  const [shippingAddress, setShippingAddress] = useState<AddressDetails>(
-    createEmptyAddress()
-  );
 
 
   // Moves to the first box with a message, which on a phone can be a long way above the button.
@@ -587,12 +592,14 @@ export function CheckoutSection({
               </div>
 
               <div className="space-y-3">
-                <PaymentOption
-                  selected={paymentMethod === "cod"}
-                  title="Cash on Delivery (COD)"
-                  description="Pay in cash when your parcel is delivered to your doorstep. No advance payment required."
-                  onSelect={() => setChosenPayment("cod")}
-                />
+                {codAvailable && (
+                  <PaymentOption
+                    selected={paymentMethod === "cod"}
+                    title="Cash on Delivery (COD)"
+                    description="Pay in cash when your parcel is delivered to your doorstep. No advance payment required."
+                    onSelect={() => setChosenPayment("cod")}
+                  />
+                )}
                 {cardAvailable && (
                   <PaymentOption
                     selected={paymentMethod === "card"}
@@ -710,9 +717,15 @@ export function CheckoutSection({
                       Delivery Charges
                     </span>
                     <span className="text-[var(--text-inverse)] font-medium">
-                      {cartItems.length > 0 ? formatCurrency(deliveryCharges) : "Rs. 0"}
+                      {cartItems.length === 0 ? "Rs. 0" : deliveryCharges === 0 ? "Free" : formatCurrency(deliveryCharges)}
                     </span>
                   </div>
+                  {cartItems.length > 0 ? (
+                    <p className="text-[11px] text-(--text-inverse)/50" data-section="delivery-note">
+                      {deliveryCityKnown ? "Delivery rate for your city." : "Enter your city to see the exact delivery rate."}
+                      {storeData?.deliveryEstimate ? " Estimated delivery: " + storeData.deliveryEstimate + "." : ""}
+                    </p>
+                  ) : null}
 
                   {discount > 0 && (
                     <div className="flex justify-between items-center">

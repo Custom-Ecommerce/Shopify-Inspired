@@ -66,3 +66,43 @@ export const Product = db.Product;
 export const productSkus = db.productSkus;
 export const StockMovement = db.StockMovement;
 export const ArchivedReview = db.ArchivedReview;
+// Sprint 4 EP-07: the notification outbox and the seller's in-app alerts.
+export const NotificationOutbox = db.NotificationOutbox;
+export const SellerAlert = db.SellerAlert;
+// Sprint 4 EP-05 (D-088): the new commission ledger. The old commissionLedger is never used from the seller backend.
+export const CommissionEntry = db.CommissionEntry;
+// Sprint 4 EP-05.US03 (D-090): payouts to stores, settled against the ledger above.
+export const Payout = db.Payout;
+
+// Sprint 4 EP-08: account links, the per-request session guard, the account-route limits and the account flows.
+export const AuthToken = db.AuthToken;
+// Sprint 4 EP-04.US06 (D-095): go-live reads storeApprovalRequired from the platform settings.
+export const PlatformSettingsModel = db.PlatformSettingsModel;
+export const PLATFORM_SETTINGS_GLOBAL_TYPE = db.PLATFORM_SETTINGS_GLOBAL_TYPE;
+export const {
+  createSessionGuard,
+  toSessionUserRecord,
+  sessionTokenVersion,
+  SESSION_USER_FIELDS,
+  SessionRejectedError,
+  RateLimitedError,
+  createAuthRateLimiter,
+  mongoRateCounterStore,
+  memoryRateCounterStore,
+  LOGIN_ACCOUNT_RULE,
+  LOGIN_IP_RULE,
+  FORGOT_IP_RULE,
+  FORGOT_EMAIL_RULE,
+  RESET_IP_RULE,
+  RESEND_VERIFY_RULE,
+  requestPasswordReset,
+  resetPassword,
+  sendPasswordChanged,
+  sendEmailVerification,
+  requestEmailChange,
+  confirmEmailToken,
+} = auth;
+
+// Sprint 4 EP-07.US04 (D-092): broadcasts and unsubscribes (seller database).
+export const Broadcast = db.Broadcast;
+export const EmailUnsubscribe = db.EmailUnsubscribe;

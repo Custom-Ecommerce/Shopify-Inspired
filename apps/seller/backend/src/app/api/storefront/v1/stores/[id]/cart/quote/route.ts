@@ -35,7 +35,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     const parsed = parseCartQuoteRequest(await readJsonBody(request));
     if (parsed.discountCode !== null) await enforceRateLimit(DISCOUNT_CHECK_LIMIT, id, request.headers);
-    const quote = await loadCartQuote(id, store, parsed.lines, parsed.discountCode);
+    // Sprint 4 EP-04.US02: the shipping city picks the store's rate for it.
+    const quote = await loadCartQuote(id, { ...store, city: parsed.city }, parsed.lines, parsed.discountCode);
 
     const body = storefrontCartQuoteResponseSchema.parse({ data: quote });
     return NextResponse.json(body, { headers: preview ? PREVIEW_RESPONSE_HEADERS : PRIVATE_NO_STORE_HEADERS });

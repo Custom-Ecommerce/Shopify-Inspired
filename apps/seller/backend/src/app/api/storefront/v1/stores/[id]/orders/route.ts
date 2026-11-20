@@ -10,6 +10,7 @@ import { placeOrder } from '@/lib/storefront/order-service';
 import { carriesPreviewCredential, storefrontFailure } from '@/lib/storefront/preview-request';
 import { ORDER_CREATE_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
+import { notifyOrderPlaced } from '@/lib/notifications';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,8 @@ export const dynamic = 'force-dynamic';
  *   201 { data }   order created
  *   200 { data }   the same Idempotency-Key was already used for this order: the first order is returned
  *                  (header Idempotent-Replayed: true), nothing new is saved and no stock moves
- *   400 INVALID_REQUEST | EMPTY_ORDER | INVALID_QUANTITY | PAYMENT_METHOD_UNAVAILABLE. A bad input also names its `field`, e.g. customer.phone
+ *   400 INVALID_REQUEST | EMPTY_ORDER | INVALID_QUANTITY. A bad input also names its `field`, e.g. customer.phone
+ *   422 PAYMENT_METHOD_UNAVAILABLE   the store does not offer this method (Sprint 4: 422, it was 400)
  *   404 STORE_NOT_FOUND    403 STORE_NOT_ACTIVE
  *   409 OUT_OF_STOCK (productId)   409 IDEMPOTENCY_CONFLICT (the key was used for a different order)
  *   422 VARIANT_REQUIRED (productId)  a product with several variants and no variantId
@@ -51,14 +53,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     const parsed = parseCreateOrderRequest(await readJsonBody(request), request.headers.get('idempotency-key'));
 
+    // Sprint 4 EP-04.US03 (SM-11): a method the store does not offer is refused with 422, even when the browser sends it.
     if (parsed.paymentMethod === 'cod' && !store.codEnabled) {
-      throw new StorefrontHttpError(400, 'PAYMENT_METHOD_UNAVAILABLE', 'Cash on delivery is not available for this store.');
+      throw new StorefrontHttpError(422, 'PAYMENT_METHOD_UNAVAILABLE', 'Cash on delivery is not available for this store.');
     }
     if (parsed.paymentMethod === 'card' && !store.cardEnabled) {
-      throw new StorefrontHttpError(400, 'PAYMENT_METHOD_UNAVAILABLE', 'Card payments are not available for this store.');
+      throw new StorefrontHttpError(422, 'PAYMENT_METHOD_UNAVAILABLE', 'Card payments are not available for this store.');
     }
 
     const { order, replayed } = await placeOrder(id, store, parsed);
+    // EP-07.US01.T03: after the response, never part of the result. A card order is announced when it is paid (card-webhook.ts),
+    // so a shopper who leaves the Stripe page gets no confirmation for an order that is then cancelled.
+    if (!replayed && order.paymentMethod !== 'card') notifyOrderPlaced(id, order);
 
     const checkoutUrl = order.paymentMethod === 'card' ? await cardCheckoutUrl(id, order, replayed) : null;
 

@@ -88,6 +88,8 @@ export const storefrontStoreSchema = z.object({
   isThemeDemo: z.boolean(),
   branding: z.object({
     logoUrl: z.string().nullable(),
+    /** Sprint 4 SB-5: the store banner (settings > branding). Optional so an older backend still parses. */
+    bannerUrl: z.string().nullable().optional(),
     announcementText: nullableText,
     heroBanners: z.array(
       z.object({
@@ -110,7 +112,20 @@ export const storefrontStoreSchema = z.object({
     deliveryRate: price,
     freeDeliveryThreshold: price.nullable(),
     whatsappNumber: nullableText,
+    /** Sprint 4 SB-5: the seller's delivery time text, for example "2 to 4 days". */
+    deliveryEstimate: nullableText.optional(),
   }),
+  /** Sprint 4 SB-5: the store's public profile (settings > profile and social). */
+  profile: z
+    .object({
+      description: nullableText,
+      contactPhone: nullableText,
+      contactEmail: nullableText,
+      address: nullableText,
+      city: nullableText,
+    })
+    .optional(),
+  social: z.object({ facebook: nullableText, instagram: nullableText, tiktok: nullableText, whatsapp: nullableText }).optional(),
   features: z.object({ socialProofEnabled: z.boolean() }),
   theme: z.object({ activeTheme: nullableText }),
 });

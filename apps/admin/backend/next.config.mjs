@@ -8,7 +8,7 @@ const securityHeaders = [
 
 const nextConfig = {
   poweredByHeader: false,
-  transpilePackages: ['@markaz/auth', '@markaz/billing', '@markaz/db-schemas'],
+  transpilePackages: ['@markaz/auth', '@markaz/billing', '@markaz/db-schemas', '@markaz/contracts', '@markaz/notifications'],
   serverExternalPackages: ['mongoose', 'stripe'],
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];

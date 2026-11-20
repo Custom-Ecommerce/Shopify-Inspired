@@ -11,7 +11,7 @@ import { getOverview } from "@/lib/api/client";
 import type { AdminOverview } from "@/lib/contracts";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
-import { ledgerRows, outboxRows, overviewTiles, storeRows, updatedLabel, type OverviewRow, type OverviewTile } from "@/lib/overview";
+import { outboxRows, overviewTiles, storeRows, updatedLabel, type OverviewRow, type OverviewTile } from "@/lib/overview";
 
 function TileCard({ tile }: { tile: OverviewTile }) {
   return (
@@ -30,8 +30,8 @@ function TileCard({ tile }: { tile: OverviewTile }) {
 
 function TilesSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true" aria-label="Loading overview">
-      {[0, 1, 2, 3].map((index) => (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading overview">
+      {[0, 1, 2].map((index) => (
         <Card key={index} className="flex flex-col gap-3 p-5">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-8 w-32" />
@@ -87,14 +87,13 @@ function Moment({ label, iso }: { label: string; iso: string | null }) {
 function OverviewBody({ overview }: { overview: AdminOverview }) {
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {overviewTiles(overview).map((tile) => (
           <TileCard key={tile.key} tile={tile} />
         ))}
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         <RowsCard title="Stores by status" description="Open the store list on one status." rows={storeRows(overview)} />
-        <RowsCard title="Commission ledger" description="Totals over the whole ledger. Amounts are in rupees." rows={ledgerRows(overview)} />
         <RowsCard
           title="Sync outbox"
           description="Events queued for the seller backend."
@@ -111,7 +110,7 @@ function OverviewBody({ overview }: { overview: AdminOverview }) {
   );
 }
 
-/** The overview at /: four headline tiles and three breakdowns, all from one backend call. Loading, error with retry, refresh. */
+/** The overview at /: three headline tiles and two breakdowns, all from one backend call. Loading, error with retry, refresh. */
 export function OverviewView() {
   const { data, error, loading, refetch } = useAdminFetch((signal) => getOverview(signal), []);
 

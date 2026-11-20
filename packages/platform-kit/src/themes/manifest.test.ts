@@ -9,6 +9,8 @@ import {
   getThemeEntry,
   isThemeSlug,
   listGalleryThemes,
+  listInstalledThemes,
+  themeSupportsCardCheckout,
 } from "./manifest";
 import { checkStoreSlug } from "../reservation";
 
@@ -62,5 +64,18 @@ describe("theme manifest", () => {
   it("rejects non-theme values in the type guard", () => {
     assert.equal(isThemeSlug("bazaar"), false);
     assert.equal(isThemeSlug(42), false);
+  });
+
+  it("flags card checkout support: Stiletto yes, Mustafa no, anything without the flag or unknown no (SB-11)", () => {
+    assert.equal(themeSupportsCardCheckout("stiletto"), true);
+    assert.equal(themeSupportsCardCheckout("mustafa"), false);
+    assert.equal(themeSupportsCardCheckout("mola"), false);
+    assert.equal(themeSupportsCardCheckout("not-a-theme"), false);
+    assert.equal(themeSupportsCardCheckout(undefined), false);
+    for (const entry of THEME_MANIFEST) {
+      if (!listInstalledThemes().some((installed) => installed.slug === entry.slug)) {
+        assert.equal(themeSupportsCardCheckout(entry.slug), false, entry.slug);
+      }
+    }
   });
 });

@@ -1,6 +1,7 @@
 import { storefrontStoreSchema } from '@/lib/contracts';
 import { Media } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
+import { readPayments } from '@/lib/store-settings';
 
 /** A Mongo document as .lean() returns it. Mixed fields stay unknown until read defensively. */
 export interface StoreRow {
@@ -45,7 +46,8 @@ async function mediaUrl(ref: unknown, storeId: unknown): Promise<string | null> 
 export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | 'pending' = 'active') {
   const sf = record(store.storefront);
   const pay = record(store.paymentSettings);
-  const [logoUrl, seoImageUrl] = await Promise.all([mediaUrl(sf.logo, store._id), mediaUrl(sf.seoImage, store._id)]);
+  const [logoUrl, bannerUrl, seoImageUrl] = await Promise.all([mediaUrl(sf.logo, store._id), mediaUrl(sf.banner, store._id), mediaUrl(sf.seoImage, store._id)]);
+  const social = record(sf.social);
 
   return storefrontStoreSchema.parse({
     id: String(store._id),
@@ -56,6 +58,7 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
     isThemeDemo: store.isThemeDemo === true,
     branding: {
       logoUrl,
+      bannerUrl,
       announcementText: text(sf.announcementText),
       // No source for banners yet: the storefront renders none.
       heroBanners: [],
@@ -65,11 +68,21 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
       currency: 'PKR',
       // Cash on delivery is on unless the seller turned it off. Card depends on the platform's Stripe keys (A-015).
       codEnabled: pay.codEnabled !== false,
-      cardEnabled: cardPaymentsAvailable(),
+      // Sprint 4 EP-04.US03: the platform keys AND the store's own switch (missing = on, as before).
+      cardEnabled: cardPaymentsAvailable() && readPayments(store.paymentSettings).cardEnabled,
       deliveryRate: amount(sf.deliveryRate) ?? 0,
       freeDeliveryThreshold: amount(sf.freeDeliveryThreshold),
       whatsappNumber: text(sf.whatsappNumber),
+      deliveryEstimate: text(sf.deliveryEstimate),
     },
+    profile: {
+      description: text(sf.description),
+      contactPhone: text(sf.contactPhone),
+      contactEmail: text(sf.contactEmail),
+      address: text(sf.address),
+      city: text(sf.city),
+    },
+    social: { facebook: text(social.facebook), instagram: text(social.instagram), tiktok: text(social.tiktok), whatsapp: text(social.whatsapp) },
     features: { socialProofEnabled: false },
     theme: { activeTheme: text(sf.activeTheme) },
   });

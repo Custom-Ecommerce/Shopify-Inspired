@@ -26,6 +26,7 @@
     "@base-ui/react": "^1.8.0",
     "@markaz/contracts": "workspace:*",
     "@markaz/core": "workspace:*",
+    "@markaz/notifications": "workspace:*",
     "@markaz/platform-kit": "workspace:*",
     "@markaz/storefront-data": "workspace:*",
     "@markaz/storefront-theme-kit": "workspace:*",

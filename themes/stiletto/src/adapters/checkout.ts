@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { checkoutBlockReason } from "@markaz/storefront-data";
 import type { CheckoutFailure } from "@markaz/storefront-data/client";
-import { checkoutServerFieldError, useCardAvailable, useCart, useCartQuote, useCheckout } from "@markaz/storefront-data/client";
+import { checkoutServerFieldError, useCardAvailable, useCodAvailable, useCart, useCartQuote, useCheckout } from "@markaz/storefront-data/client";
 import { boxForField, firstErrorBox, stilettoFieldErrors, toCheckoutValues } from "./checkout-fields";
 import type { StilettoCheckoutField, StilettoCheckoutInput, StilettoFieldErrors } from "./checkout-fields";
 import { paths } from "./paths";
@@ -49,10 +49,16 @@ function failureMessage(f: CheckoutFailure): string {
  * the fields the store keeps, prices the cart on the server, places the order and moves to the order page. Each message
  * goes on the box it is about. Billing address is shown for design parity and is not sent.
  */
-export function useStilettoCheckout() {
+export function useStilettoCheckout(shippingCity = "") {
   const router = useRouter();
   const { isEmpty, lines, discountCode, setDiscountCode } = useCart();
-  const { quote, status: quoteStatus } = useCartQuote();
+  // The quote follows the shipping city once the shopper has paused typing, so each letter is not a request.
+  const [quotedCity, setQuotedCity] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setQuotedCity(shippingCity.trim().length >= 2 ? shippingCity.trim() : ""), 600);
+    return () => clearTimeout(timer);
+  }, [shippingCity]);
+  const { quote, status: quoteStatus } = useCartQuote({ city: quotedCity });
   const checkout = useCheckout();
   const [fieldErrors, setFieldErrors] = useState<StilettoFieldErrors>({});
   // Goes up whenever messages appear, so the form can move the shopper to the first one.
@@ -60,6 +66,7 @@ export function useStilettoCheckout() {
   // A refused code stops showing as soon as the shopper changes or removes it.
   const [dismissedFailure, setDismissedFailure] = useState<CheckoutFailure | null>(null);
   const cardAvailable = useCardAvailable();
+  const codAvailable = useCodAvailable();
 
   // Only the server's prices are shown once it has answered. The cart's own prices can be older than the catalog.
   const priced = !isEmpty && quote !== null ? quote : null;
@@ -139,8 +146,11 @@ export function useStilettoCheckout() {
     /** Why the order cannot be placed as it stands, for the button. */
     blockReason: priced ? checkoutBlockReason(lines, priced) : null,
     cardAvailable,
+    codAvailable,
     subtotal,
     deliveryCharges,
+    /** True while the delivery charge is for a city the shopper has not given yet (the store's default rate). */
+    deliveryCityKnown: quotedCity !== "",
     discount,
     /** What the shopper entered, accepted or not. */
     storedCode: discountCode,

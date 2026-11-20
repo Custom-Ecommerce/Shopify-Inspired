@@ -3,6 +3,7 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { SyncOutbox } from '@markaz/db-schemas';
+import { computeDataHash } from '@markaz/platform-kit';
 import { drainBackoffMs, drainSyncOutbox, DRAIN_MAX_ATTEMPTS } from '../src/dispatcher';
 
 const STORE_ID = '65a000000000000000000001';
@@ -204,6 +205,17 @@ test('a delivered row is sent as a one-envelope batch and marked sent', async ()
   assert.equal(settles[0].set.status, 'sent');
   assert.ok(settles[0].set.sentAt instanceof Date);
   assertOnlyPayloadStatuses();
+});
+
+test('SB-12: the body carries no nulls and its dataHash is the hash of exactly that body (as the receiver checks it)', async () => {
+  collections.stores = [storeDoc({ referredBy: null, suspensionReason: null, owner: null })];
+  const summary = await drainSyncOutbox();
+  assert.equal(summary.sent, 1);
+  const batch = JSON.parse(receiveRequests()[0].body) as { envelopes: Array<{ data: Record<string, unknown>; dataHash: string }> };
+  const envelope = batch.envelopes[0];
+  assert.equal('referredBy' in envelope.data, false);
+  assert.equal('owner' in envelope.data, false);
+  assert.equal(envelope.dataHash, computeDataHash(envelope.data));
 });
 
 test('a receiver rejection with a permanent status dead-letters the row', async () => {
