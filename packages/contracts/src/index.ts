@@ -60,3 +60,5 @@ export * from './store-settings';
 export * from './payouts';
 // Sprint 4 EP-07.US04: customers and email broadcasts.
 export * from './broadcast';
+// Sprint 5 EP-10 (D-107): customers derived from orders, their notes and tags, the detail and the CSV export.
+export * from './customers';

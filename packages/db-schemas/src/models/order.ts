@@ -90,6 +90,12 @@ export interface IOrder extends Document {
   customerName?: string | null;
   /** E.164 for storefront orders. Older orders may hold a local format. */
   phone?: string | null;
+  /**
+   * Sprint 5 EP-10 (D-108): the phone in the one normalized form, +923xxxxxxxxx, written at order creation and by
+   * scripts/backfill-order-phone-key.mjs for older orders. Absent when the phone is missing or not a Pakistani mobile. The
+   * seller's customers are grouped by it. phone itself is never rewritten.
+   */
+  phoneKey?: string | null;
   address?: string | null;
   city?: string | null;
   /** Optional, from checkout. Null on every order written before EP-03. */
@@ -174,6 +180,8 @@ const OrderSchema = new Schema<IOrder>(
     paymentMethod: { type: String, enum: [...ORDER_PAYMENT_METHODS], default: undefined },
     customerName: { type: String, trim: true, maxlength: 80, default: null },
     phone: { type: String, trim: true, maxlength: 32, default: null },
+    // No default: an order with no normalizable phone has no key, and the backfill filter looks for it to be absent.
+    phoneKey: { type: String, trim: true, maxlength: 16 },
     address: { type: String, trim: true, maxlength: 300, default: null },
     city: { type: String, trim: true, maxlength: 60, default: null },
     customerEmail: { type: String, trim: true, maxlength: 254, default: null },
@@ -251,6 +259,8 @@ OrderSchema.index({ store: 1, status: 1, createdAt: -1 });
 // search is a case-insensitive regex: it scans this index's keys for the one store only, never other stores' orders.
 OrderSchema.index({ store: 1, phone: 1 });
 OrderSchema.index({ store: 1, customerName: 1 });
+// Sprint 5 EP-10 (D-108): the customer list, detail and statistics read one customer's orders by the normalized phone.
+OrderSchema.index({ store: 1, phoneKey: 1 });
 
 export const Order: Model<IOrder> =
   (mongoose.models.Order as Model<IOrder> | undefined) ?? mongoose.model<IOrder>('Order', OrderSchema);

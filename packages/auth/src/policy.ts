@@ -494,3 +494,15 @@ Object.assign(POLICY_MATRIX, {
     delete: { actors: [], fields: {} },
   },
 });
+
+// Sprint 5 EP-10.US02 (D-107): the seller's private note and tags on a customer (CustomerNote). Customers themselves stay the
+// read-only derived "customers" row above. Seller only, of their own store (the route checks the store). Nobody creates or
+// deletes through the generic policy: the note route is one upsert, so it is an "update" of the customer's note.
+Object.assign(POLICY_MATRIX, {
+  customerNotes: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: ['seller'], fields: { seller: ['note', 'tags'] } },
+    delete: { actors: [], fields: {} },
+  },
+});

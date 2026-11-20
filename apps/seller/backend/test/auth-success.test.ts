@@ -19,6 +19,8 @@ let login: (request: Request) => Promise<Response>;
 before(async () => {
   process.env.SELLER_AUTH_SECRET = SECRET;
   process.env.SELLER_MONGODB_URI = 'mongodb://stub.invalid/seller';
+  // Sprint 5 EP-11.US04.T04: signup needs a usable portal address (the verification mail must carry its link).
+  process.env.APP_BASE_URL_SELLER = 'https://seller.markazify.test';
   signup = (await import('../src/app/api/signup/route')).POST;
   login = (await import('../src/app/api/users/login/route')).POST;
 });
@@ -93,6 +95,30 @@ test('signup creates a seller, returns 201 with a session the seller audience ac
     assert.equal(stored.email, 'ali@example.com');
     assert.notEqual(stored.passwordHash, 'longenough', 'the password must be stored hashed');
   } finally {
+    restore();
+  }
+});
+
+test('Sprint 5 EP-11.US04.T04: without a usable APP_BASE_URL_SELLER signup answers 503 VERIFY_LINK_UNAVAILABLE, logs one line and creates nothing', async () => {
+  const created: unknown[] = [];
+  const restore = installStubs({ exists: false }, [], created);
+  const logged: unknown[][] = [];
+  const savedError = console.error;
+  console.error = (...args: unknown[]) => void logged.push(args);
+  try {
+    for (const bad of [undefined, '', 'not a url']) {
+      if (bad === undefined) delete process.env.APP_BASE_URL_SELLER;
+      else process.env.APP_BASE_URL_SELLER = bad;
+      logged.length = 0;
+      const response = await signup(json({ name: 'Ali', email: 'ali@example.com', password: 'longenough' }));
+      assert.equal(response.status, 503, String(bad));
+      assert.equal(((await response.json()) as { code?: string }).code, 'VERIFY_LINK_UNAVAILABLE');
+      assert.equal(logged.length, 1, 'one log line');
+    }
+    assert.equal(created.length, 0, 'no account was created');
+  } finally {
+    console.error = savedError;
+    process.env.APP_BASE_URL_SELLER = 'https://seller.markazify.test';
     restore();
   }
 });

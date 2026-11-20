@@ -3,7 +3,7 @@ import { issueToken, requireDatabase, requireSellerSecret, sessionUserOf } from 
 import { HttpError, handleRouteError, isDuplicateKeyError } from '@/lib/http';
 import { parseBody } from '@/lib/placeholder';
 import { hashPassword, sendEmailVerification, User } from '@/lib/services';
-import { sellerAccountDeps } from '@/lib/account-support';
+import { requireVerificationLink, sellerAccountDeps } from '@/lib/account-support';
 import { runAfterResponse } from '@/lib/notifications';
 
 export const runtime = 'nodejs';
@@ -17,6 +17,8 @@ export async function POST(request: Request): Promise<Response> {
 
     requireSellerSecret();
     await requireDatabase();
+    // Sprint 5 EP-11.US04.T04: before the account exists, so nobody is left with an account and no way to confirm it.
+    requireVerificationLink();
 
     const email = body.data.email.toLowerCase();
     if (await User.exists({ email })) {

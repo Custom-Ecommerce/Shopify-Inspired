@@ -47,3 +47,5 @@ export * from './models/payout';
 // Sprint 4 EP-07.US04: email broadcasts and the customers who unsubscribed from them.
 export * from './models/broadcast';
 export * from './models/email-unsubscribe';
+// Sprint 5 EP-10.US01 (D-107): the seller's private note and tags on a customer (customers themselves are derived from orders).
+export * from './models/customer-note';

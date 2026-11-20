@@ -6,6 +6,7 @@ import { AuditLog, Broadcast, EmailUnsubscribe, NotificationOutbox, Order, Selle
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { sendOrderPlaced, sendOrderStatus } from '@/lib/notifications';
 import { signUnsubscribe, verifyUnsubscribe } from '@/lib/broadcast';
+import { installCustomersWorld, makeOrder, type CustomersWorld } from './helpers/customers-world';
 
 // Sprint 4 EP-07.US04 (D-092): customers, broadcasts and the unsubscribe link. Every model is stubbed in memory (no database,
 // no email leaves: a broadcast writes outbox rows and sends none). The stubs enforce the two unique indexes the code relies
@@ -93,39 +94,9 @@ function chain(read: () => unknown) {
   return q;
 }
 
-/** The customer groups the real pipeline builds, computed from the in-memory orders of ONE store. */
-function groupsOf(storeId: string): Row[] {
-  const byKey = new Map<string, Row>();
-  const mine = orders.filter((o) => String(o.store) === storeId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  for (const o of mine) {
-    const email = String(o.customerEmail ?? '').trim().toLowerCase();
-    const phone = String(o.phone ?? '');
-    const key = email !== '' ? email : phone;
-    if (key === '') continue;
-    const group = byKey.get(key);
-    if (group) {
-      group.orders += 1;
-      continue;
-    }
-    byKey.set(key, { _id: key, name: o.customerName, email, phone, whatsapp: o.customerWhatsapp ?? null, orders: 1, lastOrderAt: o.createdAt });
-  }
-  return [...byKey.values()].sort((a, b) => b.lastOrderAt.getTime() - a.lastOrderAt.getTime());
-}
-
-function aggregate(pipeline: Row[]): Row[] {
-  pipelines.push(pipeline);
-  const storeId = String(pipeline[0]!.$match.store);
-  let groups = groupsOf(storeId);
-  const facet = pipeline.find((stage) => stage.$facet);
-  if (facet) {
-    if (pipeline.some((stage) => stage.$match && stage.$match.phone)) groups = groups.filter((g) => g.phone !== '');
-    const [{ $skip }, { $limit }] = facet.$facet.rows as Array<Row>;
-    return [{ rows: groups.slice($skip, $skip + $limit), total: groups.length === 0 ? [] : [{ n: groups.length }] }];
-  }
-  groups = groups.filter((g) => g.email !== '');
-  const limit = pipeline.find((stage) => stage.$limit !== undefined)?.$limit as number | undefined;
-  return limit === undefined ? groups : groups.slice(0, limit);
-}
+// Sprint 5 EP-10: Order.aggregate, CustomerNote.find and EmailUnsubscribe.find are stubbed by ./helpers/customers-world (the customers
+// module groups by the normalized phone first; the broadcast recipients are the distinct emails).
+let world: CustomersWorld;
 
 beforeEach(() => {
   const saved = {
@@ -140,12 +111,13 @@ beforeEach(() => {
     alert: AlertModel.create,
     env: Object.fromEntries(['UNSUBSCRIBE_SIGNING_SECRET', 'APP_BASE_URL_SELLER', 'STOREFRONT_URL', 'EMAIL_PROVIDER'].map((k) => [k, process.env[k]])),
   };
-  orders = [];
-  unsubs = [];
+  world = installCustomersWorld();
+  orders = world.orders;
+  unsubs = world.unsubs;
+  pipelines = world.pipelines;
   broadcasts = [];
   outbox = [];
   audits = [];
-  pipelines = [];
   unsubWrites = 0;
   stores = {
     [STORE_A]: { _id: STORE_A, owner: USER_A, name: 'Zara Lawn', slug: 'zara', storefront: {} },
@@ -164,7 +136,6 @@ beforeEach(() => {
   delete process.env.EMAIL_PROVIDER;
 
   (mongoose as any).connect = async () => mongoose;
-  OrderModel.aggregate = async (pipeline: Row[]) => aggregate(pipeline);
   OutboxModel.create = async (doc: Row) => {
     if (doc.dedupeKey !== undefined && outbox.some((r) => r.dedupeKey === doc.dedupeKey)) throw dup();
     const row = { _id: new mongoose.Types.ObjectId(), ...doc };
@@ -185,8 +156,6 @@ beforeEach(() => {
   };
   BroadcastModel.find = (filter: Row) => chain(() => broadcasts.filter((b) => String(b.store) === String(filter.store)).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
   BroadcastModel.countDocuments = async (filter: Row) => broadcasts.filter((b) => String(b.store) === String(filter.store)).length;
-  UnsubModel.find = (filter: Row) =>
-    chain(() => unsubs.filter((u) => String(u.store) === String(filter.store) && (filter.email.$in as string[]).includes(u.email)));
   UnsubModel.updateOne = async (filter: Row, update: Row) => {
     unsubWrites += 1;
     if (unsubs.some((u) => String(u.store) === String(filter.store) && u.email === filter.email)) return { matchedCount: 1 };
@@ -209,6 +178,7 @@ beforeEach(() => {
 
   restore = () => {
     (mongoose as any).connect = saved.connect;
+    world.restore();
     OrderModel.aggregate = saved.order;
     for (const [m, fn] of Object.entries(saved.outbox)) OutboxModel[m] = fn;
     for (const [m, fn] of Object.entries(saved.broadcast)) BroadcastModel[m] = fn;
@@ -228,17 +198,8 @@ afterEach(() => restore());
 
 // ------------------------------------------------------------------------------------------------------------ helpers
 
-let clock = 0;
 function sell(store: string, customerEmail: string | null, extra: Row = {}): void {
-  clock += 1;
-  orders.push({
-    store,
-    customerName: extra.customerName ?? 'Customer ' + clock,
-    customerEmail,
-    phone: extra.phone ?? '',
-    customerWhatsapp: extra.customerWhatsapp ?? null,
-    createdAt: new Date(T0.getTime() + clock * 1000),
-  });
+  orders.push(makeOrder(store, { customerEmail, ...extra }));
 }
 
 function crowd(store: string, count: number, prefix = 'c'): void {
@@ -300,6 +261,32 @@ test('the customers list shows name, email, phone, order count, last order and t
 
   const withPhone = await json(await getCustomers(STORE_A, tokenA, '?phone=1'));
   assert.deepEqual((withPhone.docs as Row[]).map((c) => c.name).sort(), ['Ayesha K', 'Walk In']);
+});
+
+test('Sprint 5 EP-10.US01: the broadcast counts did not change for email-only data, and the same data lists the same customers', async () => {
+  // Email-only history, exactly the Sprint 4 shape: two shoppers, one of them twice, one unsubscribed.
+  sell(STORE_A, 'ayesha@example.com');
+  sell(STORE_A, 'AYESHA@example.com ');
+  sell(STORE_A, 'bilal@example.com');
+  sell(STORE_A, 'gone@example.com');
+  unsubs.push({ store: STORE_A, email: 'gone@example.com', at: T0 });
+  assert.deepEqual(await json(await preview(STORE_A, tokenA)), { recipientCount: 2, cap: 500, tooLarge: false });
+  const list = await json(await getCustomers(STORE_A, tokenA));
+  assert.equal(list.totalDocs, 3, 'ayesha (twice), bilal and gone are three customers, as before');
+  assert.deepEqual((list.docs as Row[]).map((c) => c.id).sort(), ['ayesha@example.com', 'bilal@example.com', 'gone@example.com']);
+});
+
+test('Sprint 5 EP-10.US01: one shopper with and without an email is ONE customer, while the broadcast still counts each address once', async () => {
+  sell(STORE_A, 'ayesha@example.com', { phone: '0300 1234567', customerName: 'Ayesha' });
+  sell(STORE_A, null, { phone: '+92 300 1234567', customerName: 'Ayesha K' });
+  sell(STORE_A, 'ayesha.work@example.com', { phone: '3001234567' });
+  const list = await json(await getCustomers(STORE_A, tokenA));
+  assert.equal(list.totalDocs, 1, 'three spellings of one phone are one customer');
+  const [customer] = list.docs as Row[];
+  assert.equal(customer.id, '+923001234567');
+  assert.equal(customer.orderCount, 3);
+  assert.equal(customer.email, 'ayesha.work@example.com', 'the newest email of the customer');
+  assert.deepEqual(await json(await preview(STORE_A, tokenA)), { recipientCount: 2, cap: 500, tooLarge: false });
 });
 
 test('a bad customers query is a 400 that names the field', async () => {

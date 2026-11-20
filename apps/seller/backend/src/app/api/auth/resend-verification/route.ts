@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { authLimiter, NO_STORE, sellerAccountDeps } from '@/lib/account-support';
+import { authLimiter, NO_STORE, requireVerificationLink, sellerAccountDeps } from '@/lib/account-support';
 import { requireDatabase } from '@/lib/accounts';
 import { authenticate } from '@/lib/auth';
 import { HttpError, handleRouteError } from '@/lib/http';
@@ -15,6 +15,7 @@ export const dynamic = 'force-dynamic';
  * working). A verified account gets { sent: false } and nothing is sent.
  *
  *   200 { sent: boolean }   401 no session   429 RATE_LIMITED (Retry-After): 3 per hour per account
+ *   503 VERIFY_LINK_UNAVAILABLE   APP_BASE_URL_SELLER is not usable: nothing is sent
  */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -29,6 +30,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (!user) throw new HttpError(401, 'Invalid or expired session');
     if (user.emailVerifiedAt) return NextResponse.json({ sent: false }, { headers: NO_STORE });
 
+    // Sprint 5 EP-11.US04.T04: no link, no mail, and the hourly allowance is not spent on it.
+    requireVerificationLink();
     await authLimiter.consume(RESEND_VERIFY_RULE, ctx.userId);
     const account = { id: ctx.userId, email: String(user.email ?? ''), name: typeof user.name === 'string' ? user.name : null };
     if (account.email !== '') runAfterResponse('email_verify', () => sendEmailVerification(sellerAccountDeps(), account));

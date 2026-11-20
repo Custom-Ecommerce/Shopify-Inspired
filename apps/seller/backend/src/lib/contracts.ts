@@ -183,3 +183,15 @@ export const {
   customerListQuerySchema,
   unsubscribeRequestSchema,
 } = contracts;
+
+// Sprint 5 EP-10 (D-107): customers derived from orders, their notes, the detail and the CSV export.
+export const {
+  CUSTOMER_CSV_COLUMNS,
+  CUSTOMER_DETAIL_ADDRESSES_MAX,
+  CUSTOMER_DETAIL_ORDERS_MAX,
+  CUSTOMER_EXPORT_MAX_ROWS,
+  CUSTOMER_NOTE_MAX,
+  customerExportQuerySchema,
+  customerNoteRequestSchema,
+  normalizeCustomerKey,
+} = contracts;

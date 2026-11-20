@@ -5,7 +5,7 @@ import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { useStoreHref } from "@/lib/dashboard-context";
 import { discountPercent } from "@/lib/product-pricing";
 import { duplicateProduct, refusalMessage, runProductAction } from "@/lib/product-actions";
-import { buildMatrix, rowProblem, usableOptions, variantPayload } from "@/lib/variant-matrix";
+import { OUT_OF_STOCK_HINT, buildMatrix, rowProblem, usableOptions, variantPayload, willShowOutOfStock } from "@/lib/variant-matrix";
 import type { MatrixRow, OptionDraft, RowValues } from "@/lib/variant-matrix";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -541,6 +541,11 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
                 disabled={isEdit}
               />
               {isEdit && <p className="text-xs text-muted-foreground mt-1">Adjust stock in Inventory.</p>}
+              {!isEdit && willShowOutOfStock(form.trackQuantity, form.stockQuantity) ? (
+                <p role="status" className="mt-1 rounded-md bg-warning/15 px-2 py-1 text-sm text-foreground">
+                  {OUT_OF_STOCK_HINT}
+                </p>
+              ) : null}
             </div>
           </>
         )}

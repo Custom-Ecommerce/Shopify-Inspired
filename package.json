@@ -20,6 +20,7 @@
     "type-check:all": "pnpm -r run type-check",
     "check:env": "node scripts/check-env-coverage.mjs",
     "bootstrap:admin": "node scripts/bootstrap-admin-data.mjs",
+    "backfill:phone-key": "pnpm --filter @markaz/contracts exec node --import tsx ../../scripts/backfill-order-phone-key.mjs",
     "test": "pnpm -r --if-present run test",
     "dev:admin-frontend": "pnpm --filter @markaz/admin-frontend dev"
   },

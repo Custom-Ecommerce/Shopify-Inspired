@@ -326,6 +326,79 @@ test('readiness lists every missing item', async () => {
   assert.deepEqual(result.missing, ['profile', 'delivery', 'payout', 'product', 'email']);
 });
 
+// Sprint 5 EP-11.US04.T03: when every published product has nothing to buy, the checklist WARNS and never blocks.
+test('Sprint 5: a store whose published products are all out of stock gets a stock warning, still ready, and can go live', async () => {
+  complete();
+  ProductModel.exists = async (filter: any) => (filter.variants?.$elemMatch ? null : { _id: 'p' });
+  const result = (await readiness()) as { ready: boolean; missing: string[]; warnings?: Array<{ key: string; label: string; tab: string }> };
+  assert.equal(result.ready, true, 'a warning is not a blocker');
+  assert.deepEqual(result.missing, []);
+  assert.equal(result.warnings?.length, 1);
+  assert.equal(result.warnings?.[0]?.key, 'stock');
+  assert.equal(result.warnings?.[0]?.tab, 'inventory');
+  assert.match(result.warnings?.[0]?.label ?? '', /out of stock/i);
+  assert.equal((await goLive()).status, 200);
+  assert.equal(stores[STORE_A]!.status, 'active');
+});
+
+test('Sprint 5: the buyable test is the storefront rule (no tracking, or stock above 0), and a store with stock has no warnings field', async () => {
+  complete();
+  let seen: any = null;
+  ProductModel.exists = async (filter: any) => {
+    if (filter.variants?.$elemMatch) seen = filter.variants.$elemMatch;
+    return { _id: 'p' };
+  };
+  const result = (await readiness()) as { ready: boolean; warnings?: unknown };
+  assert.equal(result.ready, true);
+  assert.equal('warnings' in result, false);
+  assert.deepEqual(seen, { $or: [{ trackQuantity: false }, { stockQuantity: { $gt: 0 } }] });
+});
+
+test('Sprint 5: with no published product at all there is the product item to fix, and no stock warning on top', async () => {
+  complete();
+  publishedProduct = false;
+  const result = (await readiness()) as { missing: string[]; warnings?: unknown };
+  assert.deepEqual(result.missing, ['product']);
+  assert.equal('warnings' in result, false);
+});
+
+// Sprint 5 EP-11.US04.T01 (D-107): COD-only mode in the settings answer and the checklist.
+const CARD_ENV = ['CARD_CHECKOUT_ENABLED', 'STRIPE_SECRET_KEY', 'STRIPE_ORDER_WEBHOOK_SECRET'] as const;
+async function withCardEnv(values: Partial<Record<(typeof CARD_ENV)[number], string>>, run: () => Promise<void>): Promise<void> {
+  const saved = Object.fromEntries(CARD_ENV.map((key) => [key, process.env[key]]));
+  for (const key of CARD_ENV) delete process.env[key];
+  Object.assign(process.env, values);
+  try {
+    await run();
+  } finally {
+    for (const key of CARD_ENV) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
+}
+const cardAvailable = async () => ((await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any }).settings.payments.cardAvailable;
+
+test('Sprint 5: the settings answer reports cardAvailable false while CARD_CHECKOUT_ENABLED is off, even with every Stripe value set', async () => {
+  const stripe = { STRIPE_SECRET_KEY: 'sk_test_stub', STRIPE_ORDER_WEBHOOK_SECRET: 'whsec_stub' };
+  await withCardEnv({}, async () => assert.equal(await cardAvailable(), false));
+  await withCardEnv({ ...stripe }, async () => assert.equal(await cardAvailable(), false, 'keys alone do not turn card on'));
+  await withCardEnv({ ...stripe, CARD_CHECKOUT_ENABLED: 'false' }, async () => assert.equal(await cardAvailable(), false));
+  await withCardEnv({ CARD_CHECKOUT_ENABLED: 'true' }, async () => assert.equal(await cardAvailable(), false, 'the switch alone is not enough without Stripe'));
+  await withCardEnv({ ...stripe, CARD_CHECKOUT_ENABLED: 'true' }, async () => assert.equal(await cardAvailable(), true));
+});
+
+test('Sprint 5: a store that is card only does not pass the payment check while card is off, and does when the platform offers card', async () => {
+  complete();
+  stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
+  await withCardEnv({}, async () => assert.ok(((await readiness()) as { missing: string[] }).missing.includes('payment')));
+  await withCardEnv({ STRIPE_SECRET_KEY: 'sk_test_stub', STRIPE_ORDER_WEBHOOK_SECRET: 'whsec_stub', CARD_CHECKOUT_ENABLED: 'true' }, async () =>
+    assert.equal(((await readiness()) as { missing: string[] }).missing.includes('payment'), false),
+  );
+  stores[STORE_A]!.paymentSettings = { codEnabled: true, cardEnabled: false };
+  await withCardEnv({}, async () => assert.equal(((await readiness()) as { missing: string[] }).missing.includes('payment'), false, 'COD alone is a payment method'));
+});
+
 test('go-live is refused with 422 and the missing items until the checklist passes', async () => {
   publishedProduct = false;
   const res = await goLive();

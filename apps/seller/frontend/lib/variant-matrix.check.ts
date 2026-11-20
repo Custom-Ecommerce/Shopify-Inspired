@@ -6,7 +6,7 @@
  * Exits non-zero on the first failing check.
  */
 import assert from "node:assert/strict";
-import { MAX_VARIANTS, buildMatrix, rowProblem, variantPayload } from "./variant-matrix";
+import { MAX_VARIANTS, buildMatrix, rowProblem, variantPayload, willShowOutOfStock } from "./variant-matrix";
 import type { OptionDraft, RowValues, SavedVariant } from "./variant-matrix";
 
 const option = (name: string, values: string[], source: number | null): OptionDraft => ({ key: name, name, values, source });
@@ -102,5 +102,14 @@ assert.match(rowProblem({ ...values, price: "" }, false) ?? "", /whole rupees/);
 assert.match(rowProblem({ ...values, price: "10.5" }, false) ?? "", /whole rupees/);
 assert.match(rowProblem({ ...values, compareAt: "900" }, false) ?? "", /higher/);
 assert.match(rowProblem({ ...values, stock: "-1" }, true) ?? "", /whole number/);
+
+// Sprint 5 EP-11.US04.T03: the stock 0 hint.
+{
+  assert.equal(willShowOutOfStock(true, "0"), true);
+  assert.equal(willShowOutOfStock(true, ""), true);
+  assert.equal(willShowOutOfStock(true, "abc"), true);
+  assert.equal(willShowOutOfStock(true, "3"), false);
+  assert.equal(willShowOutOfStock(false, "0"), false, "a variant that does not track quantity is always buyable");
+}
 
 console.log("variant matrix checks passed");

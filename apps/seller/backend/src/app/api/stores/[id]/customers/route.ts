@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth';
-import { listCustomers, readQuery } from '@/lib/broadcast';
+import { readQuery } from '@/lib/broadcast';
+import { listCustomers } from '@/lib/customers';
 import { customerListQuerySchema } from '@/lib/contracts';
 import { handleRouteError } from '@/lib/http';
 import { loadOwnedStore, requireSellerActor } from '@/lib/owned-store';
@@ -11,9 +12,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/stores/:id/customers?page=&limit=&phone=1 (Sprint 4 EP-07.US04, D-092): the store's customers, derived from its
- * orders (there is no customer collection): name, email, phone, order count, last order date and whether the customer
- * unsubscribed from broadcasts. phone=1 keeps only customers with a phone number (the WhatsApp list).
+ * GET /api/stores/:id/customers?page=&limit=&phone=1&q=&sort=&repeat=1&hasEmail=1&unsubscribed=1
+ * (Sprint 4 EP-07.US04, D-092; Sprint 5 EP-10.US02, D-107): the store's customers, derived from its orders (there is no
+ * customer collection) and grouped by the normalized phone first: name, email, phone, order count, last order date, whether the
+ * customer unsubscribed from broadcasts, delivered orders, total spent and the seller's tags. phone=1 keeps only customers
+ * with a phone number (the WhatsApp list the broadcast page reads). q searches name, phone or email as plain text.
+ * sort: last_order (default) | total_spent | orders.
  *
  * Order: authenticate -> seller only -> parse (400 with the field) -> assertCan -> DB -> id -> resolveOwnedStoreId ->
  * findOne({ _id, owner }) -> the read, scoped by that store id.

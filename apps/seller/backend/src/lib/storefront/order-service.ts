@@ -9,6 +9,7 @@ import { claimDiscountUse, findDiscountRule, returnDiscountUse } from '@/lib/sto
 import { StorefrontHttpError, discountRefused, productUnavailable } from '@/lib/storefront/errors';
 import { isLiveProduct, type LiveFlags } from '@/lib/storefront/live-product';
 import { generateOrderId } from '@/lib/storefront/order-id';
+import { phoneKeyOf } from '@/lib/storefront/order-phone';
 import type { OrderRow } from '@/lib/storefront/order-dto';
 import type { ParsedOrderRequest } from '@/lib/storefront/order-request';
 import { priceCart } from '@/lib/storefront/pricing';
@@ -216,6 +217,8 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       paymentMethod: request.paymentMethod,
       customerName: request.customer.customerName,
       phone: request.customer.phone,
+      // Sprint 5 EP-10 (D-108): the normalized phone the seller's customers are grouped by. Left absent when there is none.
+      ...(phoneKeyOf(request.customer.phone) === undefined ? {} : { phoneKey: phoneKeyOf(request.customer.phone) }),
       address: request.customer.address,
       city: request.customer.city,
       customerEmail: request.customer.email,

@@ -271,6 +271,7 @@ test('creates an order: server totals, stock taken, customer and key saved, cont
   assert.equal(saved.idempotencyKey, key);
   assert.equal(saved.customerName, 'Sara Khan');
   assert.equal(saved.phone, '+923001234567', 'phone is stored as E.164');
+  assert.equal(saved.phoneKey, '+923001234567', 'Sprint 5 EP-10 (D-108): the normalized phone the customers are grouped by is stored with the order');
   assert.equal(saved.address, CUSTOMER.address);
   assert.equal(saved.city, 'Karachi');
   assert.equal(saved.paymentMethod, 'cod');
@@ -592,6 +593,7 @@ test('every Pakistani phone format is stored as E.164', async () => {
     await order({ customer: { ...CUSTOMER, phone } });
   }
   assert.deepEqual([...new Set(orders.map((o) => o.phone))], ['+923001234567']);
+  assert.deepEqual([...new Set(orders.map((o) => o.phoneKey))], ['+923001234567'], 'one phoneKey for every spelling');
 });
 
 test('every refused customer field is a 400 that names the field, with the UI bypassed', async () => {

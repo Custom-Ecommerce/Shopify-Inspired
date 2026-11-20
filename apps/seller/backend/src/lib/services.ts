@@ -106,3 +106,6 @@ export const {
 // Sprint 4 EP-07.US04 (D-092): broadcasts and unsubscribes (seller database).
 export const Broadcast = db.Broadcast;
 export const EmailUnsubscribe = db.EmailUnsubscribe;
+
+// Sprint 5 EP-10.US01 (D-107): the seller's private note and tags on a customer. There is no customer collection.
+export const CustomerNote = db.CustomerNote;

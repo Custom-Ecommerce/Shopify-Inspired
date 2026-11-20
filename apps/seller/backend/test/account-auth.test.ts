@@ -35,6 +35,8 @@ let routes: Record<string, (r: NextRequest) => Promise<Response>> = {};
 before(async () => {
   process.env.SELLER_AUTH_SECRET = SECRET;
   process.env.SELLER_MONGODB_URI = 'mongodb://stub.invalid/seller';
+  // Sprint 5 EP-11.US04.T04: the resend route needs a usable portal address.
+  process.env.APP_BASE_URL_SELLER = 'https://seller.markazify.test';
   routes = {
     forgot: (await import('../src/app/api/auth/forgot-password/route')).POST,
     reset: (await import('../src/app/api/auth/reset-password/route')).POST,
@@ -217,6 +219,27 @@ test('resend verification: 3 an hour per account, and nothing for a verified acc
   assert.equal((await routes.resend!(req('/api/auth/resend-verification', { bearer }))).status, 429);
   stored.emailVerifiedAt = new Date();
   assert.deepEqual(await (await routes.resend!(req('/api/auth/resend-verification', { bearer }))).json(), { sent: false });
+});
+
+test('Sprint 5 EP-11.US04.T04: resend answers 503 VERIFY_LINK_UNAVAILABLE without a usable APP_BASE_URL_SELLER, and spends none of the hourly allowance', async () => {
+  const bearer = await token();
+  const savedError = console.error;
+  const logged: unknown[][] = [];
+  console.error = (...args: unknown[]) => void logged.push(args);
+  delete process.env.APP_BASE_URL_SELLER;
+  try {
+    for (let i = 0; i < 5; i += 1) {
+      const res = await routes.resend!(req('/api/auth/resend-verification', { bearer }));
+      assert.equal(res.status, 503);
+      assert.equal(((await res.json()) as { code?: string }).code, 'VERIFY_LINK_UNAVAILABLE');
+    }
+    assert.equal(logged.length, 5, 'one line per refused call');
+  } finally {
+    console.error = savedError;
+    process.env.APP_BASE_URL_SELLER = 'https://seller.markazify.test';
+  }
+  // The allowance is untouched: three sends still work afterwards.
+  for (let i = 0; i < 3; i += 1) assert.deepEqual(await (await routes.resend!(req('/api/auth/resend-verification', { bearer }))).json(), { sent: true });
 });
 
 // ------------------------------------------------------------------------------------------------ account (US04)

@@ -329,11 +329,17 @@ export type StoreSettings = z.output<typeof storeSettingsSchema>;
 export const STORE_READINESS_ITEMS = ['profile', 'delivery', 'payment', 'payout', 'product', 'email'] as const;
 export type StoreReadinessItem = (typeof STORE_READINESS_ITEMS)[number];
 
+/** Sprint 5 EP-11.US04.T03: a warning does not block go-live. Only 'stock' exists: every published product is out of stock. */
+export const STORE_READINESS_WARNINGS = ['stock'] as const;
+export type StoreReadinessWarningKey = (typeof STORE_READINESS_WARNINGS)[number];
+
 export const storeReadinessSchema = z.object({
   ready: z.boolean(),
   status: z.string(),
   items: z.array(z.object({ key: z.enum(STORE_READINESS_ITEMS), ok: z.boolean(), label: z.string(), tab: z.string() })),
   missing: z.array(z.enum(STORE_READINESS_ITEMS)),
+  /** Absent when there is nothing to warn about. Never part of `missing`, never blocks go-live. */
+  warnings: z.array(z.object({ key: z.enum(STORE_READINESS_WARNINGS), label: z.string(), tab: z.string() })).optional(),
 });
 export type StoreReadiness = z.output<typeof storeReadinessSchema>;
 

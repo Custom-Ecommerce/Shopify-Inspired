@@ -15,6 +15,7 @@ import type { StoreReadiness } from "@markaz/contracts/store-settings";
 export function readinessHref(tab: string, href: (path?: string) => string): string {
   if (tab === "products") return href("/products/new");
   if (tab === "account") return href("/account");
+  if (tab === "inventory") return href("/inventory");
   return href("/store?tab=" + encodeURIComponent(tab));
 }
 
@@ -140,6 +141,19 @@ export function OnboardingChecklist() {
           </li>
         ))}
       </ul>
+
+      {readiness.warnings && readiness.warnings.length > 0 ? (
+        <ul className="mt-4 flex flex-col gap-1">
+          {readiness.warnings.map((warning) => (
+            <li key={warning.key} role="status" className="rounded-lg bg-warning/15 px-3 py-2 text-sm text-foreground">
+              {warning.label}{" "}
+              <Link href={readinessHref(warning.tab, href)} className="font-medium underline">
+                Add stock
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {notice ? (
         <p role={notice.error ? "alert" : "status"} className={cn("mt-4 text-sm", notice.error ? "text-destructive" : "text-foreground")}>

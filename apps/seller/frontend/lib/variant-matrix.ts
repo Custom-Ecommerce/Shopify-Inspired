@@ -134,3 +134,11 @@ export function variantPayload(row: MatrixRow, values: RowValues, gallery: Reado
   };
   return row.id !== null ? { id: row.id, ...fields } : { ...fields, stockQuantity: Number(values.stock) || 0 };
 }
+
+/** Sprint 5 EP-11.US04.T03: what a new product with tracked quantity and no stock tells the seller. */
+export const OUT_OF_STOCK_HINT = "With stock at 0 and quantity tracked, the storefront will show this as Out of stock until you add stock.";
+
+/** True when a NEW variant will show Out of stock: it tracks quantity and its initial stock is 0, empty or not a number (the form saves those as 0). */
+export function willShowOutOfStock(trackQuantity: boolean, stock: string): boolean {
+  return trackQuantity && (Number(stock) || 0) <= 0;
+}

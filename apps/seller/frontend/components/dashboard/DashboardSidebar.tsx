@@ -38,7 +38,8 @@ import {
   CreditCard,
   Settings,
   Globe,
-  ExternalLink, UserCog
+  ExternalLink, UserCog,
+  Contact,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -58,6 +59,8 @@ export const NAV_GROUPS = [
       { href: "/products", label: "Products", icon: Package },
       { href: "/categories", label: "Categories", icon: FolderTree },
       { href: "/orders", label: "Orders", icon: ShoppingCart },
+      // Sprint 5 EP-10.US02: the customers who ordered, with private notes.
+      { href: "/customers", label: "Customers", icon: Contact },
       { href: "/inventory", label: "Inventory", icon: Archive },
       { href: "/returns", label: "Returns", icon: RotateCcw },
       { href: "/reviews", label: "Reviews", icon: Star },

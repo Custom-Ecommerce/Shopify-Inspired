@@ -43,6 +43,7 @@ preview links, cache purge, sync, Cloudinary uploads, email. Each example has a 
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | seller backend, admin backend | SMTP settings when `EMAIL_PROVIDER=smtp`. |
 | `OUTBOX_CRON_SECRET` | seller backend, admin backend | Bearer secret for the internal outbox retry route (EP-07.US01.T02). |
 | `UNSUBSCRIBE_SIGNING_SECRET` | seller backend | Signs the unsubscribe link of broadcast emails (EP-07.US04). 16 characters or more. Without it a broadcast cannot be sent (503) and every unsubscribe link answers 404. |
+| `CARD_CHECKOUT_ENABLED` | seller backend (listed in the storefront example, never read there) | Sprint 5 COD-only mode (D-107). Card checkout is offered to shoppers only when this is `true` or `1` and the Stripe values are set; unset or any other value keeps card off everywhere. Stripe stays for seller billing. |
 | `PLATFORM_DEFAULT_COMMISSION_PERCENT` | seller backend, admin backend | Platform default commission in percent. The placeholder is 5; the owner sets the real value (A-019). |
 | `APP_BASE_URL_SELLER` | seller backend, admin backend | Seller portal base URL for links in emails. |
 | `APP_BASE_URL_ADMIN` | admin backend | Admin console base URL for operator password-reset links (Sprint 4 EP-08). |
@@ -132,6 +133,18 @@ The second writes it. A database whose name contains `throwaway` or `test` does 
 script stops if `SELLER_MONGODB_URI` is set and names a different database than `MONGODB_URI`. No code creates the
 mirror row for a seller who signs up later, so re-run the script (it is safe) whenever a per-store rate change shows
 `OWNER_TRANSLATION_PENDING`.
+
+### Sprint 5: customers and the phone key (run once per database)
+
+The seller's Customers pages group orders by `Order.phoneKey` (the normalized phone, `+923xxxxxxxxx`). New orders get it at
+checkout. Orders placed before Sprint 5 have none, and until they are backfilled their phone-only customers are not listed.
+Run the backfill once on each database, dry run first (it writes nothing unless `--apply`, never changes `phone`, and is safe to
+repeat). A database whose name does not contain `throwaway` also needs `--i-know-this-is-real`:
+
+```bash
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/backfill-order-phone-key.mjs
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/backfill-order-phone-key.mjs --apply
+```
 
 ### Required secrets (production)
 

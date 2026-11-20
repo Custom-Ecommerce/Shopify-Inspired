@@ -65,13 +65,35 @@ export const createBroadcastRequestSchema = z
   .strict();
 export type CreateBroadcastRequest = z.output<typeof createBroadcastRequestSchema>;
 
-/** GET /api/stores/:id/customers?page=&limit=&phone=1 */
+/** Sprint 5 EP-10.US02: how the customer list can be ordered. last_order is newest buyer first. */
+export const CUSTOMER_SORTS = ['last_order', 'total_spent', 'orders'] as const;
+export type CustomerSort = (typeof CUSTOMER_SORTS)[number];
+export const CUSTOMER_SEARCH_MAX = 80;
+
+/**
+ * GET /api/stores/:id/customers?page=&limit=&phone=1&q=&sort=&repeat=1&hasEmail=1&unsubscribed=1
+ * (Sprint 4 added page, limit and phone; Sprint 5 EP-10.US02 adds the rest. Every new field is optional, so the broadcast page's
+ * call, which sends only page, limit and phone, is unchanged.)
+ */
 export const customerListQuerySchema = z
   .object({
     page: z.coerce.number().int().min(1).max(100000).default(1),
     limit: z.coerce.number().int().min(1).max(CUSTOMER_LIST_MAX_LIMIT).default(CUSTOMER_LIST_DEFAULT_LIMIT),
     /** 1: only customers with a phone number (the WhatsApp list). */
     phone: z.enum(['1']).optional(),
+    /** Name, phone or email, case-insensitive, matched as plain text (never as a pattern). */
+    q: z
+      .string()
+      .transform((value) => value.trim())
+      .pipe(z.string().max(CUSTOMER_SEARCH_MAX, 'q can be at most ' + CUSTOMER_SEARCH_MAX + ' characters'))
+      .optional(),
+    sort: z.enum(CUSTOMER_SORTS).optional(),
+    /** 1: customers with two or more orders. */
+    repeat: z.enum(['1']).optional(),
+    /** 1: customers with an email address. */
+    hasEmail: z.enum(['1']).optional(),
+    /** 1: customers who unsubscribed from broadcasts. */
+    unsubscribed: z.enum(['1']).optional(),
   })
   .strict();
 export type CustomerListQuery = z.output<typeof customerListQuerySchema>;
@@ -96,16 +118,24 @@ export const unsubscribeRequestSchema = z
 export type UnsubscribeRequest = z.output<typeof unsubscribeRequestSchema>;
 
 export interface CustomerRow {
-  /** The key the customer was grouped by: the lower-case email, else the phone. */
+  /**
+   * The key the customer was grouped by (Sprint 5, D-107): the normalized phone (+923xxxxxxxxx), or the lower-case email for
+   * an order with no phone. It is also the :key of the detail, note and export routes.
+   */
   id: string;
   name: string | null;
   email: string | null;
+  /** The normalized phone for a phone-keyed customer. */
   phone: string | null;
   /** The customer's WhatsApp number when it differs from the phone. */
   whatsapp: string | null;
   orderCount: number;
   lastOrderAt: string | null;
   unsubscribed: boolean;
+  /** Sprint 5 EP-10.US01: delivered orders, whole rupees spent on them and the seller's tags. */
+  deliveredCount: number;
+  totalSpent: number;
+  tags: string[];
 }
 
 export interface CustomerList {

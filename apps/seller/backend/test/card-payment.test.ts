@@ -52,6 +52,7 @@ let stripe: StripeClient;
 let restore: () => void;
 
 const setCardEnv = () => {
+  process.env.CARD_CHECKOUT_ENABLED = 'true';
   process.env.STRIPE_SECRET_KEY = 'sk_test_stub';
   process.env.STRIPE_ORDER_WEBHOOK_SECRET = WEBHOOK_SECRET;
   process.env.STOREFRONT_URL = 'https://markazify.test';
@@ -70,6 +71,7 @@ before(async () => {
 });
 
 after(() => {
+  delete process.env.CARD_CHECKOUT_ENABLED;
   delete process.env.STRIPE_SECRET_KEY;
   delete process.env.STRIPE_ORDER_WEBHOOK_SECRET;
   delete process.env.STOREFRONT_URL;
@@ -377,7 +379,7 @@ test('cash on delivery never touches Stripe', async () => {
   assert.equal(orders[0]!.stripeSessionExpiresAt, undefined);
 });
 
-for (const missing of ['STRIPE_SECRET_KEY', 'STRIPE_ORDER_WEBHOOK_SECRET', 'STOREFRONT_URL']) {
+for (const missing of ['CARD_CHECKOUT_ENABLED', 'STRIPE_SECRET_KEY', 'STRIPE_ORDER_WEBHOOK_SECRET', 'STOREFRONT_URL']) {
   test('card is hidden and refused without ' + missing, async () => {
     delete process.env[missing];
     const store = await toStorefrontStoreDto({ _id: STORE, slug: 'alpha-store', name: 'Alpha' });
@@ -390,6 +392,36 @@ for (const missing of ['STRIPE_SECRET_KEY', 'STRIPE_ORDER_WEBHOOK_SECRET', 'STOR
     assert.equal(creates.length, 0);
   });
 }
+
+// Sprint 5 EP-11.US04.T01 (D-107): COD-only mode. The platform switch is independent of any Stripe key.
+for (const off of ['', 'false', '0', 'yes', 'TRUE ']) {
+  test('CARD_CHECKOUT_ENABLED=' + JSON.stringify(off) + (off.trim().toLowerCase() === 'true' ? ' still counts as on' : ' keeps card off even with every Stripe key set'), async () => {
+    process.env.CARD_CHECKOUT_ENABLED = off;
+    const store = await toStorefrontStoreDto({ _id: STORE, slug: 'alpha-store', name: 'Alpha' });
+    assert.equal(store.commerce.cardEnabled, off.trim().toLowerCase() === 'true');
+    if (off.trim().toLowerCase() === 'true') return;
+    const res = await place();
+    assert.equal(res.status, 422);
+    assert.equal(((await res.json()) as Any).error.code, 'PAYMENT_METHOD_UNAVAILABLE');
+    assert.equal(orders.length, 0);
+    assert.equal(creates.length, 0);
+  });
+}
+
+test('the switch can be 1, and an unset switch is off', async () => {
+  process.env.CARD_CHECKOUT_ENABLED = '1';
+  assert.equal((await toStorefrontStoreDto({ _id: STORE, slug: 'alpha-store', name: 'Alpha' })).commerce.cardEnabled, true);
+  delete process.env.CARD_CHECKOUT_ENABLED;
+  assert.equal((await toStorefrontStoreDto({ _id: STORE, slug: 'alpha-store', name: 'Alpha' })).commerce.cardEnabled, false);
+});
+
+test('with the switch off the webhook still records a payment for an order placed while it was on', async () => {
+  const order = await placed();
+  process.env.CARD_CHECKOUT_ENABLED = 'false';
+  const res = await webhook(COMPLETED, sessionFor(order));
+  assert.equal(res.status, 200);
+  assert.equal(order.paymentStatus, 'paid');
+});
 
 test('the store answer offers card when the keys are present', async () => {
   const store = await toStorefrontStoreDto({ _id: STORE, slug: 'alpha-store', name: 'Alpha' });

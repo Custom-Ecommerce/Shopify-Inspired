@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { apiError, proxyGet, proxyPost, ProxyResponseError, type ProxyAuthResult } from "@/lib/proxy";
+import { apiError, proxyGet, proxyPatch, proxyPost, ProxyResponseError, type ProxyAuthResult } from "@/lib/proxy";
 
 /** The path id must be the verified active store, as for PATCH /api/proxy/stores/:id. */
 export function ownStoreGuard(id: string) {
@@ -27,6 +27,26 @@ export function proxyStorePost(req: NextRequest, id: string, tail: string, logSc
     logScope,
     guard: ownStoreGuard(id),
     body: () => ({}),
+  });
+}
+
+/**
+ * PATCH /api/proxy/stores/:id/<tail> with the browser's JSON body forwarded as it is (a customer's note and tags, Sprint 5). The
+ * backend validates every field; here only "a JSON object" is required. `bindStore` is off: the store comes from the path.
+ */
+export function proxyStorePatchBody(req: NextRequest, id: string, tail: string, logScope: string) {
+  return proxyPatch(req, `/api/stores/${encodeURIComponent(id)}/${tail}`, {
+    auth: "dashboard",
+    storeScope: "required",
+    bindStore: false,
+    logScope,
+    guard: ownStoreGuard(id),
+    body: (incoming: unknown) => {
+      if (typeof incoming !== "object" || incoming === null || Array.isArray(incoming)) {
+        throw new ProxyResponseError(apiError(400, "INVALID_BODY", "Expected a JSON object body."));
+      }
+      return incoming;
+    },
   });
 }
 
