@@ -87,19 +87,6 @@ const verify = (call: { url: string; init: RequestInit }, method: string, adminI
 
 // Sprint 6 EP-12 (S6-B5, D-093): the admin console's READ-ONLY orders view. The seller backend and the audit are stubbed.
 
-const verify = (call: { url: string; init: RequestInit }, method: string, adminId: string | null, body: string): boolean => {
-  const url = new URL(call.url);
-  const headers = new Headers(call.init.headers);
-  return verifyInternalSignature({
-    secret: MOD_SECRET,
-    method,
-    path: url.pathname + url.search,
-    body,
-    timestamp: headers.get('x-markaz-timestamp'),
-    signature: headers.get('x-markaz-signature'),
-    adminId,
-  });
-};
 
 async function admin(path: string, token?: string | null): Promise<Request> {
   const t = token === undefined ? await signSession({ sub: ADMIN_ID, role: 'admin' }, SECRET, ADMIN_AUDIENCE) : token;

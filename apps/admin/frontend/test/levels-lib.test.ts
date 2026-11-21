@@ -180,7 +180,8 @@ test("the export route needs the session, forwards only the known filters, retur
   assert.equal(calls[0]!.url, "http://admin.test/api/admin/audit/export?q=store&action=store.suspend&from=2026-11-01");
   assert.equal(res.headers.get("content-type"), "text/csv; charset=utf-8");
   assert.equal(res.headers.get("x-export-truncated"), "true");
-  assert.equal(await res.text(), csv);
+  // Response.text() strips a UTF-8 BOM, so the bytes are compared: the file must come back exactly as it was sent, BOM included.
+  assert.deepEqual([...new Uint8Array(await res.arrayBuffer())], [...new TextEncoder().encode(csv)]);
   assert.equal((await exportGET(new NextRequest("http://admin.local/api/audit/export"))).status, 401);
   stub(403, { error: "Forbidden" });
   assert.equal((await exportGET(new NextRequest("http://admin.local/api/audit/export", { headers: { cookie: "markaz-admin-session=tok" } }))).status, 403);

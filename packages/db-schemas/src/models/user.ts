@@ -67,7 +67,7 @@ emailVerifiedAt: { type: Date, default: null },
 phone: { type: String, default: null, maxlength: 20 },
 pendingEmail: { type: String, default: null, lowercase: true, trim: true, maxlength: 254 },
 adminLevel: { type: String, enum: [...ADMIN_USER_LEVELS], default: undefined },
-storeLimitOverride: { type: Number, default: null, min: 1, validate: { validator: Number.isInteger, message: 'storeLimitOverride must be a whole number' } },
+storeLimitOverride: { type: Number, default: null, min: 1, validate: { validator: (value: unknown) => value === null || value === undefined || Number.isInteger(value), message: 'storeLimitOverride must be a whole number' } },
 },
 { timestamps: true, collection: 'users' },
 );

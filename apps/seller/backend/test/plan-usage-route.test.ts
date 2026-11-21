@@ -1,4 +1,4 @@
-import { test, before, beforeEach, afterEach } from 'node:test';
+import { test, before, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
@@ -290,7 +290,10 @@ const signed = (body: unknown, secret = MOD_SECRET): NextRequest => {
   });
 };
 
-test('the sellers page call answers each seller\'s plan, status and usage in one go', async () => {
+test('the sellers page call answers each seller\'s plan, status and usage in one go', async (t) => {
+  // The route reads the real clock; the test data are dated relative to NOW, so the clock is frozen at NOW.
+  mock.timers.enable({ apis: ['Date'], now: NOW.getTime() });
+  t.after(() => mock.timers.reset());
   subs = [
     { seller: A, planKey: 'growth', status: 'active', currentPeriodEnd: at(9) },
     { seller: C, planKey: 'growth', status: 'expired', currentPeriodEnd: at(-60) },

@@ -9,7 +9,8 @@ export type PlanInterval = (typeof PLAN_INTERVALS)[number];
 /** A plan key is a slug: lower case letters, digits and hyphens, starting with a letter (2 to 30 characters). */
 export const PLAN_KEY_PATTERN = /^[a-z][a-z0-9-]{1,29}$/;
 
-const wholeNumber = { validator: Number.isInteger, message: 'must be a whole number' };
+// null (unlimited, or no value) is allowed: only a number has to be whole. Mongoose runs a validator on a default null too.
+const wholeNumber = { validator: (value: unknown) => value === null || value === undefined || Number.isInteger(value), message: 'must be a whole number' };
 
 /** A limit is a whole number of 0 or more, or null for unlimited. */
 const limit = { type: Number, default: null, min: 0, validate: wholeNumber };

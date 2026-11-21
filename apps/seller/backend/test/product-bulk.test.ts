@@ -254,6 +254,8 @@ beforeEach(() => {
 
   stubs.mongoose.connect = async () => mongoose;
   stubs.product.find = (filter) => chain(() => products.filter((row) => matches(row, filter)), (rows, populated) => (rows as Row[]).map((row) => view(row, populated)));
+  // Sprint 6 (S6-B3): the plan limit counts a store's live products (not in trash, not the sample); the in-memory rows answer it.
+  stubs.product.countDocuments = async (filter) => products.filter((p) => p.store === String(filter.store) && !p.deletedAt && !p.isDemo).length;
   stubs.product.findOne = (filter) => chain(() => products.find((row) => matches(row, filter)) ?? null, (row, populated) => (row ? view(row as Row, populated) : null));
   stubs.product.findOneAndUpdate = (filter, update) => {
     const row = products.find((candidate) => matches(candidate, filter));

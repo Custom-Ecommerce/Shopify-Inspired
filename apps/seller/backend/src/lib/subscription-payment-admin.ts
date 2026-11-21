@@ -119,7 +119,9 @@ async function undoConfirm(decided: PaymentRow): Promise<void> {
         $set: { status: 'claimed', isOpen: true, decidedBy: null, decidedAt: null, reason: null, periodStart: null, periodEnd: null, subscriptionBefore: null, subscriptionRevisionAfter: null },
         $inc: { revision: 1 },
       } as never,
-    );
+    )
+      .select('_id')
+      .lean();
   } catch (err) {
     console.error('[seller-backend] could not put a payment back after a failed confirm', err instanceof Error ? err.name : 'unknown');
   }
@@ -282,7 +284,9 @@ export async function voidPayment(input: InternalDecidePaymentRequest, adminId: 
         await SubscriptionPayment.findOneAndUpdate(
           { _id: decided._id, status: 'void', revision: revisionFilter(decided.revision) } as never,
           { $set: { status: 'confirmed', decidedBy: row.decidedBy ?? null, decidedAt: row.decidedAt ?? null, reason: row.reason ?? null }, $inc: { revision: 1 } } as never,
-        );
+        )
+          .select('_id')
+          .lean();
       } catch (undoErr) {
         console.error('[seller-backend] could not put a payment back after a failed void', undoErr instanceof Error ? undoErr.name : 'unknown');
       }

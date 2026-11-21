@@ -88,7 +88,7 @@ test("a reason is 3 or more characters to confirm and 5 or more to reject or voi
   assert.equal(reasonProblem("confirm", "ok!"), null);
   assert.equal(reasonProblem("confirm", "ok"), "Give a reason of at least 3 characters.");
   assert.equal(reasonProblem("reject", "four"), "Give a reason of at least 5 characters.");
-  assert.equal(reasonProblem("void", "  five  "), null, "trimmed first");
+  assert.equal(reasonProblem("void", "  fives  "), null, "trimmed first (5 characters)");
   assert.equal(reasonProblem("void", "    x    "), "Give a reason of at least 5 characters.");
   assert.match(reasonProblem("reject", "x".repeat(301)) ?? "", /at most 300/);
   assert.match(reasonProblem("reject", "<b>wrong</b>") ?? "", /plain text/);

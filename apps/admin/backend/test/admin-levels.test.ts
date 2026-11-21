@@ -351,8 +351,9 @@ test('the export route: owner only, capped at 5000 rows, CSV headers, the export
   assert.equal(AUDIT_EXPORT_ROW_CAP, 5000);
   assert.equal(res.headers.get('content-type'), 'text/csv; charset=utf-8');
   assert.equal(res.headers.get('x-export-truncated'), 'true');
-  const text = await res.text();
-  assert.equal(text.charCodeAt(0), 0xfeff);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  assert.deepEqual([...bytes.slice(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 BOM (Response.text() would strip it, so the bytes are read)');
+  const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
   assert.ok(text.includes("\"'=cmd\""), 'the reason is guarded');
   assert.deepEqual([audits[0][0], audits[0][3], audits[0][4].rows], ['audit.exported', OWNER, 3]);
   auditExportSteps.audit = (async () => { throw new Error('down'); }) as any;

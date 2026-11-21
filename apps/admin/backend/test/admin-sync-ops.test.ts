@@ -6,7 +6,7 @@ import { User, signSession } from '@/lib/workspace';
 import { ADMIN_AUDIENCE } from '@/lib/admin-auth';
 import { compareHeads, digest, receiveBatch, repair, type OutboxPort, type RevisionPort } from '../src/lib/sync-receiver';
 import { RETRY_LIMIT, errorCode, listFailedEmails, maskRecipient, retryDeadEvents, retryFailedEmails, retrySteps } from '../src/lib/admin-retries';
-import { retentionSteps } from '../src/app/api/admin/retention/route';
+import { retentionSteps } from '../src/lib/admin-retention';
 
 // Sprint 6 EP-16 (S6-B7, D-106): the reduced sync (record, compare, repair), the audited retries and the admin's retention run. Fakes only.
 
@@ -90,7 +90,8 @@ test('repair requeues the missing range in the sender outbox, never replays what
   const body = (first as { ok: true; body: Record<string, any> }).body;
   assert.deepEqual([body.replayFrom, body.requeued, body.alreadyPending, body.missing, body.acknowledgedRevision], [5, 5, 1, 0, 4]);
   assert.deepEqual(outbox.rows.filter((r) => r.revision <= 4).map((r) => r.status), ['sent', 'sent', 'sent', 'sent'], 'acknowledged revisions are never replayed');
-  assert.deepEqual(outbox.rows.filter((r) => r.revision >= 5).map((r) => [r.status, r.attempts]), Array(6).fill(['pending', 0]));
+  // Revisions 5-6 were dead and 8-10 sent: all back to pending with the attempts reset. Revision 7 was ALREADY pending: it is left exactly as it was.
+  assert.deepEqual(outbox.rows.filter((r) => r.revision >= 5).map((r) => [r.status, r.attempts]), [['pending', 0], ['pending', 0], ['pending', 3], ['pending', 0], ['pending', 0], ['pending', 0]]);
   const second = (await repair({ store: STORE, fromRevision: 1, toRevision: 10 }, NOW, { revisions, outbox })) as { ok: true; body: Record<string, any> };
   assert.equal(second.body.requeued, 0, 'a repeat requeues nothing new');
   const acked = (await repair({ store: STORE, fromRevision: 1, toRevision: 3 }, NOW, { revisions, outbox })) as { ok: true; body: Record<string, any> };

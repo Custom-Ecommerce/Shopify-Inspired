@@ -79,8 +79,9 @@ test('the update answer carries the settings and the queued event, or null', () 
   assert.equal(adminSettingsUpdateResponseSchema.safeParse({ settings, queued: { eventId: 'e', revision: 0 } }).success, false);
 });
 
-test('the writable field list is the four settings the policy matrix allows, and no revision', () => {
-  assert.deepEqual([...ADMIN_SETTINGS_FIELDS], ['defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired']);
+test('the writable field list starts with the four original settings (Sprint 6 adds more, below), and has no revision', () => {
+  assert.equal((ADMIN_SETTINGS_FIELDS as readonly string[]).includes('settingsRevision'), false);
+  assert.deepEqual([...ADMIN_SETTINGS_FIELDS].slice(0, 4), ['defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired']);
 });
 
 // Sprint 6 (D-116, D-118): the COD commission percent and the plan settings.

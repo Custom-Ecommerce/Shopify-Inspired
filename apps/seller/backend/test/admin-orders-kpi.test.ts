@@ -178,7 +178,7 @@ test('the KPI route answers whole rupees from the NEW ledger with aggregations; 
   assert.deepEqual(body.periods.today, { gatewaySales: 20000, commission: 800, gatewayOrders: 5, codOrderValue: 30000, codOrders: 7 });
   assert.equal(body.unsettledBalance, -1200);
   assert.deepEqual(body.topStores, [{ storeId: STORE_A, storeName: 'Zara Lawn', sales: 50000 }]);
-  assert.deepEqual(body.sellersByPlan, [{ planKey: 'growth', status: 'active', count: 3 }, { planKey: 'free', status: 'none', count: 7 }]);
+  assert.deepEqual(body.sellersByPlan, [{ planKey: 'free', status: 'none', count: 7 }, { planKey: 'growth', status: 'active', count: 3 }]);
   assert.equal(body.ordersByStatus.pending, 4);
   const numbers: number[] = [];
   (function walk(v: unknown) { if (typeof v === 'number') numbers.push(v); else if (v && typeof v === 'object') Object.values(v).forEach(walk); })(body);

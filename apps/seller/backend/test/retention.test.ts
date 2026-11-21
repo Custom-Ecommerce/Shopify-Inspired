@@ -1,4 +1,4 @@
-import { test, before, beforeEach, afterEach } from 'node:test';
+import { test, before, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -166,7 +166,10 @@ test('one audit line per run, with the counts and who ran it', async () => {
 const cron = (body?: unknown, secret: string | null = CRON) =>
   new NextRequest('http://seller.test/api/internal/retention/run', { method: 'POST', headers: { ...(secret === null ? {} : { 'x-retention-secret': secret }), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }) });
 
-test('the cron route: closed without or with a wrong secret, and when none is set; a dry run by default; only { apply: true } purges', async () => {
+test('the cron route: closed without or with a wrong secret, and when none is set; a dry run by default; only { apply: true } purges', async (t) => {
+  // The route reads the real clock; the test data are dated relative to NOW, so the clock is frozen at NOW.
+  mock.timers.enable({ apis: ['Date'], now: NOW.getTime() });
+  t.after(() => mock.timers.reset());
   assert.equal((await runPOST(cron({ apply: true }, null))).status, 401);
   assert.equal((await runPOST(cron({ apply: true }, 'w'.repeat(32)))).status, 401);
   assert.equal(stores.notif!.length, 7);
@@ -184,7 +187,10 @@ test('the cron route: closed without or with a wrong secret, and when none is se
   assert.equal((await runPOST(cron({ apply: true }))).status, 503);
 });
 
-test('the admin route is signed: unsigned and wrongly signed calls are refused; a signed dry run counts and the audit names the admin', async () => {
+test('the admin route is signed: unsigned and wrongly signed calls are refused; a signed dry run counts and the audit names the admin', async (t) => {
+  // The route reads the real clock; the test data are dated relative to NOW, so the clock is frozen at NOW.
+  mock.timers.enable({ apis: ['Date'], now: NOW.getTime() });
+  t.after(() => mock.timers.reset());
   const path = '/api/internal/retention/admin';
   const signed = (body: unknown, secret = MOD) => {
     const raw = JSON.stringify(body);
