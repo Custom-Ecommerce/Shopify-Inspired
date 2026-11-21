@@ -56,7 +56,7 @@ test('the Sprint 7 capability names exist now', () => {
 test('an admin with no level, or an unknown one, is an owner (back-compat); an unknown capability is denied to everyone', () => {
   assert.equal(effectiveAdminLevel(undefined), 'owner');
   assert.equal(effectiveAdminLevel(null), 'owner');
-  assert.equal(effectiveAdminLevel('superuser'), 'owner');
+  assert.equal(effectiveAdminLevel('superuser'), null, 'a present but unknown level is NOT an owner (S6-B7)');
   assert.equal(adminCan(undefined, 'users.manage'), true);
   assert.equal(adminCan(null, 'audit.export'), true);
   for (const level of ADMIN_LEVELS) {
@@ -81,4 +81,16 @@ test('the matrix is frozen and lists no capability twice or one that does not ex
     assert.equal(new Set(list).size, list.length, level);
     for (const capability of list) assert.ok((ADMIN_CAPABILITIES as readonly string[]).includes(capability), level + ' ' + capability);
   }
+});
+
+test('S6-B7: a level that is present but not one of the four is denied everything and has no capabilities; only a missing level is an owner', () => {
+  for (const garbage of ['superuser', 'Owner', 'OWNER', 'admin', '', ' owner', 0, false, {}, []]) {
+    assert.equal(effectiveAdminLevel(garbage), null, JSON.stringify(garbage));
+    for (const capability of ADMIN_CAPABILITIES) assert.equal(adminCan(garbage, capability), false, JSON.stringify(garbage) + ' ' + capability);
+    assert.deepEqual(adminCapabilities(garbage), [], JSON.stringify(garbage));
+    assert.throws(() => assertAdminCan(garbage, 'orders.read'), AdminCapabilityError);
+  }
+  assert.equal(effectiveAdminLevel(undefined), 'owner');
+  assert.equal(effectiveAdminLevel(null), 'owner');
+  assert.equal(adminCan(undefined, 'users.manage'), true);
 });

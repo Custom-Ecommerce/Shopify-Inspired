@@ -53,3 +53,5 @@ export * from './models/customer-note';
 export * from './models/blocked-contact';
 // Sprint 5 EP-28 (D-107): carts a shopper left with a phone and the consent line (7 day TTL).
 export * from './models/abandoned-cart';
+// Sprint 6 (S6-B7): the acknowledged revision per (store, group).
+export * from './models/store-sync-revision';

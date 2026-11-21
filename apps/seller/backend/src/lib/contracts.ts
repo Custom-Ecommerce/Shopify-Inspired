@@ -157,6 +157,9 @@ export const {
   internalDecidePaymentRequestSchema,
 } = contracts;
 
+// Sprint 6 (S6-B7): the retention run.
+export const { retentionRunRequestSchema } = contracts;
+
 // Sprint 6 (S6-B5): the admin's read-only orders view.
 export const { internalOrderListRequestSchema, internalOrderDetailRequestSchema } = contracts;
 

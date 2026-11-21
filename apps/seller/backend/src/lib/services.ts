@@ -68,6 +68,8 @@ export const StockMovement = db.StockMovement;
 export const ArchivedReview = db.ArchivedReview;
 // Sprint 4 EP-07: the notification outbox and the seller's in-app alerts.
 export const NotificationOutbox = db.NotificationOutbox;
+// Sprint 6 (S6-B7): the retention purge reads the sent sync events.
+export const SyncOutbox = db.SyncOutbox;
 export const SellerAlert = db.SellerAlert;
 // Sprint 4 EP-05 (D-088): the new commission ledger. The old commissionLedger is never used from the seller backend.
 export const CommissionEntry = db.CommissionEntry;

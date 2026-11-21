@@ -249,6 +249,9 @@ the return number and blocklist uniques). After deploying the backends run, in t
 4. `bootstrap-admin-data` (section "One shared database").
 5. `mark-sellers-verified` (section 8).
 
+Sprint 6 adds `migrate-admin-levels` (section "Admin levels"). The order is now: `migrate-commission-index`, `ensure-indexes` (it also builds the new
+`storeSyncRevisions` and `subscriptionPayments` indexes), **`migrate-admin-levels`**, `backfill-order-phone-key`, `bootstrap-admin-data`, `mark-sellers-verified`.
+
 ```bash
 pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/migrate-commission-index.mjs
 pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/ensure-indexes.mjs
@@ -298,7 +301,37 @@ Every other script points to a file that exists.
 | Commission ledger retry (EP-05.US01) | `POST` or `GET https://<seller backend>/api/internal/commission/backfill` | `OUTBOX_CRON_SECRET`, sent like the outbox flush | every 15 minutes |
 | Trash retention | `POST https://<seller backend>/api/internal/retention` | `RETENTION_CRON_SECRET` in `x-retention-secret` | daily |
 | Sync drain (admin) | `GET https://<admin backend>/api/internal/sync/drain` | `CRON_SECRET` as a bearer token (`apps/admin/backend/vercel.json`) | every minute |
+| Plan expiry (Sprint 6) | `POST https://<seller backend>/api/internal/subscriptions/expire` with `{"apply": true}` (without it: dry run) | `OUTBOX_CRON_SECRET` (`x-cron-secret` or bearer) | daily |
+| **Retention run** (Sprint 6) | `POST https://<seller backend>/api/internal/retention/run` with `{"apply": true}` (without it: dry run) | `RETENTION_CRON_SECRET` in `x-retention-secret` | daily, after the trash retention |
+| Email outbox flush (admin) | `POST` or `GET https://<admin backend>/api/internal/notifications/flush` | `OUTBOX_CRON_SECRET` | every 5 minutes |
 
+That is every route in the repository protected by a cron secret (`OUTBOX_CRON_SECRET`, `CRON_SECRET`, `RETENTION_CRON_SECRET`). By hand, from the admin console:
+**Sync** (retry dead events, retry failed emails), **Retention** (dry run, then apply, owner only) and **Subscription payments**. The signed internal
+sync routes `receive`, `digest` and `repair` on the admin backend are called by the sellers' sender (HMAC), not by a scheduler.
+
+### Backup and retention policy (Sprint 6, EP-29)
+
+- **Backups are the owner's step**, not the code's: turn on Atlas continuous or scheduled snapshots for the shared database, and a Cloudinary backup of
+  the media account. Neither is configured in the repository.
+- **Restore runbook, on a THROWAWAY database only, never on production:** (1) restore the Atlas snapshot into a NEW cluster or database whose name contains
+  `throwaway`; (2) point a copy of the env files at it; (3) run `ensure-indexes` dry run, then check counts of `users`, `stores`, `orders`, `commissionEntries`
+  and `subscriptionPayments` against the source; (4) open the consoles against it and read the audit log; (5) delete it. A real recovery is a
+  decision of the owner and Atlas support, made from the snapshot, not by running these scripts on production.
+
+| Data | Kept | Purged by |
+| --- | --- | --- |
+| Commission ledger (`commissionEntries`) | forever, append-only | never |
+| Audit log (`audit-log`) | forever | never |
+| Subscription payments | forever | never |
+| Sent emails (notification outbox) | 90 days | `retention/run` |
+| Sent sync events (sync outbox) | 30 days | `retention/run` |
+| Stock history | 365 days | `retention/run` |
+| Products in seller trash | 365 days (never one an admin took down or deleted) | `retention` and `retention/run` |
+| Closed tickets (Sprint 7) | 730 days | not built yet (period fixed in `retention-policy.ts`) |
+| Contact messages (Sprint 7) | 365 days | not built yet |
+
+Every period lives in `apps/seller/backend/src/lib/retention-policy.ts`. A run is a dry run unless it is told to apply, removes at most 500 rows per kind,
+and writes one audit line (`retention.run`) with the counts.
 The outbox flush sends queued and failed emails that are due: at most 50 per call, at most 5 tries per email, with a
 wait of 2, 4, 8 and then 16 minutes between tries. Each email is claimed with a compare-and-set, so two calls at the
 same moment never send it twice. The route answers `401` when `OUTBOX_CRON_SECRET` is not set (or is shorter than 16

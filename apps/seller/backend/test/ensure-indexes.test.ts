@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AbandonedCart, CommissionEntry, Review, Return, BlockedContact, Subscription, SubscriptionPayment, SubscriptionPlanModel } from '@/lib/services';
+import * as dbSchemas from '@markaz/db-schemas';
 // @ts-expect-error plain .mjs script module without types; tests are not type-checked (tsconfig excludes test)
 import * as planNs from '../../../../scripts/lib/ensure-indexes-plan.mjs';
 
@@ -213,4 +214,18 @@ test('Sprint 6 (S6-B4): once the payment indexes exist nothing is missing, and a
   assert.ok(plain.totals.missing >= 1, 'a plain index on seller is not the partial unique one');
   const wholeUnique = plan.planAll([{ model: 'SubscriptionPayment', collection: 'subscriptionPayments', declared }], { subscriptionPayments: [ID, { name: 'seller_1', key: { seller: 1 }, unique: true }] });
   assert.ok(wholeUnique.totals.missing + wholeUnique.totals.conflicts >= 1, 'a unique index over EVERY payment would forbid a second payment ever; it is not the same index');
+});
+
+test('Sprint 6 (S6-B7): a fresh database misses the unique {store, group} index of the sync revision log, and once it exists nothing is missing', () => {
+  const model = (dbSchemas as any).StoreSyncRevision ?? (dbSchemas as any).default?.StoreSyncRevision;
+  const declared = model.schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'StoreSyncRevision', collection: 'storeSyncRevisions', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['StoreSyncRevision']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string; unique: boolean; partial: boolean }> }).missing;
+  assert.ok(missing.some((m) => m.name === 'store_group_unique' && m.unique && !m.partial), 'one acknowledged revision row per (store, group)');
+  assert.equal(model.collection.name, 'storeSyncRevisions');
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.keys(key).join('_') + '_1', key, ...(options as object) }));
+  assert.equal(plan.planAll([{ model: 'StoreSyncRevision', collection: 'storeSyncRevisions', declared }], { storeSyncRevisions: [ID, ...have] }).totals.missing, 0);
 });

@@ -27,6 +27,11 @@ import {
   adminSubscriptionPlanListSchema,
   adminPaymentListSchema,
   adminUserListSchema,
+  retryResponseSchema,
+  failedEmailListSchema,
+  retentionRunResponseSchema,
+  type FailedEmailRow,
+  type RetentionRunResponse,
   adminUserResponseSchema,
   type AdminUser,
   adminOrderListSchema,
@@ -379,4 +384,24 @@ export function inviteAdminUser(body: { name: string; email: string; adminLevel:
 
 export function runUserAction(action: "level" | "disable" | "enable", id: string, body: { reason: string; adminLevel?: string }): Promise<{ user: AdminUser }> {
   return call("/api/users/" + encodeURIComponent(id) + "/" + action, adminUserResponseSchema as Parser<{ user: AdminUser }>, { method: "POST", body: JSON.stringify(body) });
+}
+
+// Sprint 6 (S6-B7): retries and the retention run.
+type RetryResult = { requested: number; retried: number; skipped: number };
+
+export function retryDeadEvents(ids: string[]): Promise<RetryResult> {
+  return call("/api/sync/retry", retryResponseSchema as Parser<RetryResult>, { method: "POST", body: JSON.stringify({ ids }) });
+}
+
+export function listFailedEmails(signal?: AbortSignal): Promise<{ docs: FailedEmailRow[]; totalDocs: number }> {
+  return call("/api/notifications/failed", failedEmailListSchema as Parser<{ docs: FailedEmailRow[]; totalDocs: number }>, { signal });
+}
+
+export function retryFailedEmails(ids: string[]): Promise<RetryResult> {
+  return call("/api/notifications/retry", retryResponseSchema as Parser<RetryResult>, { method: "POST", body: JSON.stringify({ ids }) });
+}
+
+/** The retention run: a dry run unless apply is true. */
+export function runRetentionNow(apply: boolean): Promise<RetentionRunResponse> {
+  return call("/api/retention", retentionRunResponseSchema as Parser<RetentionRunResponse>, { method: "POST", body: JSON.stringify(apply ? { apply: true } : {}) });
 }

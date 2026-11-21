@@ -122,3 +122,7 @@ export type { AdminUser } from "@markaz/contracts";
 // Sprint 6 (S6-B5): the read-only orders view and the overview KPIs.
 export const { adminOrderListSchema, adminOrderDetailResponseSchema, ADMIN_ORDER_FORBIDDEN_KEYS } = contracts;
 export type { AdminOrderRow, AdminOrderList, AdminOrderDetail, AdminKpi } from "@markaz/contracts";
+
+// Sprint 6 (S6-B7): retries and retention.
+export const { retryRequestSchema, retryResponseSchema, failedEmailListSchema, retentionRunRequestSchema, retentionRunResponseSchema, RETRY_CAP, RETENTION_TARGET_KEYS } = contracts;
+export type { FailedEmailRow, RetentionRunResponse } from "@markaz/contracts";

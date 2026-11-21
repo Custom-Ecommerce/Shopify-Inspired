@@ -33,7 +33,8 @@ export function toAdminUser(doc: Doc): AdminUser {
     id: String(doc._id),
     name: String(doc.name ?? ''),
     email: String(doc.email ?? ''),
-    adminLevel: effectiveAdminLevel(doc.adminLevel),
+    // An unknown stored level has no rights at all; it is shown as the least privileged level, never as owner.
+    adminLevel: effectiveAdminLevel(doc.adminLevel) ?? 'customer_support',
     accountStatus: ['suspended', 'blocked'].includes(doc.accountStatus) ? doc.accountStatus : 'active',
     accepted: Boolean(doc.emailVerifiedAt),
     createdAt: new Date(doc.createdAt ?? 0).toISOString(),
@@ -107,7 +108,7 @@ export async function changeAdminLevel(actorId: string, targetId: string, input:
   assertCan('admin', 'update', 'adminUsers', ['adminLevel']);
   if (targetId === actorId) throw new AdminHttpError(403, 'You cannot change your own level.', 'SELF_CHANGE');
   const target = await loadAdmin(targetId);
-  const from = effectiveAdminLevel(target.adminLevel);
+  const from = effectiveAdminLevel(target.adminLevel) ?? 'customer_support';
   if (from === input.adminLevel) return { user: toAdminUser(target), changed: false };
   if (from === 'owner' && target.accountStatus !== 'suspended' && (await otherActiveOwners(targetId)) === 0) {
     throw new AdminHttpError(409, 'This is the last active owner. Make someone else an owner first.', 'LAST_OWNER');

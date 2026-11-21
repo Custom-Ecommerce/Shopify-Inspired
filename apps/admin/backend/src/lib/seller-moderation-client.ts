@@ -22,6 +22,7 @@ import type { AdminSellerPlansResponse } from '../../../../../packages/contracts
 import type { AdminPaymentList, AdminPaymentWriteResponse } from '../../../../../packages/contracts/src/subscription-payments';
 import type { AdminOrderList, AdminOrderDetail } from '../../../../../packages/contracts/src/admin-orders';
 import type { AdminKpi } from '../../../../../packages/contracts/src/admin-overview';
+import type { RetentionRunResponse } from '../../../../../packages/contracts/src/admin-retries';
 
 const { INTERNAL_SECRET_MIN_LENGTH, internalRequestHeaders } = unwrapCjs(signatureNs) as typeof signatureNs;
 
@@ -208,3 +209,6 @@ export const readAdminOrderDetail = (adminId: string, input: { orderId: string }
   send('POST', '/api/internal/orders/detail', adminId, input, 'Orders');
 
 export const readKpi = (adminId: string): Promise<AdminKpi> => send('POST', '/api/internal/kpi', adminId, {}, 'Overview KPIs');
+
+/** Sprint 6 (S6-B7): the retention run, a signed call to the seller backend. A dry run (the default) only counts; apply purges, capped per target. */
+export const runRetention = (adminId: string, input: { apply?: boolean }): Promise<RetentionRunResponse> => send('POST', '/api/internal/retention/admin', adminId, input, 'Retention');

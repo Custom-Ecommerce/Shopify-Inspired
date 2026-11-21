@@ -358,3 +358,15 @@ test('the export route: owner only, capped at 5000 rows, CSV headers, the export
   auditExportSteps.audit = (async () => { throw new Error('down'); }) as any;
   assert.equal((await exportGET(await get('/e', OWNER))).status, 503, 'no audit entry, no file');
 });
+
+test('S6-B7: an admin whose stored level is garbage (not missing) is refused with 403 everywhere, the session check included', async () => {
+  const meGET = (await import('../src/app/api/admin/me/route')).GET;
+  const ordersGET = (await import('../src/app/api/admin/orders/route')).GET;
+  for (const garbage of ['superuser', 'Owner', '', 'admin']) {
+    users[0]!.adminLevel = garbage;
+    assert.equal((await ordersGET(await get('/o', OWNER))).status, 403, JSON.stringify(garbage));
+    assert.equal((await meGET(await get('/me', OWNER))).status, 403, JSON.stringify(garbage));
+  }
+  users[0]!.adminLevel = null;
+  assert.notEqual((await ordersGET(await get('/o', OWNER))).status, 403, 'null is a missing level: owner');
+});

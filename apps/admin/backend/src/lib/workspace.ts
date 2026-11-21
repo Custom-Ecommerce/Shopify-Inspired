@@ -11,6 +11,7 @@ const sync = unwrapCjs(syncNs);
 
 export const { adminCan, adminCapabilities, effectiveAdminLevel, ADMIN_LEVELS, ADMIN_CAPABILITIES, assertCan, PolicyDeniedError, writeAuditLog, hashPassword, verifyPassword, signSession, verifySession, isLocked, recordFailedAttempt, SESSION_MIN_SECRET_LENGTH } = auth;
 export const { CommissionRateHistory } = db;
+export const { StoreSyncRevision } = db;
 export const { AuditLog, CommissionLedgerModel, PlatformSettingsModel, Store, Subscription, SubscriptionPayment, SubscriptionPlanModel, SyncOutbox, User } = db;
 export const { enqueueSyncEvent, registerSyncOutboxModel } = sync;
 export type { SyncOutboxModelPort } from '@markaz/sync-core';

@@ -43,6 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Audit log", href: "/audit", icon: "audit", status: "live", capability: "audit.read" },
       { label: "Settings", href: "/settings", icon: "settings", status: "live", capability: "settings.read" },
       { label: "Admin users", href: "/users", icon: "sellers", status: "live", capability: "users.manage" },
+      { label: "Retention", href: "/retention", icon: "settings", status: "live", capability: "settings.write" },
     ],
   },
 ];

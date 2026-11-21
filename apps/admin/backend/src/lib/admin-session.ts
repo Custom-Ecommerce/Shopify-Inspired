@@ -27,6 +27,8 @@ export async function authorizeAdmin(request: Request, capability: AdminCapabili
   // Sprint 6 (S6-B6, D-118): the level is read from the same account read as everything else, on EVERY request (no cache), so a level change or a disable is
   // seen on the next request. An admin with no level is an owner (back-compat). A capability the level lacks is a 403.
   const adminLevel = effectiveAdminLevel(doc?.adminLevel);
+  // S6-B7: a level that is present but unknown is denied everything, even the session check.
+  if (adminLevel === null) throw new AdminHttpError(403, 'Forbidden', 'CAPABILITY_REQUIRED');
   if (capability !== ANY_ADMIN && !adminCan(adminLevel, capability)) throw new AdminHttpError(403, 'Forbidden', 'CAPABILITY_REQUIRED');
   return { userId, tokenVersion, adminLevel };
 }

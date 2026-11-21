@@ -71,9 +71,13 @@ export function isAdminLevel(value: unknown): value is AdminLevel {
   return typeof value === 'string' && (ADMIN_LEVELS as readonly string[]).includes(value);
 }
 
-/** The level of an admin account: a missing or unknown level reads as owner (back-compat for accounts from before levels). */
-export function effectiveAdminLevel(value: unknown): AdminLevel {
-  return isAdminLevel(value) ? value : 'owner';
+/**
+ * The level of an admin account. ONLY a missing level (undefined or null) reads as owner (back-compat for accounts from before levels). A level that is
+ * present but not one of the four known values is NOT an owner: it is null, and null is denied everything (S6-B7).
+ */
+export function effectiveAdminLevel(value: unknown): AdminLevel | null {
+  if (value === undefined || value === null) return 'owner';
+  return isAdminLevel(value) ? value : null;
 }
 
 export const LEVEL_LABELS: Readonly<Record<AdminLevel, string>> = Object.freeze({
@@ -84,14 +88,16 @@ export const LEVEL_LABELS: Readonly<Record<AdminLevel, string>> = Object.freeze(
 });
 
 /** Whether a level may use a capability. An unknown capability is denied for everyone. */
-export function adminCan(level: AdminLevel | null | undefined, capability: string): boolean {
+export function adminCan(level: unknown, capability: string): boolean {
   const effective = effectiveAdminLevel(level);
+  if (effective === null) return false;
   return (ADMIN_CAPABILITY_MATRIX[effective] as readonly string[]).includes(capability);
 }
 
 /** The capabilities of a level, for the console to follow. */
-export function adminCapabilities(level: AdminLevel | null | undefined): AdminCapability[] {
-  return [...ADMIN_CAPABILITY_MATRIX[effectiveAdminLevel(level)]];
+export function adminCapabilities(level: unknown): AdminCapability[] {
+  const effective = effectiveAdminLevel(level);
+  return effective === null ? [] : [...ADMIN_CAPABILITY_MATRIX[effective]];
 }
 
 export class AdminCapabilityError extends Error {
@@ -104,6 +110,6 @@ export class AdminCapabilityError extends Error {
 }
 
 /** Throws AdminCapabilityError (the admin backend turns it into a 403) when the level lacks the capability. */
-export function assertAdminCan(level: AdminLevel | null | undefined, capability: string): void {
+export function assertAdminCan(level: unknown, capability: string): void {
   if (!adminCan(level, capability)) throw new AdminCapabilityError(capability);
 }
