@@ -174,3 +174,37 @@ test('SB-6 (bug 6): a single return of the whole order takes the whole base and 
   assert.equal((await call(refundPOST, 'POST', String(whole._id), { amount: 1850, method: 'bank' })).status, 200);
   assert.deepEqual(reversals().map((e) => e.balanceEffect), [74]);
 });
+
+// SB-7 (re-verification bug 2): the completing return keeps back the share of the earlier received returns that have no reversal yet.
+async function threeReceived(): Promise<[Row, Row, Row]> {
+  splitOrder();
+  cod(1850, 74);
+  const r1 = world.ret({ status: 'approved', items: asked(P1, V1, 1000) });
+  const r2 = world.ret({ status: 'approved', items: asked(P2, V2, 500) });
+  const r3 = world.ret({ status: 'approved', items: asked(P2, V2, 500) });
+  await receiveAll([[r1, [P1, V1]], [r2, [P2, V2]], [r3, [P2, V2]]]);
+  return [r1, r2, r3];
+}
+const payCap = async (ret: Row) => assert.equal((await call(refundPOST, 'POST', String(ret._id), { amount: await capOf(ret), method: 'cash' })).status, 200);
+
+test('SB-7: through the routes, the completing return refunded FIRST reverses 19, the earlier ones later 37 and 18 (74 in all)', async () => {
+  const [r1, r2, r3] = await threeReceived();
+  await payCap(r3);
+  assert.deepEqual(reversals().map((e) => e.balanceEffect), [19]);
+  await payCap(r1);
+  await payCap(r2);
+  assert.deepEqual(reversals().map((e) => e.balanceEffect), [19, 37, 18]);
+  assert.equal(reversals().reduce((sum, e) => sum + e.balanceEffect, 0), 74);
+});
+
+test('SB-7: through the routes, only the completing return refunded: 19, not the whole 74', async () => {
+  const [, , r3] = await threeReceived();
+  await payCap(r3);
+  assert.deepEqual(reversals().map((e) => e.balanceEffect), [19]);
+});
+
+test('SB-7: through the routes, refunded in arrival order the numbers are unchanged: 37, 18, 19', async () => {
+  const [r1, r2, r3] = await threeReceived();
+  for (const ret of [r1, r2, r3]) await payCap(ret);
+  assert.deepEqual(reversals().map((e) => e.balanceEffect), [37, 18, 19]);
+});

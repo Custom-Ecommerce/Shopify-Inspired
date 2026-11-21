@@ -75,6 +75,7 @@ export async function reconcileReturnReversals(orderId: unknown): Promise<Reconc
         order: { _id: order._id ?? orderId, store: order.store, orderId: String(order.orderId ?? ''), paymentMethod: order.paymentMethod },
         returnedBase,
         completesOrder: completion.completes,
+        earlierReturns: completion.earlier,
       });
       if (outcome.outcome === 'created') result.created += 1;
       else if (outcome.outcome === 'exists') result.existing += 1;

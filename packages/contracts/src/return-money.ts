@@ -55,6 +55,11 @@ export interface ReversalInput {
    * returns were received). It is the last one: it takes everything that is left of the commission, whatever rounding the earlier parts made.
    */
   completesOrder?: boolean;
+  /**
+   * SB-7 (re-verification bug 2): with completesOrder, the proportional reversals (same rounding as a normal return) that the EARLIER received returns of the
+   * order will still get because they have no reversal yet. The completing return keeps them back, so it takes only what is really left for it.
+   */
+  reservedForEarlier?: number;
 }
 
 /**
@@ -69,7 +74,7 @@ export function commissionReversal(input: ReversalInput): number {
   const previousAmount = Math.min(commission, whole(input.previousAmount));
   const left = commission - previousAmount;
   if (commission <= 0 || base <= 0 || left <= 0) return 0;
-  if (input.completesOrder === true) return left;
+  if (input.completesOrder === true) return Math.max(0, left - whole(input.reservedForEarlier));
   const room = Math.max(0, base - whole(input.previousBase));
   const returned = Math.min(whole(input.returnedBase), room);
   if (returned <= 0) return 0;

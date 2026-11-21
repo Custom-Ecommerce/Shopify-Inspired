@@ -225,6 +225,8 @@ export interface ReturnReversalInput {
   returnedBase: number;
   /** SB-6: true when this return completes the received quantities of the whole order (completionOf): it takes everything that is left of the commission. */
   completesOrder?: boolean;
+  /** SB-7: the earlier received returns of the order and their proportional caps (from completionOf), used only with completesOrder. */
+  earlierReturns?: ReadonlyArray<{ returnId: unknown; base: number }>;
 }
 
 export type ReturnReversalResult =
@@ -255,7 +257,15 @@ export async function reverseForReturn(input: ReturnReversalInput): Promise<Retu
     const previousBase = reversals.reduce((sum, entry) => sum + num(entry.baseAmount), 0);
     const previousAmount = reversals.reduce((sum, entry) => sum + num(entry.balanceEffect), 0);
     const commission = Math.max(0, -num(original.balanceEffect));
-    const amount = commissionReversal({ commission, orderBase: num(original.baseAmount), returnedBase: input.returnedBase, previousBase, previousAmount, completesOrder: input.completesOrder === true });
+    // SB-7 (re-verification bug 2): the completing return keeps back what the earlier received returns WITHOUT a reversal yet will still get
+    // (round(commission x their cap / order base), the rule of a normal return), so it never takes their share.
+    const orderBase = num(original.baseAmount);
+    const reversed = new Set(reversals.filter((entry) => entry.returnId !== undefined && entry.returnId !== null).map((entry) => String(entry.returnId)));
+    const reservedForEarlier =
+      input.completesOrder === true && orderBase > 0
+        ? (input.earlierReturns ?? []).filter((earlier) => !reversed.has(String(earlier.returnId)) && String(earlier.returnId) !== String(input.returnId)).reduce((sum, earlier) => sum + Math.round((commission * Math.max(0, earlier.base)) / orderBase), 0)
+        : 0;
+    const amount = commissionReversal({ commission, orderBase, returnedBase: input.returnedBase, previousBase, previousAmount, completesOrder: input.completesOrder === true, reservedForEarlier });
     if (amount <= 0) return { outcome: 'nothing' };
 
     // The base recorded is what this return really adds to the order's returned base, so the next return's remainder check is exact.

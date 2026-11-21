@@ -123,6 +123,8 @@ export interface ReturnCompletion {
   completes: boolean;
   /** The refund caps of the returns received before this one (their proportional caps): what the completing return's base subtracts. */
   earlierBase: number;
+  /** The earlier received returns of the order with their proportional caps (SB-7: the completing return keeps back the share of those without a reversal). */
+  earlier: Array<{ returnId: unknown; base: number }>;
 }
 
 /**
@@ -140,21 +142,24 @@ export function completionOf(returnDoc: unknown, siblings: readonly unknown[], o
     if (COUNTED_STATUSES.has(String(row.status))) pool.set(String(row._id), row);
   }
   if (COUNTED_STATUSES.has(String(doc.status))) pool.set(mine, doc);
-  if (!pool.has(mine)) return { completes: false, earlierBase: 0 };
+  if (!pool.has(mine)) return { completes: false, earlierBase: 0, earlier: [] };
   const lines = orderLinesOf(order);
   const ordered = [...pool.values()].sort((a, b) => receivedKey(a) - receivedKey(b) || String(a._id).localeCompare(String(b._id)));
   const back: Array<{ productId: string; variantId: string; quantity: number }> = [];
   let earlierBase = 0;
+  const earlier: Array<{ returnId: unknown; base: number }> = [];
   for (const row of ordered) {
     for (const entry of Array.isArray(row.received) ? (row.received as unknown[]).map(record) : []) {
       back.push({ productId: String(entry.productId), variantId: String(entry.variantId), quantity: whole(entry.quantity) });
     }
     const complete = everythingReceived(lines, back);
-    if (String(row._id) === mine) return { completes: complete, earlierBase };
-    if (complete) return { completes: false, earlierBase };
-    earlierBase += refundCapOf(row, order) ?? 0;
+    if (String(row._id) === mine) return { completes: complete, earlierBase, earlier };
+    if (complete) return { completes: false, earlierBase, earlier };
+    const base = refundCapOf(row, order) ?? 0;
+    earlierBase += base;
+    earlier.push({ returnId: row._id, base });
   }
-  return { completes: false, earlierBase };
+  return { completes: false, earlierBase, earlier };
 }
 
 /** The refund cap of a return with the rule of the whole order applied: the same number in the refund, the detail, the list and the reconcile. */

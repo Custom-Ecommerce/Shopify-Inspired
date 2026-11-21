@@ -168,3 +168,11 @@ test('commissionReversal: completesOrder takes what is left, whatever the earlie
   assert.equal(commissionReversal({ ...base, previousAmount: 74, returnedBase: 462, completesOrder: true }), 0, 'never more than the original');
   assert.equal(commissionReversal({ commission: 0, orderBase: 1850, previousBase: 0, previousAmount: 0, returnedBase: 500, completesOrder: true }), 0, 'no commission, nothing to give back');
 });
+
+test('commissionReversal: completesOrder keeps back the share of earlier returns without a reversal (SB-7)', () => {
+  const base = { commission: 74, orderBase: 1850, returnedBase: 463, completesOrder: true, previousBase: 0, previousAmount: 0 };
+  assert.equal(commissionReversal({ ...base, reservedForEarlier: 55 }), 19, 'refunded first: 74 - (37 + 18)');
+  assert.equal(commissionReversal({ ...base, reservedForEarlier: 0, previousBase: 1387, previousAmount: 55 }), 19, 'refunded last: nothing held back');
+  assert.equal(commissionReversal({ ...base, reservedForEarlier: 0 }), 74, 'a single full return');
+  assert.equal(commissionReversal({ ...base, reservedForEarlier: 200 }), 0, 'never below zero');
+});

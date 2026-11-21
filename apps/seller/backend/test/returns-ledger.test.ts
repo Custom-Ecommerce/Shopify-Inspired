@@ -273,13 +273,46 @@ test('SB-6 (bug 6): a full return made of three parts reverses the WHOLE commiss
   assert.equal(given(), 74);
 });
 
-test('SB-6: the completing return takes what is left even when it is refunded BEFORE an earlier one, and never more than the commission', async () => {
+// SB-7 (re-verification bug 2): the completing return keeps back the proportional share of the earlier received returns that have no reversal yet.
+// Order 2000, discount 150: base 1850, commission 74, returns 925 (kurta) / 462 / 463 (the one that completes). Shares: 37, 18; the completing one: 74 - 55 = 19.
+const EARLIER = [{ returnId: RETURN_1, base: 925 }, { returnId: RETURN_2, base: 462 }];
+
+test('SB-7: the completing return refunded FIRST takes 19 (not 74); the earlier ones refunded later still get 37 and 18', async () => {
   commissionOf(1850);
-  const completing = await reverseForReturn({ returnId: RETURN_3, order, returnedBase: 463, completesOrder: true });
-  assert.deepEqual(completing, { outcome: 'created', amount: 74 }, 'everything that is left of the commission');
-  const earlier = await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 925 });
-  assert.deepEqual(earlier, { outcome: 'nothing' }, 'nothing is left for the earlier return, so the total can never go above the original');
+  const completing = await reverseForReturn({ returnId: RETURN_3, order, returnedBase: 463, completesOrder: true, earlierReturns: EARLIER });
+  assert.deepEqual(completing, { outcome: 'created', amount: 19 });
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 925 }), { outcome: 'created', amount: 37 });
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_2, order, returnedBase: 462 }), { outcome: 'created', amount: 18 });
+  assert.equal(given(), 74, 'exactly the commission, whatever the refund order');
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_3, order, returnedBase: 463, completesOrder: true, earlierReturns: EARLIER }), { outcome: 'exists' });
   assert.equal(given(), 74);
+});
+
+test('SB-7: refunded last: 37 / 18 / 19 (the earlier ones already have their reversal, nothing is held back)', async () => {
+  commissionOf(1850);
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 925 }), { outcome: 'created', amount: 37 });
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_2, order, returnedBase: 462 }), { outcome: 'created', amount: 18 });
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_3, order, returnedBase: 463, completesOrder: true, earlierReturns: EARLIER }), { outcome: 'created', amount: 19 });
+  assert.equal(given(), 74);
+});
+
+test('SB-7: refunded in the middle (kurta, then the completing one, then the last earlier one): 37, 19, 18', async () => {
+  commissionOf(1850);
+  assert.equal((await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 925 })).outcome, 'created');
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_3, order, returnedBase: 463, completesOrder: true, earlierReturns: EARLIER }), { outcome: 'created', amount: 19 }, 'holds back only the share of the one still without a reversal (18)');
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_2, order, returnedBase: 462 }), { outcome: 'created', amount: 18 });
+  assert.equal(given(), 74);
+});
+
+test('SB-7: only the completing return is ever refunded: 19 of 74, not the whole commission', async () => {
+  commissionOf(1850);
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_3, order, returnedBase: 463, completesOrder: true, earlierReturns: EARLIER }), { outcome: 'created', amount: 19 });
+  assert.equal(given(), 19);
+});
+
+test('SB-7: a single full return still takes the whole commission (no earlier returns to keep back)', async () => {
+  commissionOf(1850);
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 1850, completesOrder: true, earlierReturns: [] }), { outcome: 'created', amount: 74 });
 });
 
 test('SB-6: a partial return stays proportional (no completesOrder, no remainder)', async () => {

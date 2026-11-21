@@ -101,6 +101,36 @@ test('SB-6 (bug 6): the reconcile computes the same completion flag: split retur
   assert.deepEqual(await reconcileReturnReversals(ORDER_A), { created: 0, existing: 3, nothingDue: 0, failed: 0 }, 'a second run writes nothing');
 });
 
+test('SB-7: the reconcile gives the same numbers as the refund path when only the completing return was refunded, and when the earlier ones are refunded later', async () => {
+  world.order({
+    paymentStatus: 'unpaid',
+    subtotal: 2000,
+    discountAmount: 150,
+    total: 2050,
+    items: [
+      { productId: P1, variantId: V1, productTitle: 'Shirt', variantTitle: 'M', sku: 'SH-M', unitPrice: 1000, quantity: 1, stockDeducted: true },
+      { productId: P2, variantId: V2, productTitle: 'Cap', variantTitle: 'Default', sku: null, unitPrice: 500, quantity: 2, stockDeducted: true },
+    ],
+  });
+  const at = (minutes: number) => new Date(Date.now() - DAY + minutes * 60_000);
+  const line = (productId: string, variantId: string) => [{ productId, variantId, productTitle: 'x', variantTitle: 'x', quantity: 1, unitPrice: productId === P1 ? 1000 : 500 }];
+  const got = (productId: string, variantId: string) => back([productId, variantId, 1]);
+  // three received returns; ONLY the last (completing) one has a refund recorded
+  const r1 = world.ret({ status: 'received', items: line(P1, V1), received: got(P1, V1), receivedAt: at(1), updatedAt: at(1) });
+  const r2 = world.ret({ status: 'received', items: line(P2, V2), received: got(P2, V2), receivedAt: at(2), updatedAt: at(2) });
+  const r3 = world.ret({ status: 'refunded', items: line(P2, V2), received: got(P2, V2), receivedAt: at(3), updatedAt: at(4), refundAmount: 463, refunds: [{ amount: 463, method: 'cash', reference: 'r', at: at(4) }], resolvedAt: at(4) });
+  world.orders.find((o) => String(o._id) === ORDER_A)!.paymentStatus = 'collected';
+  await recordAndReconcile(collected());
+  assert.deepEqual(reversals().map((e) => [String(e.returnId), e.balanceEffect]), [[String(r3._id), 19]], 'the completing return keeps 55 back for the two without a refund');
+  // the earlier ones are refunded later: the reconcile writes their proportional shares
+  Object.assign(r1, { status: 'refunded', refundAmount: 925, refunds: [{ amount: 925, method: 'cash', reference: 'r', at: at(10) }], updatedAt: at(10) });
+  Object.assign(r2, { status: 'refunded', refundAmount: 462, refunds: [{ amount: 462, method: 'cash', reference: 'r', at: at(11) }], updatedAt: at(11) });
+  await reconcileReturnReversals(ORDER_A);
+  const by = Object.fromEntries(reversals().map((e) => [String(e.returnId), e.balanceEffect]));
+  assert.deepEqual([by[String(r1._id)], by[String(r2._id)], by[String(r3._id)]], [37, 18, 19]);
+  assert.equal(reversals().reduce((sum, e) => sum + e.balanceEffect, 0), 74);
+});
+
 test('the reconcile is idempotent: run again (or in parallel) and no second reversal is written, the count says it existed', async () => {
   world.order();
   refundedReturn([[P1, V1, 1]]);

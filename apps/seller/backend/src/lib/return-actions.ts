@@ -255,6 +255,7 @@ export async function recordRefund(storeId: string, id: string, actor: Actor, bo
     order: { _id: order._id, store: order.store, orderId: String(order.orderId ?? ''), paymentMethod: order.paymentMethod },
     returnedBase: cap,
     completesOrder: completion.completes,
+    earlierReturns: completion.earlier,
   });
   await audit('return.refund', actor, id, { storeId, returnNumber: updated.returnNumber ?? null, amount: body.amount, method: body.method, completed });
   return { doc: updated, cap, completed, reversal };
