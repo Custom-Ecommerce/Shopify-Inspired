@@ -131,3 +131,12 @@ test("a refused session clears the cookie, a refused permission is 403, and a ba
   assert.equal((await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5 }))).status, 502);
   assert.equal((await settingsGET(req("GET", "/api/settings"))).status, 502);
 });
+
+test("Sprint 6: the proxy refuses a COD percent of 101 and a grace period of 31 before it reaches the backend", async () => {
+  const calls = stubBackend(200, { settings: { defaultCommissionRate: 4 } });
+  for (const body of [{ codCommissionPercent: 101 }, { graceDays: 31 }, { trialDays: 61 }, { supportEmail: "not an email" }, { paymentInstructions: "x".repeat(1001) }]) {
+    const response = await settingsPATCH(req("PATCH", "/api/settings", { ...body, reason: "x" }));
+    assert.equal(response.status, 422, JSON.stringify(body));
+  }
+  assert.equal(calls.length, 0);
+});

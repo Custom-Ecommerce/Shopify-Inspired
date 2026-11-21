@@ -55,6 +55,17 @@ export interface EarningsData {
   payouts: EarningsPayout[];
   /** Sprint 5 EP-13: the part of the summary that came from refunded returns (already netted into it). Absent from an older backend. */
   returns?: { count: number; sales: number; commission: number };
+  /** Sprint 6 D-116: the cash-on-delivery part of the summary (already counted in it). Absent from an older backend. */
+  cod?: { orders: number; sales: number; commission: number };
+}
+
+/** The rates of one store (GET /api/stores/:id/commission). Older backends send only rate and source. */
+export interface CommissionRates {
+  /** Card (gateway) orders: the store's own rate or the standard one. */
+  gatewayRate: number;
+  gatewaySource: "custom" | "default";
+  /** Cash on delivery: the platform's COD percent. 0 means no commission on COD. */
+  codRate: number;
 }
 
 /** "PKR 12,500". A negative amount reads "-PKR 500". */
@@ -117,4 +128,63 @@ export function balanceHint(balance: number): string {
   if (balance > 0) return "Not paid out yet. The platform pays this to your payout account.";
   if (balance < 0) return "You owe the platform this amount. It is taken from your next payout.";
   return "Nothing is waiting to be paid out.";
+}
+
+/** A percent without a trailing zero: 4 -> "4%", 2.5 -> "2.5%". */
+export function formatPercent(rate: number): string {
+  return (Number.isInteger(rate) ? String(rate) : String(Math.round(rate * 10) / 10)) + "%";
+}
+
+/**
+ * Reads the answer of /api/dashboard/commission. A newer backend sends gatewayRate and codRate; an older one only rate and source (then
+ * COD is taken as 0, which is what it charged nothing for). Returns null for anything unusable, and the page hides the line.
+ */
+export function readCommissionRates(body: unknown): CommissionRates | null {
+  if (typeof body !== "object" || body === null) return null;
+  const record = body as Record<string, unknown>;
+  const gateway = typeof record.gatewayRate === "number" ? record.gatewayRate : typeof record.rate === "number" ? record.rate : null;
+  const source = record.source === "custom" || record.source === "default" ? record.source : null;
+  if (gateway === null || source === null || !Number.isFinite(gateway) || gateway < 0 || gateway > 100) return null;
+  const cod = typeof record.codRate === "number" && Number.isFinite(record.codRate) && record.codRate >= 0 && record.codRate <= 100 ? record.codRate : 0;
+  return { gatewayRate: gateway, gatewaySource: source, codRate: cod };
+}
+
+/**
+ * What the commission tile says about the rates. While the COD percent is 0 the page says the card rate and that cash on delivery carries
+ * no commission; when it is not 0 it says both rates.
+ */
+export function commissionRatesText(rates: CommissionRates): string {
+  const card = formatPercent(rates.gatewayRate) + (rates.gatewaySource === "custom" ? " (your rate)" : " (standard rate)");
+  if (rates.codRate === 0) return "Card orders " + card + ". Cash on delivery: no commission.";
+  return "Card orders " + card + ". Cash on delivery " + formatPercent(rates.codRate) + ".";
+}
+
+/** A ledger row of a COD order that carried no commission (the percent was 0 when it was collected). */
+export function isNoCommissionEntry(entry: Pick<EarningsEntry, "type" | "amount" | "rate">): boolean {
+  return entry.type === "cod_commission" && entry.amount === 0 && entry.rate === 0;
+}
+
+/** The type column: a zero COD row says "COD sale, no commission" instead of "COD commission" with PKR 0. */
+export function entryTypeText(entry: Pick<EarningsEntry, "type" | "reversesType" | "amount" | "rate">): string {
+  if (isNoCommissionEntry(entry)) return "COD sale (no commission)";
+  if (entry.type === "reversal" && entry.reversesType === "cod_commission" && entry.amount === 0 && entry.rate === 0) return "Reversal of COD sale (no commission)";
+  return entryLabel(entry);
+}
+
+/** The amount column: "No commission" for a zero COD row, else the signed amount. */
+export function entryAmountText(entry: Pick<EarningsEntry, "type" | "reversesType" | "amount" | "rate">): string {
+  if (isNoCommissionEntry(entry) || (entry.type === "reversal" && entry.reversesType === "cod_commission" && entry.amount === 0 && entry.rate === 0)) return "No commission";
+  return formatSignedPkr(entry.amount);
+}
+
+/**
+ * The line under the summary about cash on delivery: with a COD percent of 0, "COD sales PKR 2,000 (3 orders): no commission"; with a percent
+ * above 0 the commission they paid. Null when there were no COD sales in the period (or the backend does not send them).
+ */
+export function codSalesLine(cod: EarningsData["cod"], rates: CommissionRates | null): string | null {
+  if (!cod || cod.orders <= 0 || cod.sales <= 0) return null;
+  const orders = cod.orders + (cod.orders === 1 ? " order" : " orders");
+  const noCommission = (rates !== null && rates.codRate === 0 && cod.commission === 0) || (rates === null && cod.commission === 0);
+  if (noCommission) return "Cash on delivery sales: " + formatPkr(cod.sales) + " (" + orders + "), no commission.";
+  return "Cash on delivery sales: " + formatPkr(cod.sales) + " (" + orders + "), commission " + formatPkr(cod.commission) + ".";
 }

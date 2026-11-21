@@ -93,3 +93,25 @@ test("a network failure is an ApiError with status 0", async () => {
   }) as typeof fetch;
   await assert.rejects(getSettings(), (err: unknown) => err instanceof ApiError && err.status === 0);
 });
+
+test("Sprint 6: an answer from a backend without the new settings is read with their defaults", async () => {
+  stub(200, { settings });
+  const result = await getSettings();
+  assert.equal(result.codCommissionPercent, 0);
+  assert.equal(result.paymentInstructions, null);
+  assert.equal(result.graceDays, 7);
+  assert.equal(result.trialDays, 0);
+  assert.equal(result.supportEmail, null);
+  assert.equal(result.supportPhone, null);
+});
+
+test("Sprint 6: the new settings travel in the update body and come back in the answer", async () => {
+  const seen = stub(200, {
+    settings: { ...settings, codCommissionPercent: 2, graceDays: 10, paymentInstructions: "Meezan 0123" },
+    queued: { eventId: "01JABCDEFGHJKMNPQRSTVWXYZ0", revision: 4 },
+  });
+  const result = await updateSettings({ codCommissionPercent: 2, graceDays: 10, paymentInstructions: "Meezan 0123", reason: "Plans" });
+  assert.deepEqual(JSON.parse(seen[0].body ?? "{}"), { codCommissionPercent: 2, graceDays: 10, paymentInstructions: "Meezan 0123", reason: "Plans" });
+  assert.equal(result.settings.codCommissionPercent, 2);
+  assert.equal(result.settings.paymentInstructions, "Meezan 0123");
+});

@@ -320,3 +320,41 @@ test('SB-6: a partial return stays proportional (no completesOrder, no remainder
   assert.deepEqual(await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 925, completesOrder: false }), { outcome: 'created', amount: 37 });
   assert.equal(given(), 37);
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-12.US04.T02 (D-116): a COD order at 0 percent has a zero entry; a return of it gives back nothing, without an error.
+
+test('Sprint 6: a return of an order whose COD entry is zero (0 percent) gives nothing due, without an error and without a row', async () => {
+  commissionOf(2000, 0); // rate 0: balanceEffect 0
+  const result = await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 500 });
+  assert.deepEqual(result, { outcome: 'nothing' });
+  assert.equal(returnReversals().length, 0);
+  assert.equal(world.audits.filter((a) => a.action === 'commission.reversal').length, 0);
+});
+
+test('Sprint 6: the return that completes the order of a zero entry also gives nothing due', async () => {
+  commissionOf(2000, 0);
+  const result = await reverseForReturn({ returnId: RETURN_2, order, returnedBase: 2000, completesOrder: true });
+  assert.deepEqual(result, { outcome: 'nothing' });
+  assert.equal(returnReversals().length, 0);
+});
+
+test('Sprint 6: an order without any COD entry still answers no_commission (nothing to give back), not nothing', async () => {
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 500 }), { outcome: 'no_commission' });
+});
+
+test('Sprint 6: the reversal follows the ORIGINAL entry (rate and amount), not the percent that applies now', async () => {
+  commissionOf(2000, 4); // written at 4 percent: 80
+  // the COD percent is 0 by now; reverseForReturn never reads it
+  const result = await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 500 });
+  assert.deepEqual(result, { outcome: 'created', amount: 20 });
+  assert.equal(returnReversals()[0]!.rate, 4);
+});
+
+test('Sprint 6: reverseLedgerForOrder with a zero COD entry writes a zero reversal and reports no failure', async () => {
+  commissionOf(2000, 0);
+  assert.deepEqual(await reverseLedgerForOrder(ORDER_1, 'cancelled'), { written: 1, existing: 0, failed: 0 });
+  const reversal = world.entries.find((e) => e.type === 'reversal')!;
+  assert.equal(reversal.balanceEffect === 0, true);
+  assert.equal(reversal.reversesType, 'cod_commission');
+});

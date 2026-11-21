@@ -47,6 +47,34 @@ export const adminSellerStatusResponseSchema = z.object({
 });
 export type AdminSellerStatusResponse = z.infer<typeof adminSellerStatusResponseSchema>;
 
+/**
+ * Sprint 6 EP-12.US02: GET /api/admin/sellers/:id/store-limit answers this. The seller's override, the effective limit and where it comes
+ * from (override, plan, setting, env), how many stores the seller has, and what each step would give, so the dialog can say what clearing
+ * the override would do.
+ */
+export const adminSellerStoreLimitSchema = z.object({
+  seller: z.object({
+    id: objectIdSchema,
+    name: z.string(),
+    email: z.string(),
+    storeLimitOverride: z.number().int().min(1).nullable(),
+    effectiveLimit: z.number().int().min(1),
+    source: z.enum(['override', 'plan', 'setting', 'env']),
+    storesUsed: z.number().int().min(0),
+    /** The plan's store limit (EP-14); null until plans exist. */
+    planLimit: z.number().int().min(1).nullable(),
+    platformMax: z.number().int().min(1).nullable(),
+    envMax: z.number().int().min(1),
+  }),
+});
+export type AdminSellerStoreLimit = z.infer<typeof adminSellerStoreLimitSchema>;
+
+/** POST /api/admin/sellers/:id/store-limit answers this. */
+export const adminSellerStoreLimitSetResponseSchema = z.object({
+  seller: z.object({ id: objectIdSchema, storeLimitOverride: z.number().int().min(1).nullable(), changed: z.boolean() }),
+});
+export type AdminSellerStoreLimitSetResponse = z.infer<typeof adminSellerStoreLimitSetResponseSchema>;
+
 export const adminSellerListEnvelopeSchema = envelopeOf(adminSellerListItemSchema);
 
 /* Sync outbox health. */

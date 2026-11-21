@@ -45,8 +45,26 @@ preview links, cache purge, sync, Cloudinary uploads, email. Each example has a 
 | `UNSUBSCRIBE_SIGNING_SECRET` | seller backend | Signs the unsubscribe link of broadcast emails (EP-07.US04). 16 characters or more. Without it a broadcast cannot be sent (503) and every unsubscribe link answers 404. |
 | `CARD_CHECKOUT_ENABLED` | seller backend (listed in the storefront example, never read there) | Sprint 5 COD-only mode (D-107). Card checkout is offered to shoppers only when this is `true` or `1` and the Stripe values are set; unset or any other value keeps card off everywhere. Stripe stays for seller billing. **Changing it takes up to 300 seconds to show on a storefront** (SB-6, D-113): the storefront caches each store's answer for `STORE_REVALIDATE_SECONDS` = 300 (`apps/storefront/lib/api/stores.ts`), so after the switch goes off a shopper can still be offered card until the cache is revalidated or the wait ends. The order route refuses card at once (422 `PAYMENT_METHOD_UNAVAILABLE`), so nothing is charged; restart the seller backend, then wait up to 5 minutes (or revalidate the store). |
 | `PLATFORM_DEFAULT_COMMISSION_PERCENT` | seller backend, admin backend | Platform default commission in percent. The placeholder is 5; the owner sets the real value (A-019). |
+| `COD_COMMISSION_PERCENT` | seller backend | Sprint 6 (D-116): commission percent on cash-on-delivery orders, used only while the platform settings document is not in the seller database. Empty or `0` (the default) means COD carries no commission; a store's own rate never applies to COD. A COD order is still written to the ledger at 0 percent (rate 0, balance effect 0). The admin console setting `codCommissionPercent` wins when present. |
+| `SELLER_MAX_STORES` | seller backend, admin backend | Stores per seller when no seller override, plan limit or platform setting applies (default 3). The seller backend enforces it; the admin backend only reads it to show a seller's effective limit in the Store limit dialog, so give both the same value. |
 | `APP_BASE_URL_SELLER` | seller backend, admin backend | Seller portal base URL for links in emails. |
 | `APP_BASE_URL_ADMIN` | admin backend | Admin console base URL for operator password-reset links (Sprint 4 EP-08). |
+
+### Platform settings added in Sprint 6 (admin console, Settings; no environment variable)
+
+Each change needs a reason, is audited, advances the settings revision and is sent to the seller backend. The bootstrap script
+(`scripts/bootstrap-admin-data.mjs`) seeds `codCommissionPercent` 0, `graceDays` 7 and `trialDays` 0 on a new database.
+
+| Setting | Range | Default | Meaning |
+| --- | --- | --- | --- |
+| `codCommissionPercent` | 0 to 100 | 0 | Commission on cash-on-delivery orders (D-116). The default rate and a store's own rate apply to gateway (card) orders only. An entry already written is never rewritten when this changes. |
+| `paymentInstructions` | text, at most 1000 characters | none | How a seller pays a subscription by hand (bank, JazzCash, Easypaisa). Plain text, escaped wherever it is shown. |
+| `graceDays` | 0 to 30 | 7 | Days a lapsed subscription keeps its plan limits before it falls back to Free. |
+| `trialDays` | 0 to 60 | 0 | Days of a free trial on a paid plan. |
+| `supportEmail`, `supportPhone` | email, phone (at most 30 characters) | none | Where sellers can reach the platform about a subscription payment. |
+
+The seller's store limit is resolved in this order: the seller's own override (admin, with a reason) first, then the plan limit
+(EP-14, once built), then the platform setting `maxStoresPerSeller`, then `SELLER_MAX_STORES`, then 3.
 
 ### Sprint 3 deploy variables (still required for those features)
 

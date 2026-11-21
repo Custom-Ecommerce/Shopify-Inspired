@@ -26,6 +26,9 @@ test('an empty database: settings with the code defaults, no mirrors', () => {
     maxStoresPerSeller: 3,
     settingsRevision: 0,
     storeApprovalRequired: false,
+    codCommissionPercent: 0,
+    graceDays: 7,
+    trialDays: 0,
   });
   assert.equal(plan.createSettings?.defaultCommissionRate, SETTINGS_DEFAULTS.defaultCommissionRate);
   assert.deepEqual(plan.createMirrors, []);
@@ -107,4 +110,16 @@ test('target guard: safe names pass, other names need the flag, the dry run need
   assert.equal(targetDecision('markaz', { apply: true, iKnowThisIsReal: false }).ok, false);
   assert.equal(targetDecision('markaz', { apply: true, iKnowThisIsReal: true }).ok, true);
   assert.equal(targetDecision('', { apply: true, iKnowThisIsReal: false }).ok, false);
+});
+
+test('Sprint 6: the bootstrap defaults carry COD 0 percent, a 7 day grace and no trial (D-116, D-118)', () => {
+  assert.equal(SETTINGS_DEFAULTS.codCommissionPercent, 0);
+  assert.equal(SETTINGS_DEFAULTS.graceDays, 7);
+  assert.equal(SETTINGS_DEFAULTS.trialDays, 0);
+  // The texts have no default: an unset payment instruction or support contact is simply missing.
+  assert.equal('paymentInstructions' in SETTINGS_DEFAULTS, false);
+  assert.equal('supportEmail' in SETTINGS_DEFAULTS, false);
+  assert.equal('supportPhone' in SETTINGS_DEFAULTS, false);
+  const plan = planBootstrap({ settingsDocs: [], sellerUsers: [], stores: [], sellerMirrors: [] });
+  assert.equal(plan.createSettings?.codCommissionPercent, 0);
 });

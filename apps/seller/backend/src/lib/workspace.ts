@@ -3,7 +3,9 @@ import { STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from '@markaz/platform-k
 import { HttpError } from '@/lib/http';
 import type { AuthContext } from '@/lib/auth';
 import { seedStoreDemoData } from '@/lib/demo-data';
+import { DEFAULT_ENV_STORE_LIMIT, parseEnvStoreLimit, resolveStoreLimit, type EffectiveStoreLimit } from '@/lib/effective-limits';
 import { connectSellerDb } from '@/lib/mongo';
+import { readPlatformSettings } from '@/lib/platform-settings';
 import { ensureSellerMirror } from '@/lib/seller-mirror';
 import { Store, User } from '@/lib/services';
 import { newStoreStorefront } from '@/lib/store-defaults';
@@ -28,9 +30,19 @@ const STORE_SUMMARY_SELECT = [
 
 const KNOWN_STATUSES = ['pending', 'active', 'suspended', 'archived'];
 
+/** The environment's store limit (SELLER_MAX_STORES, else 3): the LAST step of the precedence in lib/effective-limits.ts. */
 export function maxStoresPerSeller(): number {
-  const n = Number.parseInt(process.env.SELLER_MAX_STORES ?? '', 10);
-  return Number.isFinite(n) && n > 0 ? n : 3;
+  return parseEnvStoreLimit(process.env.SELLER_MAX_STORES) ?? DEFAULT_ENV_STORE_LIMIT;
+}
+
+/**
+ * Sprint 6 EP-12.US02.T01 (D-118): the store limit of one seller and where it comes from: the seller's own override, then the plan limit
+ * (EP-14; no plan input yet, so none applies), then the platform setting maxStoresPerSeller, then the environment. The pure rule is
+ * resolveStoreLimit; this only gathers its inputs. readPlatformSettings never throws.
+ */
+export async function effectiveStoreLimitFor(override: unknown, planLimit?: unknown): Promise<EffectiveStoreLimit> {
+  const settings = await readPlatformSettings();
+  return resolveStoreLimit({ override, planLimit, platformMax: settings.maxStoresPerSeller, envMax: process.env.SELLER_MAX_STORES });
 }
 
 /**
@@ -107,16 +119,21 @@ interface AccountDoc {
   name?: string | null;
   email?: string;
   accountStatus?: string | null;
+  storeLimitOverride?: unknown;
 }
 
-async function loadAccount(ctx: AuthContext): Promise<{ id: string; name: string | null; email: string; accountStatus: 'active' | 'suspended' }> {
-  const user = (await User.findById(ctx.userObjectId).select('name email accountStatus').lean()) as AccountDoc | null;
+async function loadAccount(
+  ctx: AuthContext,
+): Promise<{ id: string; name: string | null; email: string; accountStatus: 'active' | 'suspended'; limitOverride: unknown }> {
+  const user = (await User.findById(ctx.userObjectId).select('name email accountStatus storeLimitOverride').lean()) as AccountDoc | null;
   if (!user) throw new HttpError(401, 'Invalid or expired session');
   return {
     id: ctx.userId,
     name: user.name ?? null,
     email: String(user.email ?? ''),
     accountStatus: user.accountStatus === 'suspended' ? 'suspended' : 'active',
+    // Kept apart from the public fields: the seller's own response never carries the override itself.
+    limitOverride: user.storeLimitOverride,
   };
 }
 
@@ -131,12 +148,13 @@ async function loadStores(ctx: AuthContext) {
 /** GET /api/workspace payload: the user, a summary of every owned store, and limits. */
 export async function loadWorkspace(ctx: AuthContext) {
   await connect();
-  const [user, stores] = await Promise.all([loadAccount(ctx), loadStores(ctx)]);
-  const max = maxStoresPerSeller();
+  const [account, stores] = await Promise.all([loadAccount(ctx), loadStores(ctx)]);
+  const { limitOverride, ...user } = account;
+  const { limit: max, source } = await effectiveStoreLimitFor(limitOverride);
   return {
     user,
     stores,
-    limits: { used: stores.length, max, canCreate: user.accountStatus !== 'suspended' && stores.length < max },
+    limits: { used: stores.length, max, canCreate: user.accountStatus !== 'suspended' && stores.length < max, source },
   };
 }
 
@@ -162,9 +180,9 @@ export async function provisionStore(ctx: AuthContext, rawName: unknown): Promis
   }
 
   const used = await Store.countDocuments({ owner: ctx.userObjectId });
-  const max = maxStoresPerSeller();
+  const { limit: max, source } = await effectiveStoreLimitFor(account.limitOverride);
   if (used >= max) {
-    return { ok: false, status: 409, body: { error: 'Store limit reached.', code: 'STORE_LIMIT_REACHED', used, max } };
+    return { ok: false, status: 409, body: { error: 'Store limit reached.', code: 'STORE_LIMIT_REACHED', used, max, source } };
   }
 
   const base = slugify(name);

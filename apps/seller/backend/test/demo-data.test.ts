@@ -2,7 +2,7 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { Category, Product, Store, User, signSession } from '@/lib/services';
+import { Category, PlatformSettingsModel, Product, Store, User, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import type { AuthContext } from '@/lib/auth';
 import { seedStoreDemoData } from '../src/lib/demo-data';
@@ -35,6 +35,8 @@ const CategoryStub = Category as unknown as {
 };
 const ProductStub = Product as unknown as { create: (doc: Doc) => Promise<Doc> };
 const UserStub = User as unknown as { findById: () => { select: () => { lean: () => Promise<unknown> } } };
+// Sprint 6: provisionStore reads the platform store limit; no settings document here, so the environment and the default decide.
+const SettingsStub = PlatformSettingsModel as unknown as { findOne: () => { select: () => { lean: () => Promise<unknown> } } };
 
 let stores: StoreRow[];
 let categories: Doc[];
@@ -61,7 +63,9 @@ beforeEach(() => {
     removeCategory: CategoryStub.deleteOne,
     createProduct: ProductStub.create,
     findUser: UserStub.findById,
+    findSettings: SettingsStub.findOne,
   };
+  SettingsStub.findOne = () => ({ select: () => ({ lean: async () => null }) });
 
   mongooseStub.connect = async () => mongoose;
   StoreStub.updateOne = async (filter, update) => {
@@ -102,6 +106,7 @@ beforeEach(() => {
     CategoryStub.deleteOne = saved.removeCategory;
     ProductStub.create = saved.createProduct;
     UserStub.findById = saved.findUser;
+    SettingsStub.findOne = saved.findSettings;
   };
 });
 

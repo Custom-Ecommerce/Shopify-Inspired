@@ -35,6 +35,10 @@ export const TEMPLATE_NAMES = [
   // Sprint 5 EP-21: a shopper left a review (to the seller). EP-28: the optional email about a cart left behind (to the shopper).
   'review_received_seller',
   'abandoned_cart',
+  // Sprint 6 EP-12.US02 (CO-82): the platform paused a store, suspended a seller account, or reactivated it.
+  'store_paused',
+  'account_suspended',
+  'account_reactivated',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -72,6 +76,8 @@ export const TEMPLATE_VARIABLES = [
   // Sprint 5 EP-21: the rating ("5 out of 5") and the text of a new review, for the seller's email.
   'reviewRating',
   'reviewText',
+  // Sprint 6 EP-12.US02: the reason an operator gave when pausing a store or suspending an account.
+  'suspensionReason',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
@@ -383,6 +389,50 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'ایسی ای میلز بند کرنے کے لیے یہ لنک کھولیں: {{unsubscribeLink}}',
     ],
     whatsapp: 'You left items in your cart at {{storeName}}: {{storefrontLink}}\nآپ کی کارٹ میں سامان رہ گیا ہے۔',
+  },
+  store_paused: {
+    variables: ['storeName', 'suspensionReason'],
+    subject: '{{storeName}} was paused',
+    en: [
+      'Your store {{storeName}} was paused by the Markazify team. Shoppers cannot open it or place orders until it is switched on again.',
+      '',
+      'Reason: {{suspensionReason}}',
+      '',
+      'Your products, orders and settings are all kept. Reply to this email if you think this is a mistake.',
+    ],
+    ur: [
+      'آپ کا اسٹور {{storeName}} Markazify ٹیم نے روک دیا ہے۔ دوبارہ چالو ہونے تک خریدار اسے کھول نہیں سکتے اور آرڈر نہیں دے سکتے۔',
+      'وجہ: {{suspensionReason}}',
+      'آپ کی مصنوعات، آرڈرز اور سیٹنگز محفوظ ہیں۔ اگر آپ کو لگتا ہے کہ یہ غلطی ہے تو اس ای میل کا جواب دیں۔',
+    ],
+    whatsapp: 'Your store {{storeName}} was paused: {{suspensionReason}}\nآپ کا اسٹور روک دیا گیا ہے۔',
+  },
+  account_suspended: {
+    variables: ['appName', 'customerName', 'suspensionReason'],
+    subject: '{{appName}}: your account was suspended',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Your {{appName}} account was suspended by our team. While it is suspended you cannot sign in or change your stores.',
+      '',
+      'Reason: {{suspensionReason}}',
+      '',
+      'Your storefront stays online unless a store itself was taken down. Reply to this email if you think this is a mistake.',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کا {{appName}} اکاؤنٹ ہماری ٹیم نے معطل کر دیا ہے۔ معطلی کے دوران آپ سائن اِن نہیں کر سکتے اور اپنے اسٹورز میں تبدیلی نہیں کر سکتے۔',
+      'وجہ: {{suspensionReason}}',
+      'جب تک کسی اسٹور کو خود بند نہ کیا جائے، آپ کا اسٹور آن لائن رہتا ہے۔ اگر آپ کو لگتا ہے کہ یہ غلطی ہے تو اس ای میل کا جواب دیں۔',
+    ],
+    whatsapp: 'Your {{appName}} account was suspended: {{suspensionReason}}\nآپ کا اکاؤنٹ معطل کر دیا گیا ہے۔',
+  },
+  account_reactivated: {
+    variables: ['appName', 'customerName'],
+    subject: '{{appName}}: your account is active again',
+    en: ['Hi {{customerName}},', '', 'Your {{appName}} account is active again. You can sign in and manage your stores as before.'],
+    ur: ['{{customerName}}، السلام علیکم،', 'آپ کا {{appName}} اکاؤنٹ دوبارہ فعال ہو گیا ہے۔ آپ پہلے کی طرح سائن اِن کر کے اپنے اسٹورز چلا سکتے ہیں۔'],
+    whatsapp: 'Your {{appName}} account is active again.\nآپ کا اکاؤنٹ دوبارہ فعال ہو گیا ہے۔',
   },
   payout_paid: {
     variables: ['storeName', 'payoutAmount', 'payoutMethod', 'payoutReference', 'dashboardLink'],

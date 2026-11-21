@@ -48,6 +48,8 @@ const FULL: TemplateVars = {
   // Sprint 5 EP-21: the new review's rating and text.
   reviewRating: '5 out of 5',
   reviewText: 'Soft fabric, true to size.\nWill order again.',
+  // Sprint 6 EP-12.US02: the operator's reason.
+  suspensionReason: 'Reported for selling fake products',
 };
 
 test('every template uses only variables it declares, and every declared variable is known', () => {
@@ -199,4 +201,44 @@ test('abandoned_cart: bilingual, the items keep their lines, the unsubscribe and
   assert.match(out.subject, /you left something in your cart/);
   // No hole: a missing unsubscribe link refuses the message, so one can never go out without it.
   assert.throws(() => renderTemplate('abandoned_cart', { ...FULL, unsubscribeLink: '' }), TemplateError);
+});
+
+// Sprint 6 EP-12.US02.T03 (CO-82): the store paused, account suspended and account reactivated emails.
+
+test('Sprint 6: the paused, suspended and reactivated emails exist, are bilingual and render without a hole', () => {
+  for (const name of ['store_paused', 'account_suspended', 'account_reactivated'] as const) {
+    assert.ok((TEMPLATE_NAMES as readonly string[]).includes(name), name);
+    const out = renderTemplate(name, FULL);
+    assert.ok(out.subject.length > 0, name);
+    assert.ok(out.html.includes('dir="rtl" lang="ur"'), name);
+    assert.ok(out.text.search(/[؀-ۿ]/) > out.text.indexOf('---'), name);
+    assert.equal(/\{\{/.test(out.text + out.html + out.subject + out.whatsapp), false, name);
+  }
+  assert.equal(renderTemplate('store_paused', FULL).subject, 'Zara Lawn was paused');
+  assert.equal(renderTemplate('account_suspended', FULL).subject, 'Markazify: your account was suspended');
+  assert.equal(renderTemplate('account_reactivated', FULL).subject, 'Markazify: your account is active again');
+});
+
+test('Sprint 6: the operator reason is shown in the suspended and paused emails and escaped in HTML', () => {
+  for (const name of ['store_paused', 'account_suspended'] as const) {
+    const out = renderTemplate(name, { ...FULL, suspensionReason: '<script>alert(1)</script> fake goods' });
+    assert.ok(out.text.includes('Reason: <script>alert(1)</script> fake goods'), name);
+    assert.equal(out.html.includes('<script>'), false, name);
+    assert.ok(out.html.includes('&lt;script&gt;alert(1)&lt;/script&gt; fake goods'), name);
+  }
+});
+
+test('Sprint 6: a reason cannot add a line to the subject, and a missing reason is refused', () => {
+  assert.equal(/[\r\n]/.test(renderTemplate('store_paused', { ...FULL, storeName: 'Zara\r\nBcc: x@example.com' }).subject), false);
+  const { suspensionReason: _reason, ...rest } = FULL;
+  void _reason;
+  assert.throws(() => renderTemplate('account_suspended', rest), TemplateError);
+  assert.throws(() => renderTemplate('store_paused', { ...FULL, suspensionReason: '  ' }), TemplateError);
+  // reactivating needs no reason
+  assert.doesNotThrow(() => renderTemplate('account_reactivated', rest));
+});
+
+test('Sprint 6: the reactivated email does not mention a reason and the suspended one does not promise the storefront is down', () => {
+  assert.equal(renderTemplate('account_reactivated', FULL).text.includes('Reason'), false);
+  assert.ok(renderTemplate('account_suspended', FULL).text.includes('storefront stays online'));
 });

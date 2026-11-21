@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import { User, signSession } from '@/lib/workspace';
 import { ADMIN_AUDIENCE, AdminHttpError } from '@/lib/admin-auth';
 import { payoutSteps, readAdminQuery } from '@/lib/admin-payouts';
-import { COMMISSION_REPORT_HEADER, CSV_BOM, buildCommissionReportCsv, commissionReportFileName, csvCell } from '@/lib/commission-report-csv';
+import { COMMISSION_REPORT_HEADER, CSV_BOM, PAYMENT_TYPE_LABELS, buildCommissionReportCsv, commissionReportFileName, csvCell } from '@/lib/commission-report-csv';
 import { commissionReportQuerySchema, payoutListQuerySchema } from '@/lib/payout-contracts';
 
 // Sprint 4 EP-05.US03, US06 (D-090): the admin side of payouts and the commission report CSV. The seller backend is stubbed
@@ -60,7 +60,7 @@ test('the CSV starts with a UTF-8 byte order mark, quotes its text and writes nu
   assert.equal(lines.length, 3, 'a header, one row and the closing line break');
   assert.equal(lines[2], '');
   assert.equal(lines[0], COMMISSION_REPORT_HEADER.map((name) => '"' + name + '"').join(','));
-  assert.equal(lines[1], '"Zara Lawn","' + STORE + '","30","2026-10-17","2026-11-15",60,1500,1,-60');
+  assert.equal(lines[1], '"Zara Lawn","' + STORE + '","30","2026-10-17","2026-11-15",60,1500,1,-60,"All orders"');
 });
 
 test('a quote, a comma and a line break stay inside their cell', () => {
@@ -302,4 +302,48 @@ test('the report is JSON, or a CSV download of the same numbers with a byte orde
 
   assert.equal((await routes.report(await req('/api/admin/commission/report?period=30'))).status, 400, 'a store is required');
   assert.equal((await routes.report(await req('/api/admin/commission/report?storeId=' + STORE + '&period=custom'))).status, 400);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-12.US04.T04 (D-116): the commission report labels its cash on delivery and gateway rows.
+
+const SPLIT = {
+  cod: { commissionEarned: 0, sales: 5000, ordersCount: 3 },
+  gateway: { commissionEarned: 60, sales: 1500, ordersCount: 1 },
+};
+
+test('Sprint 6: a report with the split writes one labelled row for all orders, one for cash on delivery and one for gateway orders', () => {
+  const csv = buildCommissionReportCsv([report({ commissionEarned: 60, sales: 6500, ordersCount: 4, ...SPLIT }) as never]);
+  const lines = csv.slice(1).split('\r\n');
+  assert.equal(lines.length, 5, 'a header, three rows and the closing line break');
+  assert.equal(lines[0]!.endsWith(',"Payment type"'), true);
+  assert.equal(lines[1], '"Zara Lawn","' + STORE + '","30","2026-10-17","2026-11-15",60,6500,4,-60,"' + PAYMENT_TYPE_LABELS.all + '"');
+  assert.equal(lines[2], '"Zara Lawn","' + STORE + '","30","2026-10-17","2026-11-15",0,5000,3,"","Cash on delivery"');
+  assert.equal(lines[3], '"Zara Lawn","' + STORE + '","30","2026-10-17","2026-11-15",60,1500,1,"","Gateway (card)"');
+});
+
+test('Sprint 6: the split rows add up to the totals row, and COD at 0 percent shows a commission of 0 as a number', () => {
+  const csv = buildCommissionReportCsv([report({ commissionEarned: 60, sales: 6500, ordersCount: 4, ...SPLIT }) as never]);
+  const rows = csv.slice(1).split('\r\n').slice(1, 4).map((line) => line.split(','));
+  const num = (row: string[], at: number) => Number(row[at]);
+  assert.equal(num(rows[1]!, 5) + num(rows[2]!, 5), num(rows[0]!, 5));
+  assert.equal(num(rows[1]!, 6) + num(rows[2]!, 6), num(rows[0]!, 6));
+  assert.equal(num(rows[1]!, 7) + num(rows[2]!, 7), num(rows[0]!, 7));
+  assert.equal(rows[1]![5], '0');
+});
+
+test('Sprint 6: a report without the split (an older seller backend) is still one labelled row', () => {
+  const lines = buildCommissionReportCsv([report() as never]).slice(1).split('\r\n');
+  assert.equal(lines.length, 3);
+  assert.equal(lines[1]!.endsWith(',"All orders"'), true);
+});
+
+test('Sprint 6: a report with only one part writes only that part after the totals', () => {
+  const lines = buildCommissionReportCsv([report({ cod: SPLIT.cod }) as never]).slice(1).split('\r\n');
+  assert.equal(lines.length, 4);
+  assert.equal(lines[2]!.endsWith(',"Cash on delivery"'), true);
+});
+
+test('Sprint 6: the payment type labels are fixed text, never a store name, so they never need the formula guard', () => {
+  for (const label of Object.values(PAYMENT_TYPE_LABELS)) assert.equal(csvCell(label), '"' + label + '"');
 });

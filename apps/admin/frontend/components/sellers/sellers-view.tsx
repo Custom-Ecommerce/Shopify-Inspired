@@ -15,6 +15,7 @@ import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
 import { useDebouncedSearch } from "@/lib/hooks/use-debounced-search";
 import { parseSellerListState, sellerStateToQuery, type SellerListState } from "@/lib/sellers";
 import { SellerStatusDialog } from "@/components/sellers/seller-status-dialog";
+import { StoreLimitDialog } from "@/components/sellers/store-limit-dialog";
 
 const COLUMNS: Array<Column<AdminSellerListItem>> = [
   {
@@ -88,20 +89,28 @@ export function SellersView() {
 
   // Sprint 4 EP-08.US03.T02: suspend or unsuspend, behind a confirm dialog.
   const [changing, setChanging] = useState<AdminSellerListItem | null>(null);
+  // Sprint 6 EP-12.US02.T03: the Store limit dialog.
+  const [limiting, setLimiting] = useState<AdminSellerListItem | null>(null);
   const columns = useMemo<Array<Column<AdminSellerListItem>>>(
     () => [
       ...COLUMNS,
       {
         key: "actions",
         header: "Actions",
-        cell: (seller) =>
-          seller.accountStatus === "blocked" ? (
-            <span className="text-xs text-muted-foreground">Blocked</span>
-          ) : (
-            <Button variant={seller.accountStatus === "suspended" ? "outline" : "destructive"} size="sm" onClick={() => setChanging(seller)}>
-              {seller.accountStatus === "suspended" ? "Unsuspend" : "Suspend"}
+        cell: (seller) => (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" aria-label={"Store limit of " + seller.name} onClick={() => setLimiting(seller)}>
+              Store limit
             </Button>
-          ),
+            {seller.accountStatus === "blocked" ? (
+              <span className="self-center text-xs text-muted-foreground">Blocked</span>
+            ) : (
+              <Button variant={seller.accountStatus === "suspended" ? "outline" : "destructive"} size="sm" onClick={() => setChanging(seller)}>
+                {seller.accountStatus === "suspended" ? "Unsuspend" : "Suspend"}
+              </Button>
+            )}
+          </div>
+        ),
       },
     ],
     [],
@@ -153,6 +162,17 @@ export function SellersView() {
           onClose={() => setChanging(null)}
           onDone={() => {
             setChanging(null);
+            refetch();
+          }}
+        />
+      ) : null}
+
+      {limiting ? (
+        <StoreLimitDialog
+          seller={limiting}
+          onClose={() => setLimiting(null)}
+          onDone={() => {
+            setLimiting(null);
             refetch();
           }}
         />

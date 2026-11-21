@@ -9,6 +9,10 @@ export const SETTINGS_DEFAULTS = Object.freeze({
   maxStoresPerSeller: 3,
   settingsRevision: 0,
   storeApprovalRequired: false,
+  // Sprint 6 (D-116, D-118): COD carries no commission by default; a lapsed plan keeps its limits for 7 days; no trial.
+  codCommissionPercent: 0,
+  graceDays: 7,
+  trialDays: 0,
 });
 
 /**

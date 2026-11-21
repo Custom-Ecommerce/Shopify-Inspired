@@ -132,6 +132,29 @@ assert.equal(can('admin', 'update', 'platformSettings', ['settingsRevision']), f
 assert.equal(can('admin', 'update', 'platformSettings', ['defaultCommissionRate']), true);
 });
 
+test('Sprint 6: admin may write the COD commission percent and the plan settings; a seller and the public may not', () => {
+const fields = ['codCommissionPercent', 'paymentInstructions', 'graceDays', 'trialDays', 'supportEmail', 'supportPhone'];
+for (const field of fields) {
+assert.equal(can('admin', 'update', 'platformSettings', [field]), true, field);
+assert.equal(can('system', 'update', 'platformSettings', [field]), true, field);
+assert.equal(can('seller', 'update', 'platformSettings', [field]), false, field);
+assert.equal(can('public', 'update', 'platformSettings', [field]), false, field);
+}
+assert.equal(can('admin', 'update', 'platformSettings', ['codCommissionPercent', 'settingsRevision']), false);
+});
+
+test('Sprint 6: only an admin (and the system) may write storeLimitOverride; a seller, the public and a generic users update may not', () => {
+assert.equal(can('admin', 'update', 'sellers', ['storeLimitOverride']), true);
+assert.equal(can('system', 'update', 'sellers', ['storeLimitOverride']), true);
+assert.equal(can('seller', 'update', 'sellers', ['storeLimitOverride']), false);
+assert.equal(can('public', 'update', 'sellers', ['storeLimitOverride']), false);
+assert.equal(can('seller', 'update', 'users', ['storeLimitOverride']), false);
+assert.equal(can('public', 'update', 'users', ['storeLimitOverride']), false);
+assert.equal(can('admin', 'update', 'users', ['storeLimitOverride']), false);
+assert.equal(can('admin', 'read', 'users', ['storeLimitOverride']), true);
+assert.equal(can('seller', 'read', 'users', ['storeLimitOverride']), false);
+});
+
 test('audit entries are immutable, even for system', () => {
 assert.equal(can('system', 'update', 'audit-log', ['x']), false);
 assert.equal(can('system', 'delete', 'audit-log'), false);

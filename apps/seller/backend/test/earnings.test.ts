@@ -280,3 +280,57 @@ test('the report route answers only to the admin backend\'s signature, and check
   assert.equal((await reportGET(reportRequest('?period=30'))).status, 422);
   for (const actor of ['seller', 'system', 'public'] as const) assert.throws(() => assertCan(actor, 'read', 'commissionReport'));
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-12.US04.T03 (D-116): cash on delivery sales at a COD percent of 0 are sales with no commission.
+
+test('Sprint 6: zero COD entries (percent 0) count as COD sales with no commission, and the summary adds up the same way', async () => {
+  world.entry({ type: 'cod_commission', order: ORDER_1, balanceEffect: 0, baseAmount: 2000, rate: 0, createdAt: at('2026-11-10T08:00:00Z') });
+  world.entry({ type: 'cod_commission', order: ORDER_2, balanceEffect: 0, baseAmount: 1000, rate: 0, createdAt: at('2026-11-11T08:00:00Z') });
+  const result = await buildEarnings(STORE_A, query(), NOW);
+  assert.deepEqual(result.cod, { orders: 2, sales: 3000, commission: 0 });
+  assert.deepEqual(result.summary, { sales: 3000, commission: 0, net: 3000 });
+  assert.deepEqual(result.entries.docs.map((d) => [d.type, d.amount, d.rate]).sort(), [['cod_commission', 0, 0], ['cod_commission', 0, 0]]);
+  assert.equal(result.entries.docs.every((d) => Object.is(d.amount, -0) === false), true);
+});
+
+test('Sprint 6: the COD part is only the COD entries; card commission stays out of it but in the summary', async () => {
+  ledger();
+  world.entry({ store: STORE_B, type: 'cod_commission', balanceEffect: -999, baseAmount: 99999, createdAt: at('2026-11-10T08:00:00Z') });
+  const result = await buildEarnings(STORE_A, query(), NOW);
+  // order 1: 80 on 2,000, reversed in full: COD nets to nothing; the card commission 60 on 1,500 is not COD.
+  assert.deepEqual(result.cod, { orders: 0, sales: 0, commission: 0 });
+  assert.deepEqual(result.summary, { sales: 1500, commission: 60, net: 1440 });
+});
+
+test('Sprint 6: a COD entry written at 4 percent and one at 0 percent sit side by side, each with its own rate', async () => {
+  world.entry({ type: 'cod_commission', order: ORDER_1, balanceEffect: -80, baseAmount: 2000, rate: 4, createdAt: at('2026-11-10T08:00:00Z') });
+  world.entry({ type: 'cod_commission', order: ORDER_2, balanceEffect: 0, baseAmount: 1000, rate: 0, createdAt: at('2026-11-11T08:00:00Z') });
+  const result = await buildEarnings(STORE_A, query(), NOW);
+  assert.deepEqual(result.cod, { orders: 2, sales: 3000, commission: 80 });
+  assert.deepEqual(result.summary, { sales: 3000, commission: 80, net: 2920 });
+  assert.deepEqual(result.entries.docs.map((d) => d.rate).sort(), [0, 4]);
+});
+
+test('Sprint 6: an empty store answers a zero COD part, never an error', async () => {
+  const empty = await buildEarnings(STORE_A, query(), NOW);
+  assert.deepEqual(empty.cod, { orders: 0, sales: 0, commission: 0 });
+});
+
+test('Sprint 6: the commission report is split into cash on delivery and gateway, and the two add up to the totals', async () => {
+  world.entry({ type: 'cod_commission', order: ORDER_1, balanceEffect: 0, baseAmount: 2000, rate: 0, createdAt: at('2026-11-10T08:00:00Z') });
+  world.entry({ type: 'card_sale', order: ORDER_2, balanceEffect: 1500, baseAmount: 1500, createdAt: at('2026-11-11T08:00:00Z') });
+  world.entry({ type: 'card_commission', order: ORDER_2, balanceEffect: -60, baseAmount: 1500, rate: 4, createdAt: at('2026-11-11T08:00:01Z') });
+  const report = await buildCommissionReport(commissionReportQuerySchema.parse({ storeId: STORE_A, period: '30' }), NOW);
+  assert.deepEqual(report.cod, { commissionEarned: 0, sales: 2000, ordersCount: 1 });
+  assert.deepEqual(report.gateway, { commissionEarned: 60, sales: 1500, ordersCount: 1 });
+  assert.equal(report.cod!.commissionEarned + report.gateway!.commissionEarned, report.commissionEarned);
+  assert.equal(report.cod!.sales + report.gateway!.sales, report.sales);
+  assert.equal(report.cod!.ordersCount + report.gateway!.ordersCount, report.ordersCount);
+});
+
+test('Sprint 6: an empty store has a zero split, not an error', async () => {
+  const report = await buildCommissionReport(commissionReportQuerySchema.parse({ storeId: STORE_B, period: 'today' }), NOW);
+  assert.deepEqual(report.cod, { commissionEarned: 0, sales: 0, ordersCount: 0 });
+  assert.deepEqual(report.gateway, { commissionEarned: 0, sales: 0, ordersCount: 0 });
+});

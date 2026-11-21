@@ -13,20 +13,57 @@ export const SETTINGS_MAX_STORES_MIN = 1;
 export const SETTINGS_MAX_STORES_MAX = 1000;
 export const SETTINGS_NOTE_MAX = 500;
 export const SETTINGS_REASON_MAX = 500;
+/** Sprint 6 (D-118): the plan settings' limits; the same as ADMIN_SETTINGS_* in @markaz/contracts. */
+export const SETTINGS_PAYMENT_INSTRUCTIONS_MAX = 1000;
+export const SETTINGS_GRACE_DAYS_MIN = 0;
+export const SETTINGS_GRACE_DAYS_MAX = 30;
+export const SETTINGS_TRIAL_DAYS_MIN = 0;
+export const SETTINGS_TRIAL_DAYS_MAX = 60;
+export const SETTINGS_SUPPORT_EMAIL_MAX = 254;
+export const SETTINGS_SUPPORT_PHONE_MAX = 30;
 
 /**
  * The fields an operator may write (ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS in the policy matrix). Passed to the
  * policy check, so a field added later is denied until declared. settingsRevision is not here: only the server moves it.
  */
-export const SETTINGS_FIELDS = ['defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired'] as const;
+export const SETTINGS_FIELDS = [
+  'defaultCommissionRate',
+  'maxStoresPerSeller',
+  'stripeCommissionNote',
+  'storeApprovalRequired',
+  // Sprint 6 (D-116, D-118).
+  'codCommissionPercent',
+  'paymentInstructions',
+  'graceDays',
+  'trialDays',
+  'supportEmail',
+  'supportPhone',
+] as const;
 export type SettingsField = (typeof SETTINGS_FIELDS)[number];
 
 /** The fields in the seller sync allowlist (SETTINGS_ALLOWLIST in platform-kit). A change to the note is not sent. */
-export const SYNCED_SETTINGS_FIELDS: readonly SettingsField[] = ['defaultCommissionRate', 'maxStoresPerSeller', 'storeApprovalRequired'];
+export const SYNCED_SETTINGS_FIELDS: readonly SettingsField[] = [
+  'defaultCommissionRate',
+  'maxStoresPerSeller',
+  'storeApprovalRequired',
+  'codCommissionPercent',
+  'paymentInstructions',
+  'graceDays',
+  'trialDays',
+  'supportEmail',
+  'supportPhone',
+];
+
+/** The text settings: a blank value clears them (the field is removed from the document), and the row shows null. */
+const TEXT_FIELDS: readonly SettingsField[] = ['stripeCommissionNote', 'paymentInstructions', 'supportEmail', 'supportPhone'];
 
 /** What the model defaults to (platform-settings.ts), used when the stored document lacks a value. */
 export const DEFAULT_COMMISSION_RATE = 4;
 export const DEFAULT_MAX_STORES_PER_SELLER = 3;
+/** D-116: cash-on-delivery orders carry no commission unless an operator sets one. */
+export const DEFAULT_COD_COMMISSION_PERCENT = 0;
+export const DEFAULT_GRACE_DAYS = 7;
+export const DEFAULT_TRIAL_DAYS = 0;
 
 export const CONFLICT_MESSAGE = 'The settings were changed by someone else. Reload and try again.';
 export const NOT_SET_UP_MESSAGE = 'Platform settings have not been set up';
@@ -37,6 +74,14 @@ export interface SettingsChange {
   stripeCommissionNote?: string | null;
   /** Sprint 4 D-094/D-095: go-live waits for an admin when true. */
   storeApprovalRequired?: boolean;
+  /** Sprint 6 D-116: the commission percent on cash-on-delivery orders. */
+  codCommissionPercent?: number;
+  /** Sprint 6 D-118: plan settings. Text values are null to clear. */
+  paymentInstructions?: string | null;
+  graceDays?: number;
+  trialDays?: number;
+  supportEmail?: string | null;
+  supportPhone?: string | null;
 }
 
 export interface SettingsUpdate {
@@ -47,6 +92,8 @@ export interface SettingsUpdate {
 export type ParsedSettingsUpdate = { ok: true; data: SettingsUpdate } | { ok: false; issues: Issue[] };
 
 const WRITABLE = new Set<string>([...SETTINGS_FIELDS, 'reason']);
+const EMAIL_SHAPE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+const PHONE_SHAPE = /^[0-9+\-() ]+$/;
 
 /**
  * Reads and checks whichever settings are present. Unknown fields are refused, not ignored (settingsRevision
@@ -92,6 +139,60 @@ export function parseSettingsUpdate(input: unknown): ParsedSettingsUpdate {
     else changes.storeApprovalRequired = value;
   }
 
+  if ('codCommissionPercent' in record) {
+    const value = record.codCommissionPercent;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < SETTINGS_RATE_MIN || value > SETTINGS_RATE_MAX) {
+      issues.push({ path: 'codCommissionPercent', message: 'must be a number from ' + SETTINGS_RATE_MIN + ' to ' + SETTINGS_RATE_MAX });
+    } else changes.codCommissionPercent = value;
+  }
+
+  if ('paymentInstructions' in record) {
+    const value = record.paymentInstructions;
+    if (value === null) changes.paymentInstructions = null;
+    else if (typeof value !== 'string') issues.push({ path: 'paymentInstructions', message: 'must be text or null' });
+    else if (value.trim().length > SETTINGS_PAYMENT_INSTRUCTIONS_MAX) {
+      issues.push({ path: 'paymentInstructions', message: 'must be at most ' + SETTINGS_PAYMENT_INSTRUCTIONS_MAX + ' characters' });
+    } else changes.paymentInstructions = value.trim() === '' ? null : value.trim();
+  }
+
+  if ('graceDays' in record) {
+    const value = record.graceDays;
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < SETTINGS_GRACE_DAYS_MIN || value > SETTINGS_GRACE_DAYS_MAX) {
+      issues.push({ path: 'graceDays', message: 'must be a whole number from ' + SETTINGS_GRACE_DAYS_MIN + ' to ' + SETTINGS_GRACE_DAYS_MAX });
+    } else changes.graceDays = value;
+  }
+
+  if ('trialDays' in record) {
+    const value = record.trialDays;
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < SETTINGS_TRIAL_DAYS_MIN || value > SETTINGS_TRIAL_DAYS_MAX) {
+      issues.push({ path: 'trialDays', message: 'must be a whole number from ' + SETTINGS_TRIAL_DAYS_MIN + ' to ' + SETTINGS_TRIAL_DAYS_MAX });
+    } else changes.trialDays = value;
+  }
+
+  if ('supportEmail' in record) {
+    const value = record.supportEmail;
+    if (value === null) changes.supportEmail = null;
+    else if (typeof value !== 'string') issues.push({ path: 'supportEmail', message: 'must be text or null' });
+    else {
+      const text = value.trim();
+      if (text.length > SETTINGS_SUPPORT_EMAIL_MAX) issues.push({ path: 'supportEmail', message: 'must be at most ' + SETTINGS_SUPPORT_EMAIL_MAX + ' characters' });
+      else if (text !== '' && !EMAIL_SHAPE.test(text)) issues.push({ path: 'supportEmail', message: 'must be an email address' });
+      else changes.supportEmail = text === '' ? null : text;
+    }
+  }
+
+  if ('supportPhone' in record) {
+    const value = record.supportPhone;
+    if (value === null) changes.supportPhone = null;
+    else if (typeof value !== 'string') issues.push({ path: 'supportPhone', message: 'must be text or null' });
+    else {
+      const text = value.trim();
+      if (text.length > SETTINGS_SUPPORT_PHONE_MAX) issues.push({ path: 'supportPhone', message: 'must be at most ' + SETTINGS_SUPPORT_PHONE_MAX + ' characters' });
+      else if (text !== '' && !PHONE_SHAPE.test(text)) issues.push({ path: 'supportPhone', message: 'must be a phone number' });
+      else changes.supportPhone = text === '' ? null : text;
+    }
+  }
+
   if ('reason' in record) {
     const value = record.reason;
     const text = typeof value === 'string' ? value.trim() : '';
@@ -110,7 +211,16 @@ function isRate(value: unknown): value is number {
 }
 
 function isStoreLimit(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= SETTINGS_MAX_STORES_MIN;
+  return typeof value === 'number' && Number.isInteger(value) && value >= SETTINGS_MAX_STORES_MIN;
+}
+
+function isDays(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+}
+
+/** A stored text, or null when it is missing, empty or not text. */
+function textOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 /** The settings as the console reads them. A value the document lacks or holds unusably shows the model default. */
@@ -122,6 +232,12 @@ export function toSettingsRow(doc: Doc) {
     maxStoresPerSeller: isStoreLimit(doc.maxStoresPerSeller) ? doc.maxStoresPerSeller : DEFAULT_MAX_STORES_PER_SELLER,
     stripeCommissionNote: typeof note === 'string' && note !== '' ? note : null,
     storeApprovalRequired: doc.storeApprovalRequired === true,
+    codCommissionPercent: isRate(doc.codCommissionPercent) ? doc.codCommissionPercent : DEFAULT_COD_COMMISSION_PERCENT,
+    paymentInstructions: textOrNull(doc.paymentInstructions),
+    graceDays: isDays(doc.graceDays, SETTINGS_GRACE_DAYS_MIN, SETTINGS_GRACE_DAYS_MAX) ? doc.graceDays : DEFAULT_GRACE_DAYS,
+    trialDays: isDays(doc.trialDays, SETTINGS_TRIAL_DAYS_MIN, SETTINGS_TRIAL_DAYS_MAX) ? doc.trialDays : DEFAULT_TRIAL_DAYS,
+    supportEmail: textOrNull(doc.supportEmail),
+    supportPhone: textOrNull(doc.supportPhone),
     settingsRevision: typeof revision === 'number' && Number.isInteger(revision) && revision >= 0 ? revision : 0,
     updatedAt: toIso(doc.updatedAt),
   };
@@ -136,6 +252,30 @@ export function settingsSnapshot(row: SettingsRow): Required<SettingsChange> {
     maxStoresPerSeller: row.maxStoresPerSeller,
     stripeCommissionNote: row.stripeCommissionNote,
     storeApprovalRequired: row.storeApprovalRequired,
+    codCommissionPercent: row.codCommissionPercent,
+    paymentInstructions: row.paymentInstructions,
+    graceDays: row.graceDays,
+    trialDays: row.trialDays,
+    supportEmail: row.supportEmail,
+    supportPhone: row.supportPhone,
+  };
+}
+
+/**
+ * The payload of the sync event for the seller (group settings): every synced setting, so the seller's replica is whole
+ * after any change. A cleared text goes as an empty string; the seller reads an empty text as "not set".
+ */
+export function syncPayload(row: SettingsRow): Record<string, string | number | boolean> {
+  return {
+    defaultCommissionRate: row.defaultCommissionRate,
+    maxStoresPerSeller: row.maxStoresPerSeller,
+    storeApprovalRequired: row.storeApprovalRequired,
+    codCommissionPercent: row.codCommissionPercent,
+    paymentInstructions: row.paymentInstructions ?? '',
+    graceDays: row.graceDays,
+    trialDays: row.trialDays,
+    supportEmail: row.supportEmail ?? '',
+    supportPhone: row.supportPhone ?? '',
   };
 }
 
@@ -147,7 +287,7 @@ export function changedFields(before: SettingsRow, changes: SettingsChange): Set
 /** The stored value of one setting, read raw: a missing rate or limit, or an empty note, is null. */
 function storedValueOf(stored: Doc, field: SettingsField): unknown {
   const value = stored[field];
-  if (field === 'stripeCommissionNote') return typeof value === 'string' && value !== '' ? value : null;
+  if (TEXT_FIELDS.includes(field)) return typeof value === 'string' && value !== '' ? value : null;
   if (field === 'storeApprovalRequired') return typeof value === 'boolean' ? value : null;
   return typeof value === 'number' ? value : null;
 }

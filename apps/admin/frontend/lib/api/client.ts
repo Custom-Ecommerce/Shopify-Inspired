@@ -10,7 +10,11 @@ import {
   type StoreStatusChangeResponse,
   adminSellerListEnvelopeSchema,
   adminSellerStatusResponseSchema,
+  adminSellerStoreLimitSchema,
+  adminSellerStoreLimitSetResponseSchema,
   type AdminSellerStatusResponse,
+  type AdminSellerStoreLimit,
+  type AdminSellerStoreLimitSetResponse,
   adminSyncOutboxSchema,
   adminAuditListSchema,
   type AdminSellerListEnvelope,
@@ -142,6 +146,19 @@ export function listSellers(state: SellerListState, signal?: AbortSignal): Promi
 /** Sprint 4 EP-08.US03: suspend (with a reason) or unsuspend a seller account. */
 export function changeSellerStatus(id: string, input: { status: "suspended" | "active"; reason?: string }): Promise<AdminSellerStatusResponse> {
   return call("/api/sellers/" + encodeURIComponent(id) + "/status", adminSellerStatusResponseSchema as Parser<AdminSellerStatusResponse>, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Sprint 6 EP-12.US02.T03: a seller's store limit: the override, the effective limit and where it comes from. */
+export function getSellerStoreLimit(id: string, signal?: AbortSignal): Promise<AdminSellerStoreLimit> {
+  return call("/api/sellers/" + encodeURIComponent(id) + "/store-limit", adminSellerStoreLimitSchema as Parser<AdminSellerStoreLimit>, { signal });
+}
+
+/** Sprint 6 EP-12.US02.T02: set (a whole number from 1) or clear (null) a seller's store-limit override, with a reason. */
+export function setSellerStoreLimit(id: string, input: { storeLimitOverride: number | null; reason: string }): Promise<AdminSellerStoreLimitSetResponse> {
+  return call("/api/sellers/" + encodeURIComponent(id) + "/store-limit", adminSellerStoreLimitSetResponseSchema as Parser<AdminSellerStoreLimitSetResponse>, {
     method: "POST",
     body: JSON.stringify(input),
   });

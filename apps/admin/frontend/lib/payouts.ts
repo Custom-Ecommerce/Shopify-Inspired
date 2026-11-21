@@ -41,6 +41,31 @@ export function formatRupees(amount: number): string {
   return (whole < 0 ? "-" : "") + "Rs. " + Math.abs(whole).toLocaleString("en-US");
 }
 
+/**
+ * Sprint 6 EP-12.US04.T04 (D-116): the report split by payment kind, as the dialog shows it. Null when the backend sent no split (an older seller
+ * backend). The labels match the CSV's "Payment type" column.
+ */
+export interface ReportPartLine {
+  key: "cod" | "gateway";
+  label: string;
+  commissionEarned: number;
+  sales: number;
+  ordersCount: number;
+  /** A COD row that carried no commission: the dialog says so in words. */
+  noCommission: boolean;
+}
+
+export function reportBreakdown(report: {
+  cod?: { commissionEarned: number; sales: number; ordersCount: number };
+  gateway?: { commissionEarned: number; sales: number; ordersCount: number };
+}): ReportPartLine[] | null {
+  if (!report.cod && !report.gateway) return null;
+  const lines: ReportPartLine[] = [];
+  if (report.cod) lines.push({ key: "cod", label: "Cash on delivery", ...report.cod, noCommission: report.cod.commissionEarned === 0 && report.cod.sales > 0 });
+  if (report.gateway) lines.push({ key: "gateway", label: "Gateway (card)", ...report.gateway, noCommission: false });
+  return lines;
+}
+
 export function entriesLabel(count: number): string {
   return count + (count === 1 ? " entry" : " entries");
 }

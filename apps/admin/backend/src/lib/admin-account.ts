@@ -135,6 +135,7 @@ export const {
   forgotPasswordRequestSchema,
   resetPasswordRequestSchema,
   sellerAccountStatusRequestSchema,
+  sellerStoreLimitRequestSchema,
   passwordProblem,
 } = contracts;
 

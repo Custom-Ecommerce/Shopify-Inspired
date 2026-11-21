@@ -179,6 +179,8 @@ export interface EarningsResponse {
   summary: { sales: number; commission: number; net: number };
   /** Sprint 5 EP-13: the part of the summary that came from returns (already netted into it): refunded returns, their returned base, the commission given back. */
   returns?: { count: number; sales: number; commission: number };
+  /** Sprint 6 D-116: the cash-on-delivery part of the summary (already counted in it). commission is 0 while the platform's COD percent is 0. */
+  cod?: { orders: number; sales: number; commission: number };
   /** All time. balance is what is not yet paid out (negative: the seller owes the platform). */
   allTime: { balance: number; totalPaidOut: number };
   entries: { docs: EarningsEntryRow[]; page: number; limit: number; totalDocs: number; totalPages: number };
@@ -334,6 +336,14 @@ export const payoutFullDetailsSchema = z.object({
 });
 export type PayoutFullDetails = z.output<typeof payoutFullDetailsSchema>;
 
+/** Sprint 6 D-116: one payment kind's share of a commission report (cash on delivery, or gateway/card orders). */
+export const commissionReportPartSchema = z.object({
+  commissionEarned: z.number().int(),
+  sales: z.number().int(),
+  ordersCount: z.number().int(),
+});
+export type CommissionReportPart = z.output<typeof commissionReportPartSchema>;
+
 export const commissionReportSchema = z.object({
   storeId: z.string().min(1),
   storeName: z.string(),
@@ -346,5 +356,11 @@ export const commissionReportSchema = z.object({
   ordersCount: z.number().int(),
   /** The store's balance now (all time, not yet paid out). */
   balance: z.number().int(),
+  /**
+   * Sprint 6 D-116: the same sums split by payment kind. cod is cash on delivery (commission 0 while the platform's COD percent is 0), gateway
+   * is card orders. cod + gateway = the totals above. Absent from an older seller backend.
+   */
+  cod: commissionReportPartSchema.optional(),
+  gateway: commissionReportPartSchema.optional(),
 });
 export type CommissionReport = z.output<typeof commissionReportSchema>;

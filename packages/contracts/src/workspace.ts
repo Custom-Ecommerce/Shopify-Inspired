@@ -36,6 +36,8 @@ export const workspaceLimitsSchema = z.object({
   used: z.number().int().min(0),
   max: z.number().int().min(0),
   canCreate: z.boolean(),
+  /** Sprint 6 EP-12: where max comes from (the seller's override, the plan, the platform setting or the environment). Absent from an older backend. */
+  source: z.enum(['override', 'plan', 'setting', 'env']).optional(),
 });
 
 export const workspaceSchema = z.object({

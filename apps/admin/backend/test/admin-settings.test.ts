@@ -8,9 +8,12 @@ import { unwrapCjs } from '@/lib/cjs';
 import {
   ADMIN_SETTINGS_FIELDS,
   ADMIN_SETTINGS_MAX_STORES_MAX,
-  ADMIN_SETTINGS_NOTE_MAX,
-  ADMIN_SETTINGS_RATE_MAX,
-  ADMIN_SETTINGS_REASON_MAX,
+  ADMIN_SETTINGS_GRACE_DAYS_MAX,
+  ADMIN_SETTINGS_NOTE_MAX,
+  ADMIN_SETTINGS_PAYMENT_INSTRUCTIONS_MAX,
+  ADMIN_SETTINGS_RATE_MAX,
+  ADMIN_SETTINGS_REASON_MAX,
+  ADMIN_SETTINGS_TRIAL_DAYS_MAX,
 } from '../../../../packages/contracts/src/admin-settings';
 import {
   SETTINGS_FIELDS,
@@ -21,11 +24,14 @@ import {
   buildRevertUpdate,
   buildSettingsUpdate,
   changedFields,
-  needsSync,
-  parseSettingsUpdate,
-  revisionFilter,
-  settingsSnapshot,
-  toSettingsRow,
+  needsSync,
+  parseSettingsUpdate,
+  revisionFilter,
+  settingsSnapshot,
+  syncPayload,
+  toSettingsRow,
+  changedFieldsAgainstStored,
+  SYNCED_SETTINGS_FIELDS,
 } from '@/lib/admin-settings';
 
 const SECRET = 'x'.repeat(40);
@@ -198,9 +204,9 @@ test('parseSettingsUpdate refuses bad values, unknown fields, and an empty chang
 
 test('toSettingsRow uses the model defaults for what is missing, and ISO dates', () => {
   const row = toSettingsRow(stored);
-  assert.deepEqual(row, { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, settingsRevision: 2, updatedAt: T1.toISOString() });
-  assert.equal('_id' in row, false);
-  assert.deepEqual(toSettingsRow({ _id: SETTINGS_ID }), { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, storeApprovalRequired: false, settingsRevision: 0, updatedAt: null });
+  assert.deepEqual(row, { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, settingsRevision: 2, updatedAt: T1.toISOString() });
+  assert.equal('_id' in row, false);
+  assert.deepEqual(toSettingsRow({ _id: SETTINGS_ID }), { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, settingsRevision: 0, updatedAt: null });
   const unusable = toSettingsRow({ _id: SETTINGS_ID, defaultCommissionRate: -3, maxStoresPerSeller: 0, stripeCommissionNote: '', settingsRevision: -1 });
   assert.equal(unusable.defaultCommissionRate, 4);
   assert.equal(unusable.maxStoresPerSeller, 3);
@@ -261,7 +267,7 @@ test('GET answers the settings in the wire shape, with no store header and no _i
     assert.equal(response.headers.get('cache-control'), 'no-store');
     const body = (await response.json()) as any;
     assert.deepEqual(body, {
-      settings: { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, settingsRevision: 2, updatedAt: T1.toISOString() },
+      settings: { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, settingsRevision: 2, updatedAt: T1.toISOString() },
     });
     assert.deepEqual(calls.finds, [{ globalType: 'platformSettings' }]);
   } finally {
@@ -312,7 +318,17 @@ test('PATCH changes the default rate, audits before and after with the reason, a
     assert.equal(calls.outbox[0].entity, 'platform');
     assert.equal(calls.outbox[0].entityId, 'platform');
     assert.equal(calls.outbox[0].group, 'settings');
-    assert.deepEqual(calls.outbox[0].payload, { defaultCommissionRate: 6.5, maxStoresPerSeller: 3, storeApprovalRequired: false });
+    assert.deepEqual(calls.outbox[0].payload, {
+      defaultCommissionRate: 6.5,
+      maxStoresPerSeller: 3,
+      storeApprovalRequired: false,
+      codCommissionPercent: 0,
+      paymentInstructions: '',
+      graceDays: 7,
+      trialDays: 0,
+      supportEmail: '',
+      supportPhone: '',
+    });
     assert.equal(calls.reverts.length, 0);
   } finally {
     restore();
@@ -465,4 +481,163 @@ test('Sprint 4 D-095: storeApprovalRequired is a boolean setting, false when mis
   assert.deepEqual(bad.ok ? [] : bad.issues, [{ path: 'storeApprovalRequired', message: 'must be true or false' }]);
   assert.equal(toSettingsRow({ _id: SETTINGS_ID, storeApprovalRequired: true }).storeApprovalRequired, true);
   assert.equal(toSettingsRow({ _id: SETTINGS_ID }).storeApprovalRequired, false);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 (D-116, D-118): the COD commission percent and the plan settings.
+
+test('Sprint 6: parseSettingsUpdate reads the COD percent and the plan settings, trims text, and a blank text clears', () => {
+  assert.deepEqual(parseSettingsUpdate({ codCommissionPercent: 0 }), { ok: true, data: { changes: { codCommissionPercent: 0 }, reason: null } });
+  assert.deepEqual(parseSettingsUpdate({ codCommissionPercent: 2.5, graceDays: 30, trialDays: 60, reason: 'Plan launch' }), {
+    ok: true,
+    data: { changes: { codCommissionPercent: 2.5, graceDays: 30, trialDays: 60 }, reason: 'Plan launch' },
+  });
+  assert.deepEqual(parseSettingsUpdate({ paymentInstructions: '  Meezan 0123  ', supportEmail: ' help@example.com ', supportPhone: ' 0300-1234567 ' }), {
+    ok: true,
+    data: { changes: { paymentInstructions: 'Meezan 0123', supportEmail: 'help@example.com', supportPhone: '0300-1234567' }, reason: null },
+  });
+  assert.deepEqual(parseSettingsUpdate({ paymentInstructions: '   ', supportEmail: '', supportPhone: null }), {
+    ok: true,
+    data: { changes: { paymentInstructions: null, supportEmail: null, supportPhone: null }, reason: null },
+  });
+});
+
+test('Sprint 6: parseSettingsUpdate refuses bad values of the new settings, naming the field', () => {
+  const bad: Array<[Record<string, unknown>, string]> = [
+    [{ codCommissionPercent: -1 }, 'codCommissionPercent'],
+    [{ codCommissionPercent: 100.5 }, 'codCommissionPercent'],
+    [{ codCommissionPercent: '2' }, 'codCommissionPercent'],
+    [{ codCommissionPercent: null }, 'codCommissionPercent'],
+    [{ paymentInstructions: 'x'.repeat(1001) }, 'paymentInstructions'],
+    [{ paymentInstructions: 7 }, 'paymentInstructions'],
+    [{ graceDays: 31 }, 'graceDays'],
+    [{ graceDays: -1 }, 'graceDays'],
+    [{ graceDays: 1.5 }, 'graceDays'],
+    [{ trialDays: 61 }, 'trialDays'],
+    [{ trialDays: '3' }, 'trialDays'],
+    [{ supportEmail: 'not an email' }, 'supportEmail'],
+    [{ supportEmail: 'x'.repeat(250) + '@example.com' }, 'supportEmail'],
+    [{ supportPhone: 'call me' }, 'supportPhone'],
+    [{ supportPhone: '1'.repeat(31) }, 'supportPhone'],
+  ];
+  for (const [body, path] of bad) {
+    const parsed = parseSettingsUpdate(body);
+    assert.equal(parsed.ok, false, JSON.stringify(body));
+    assert.equal(parsed.ok ? '' : parsed.issues[0]?.path, path, JSON.stringify(body));
+  }
+});
+
+test('Sprint 6: the limits here equal the limits of the contract', () => {
+  assert.equal(parseSettingsUpdate({ paymentInstructions: 'x'.repeat(ADMIN_SETTINGS_PAYMENT_INSTRUCTIONS_MAX) }).ok, true);
+  assert.equal(parseSettingsUpdate({ paymentInstructions: 'x'.repeat(ADMIN_SETTINGS_PAYMENT_INSTRUCTIONS_MAX + 1) }).ok, false);
+  assert.equal(parseSettingsUpdate({ graceDays: ADMIN_SETTINGS_GRACE_DAYS_MAX }).ok, true);
+  assert.equal(parseSettingsUpdate({ graceDays: ADMIN_SETTINGS_GRACE_DAYS_MAX + 1 }).ok, false);
+  assert.equal(parseSettingsUpdate({ trialDays: ADMIN_SETTINGS_TRIAL_DAYS_MAX }).ok, true);
+  assert.equal(parseSettingsUpdate({ trialDays: ADMIN_SETTINGS_TRIAL_DAYS_MAX + 1 }).ok, false);
+});
+
+test('Sprint 6: every new setting is synced to the seller; the Stripe note still is not', () => {
+  for (const field of ['codCommissionPercent', 'paymentInstructions', 'graceDays', 'trialDays', 'supportEmail', 'supportPhone']) {
+    assert.ok((SYNCED_SETTINGS_FIELDS as readonly string[]).includes(field), field);
+    assert.equal(needsSync([field as never]), true, field);
+  }
+  assert.equal(needsSync(['stripeCommissionNote']), false);
+});
+
+test('Sprint 6: toSettingsRow reads the new settings, and falls back to the defaults for unusable stored values', () => {
+  const row = toSettingsRow({ ...stored, codCommissionPercent: 2, paymentInstructions: 'Pay <b>here</b>', graceDays: 10, trialDays: 14, supportEmail: 'help@example.com', supportPhone: '0300-1234567' });
+  assert.equal(row.codCommissionPercent, 2);
+  // Stored as typed: it is escaped where it is shown, not here.
+  assert.equal(row.paymentInstructions, 'Pay <b>here</b>');
+  assert.equal(row.graceDays, 10);
+  assert.equal(row.trialDays, 14);
+  assert.equal(row.supportEmail, 'help@example.com');
+  const unusable = toSettingsRow({ ...stored, codCommissionPercent: 150, graceDays: 99, trialDays: -2, paymentInstructions: '', supportEmail: 5 });
+  assert.equal(unusable.codCommissionPercent, 0);
+  assert.equal(unusable.graceDays, 7);
+  assert.equal(unusable.trialDays, 0);
+  assert.equal(unusable.paymentInstructions, null);
+  assert.equal(unusable.supportEmail, null);
+});
+
+test('Sprint 6: syncPayload carries every synced setting and sends a cleared text as an empty string', () => {
+  const payload = syncPayload(toSettingsRow({ ...stored, codCommissionPercent: 3 }));
+  assert.deepEqual(Object.keys(payload).sort(), [...SYNCED_SETTINGS_FIELDS].sort());
+  assert.equal(payload.codCommissionPercent, 3);
+  assert.equal(payload.paymentInstructions, '');
+  assert.equal(payload.stripeCommissionNote, undefined);
+});
+
+test('Sprint 6: a COD percent saved equal to the default still counts as a change when nothing is stored, and a clear removes the text', () => {
+  assert.deepEqual(changedFieldsAgainstStored(stored, { codCommissionPercent: 0 }), ['codCommissionPercent']);
+  assert.deepEqual(changedFieldsAgainstStored({ ...stored, codCommissionPercent: 0 }, { codCommissionPercent: 0 }), []);
+  assert.deepEqual(changedFieldsAgainstStored({ ...stored, supportPhone: '0300' }, { supportPhone: null }), ['supportPhone']);
+  assert.deepEqual(changedFieldsAgainstStored(stored, { supportPhone: null }), []);
+  assert.deepEqual(buildSettingsUpdate({ supportPhone: null, graceDays: 10 }, ['graceDays', 'supportPhone']), {
+    $inc: { settingsRevision: 1 },
+    $set: { graceDays: 10 },
+    $unset: { supportPhone: 1 },
+  });
+});
+
+test('Sprint 6: PATCH sets the COD percent with a reason, audits before and after, and queues the whole synced payload', async () => {
+  const restore = install();
+  try {
+    const response = await route.PATCH(await send('PATCH', { codCommissionPercent: 2, reason: 'COD fee from December' }));
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as any;
+    assert.equal(body.settings.codCommissionPercent, 2);
+    assert.equal(body.settings.settingsRevision, 3);
+    assert.equal(calls.updates[0].update.$set.codCommissionPercent, 2);
+    assert.deepEqual(calls.updates[0].filter, { _id: SETTINGS_ID, settingsRevision: 2 });
+    assert.deepEqual(calls.audits[0].details.changed, ['codCommissionPercent']);
+    assert.equal(calls.audits[0].details.reason, 'COD fee from December');
+    assert.equal(calls.audits[0].details.before.codCommissionPercent, 0);
+    assert.equal(calls.audits[0].details.after.codCommissionPercent, 2);
+    assert.equal(calls.outbox.length, 1);
+    assert.equal(calls.outbox[0].payload.codCommissionPercent, 2);
+    assert.equal(calls.outbox[0].payload.defaultCommissionRate, 4);
+  } finally {
+    restore();
+  }
+});
+
+test('Sprint 6: PATCH stores the payment instructions as typed (escaped only on output) and clears a blank support phone', async () => {
+  const restore = install({ found: { ...stored, supportPhone: '0300-1234567' } });
+  try {
+    const response = await route.PATCH(await send('PATCH', { paymentInstructions: 'Pay to <b>Meezan</b> 0123', supportPhone: '' }));
+    assert.equal(response.status, 200);
+    assert.equal(calls.updates[0].update.$set.paymentInstructions, 'Pay to <b>Meezan</b> 0123');
+    assert.deepEqual(calls.updates[0].update.$unset, { supportPhone: 1 });
+    assert.equal(calls.outbox[0].payload.supportPhone, '');
+    assert.equal(calls.outbox[0].payload.paymentInstructions, 'Pay to <b>Meezan</b> 0123');
+  } finally {
+    restore();
+  }
+});
+
+test('Sprint 6: PATCH refuses a COD percent of 101 and a grace period of 31 with 422 and changes nothing', async () => {
+  const restore = install();
+  try {
+    for (const body of [{ codCommissionPercent: 101 }, { graceDays: 31 }, { trialDays: 61 }]) {
+      const response = await route.PATCH(await send('PATCH', body));
+      assert.equal(response.status, 422, JSON.stringify(body));
+    }
+    assert.equal(calls.updates.length + calls.audits.length + calls.outbox.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('Sprint 6: a COD percent change that cannot be audited is put back, as for every setting', async () => {
+  const restore = install({ auditFails: true });
+  try {
+    const response = await route.PATCH(await send('PATCH', { codCommissionPercent: 5 }));
+    assert.equal(response.status, 500);
+    assert.equal(calls.reverts.length, 1);
+    assert.deepEqual(calls.reverts[0].filter, { _id: SETTINGS_ID, settingsRevision: 3 });
+    assert.deepEqual(calls.reverts[0].update, { $set: { settingsRevision: 2 }, $unset: { codCommissionPercent: 1 } });
+  } finally {
+    restore();
+  }
 });

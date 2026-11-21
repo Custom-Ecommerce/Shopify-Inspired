@@ -21,12 +21,16 @@ import {
   PAYOUT_METHOD_NAMES,
   PERIOD_LABELS,
   balanceHint,
+  codSalesLine,
+  commissionRatesText,
   customRangeProblem,
   earningsQuery,
-  entryLabel,
+  entryAmountText,
+  entryTypeText,
   formatPkr,
-  formatSignedPkr,
   payoutStatusLabel,
+  readCommissionRates,
+  type CommissionRates,
   type EarningsData,
   type EarningsEntry,
   type EarningsPayout,
@@ -57,12 +61,12 @@ const entryColumns = [
   },
   {
     header: "Type",
-    render: (entry: EarningsEntry) => <span className="text-sm">{entryLabel(entry)}</span>,
+    render: (entry: EarningsEntry) => <span className="text-sm">{entryTypeText(entry)}</span>,
   },
   {
     header: "Amount",
     className: "text-right",
-    render: (entry: EarningsEntry) => <span className="tabular-nums font-medium">{formatSignedPkr(entry.amount)}</span>,
+    render: (entry: EarningsEntry) => <span className="tabular-nums font-medium">{entryAmountText(entry)}</span>,
   },
   {
     header: "Rate",
@@ -115,7 +119,7 @@ export default function DashboardEarningsPage() {
   const [page, setPage] = useState(1);
   const [type, setType] = useState<EntryTypeValue | "">("");
   const [data, setData] = useState<EarningsData | null>(null);
-  const [rate, setRate] = useState<{ rate: number; source: "custom" | "default" } | null>(null);
+  const [rates, setRates] = useState<CommissionRates | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -147,13 +151,14 @@ export default function DashboardEarningsPage() {
     };
   }, [period, from, to, page, type, tick, rangeProblem, storeFetch]);
 
-  // The rate that applies now is read once; a failure just hides that line.
+  // The rates that apply now (card and cash on delivery) are read once; a failure just hides that line.
   useEffect(() => {
     let cancelled = false;
     storeFetch("/api/dashboard/commission")
       .then((res) => (res.ok ? res.json() : null))
-      .then((body: { rate?: unknown; source?: unknown } | null) => {
-        if (!cancelled && body && typeof body.rate === "number" && (body.source === "custom" || body.source === "default")) setRate({ rate: body.rate, source: body.source });
+      .then((body: unknown) => {
+        const read = readCommissionRates(body);
+        if (!cancelled && read !== null) setRates(read);
       })
       .catch(() => undefined);
     return () => {
@@ -236,10 +241,17 @@ export default function DashboardEarningsPage() {
               label="Commission"
               value={formatPkr(data.summary.commission)}
               icon={TrendingDown}
-              action={rate !== null ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Percent className="size-3" aria-hidden="true" />{rate.rate}% {rate.source === "custom" ? "(your rate)" : "(standard rate)"}</span> : undefined}
+              action={rates !== null ? <span className="inline-flex items-start gap-1 text-xs text-muted-foreground" data-slot="earnings-rates"><Percent className="mt-0.5 size-3 shrink-0" aria-hidden="true" /><span className="min-w-0">{commissionRatesText(rates)}</span></span> : undefined}
             />
             <MetricTile label="Net earnings" value={formatPkr(data.summary.net)} icon={Wallet} className="col-span-2 md:col-span-1" />
           </div>
+
+          {/* Sprint 6 D-116: cash on delivery sales, and whether they carried a commission. */}
+          {codSalesLine(data.cod, rates) !== null ? (
+            <p className="rounded-xl border bg-muted/40 p-3 text-sm" data-slot="earnings-cod">
+              {codSalesLine(data.cod, rates)}
+            </p>
+          ) : null}
 
           {/* Sprint 5 EP-13.US03.T04: what returns took off the figures above (already netted into them). */}
           {data.returns && data.returns.count > 0 ? (

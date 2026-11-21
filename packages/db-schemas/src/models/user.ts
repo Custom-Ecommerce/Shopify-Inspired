@@ -27,6 +27,11 @@ emailVerifiedAt?: Date | null;
 phone?: string | null;
 /** The new address of an email change until its link is used; the old email stays the login until then. */
 pendingEmail?: string | null;
+/**
+ * Sprint 6 EP-12.US02 (D-118): an admin's override of the seller's store limit (an integer of 1 or more), or null/missing for
+ * none. It wins over the plan, the platform setting and the environment. Only an admin writes it, with a reason.
+ */
+storeLimitOverride?: number | null;
 createdAt: Date;
 updatedAt: Date;
 }
@@ -57,6 +62,7 @@ tokenVersion: { type: Number, default: 0, min: 0 },
 emailVerifiedAt: { type: Date, default: null },
 phone: { type: String, default: null, maxlength: 20 },
 pendingEmail: { type: String, default: null, lowercase: true, trim: true, maxlength: 254 },
+storeLimitOverride: { type: Number, default: null, min: 1, validate: { validator: Number.isInteger, message: 'storeLimitOverride must be a whole number' } },
 },
 { timestamps: true, collection: 'users' },
 );

@@ -1,4 +1,5 @@
 import { AdminHttpError } from '@/lib/admin-auth';
+import { queueAccountNotice } from '@/lib/seller-notices';
 import { setSellerAccountStatus } from '@/lib/seller-moderation-client';
 import { User, writeAuditLog } from '@/lib/workspace';
 
@@ -31,7 +32,12 @@ export const sellerStatusSteps = {
 export async function changeSellerStatus(change: SellerStatusChange): Promise<SellerStatusResult> {
   if (change.adminId === change.sellerId) throw new AdminHttpError(403, 'You cannot suspend your own account.', 'SELF_SUSPEND');
 
-  const current = (await User.findById(change.sellerId).select('role accountStatus').lean()) as { role?: unknown; accountStatus?: unknown } | null;
+  const current = (await User.findById(change.sellerId).select('role accountStatus name email').lean()) as {
+    role?: unknown;
+    accountStatus?: unknown;
+    name?: unknown;
+    email?: unknown;
+  } | null;
   if (!current) throw new AdminHttpError(404, 'Seller not found');
   if (current.role !== 'seller') throw new AdminHttpError(403, 'Only seller accounts can be suspended here.', 'NOT_A_SELLER');
 
@@ -74,6 +80,9 @@ export async function changeSellerStatus(change: SellerStatusChange): Promise<Se
   } catch (err) {
     console.error('[admin-backend] could not write the seller status audit entry', err instanceof Error ? err.message : 'unknown');
   }
+
+  // Sprint 6 EP-12.US02.T03 (CO-82): the seller is told, after the response; a failed email never undoes the change.
+  queueAccountNotice({ sellerId: change.sellerId, status: change.status, reason: change.reason, name: current.name, email: current.email, at: new Date() });
   return { id: change.sellerId, accountStatus: change.status, changed: true };
 }
 

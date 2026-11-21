@@ -4,6 +4,11 @@
  */
 
 export const RATE_MAX = 100;
+
+/** Sprint 6 D-116: the platform default and a store's own rate are for GATEWAY (card) orders only. Cash on delivery has its own percent. */
+export const GATEWAY_ONLY_NOTE = "Applies to gateway (card) orders only. Cash on delivery has its own percent in Settings and no store rate applies to it.";
+export const PLATFORM_RATE_DESCRIPTION = "Applies to gateway (card) orders of every store whose rate source is the platform default. Cash on delivery follows the COD percent in Settings.";
+export const STORE_RATE_DESCRIPTION = "A store's own rate applies to its gateway (card) orders only, never to cash on delivery.";
 export const REASON_MIN = 3;
 export const REASON_MAX = 500;
 
@@ -38,7 +43,7 @@ export function parseRateInput(text: string): number | null {
 /** The sentence the confirmation step shows. A null rate means the platform default. */
 export function describeRateChange(subject: string, from: number | null, to: number | null, defaultRate: number): string {
   const label = (rate: number | null) => (rate === null ? "the platform default (" + defaultRate + "%)" : rate + "%");
-  return subject + ": " + label(from) + " to " + label(to) + ". It applies to orders delivered or paid after this change; existing ledger entries are not rewritten.";
+  return subject + ": " + label(from) + " to " + label(to) + ". It applies to gateway (card) orders paid after this change, never to cash on delivery; existing ledger entries are not rewritten.";
 }
 
 export const historyParser = {

@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { commissionReportCsvUrl, getCommissionReport } from "@/lib/api/client";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
-import { REPORT_PERIODS, REPORT_PERIOD_LABELS, formatRupees, reportInputIssue, type ReportPeriodValue } from "@/lib/payouts";
+import { REPORT_PERIODS, REPORT_PERIOD_LABELS, formatRupees, reportBreakdown, reportInputIssue, type ReportPeriodValue } from "@/lib/payouts";
 
 /**
  * Sprint 4 EP-05.US06 (D-090): the commission report of one store and period, summed from the ledger, with a CSV of the same
@@ -85,6 +85,19 @@ export function ReportDialog({ store, onClose }: { store: { id: string; name: st
               <dt className="text-muted-foreground">Balance now</dt>
               <dd className="text-xl font-bold tabular-nums">{formatRupees(data.balance)}</dd>
             </div>
+            {reportBreakdown(data)?.map((line) => (
+              <div key={line.key} className="col-span-2 rounded-xl border border-border p-3" data-slot={"report-" + line.key}>
+                <dt className="font-medium">{line.label}</dt>
+                <dd className="mt-1 text-muted-foreground">
+                  <span className="tabular-nums">{line.noCommission ? "No commission" : formatRupees(line.commissionEarned) + " commission"}</span>
+                  {" on "}
+                  <span className="tabular-nums">{formatRupees(line.sales)}</span>
+                  {" of sales ("}
+                  <span className="tabular-nums">{line.ordersCount}</span>
+                  {line.ordersCount === 1 ? " order)" : " orders)"}
+                </dd>
+              </div>
+            )) ?? null}
             <p className="col-span-2 text-xs text-muted-foreground">
               {data.period.from} to {data.period.to} (Asia/Karachi). Sales are the item subtotals the commission was taken on, delivery excluded.
             </p>

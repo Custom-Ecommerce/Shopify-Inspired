@@ -119,3 +119,45 @@ export const internalAccountStatusRequestSchema = z
   })
   .strict();
 export type InternalAccountStatusRequest = z.output<typeof internalAccountStatusRequestSchema>;
+
+/**
+ * Sprint 6 EP-12.US02 (D-118): the store-limit override. An integer of 1 or more, or null for "no override" (the plan, the
+ * platform setting or the environment decides). Only an admin writes it, with a reason.
+ */
+export const STORE_LIMIT_OVERRIDE_MAX = 1000;
+export const storeLimitOverrideSchema = z
+  .number({ error: 'The store limit must be a whole number.' })
+  .int('The store limit must be a whole number.')
+  .min(1, 'The store limit must be at least 1.')
+  .max(STORE_LIMIT_OVERRIDE_MAX, 'The store limit can be at most ' + STORE_LIMIT_OVERRIDE_MAX + '.')
+  .nullable();
+
+/** Admin: set (a number) or clear (null) a seller's store-limit override. The reason is required and goes to the audit entry. */
+export const sellerStoreLimitRequestSchema = z
+  .object({
+    storeLimitOverride: storeLimitOverrideSchema,
+    reason: z.string().trim().min(3, 'a reason of 3 to 300 characters is required').max(SELLER_SUSPEND_REASON_MAX, 'reason must be at most 300 characters'),
+  })
+  .strict();
+export type SellerStoreLimitRequest = z.output<typeof sellerStoreLimitRequestSchema>;
+
+/** Admin backend -> seller backend, signed (POST /api/internal/accounts/store-limit): apply the override there. */
+export const internalStoreLimitRequestSchema = z
+  .object({
+    userId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'userId must be a 24-character ObjectId'),
+    storeLimitOverride: storeLimitOverrideSchema,
+  })
+  .strict();
+export type InternalStoreLimitRequest = z.output<typeof internalStoreLimitRequestSchema>;
+
+/** Where an effective store limit comes from. */
+export const STORE_LIMIT_SOURCES = ['override', 'plan', 'setting', 'env'] as const;
+export type StoreLimitSource = (typeof STORE_LIMIT_SOURCES)[number];
+
+export const sellerStoreLimitResponseSchema = z.object({
+  seller: z.object({
+    id: z.string(),
+    storeLimitOverride: storeLimitOverrideSchema,
+    changed: z.boolean(),
+  }),
+});

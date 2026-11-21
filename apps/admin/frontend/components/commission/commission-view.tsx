@@ -29,7 +29,7 @@ export function CommissionPageView() {
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <div>
         <h2 className="font-heading mb-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Commission</h2>
-        <p className="text-sm text-muted-foreground">The rate that applies to every store, what the platform owes each store, and the payouts made. Amounts are in rupees.</p>
+        <p className="text-sm text-muted-foreground">The gateway (card) rate that applies to every store, what the platform owes each store, and the payouts made. Cash on delivery has its own percent in Settings. Amounts are in rupees.</p>
       </div>
 
       <div role="group" aria-label="Commission view" className="inline-flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1">

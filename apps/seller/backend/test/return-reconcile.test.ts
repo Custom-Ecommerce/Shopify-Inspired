@@ -25,7 +25,8 @@ beforeEach(() => {
   restoreExtra = [];
   const settings = PlatformSettingsModel as any;
   const original = settings.findOne;
-  settings.findOne = () => chain(() => ({ defaultCommissionRate: 4 }));
+  // Sprint 6 D-116: COD has its own percent (0 by default); these tests are about the 4 percent case.
+  settings.findOne = () => chain(() => ({ defaultCommissionRate: 4, codCommissionPercent: 4 }));
   restoreExtra.push(() => {
     settings.findOne = original;
   });

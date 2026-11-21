@@ -107,6 +107,16 @@ export const setSellerAccountStatus = (
   input: { userId: string; status: 'active' | 'suspended'; reason: string | null },
 ): Promise<{ userId: string; status: string; changed: boolean }> => send('POST', '/api/internal/accounts/status', adminId, input, 'Seller account control');
 
+/**
+ * Sprint 6 EP-12.US02.T02 (D-118): applies a seller's store-limit override in the seller database, where provisionStore reads it
+ * (POST /api/internal/accounts/store-limit, signed like the account status call). null clears the override.
+ */
+export const setSellerStoreLimit = (
+  adminId: string,
+  input: { userId: string; storeLimitOverride: number | null },
+): Promise<{ userId: string; storeLimitOverride: number | null; changed: boolean }> =>
+  send('POST', '/api/internal/accounts/store-limit', adminId, input, 'Seller store limit');
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Sprint 4 EP-05.US03, US06 (D-090): payouts and the commission report. The ledger and the payouts live in the seller
 // database, so each of these is one signed call to the seller backend (the same signature as moderation).

@@ -15,6 +15,9 @@ export const {
 } = contracts;
 export const { adminSellerListEnvelopeSchema, adminSyncOutboxSchema, adminAuditListSchema, adminSellerStatusResponseSchema } = contracts;
 export type { AdminSellerStatusResponse } from "@markaz/contracts";
+// Sprint 6 EP-12.US02: the seller store limit (override, effective limit and its source).
+export const { adminSellerStoreLimitSchema, adminSellerStoreLimitSetResponseSchema, sellerStoreLimitRequestSchema, STORE_LIMIT_OVERRIDE_MAX } = contracts;
+export type { AdminSellerStoreLimit, AdminSellerStoreLimitSetResponse } from "@markaz/contracts";
 export type { SessionUser, LoginRequest } from "@markaz/contracts";
 export type {
   AdminStoreListItem,
@@ -56,6 +59,13 @@ export const {
   ADMIN_SETTINGS_MAX_STORES_MAX,
   ADMIN_SETTINGS_NOTE_MAX,
   ADMIN_SETTINGS_REASON_MAX,
+  ADMIN_SETTINGS_PAYMENT_INSTRUCTIONS_MAX,
+  ADMIN_SETTINGS_GRACE_DAYS_MIN,
+  ADMIN_SETTINGS_GRACE_DAYS_MAX,
+  ADMIN_SETTINGS_TRIAL_DAYS_MIN,
+  ADMIN_SETTINGS_TRIAL_DAYS_MAX,
+  ADMIN_SETTINGS_SUPPORT_EMAIL_MAX,
+  ADMIN_SETTINGS_SUPPORT_PHONE_MAX,
 } = contracts;
 export type {
   AdminPlatformSettings,

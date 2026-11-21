@@ -47,7 +47,8 @@ export const PUBLIC_STORE_READABLE_FIELDS = ['name', 'slug', 'internalHandle', '
 export const ADMIN_SELLER_WRITABLE_FIELDS = ['accountStatus', 'storeLimitOverride'] as const;
 
 // Staff user administration. passwordHash is never writable through a generic update.
-export const ADMIN_USER_READABLE_FIELDS = ['name', 'email', 'role', 'store', 'createdAt', 'updatedAt'] as const;
+// storeLimitOverride (Sprint 6) is read here; it is written only through the sellers collection (ADMIN_SELLER_WRITABLE_FIELDS).
+export const ADMIN_USER_READABLE_FIELDS = ['name', 'email', 'role', 'store', 'storeLimitOverride', 'createdAt', 'updatedAt'] as const;
 export const ADMIN_USER_CREATABLE_FIELDS = ['name', 'email', 'role', 'store'] as const;
 export const ADMIN_USER_WRITABLE_FIELDS = ['name', 'role', 'store'] as const;
 
@@ -61,6 +62,8 @@ export const ADMIN_LEDGER_READABLE_FIELDS = [
 // Payload PlatformSettings: settingsRevision has update access false, so it is excluded.
 export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
 'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired',
+// Sprint 6 (D-116, D-118): the COD commission percent and the plan settings.
+'codCommissionPercent', 'paymentInstructions', 'graceDays', 'trialDays', 'supportEmail', 'supportPhone',
 ] as const;
 
 // What a seller may set on a category of their store. store and isDemo are never client-writable.
