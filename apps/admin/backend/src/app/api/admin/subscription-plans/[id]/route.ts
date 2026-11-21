@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'plans.write');
     requirePolicy(() => {
       assertCan('admin', 'update', 'subscriptionPlans', PLAN_WRITE_FIELDS);
       // The revision is moved by the server, never by the operator.

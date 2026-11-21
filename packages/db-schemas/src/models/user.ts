@@ -4,6 +4,9 @@ import mongoose, { Schema, type Document, type Model, type Types } from 'mongoos
 export const USER_ROLES = ['admin', 'seller'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 /** Sprint 4 EP-08 (D-093): a suspended or blocked account is refused on every authenticated request. */
+/** Sprint 6 (S6-B6, D-118): the level of an ADMIN account. Missing on a role admin reads as owner (back-compat). Sellers have none. */
+export const ADMIN_USER_LEVELS = ['owner', 'finance', 'operations', 'customer_support'] as const;
+export type AdminUserLevel = (typeof ADMIN_USER_LEVELS)[number];
 export const USER_ACCOUNT_STATUSES = ['active', 'suspended', 'blocked'] as const;
 export type UserAccountStatus = (typeof USER_ACCOUNT_STATUSES)[number];
 
@@ -32,6 +35,7 @@ pendingEmail?: string | null;
  * none. It wins over the plan, the platform setting and the environment. Only an admin writes it, with a reason.
  */
 storeLimitOverride?: number | null;
+adminLevel?: AdminUserLevel | null;
 createdAt: Date;
 updatedAt: Date;
 }
@@ -62,6 +66,7 @@ tokenVersion: { type: Number, default: 0, min: 0 },
 emailVerifiedAt: { type: Date, default: null },
 phone: { type: String, default: null, maxlength: 20 },
 pendingEmail: { type: String, default: null, lowercase: true, trim: true, maxlength: 254 },
+adminLevel: { type: String, enum: [...ADMIN_USER_LEVELS], default: undefined },
 storeLimitOverride: { type: Number, default: null, min: 1, validate: { validator: Number.isInteger, message: 'storeLimitOverride must be a whole number' } },
 },
 { timestamps: true, collection: 'users' },

@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'sellers.read');
     requirePolicy(() => {
       assertCan('admin', 'read', 'users', ['name', 'email', 'storeLimitOverride']);
       assertCan('admin', 'read', 'stores');
@@ -45,7 +45,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
  */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'sellers.store_limit');
     requirePolicy(() => assertCan('admin', 'update', 'sellers', ['storeLimitOverride']));
     const body = await readAdminBody(request, sellerStoreLimitRequestSchema);
     const { id } = await context.params;

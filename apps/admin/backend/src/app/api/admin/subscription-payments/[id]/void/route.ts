@@ -1,4 +1,5 @@
 import { errorResponse } from '@/lib/admin-auth';
+import { authorizeAdmin } from '@/lib/admin-session';
 import { decidePaymentFor } from '@/lib/admin-subscription-payments';
 
 export const runtime = 'nodejs';
@@ -14,7 +15,8 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
-    return await decidePaymentFor(request, context, 'void');
+    const { userId } = await authorizeAdmin(request, 'payments.void');
+    return await decidePaymentFor(request, context, 'void', userId);
   } catch (err) {
     return errorResponse(err);
   }

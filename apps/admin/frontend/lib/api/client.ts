@@ -26,6 +26,9 @@ import {
   adminCommissionRatesSchema,
   adminSubscriptionPlanListSchema,
   adminPaymentListSchema,
+  adminUserListSchema,
+  adminUserResponseSchema,
+  type AdminUser,
   adminOrderListSchema,
   adminOrderDetailResponseSchema,
   type AdminOrderList,
@@ -363,4 +366,17 @@ export function listOrders(state: OrderListState, signal?: AbortSignal): Promise
 
 export function getOrder(id: string, signal?: AbortSignal): Promise<AdminOrderDetail> {
   return call("/api/orders/" + encodeURIComponent(id), adminOrderDetailResponseSchema as Parser<{ order: AdminOrderDetail }>, { signal }, (p) => p).then((r) => r.order);
+}
+
+// Sprint 6 (S6-B6, D-118): admin users and levels (owner level only; the server refuses anyone else).
+export function listAdminUsers(signal?: AbortSignal): Promise<{ users: AdminUser[] }> {
+  return call("/api/users", adminUserListSchema as Parser<{ users: AdminUser[] }>, { signal });
+}
+
+export function inviteAdminUser(body: { name: string; email: string; adminLevel: string }): Promise<{ user: AdminUser }> {
+  return call("/api/users", adminUserResponseSchema as Parser<{ user: AdminUser }>, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function runUserAction(action: "level" | "disable" | "enable", id: string, body: { reason: string; adminLevel?: string }): Promise<{ user: AdminUser }> {
+  return call("/api/users/" + encodeURIComponent(id) + "/" + action, adminUserResponseSchema as Parser<{ user: AdminUser }>, { method: "POST", body: JSON.stringify(body) });
 }

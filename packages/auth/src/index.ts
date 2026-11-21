@@ -11,3 +11,5 @@ export * from './auth-tokens';
 export * from './session-guard';
 export * from './rate-limit';
 export * from './account-flows';
+// Sprint 6 (S6-B6, D-118): admin levels and the capability matrix.
+export * from './admin-levels';

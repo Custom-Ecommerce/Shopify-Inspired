@@ -46,6 +46,8 @@ export const TEMPLATE_NAMES = [
   'payment_rejected',
   'subscription_expiring',
   'subscription_expired',
+  // Sprint 6 (S6-B6): an admin invitation (7 day link).
+  'admin_invite',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -577,6 +579,23 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'دوبارہ شروع کرنے کے لیے: {{dashboardLink}}',
     ],
     whatsapp: 'Your {{planName}} plan has ended; the Free limits now apply. Nothing was deleted. {{dashboardLink}}\nآپ کا پلان ختم ہو گیا ہے۔',
+  },
+  admin_invite: {
+    variables: ['appName', 'customerName', 'actionLink', 'validFor'],
+    subject: '{{appName}}: you have been invited',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'You have been invited to the {{appName}} console. Set your password with this link: {{actionLink}}',
+      '',
+      'The link works once and is valid for {{validFor}}.',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کو {{appName}} کنسول کی دعوت دی گئی ہے۔ اس لنک سے اپنا پاس ورڈ بنائیں: {{actionLink}}',
+      'یہ لنک ایک بار کام کرتا ہے اور {{validFor}} تک درست ہے۔',
+    ],
+    whatsapp: 'You are invited to {{appName}}. Set your password: {{actionLink}} (valid {{validFor}})\nآپ کو دعوت دی گئی ہے۔',
   },
   broadcast: {
     variables: ['storeName', 'broadcastSubject', 'broadcastMessage', 'emailFooter', 'unsubscribeLink'],

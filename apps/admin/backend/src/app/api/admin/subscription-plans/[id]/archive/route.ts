@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'plans.write');
     requirePolicy(() => {
       assertCan('admin', 'update', 'subscriptionPlans', ['isActive', 'archivedAt']);
       assertCan('system', 'update', 'subscriptionPlans');

@@ -15,7 +15,7 @@ const LIST_FIELDS = 'name slug status domain isThemeDemo commissionRate commissi
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'stores.read');
     requirePolicy(() => {
       assertCan('admin', 'read', 'stores');
       assertCan('admin', 'read', 'users', ['name', 'email']);

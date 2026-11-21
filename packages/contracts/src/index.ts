@@ -81,3 +81,6 @@ export * from './subscription-payments';
 
 // Sprint 6 (S6-B5): the admin's read-only orders view (safe fields only).
 export * from './admin-orders';
+
+// Sprint 6 (S6-B6): admin users and levels.
+export * from './admin-users';

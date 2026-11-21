@@ -3,7 +3,7 @@ import type { AdminOrderDetail, AdminOrderList, AdminOrderListQuery } from '../.
 import { AdminHttpError } from '@/lib/admin-auth';
 import { adminOrderListQuerySchema } from '@/lib/admin-payment-contracts';
 import { readAdminQuery } from '@/lib/admin-payouts';
-import { authorizeAdmin, NO_STORE, requirePolicy } from '@/lib/admin-session';
+import { NO_STORE, requirePolicy } from '@/lib/admin-session';
 import { listAdminOrders, readAdminOrderDetail } from '@/lib/seller-moderation-client';
 import { assertCan, writeAuditLog } from '@/lib/workspace';
 
@@ -18,7 +18,7 @@ import { assertCan, writeAuditLog } from '@/lib/workspace';
  * Rate limit: the admin backend's Mongo limiter exists only for its sign-in and password flows; there is no read-limit pattern, so reads are not
  * limited here (listed in the S6-B5 report).
  *
- * CAPABILITY for S6-B6: orders.read (owner, customer_support). Until the levels exist any admin may read.
+ * Capability: orders.read (owner, customer_support), declared by the route files (S6-B6).
  */
 export const ORDERS_CAPABILITY = 'orders.read';
 
@@ -31,18 +31,15 @@ export const orderSteps = {
 const READ_FIELDS = ['orderNumber', 'store', 'status', 'paymentMethod', 'total', 'city', 'createdAt', 'updatedAt', 'itemCount'];
 
 /** GET /api/admin/orders?store&status&from&to&q&page&limit */
-export async function listOrdersFor(request: Request): Promise<Response> {
-  const { userId } = await authorizeAdmin(request);
-  // CAPABILITY orders.read (S6-B6)
+export async function listOrdersFor(request: Request, userId: string): Promise<Response> {
+  // The route file authorizes the admin with the orders.read capability (S6-B6).
   requirePolicy(() => assertCan('admin', 'read', 'adminOrdersView', READ_FIELDS));
   const query: AdminOrderListQuery = readAdminQuery(request, adminOrderListQuerySchema);
   return Response.json(await orderSteps.list(userId, query as unknown as Record<string, unknown>), { status: 200, headers: NO_STORE });
 }
 
 /** GET /api/admin/orders/:id */
-export async function readOrderFor(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { userId } = await authorizeAdmin(request);
-  // CAPABILITY orders.read (S6-B6)
+export async function readOrderFor(_request: Request, context: { params: Promise<{ id: string }> }, userId: string): Promise<Response> {
   requirePolicy(() => assertCan('admin', 'read', 'adminOrdersView', ['orderNumber', 'items', 'totals', 'statusHistory']));
   const { id } = await context.params;
   if (!mongoose.isValidObjectId(id)) throw new AdminHttpError(404, 'Order not found');

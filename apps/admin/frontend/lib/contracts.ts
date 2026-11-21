@@ -115,6 +115,10 @@ export type { AdminSellerPlan, AdminSellerPlansResponse, EffectivePlanStatus } f
 export const { adminPaymentListSchema, adminPaymentWriteResponseSchema, confirmPaymentBodySchema, decidePaymentBodySchema } = contracts;
 export type { AdminPayment, AdminPaymentList, AdminPaymentWriteResponse } from "@markaz/contracts";
 
+// Sprint 6 (S6-B6): admin users and levels.
+export const { adminUserListSchema, adminUserResponseSchema, inviteAdminRequestSchema, changeLevelRequestSchema, setAdminStatusRequestSchema } = contracts;
+export type { AdminUser } from "@markaz/contracts";
+
 // Sprint 6 (S6-B5): the read-only orders view and the overview KPIs.
 export const { adminOrderListSchema, adminOrderDetailResponseSchema, ADMIN_ORDER_FORBIDDEN_KEYS } = contracts;
 export type { AdminOrderRow, AdminOrderList, AdminOrderDetail, AdminKpi } from "@markaz/contracts";

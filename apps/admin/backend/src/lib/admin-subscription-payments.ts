@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { AdminHttpError } from '@/lib/admin-auth';
 import { readAdminBody } from '@/lib/admin-account';
 import { adminPaymentListQuerySchema, confirmPaymentBodySchema, decidePaymentBodySchema } from '@/lib/admin-payment-contracts';
-import { authorizeAdmin, NO_STORE, requirePolicy } from '@/lib/admin-session';
+import { NO_STORE, requirePolicy } from '@/lib/admin-session';
 import { confirmSubscriptionPayment, listSubscriptionPayments, rejectSubscriptionPayment, voidSubscriptionPayment } from '@/lib/seller-moderation-client';
 import { assertCan } from '@/lib/workspace';
 
@@ -12,11 +12,8 @@ import { assertCan } from '@/lib/workspace';
  * audit entry and the email. The operator is the session's, never the body's. Kept out of the route files (Next allows only route exports there)
  * and written against injectable steps, so a test can stub the seller backend call.
  *
- * CAPABILITIES for the admin levels (S6-B6). Until they exist any admin may do all four; the guard test of S6-B6 adds the rows:
- *   subscription_payments.read      owner, finance, operations           the list
- *   subscription_payments.confirm   owner, finance                       a claimed payment becomes a paid period
- *   subscription_payments.reject    owner, finance, operations           a requested or claimed payment is refused
- *   subscription_payments.void      owner (a CONFIRMED payment), finance (an unconfirmed one)
+ * CAPABILITIES (S6-B6), declared by the route files: payments.read (owner, finance) for the list, payments.decide (owner, finance) for confirm and reject,
+ * payments.void (owner only) for void.
  */
 export const PAYMENT_CAPABILITIES = {
   read: 'subscription_payments.read',
@@ -37,9 +34,7 @@ const DECISION_FIELDS = ['status', 'decidedBy', 'decidedAt', 'reason', 'periodSt
 export type PaymentAction = 'confirm' | 'reject' | 'void';
 
 /** GET /api/admin/subscription-payments?status&page&limit */
-export async function listPaymentsFor(request: Request): Promise<Response> {
-  const { userId } = await authorizeAdmin(request);
-  // CAPABILITY subscription_payments.read (S6-B6)
+export async function listPaymentsFor(request: Request, userId: string): Promise<Response> {
   requirePolicy(() => assertCan('admin', 'read', 'subscriptionPayments'));
   const parsed = adminPaymentListQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) {
@@ -52,9 +47,7 @@ export async function listPaymentsFor(request: Request): Promise<Response> {
 }
 
 /** POST /api/admin/subscription-payments/:id/confirm | reject | void. The payment id is the path's; the body has the amount and the reason only. */
-export async function decidePaymentFor(request: Request, context: { params: Promise<{ id: string }> }, action: PaymentAction): Promise<Response> {
-  const { userId } = await authorizeAdmin(request);
-  // CAPABILITY subscription_payments.confirm | reject | void (S6-B6): void of a confirmed payment is owner-only once the levels exist.
+export async function decidePaymentFor(request: Request, context: { params: Promise<{ id: string }> }, action: PaymentAction, userId: string): Promise<Response> {
   requirePolicy(() => assertCan('admin', 'update', 'subscriptionPayments', [...DECISION_FIELDS]));
   const { id } = await context.params;
   if (!mongoose.isValidObjectId(id)) throw new AdminHttpError(404, 'Payment not found');

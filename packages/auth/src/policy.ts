@@ -48,9 +48,15 @@ export const ADMIN_SELLER_WRITABLE_FIELDS = ['accountStatus', 'storeLimitOverrid
 
 // Staff user administration. passwordHash is never writable through a generic update.
 // storeLimitOverride (Sprint 6) is read here; it is written only through the sellers collection (ADMIN_SELLER_WRITABLE_FIELDS).
-export const ADMIN_USER_READABLE_FIELDS = ['name', 'email', 'role', 'store', 'storeLimitOverride', 'createdAt', 'updatedAt'] as const;
-export const ADMIN_USER_CREATABLE_FIELDS = ['name', 'email', 'role', 'store'] as const;
-export const ADMIN_USER_WRITABLE_FIELDS = ['name', 'role', 'store'] as const;
+// S6-B6: an admin never writes `role` through the generic users row (privilege escalation). Admin accounts are managed through adminUsers, owner level only.
+export const ADMIN_USER_READABLE_FIELDS = ['name', 'email', 'role', 'store', 'storeLimitOverride', 'adminLevel', 'createdAt', 'updatedAt'] as const;
+export const ADMIN_USER_CREATABLE_FIELDS = ['name', 'email', 'store'] as const;
+export const ADMIN_USER_WRITABLE_FIELDS = ['name', 'store'] as const;
+
+// Sprint 6 (S6-B6, D-118): the admin accounts. The routes require the users.manage capability (owner level) for every write; this row says what may be written.
+export const ADMIN_ACCOUNT_READABLE_FIELDS = ['name', 'email', 'adminLevel', 'accountStatus', 'emailVerifiedAt', 'createdAt', 'updatedAt'] as const;
+export const ADMIN_ACCOUNT_INVITABLE_FIELDS = ['name', 'email', 'adminLevel'] as const;
+export const ADMIN_ACCOUNT_WRITABLE_FIELDS = ['adminLevel', 'accountStatus', 'suspensionReason'] as const;
 
 // Commission ledger as the supervisor may read it: totals only, no order identifiers
 // (Payload CommissionLedger fields minus orderId, sellerOrderDocId, stripePaymentIntentId, applicationFeeId).
@@ -195,6 +201,14 @@ read: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_PAYMENT_
 create: { actors: ['seller', 'system'], fields: { seller: SELLER_PAYMENT_CREATABLE_FIELDS, system: '*' } },
 update: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_PAYMENT_WRITABLE_FIELDS, admin: ADMIN_PAYMENT_WRITABLE_FIELDS, system: '*' } },
 // A payment is a record of money: it is voided or rejected, never deleted.
+delete: { actors: [], fields: '*' },
+},
+
+adminUsers: {
+read: { actors: ['admin', 'system'], fields: { admin: ADMIN_ACCOUNT_READABLE_FIELDS, system: '*' } },
+create: { actors: ['admin', 'system'], fields: { admin: ADMIN_ACCOUNT_INVITABLE_FIELDS, system: '*' } },
+update: { actors: ['admin', 'system'], fields: { admin: ADMIN_ACCOUNT_WRITABLE_FIELDS, system: '*' } },
+// An admin account is disabled, never deleted: the audit trail keeps pointing at it.
 delete: { actors: [], fields: '*' },
 },
 

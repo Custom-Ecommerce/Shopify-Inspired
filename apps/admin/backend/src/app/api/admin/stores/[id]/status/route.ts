@@ -82,7 +82,7 @@ async function rollBack(args: {
  */
 export async function POST(request: Request, context: StatusRouteContext): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'stores.status');
     requirePolicy(() => {
       assertCan('admin', 'update', 'stores', GOVERNANCE_FIELDS);
       assertCan('system', 'create', 'sync-outbox');

@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'payouts.manage');
     requirePolicy(() => assertCan('admin', 'update', 'payouts'));
     const { id } = await context.params;
     if (!mongoose.isValidObjectId(id)) throw new AdminHttpError(404, 'Payout not found');

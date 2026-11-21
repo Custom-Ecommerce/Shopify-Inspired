@@ -48,7 +48,7 @@ function settingsFilter(): never {
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'settings.read');
     requirePolicy(() => assertCan('admin', 'read', 'platformSettings'));
 
     const found = (await PlatformSettingsModel.findOne(settingsFilter()).select(SELECT).lean()) as unknown as Doc | null;
@@ -68,7 +68,7 @@ export async function GET(request: Request): Promise<Response> {
  */
 export async function PATCH(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'settings.write');
     requirePolicy(() => {
       assertCan('admin', 'update', 'platformSettings', SETTINGS_FIELDS);
       // The revision is moved by the server, never by the operator: that write runs as the system actor.

@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'commission.read');
     requirePolicy(() => assertCan('admin', 'read', 'commissionReport'));
     const query = readAdminQuery(request, commissionReportQuerySchema, ['format']);
     const report = await commissionReportFor(userId, query);

@@ -23,9 +23,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       >
         Skip to content
       </a>
-      <Sidebar className="hidden md:flex" />
+      <Sidebar className="hidden md:flex" capabilities={session.capabilities} />
       <div className="relative flex w-full min-w-0 flex-1 flex-col bg-background">
-        <Header user={session.user} />
+        <Header user={session.user} capabilities={session.capabilities} />
         <main id="main-content" tabIndex={-1} className="flex-1 p-6 focus:outline-none sm:p-8">{children}</main>
       </div>
     </div>

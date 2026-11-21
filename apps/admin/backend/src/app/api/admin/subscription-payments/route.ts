@@ -1,4 +1,5 @@
 import { errorResponse } from '@/lib/admin-auth';
+import { authorizeAdmin } from '@/lib/admin-session';
 import { listPaymentsFor } from '@/lib/admin-subscription-payments';
 
 export const runtime = 'nodejs';
@@ -12,7 +13,8 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    return await listPaymentsFor(request);
+    const { userId } = await authorizeAdmin(request, 'payments.read');
+    return await listPaymentsFor(request, userId);
   } catch (err) {
     return errorResponse(err);
   }

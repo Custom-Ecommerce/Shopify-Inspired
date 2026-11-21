@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'payouts.manage');
     requirePolicy(() => assertCan('admin', 'read', 'payouts'));
     const query = readAdminQuery(request, payoutListQuerySchema);
     return Response.json(await listHistory(userId, query), { headers: NO_STORE });
@@ -30,7 +30,7 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'payouts.manage');
     requirePolicy(() => assertCan('admin', 'create', 'payouts'));
     const body = await readAdminBody(request, createPayoutRequestSchema);
     return Response.json({ payout: await makePayout(userId, body) }, { headers: NO_STORE });

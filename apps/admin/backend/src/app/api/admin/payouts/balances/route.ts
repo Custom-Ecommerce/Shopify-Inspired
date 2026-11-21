@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'payouts.manage');
     requirePolicy(() => assertCan('admin', 'read', 'payouts'));
     const query = readAdminQuery(request, payoutBalanceListQuerySchema);
     return Response.json(await listBalances(userId, query), { headers: NO_STORE });

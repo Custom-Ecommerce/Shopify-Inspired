@@ -95,3 +95,33 @@ export async function proxyList(request: NextRequest, path: string, allowed: rea
   const query = forwarded.toString();
   return proxyToBackend(request, path + (query === "" ? "" : "?" + query));
 }
+
+/**
+ * Sprint 6 (S6-B6, CO-77): a public POST (no session cookie): forgot password, reset password, accept an invitation. Same-origin only; the browser's
+ * address is signed for the backend's per-IP limits; the backend's own answer (status, message, code, field, Retry-After) comes back. Nothing else.
+ */
+export async function proxyPublicPost(request: NextRequest, path: string): Promise<Response> {
+  if (!isSameOrigin(request)) return fail(403, "Cross-site request refused");
+  let body: string;
+  try {
+    body = JSON.stringify(await request.json());
+  } catch {
+    return fail(400, "Body must be JSON");
+  }
+  let upstream: Response;
+  try {
+    upstream = await backendFetch(path, { method: "POST", headers: { "content-type": "application/json", ...clientAddressHeaders(request.headers) }, body });
+  } catch (err) {
+    return fail(503, err instanceof BackendUnavailableError ? err.message : "The admin backend is unavailable");
+  }
+  const payload = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;
+  if (upstream.ok) return NextResponse.json(payload ?? { ok: true }, { status: 200, headers: NO_STORE });
+  const status = [400, 429, 503].includes(upstream.status) ? upstream.status : 502;
+  const response = fail(status, typeof payload?.error === "string" ? payload.error : "The admin backend could not complete the request", {
+    ...(typeof payload?.code === "string" ? { code: payload.code } : {}),
+    ...(typeof payload?.field === "string" ? { field: payload.field } : {}),
+  });
+  const retry = upstream.headers.get("retry-after");
+  if (retry) response.headers.set("Retry-After", retry);
+  return response;
+}

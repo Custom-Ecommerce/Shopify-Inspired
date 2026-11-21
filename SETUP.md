@@ -363,6 +363,27 @@ cd apps/seller/backend && node --env-file=.env --import tsx scripts/mark-sellers
 3. Set `APP_BASE_URL_SELLER` (seller backend) and `APP_BASE_URL_ADMIN` (admin backend), so the reset and
    verification links point to the right site.
 
+### Admin levels (Sprint 6, S6-B6, D-118)
+
+Every admin account has a level; the admin backend checks a capability on every route (one matrix: `packages/auth/src/admin-levels.ts`; the server
+enforces it, the console only hides what a level cannot use). Where the matrix is silent the answer is deny.
+
+| Level | May |
+| --- | --- |
+| `owner` | everything, including admin users (invite, change level, disable) and the audit export |
+| `finance` | subscription payments (list, confirm, reject), payouts, commission and reports, plans (read) |
+| `operations` | sellers and stores (read, status, store limit), sync and outbox retry, plans (read), settings (read) |
+| `customer_support` | orders (read only, safe fields), sellers (read), tickets and the contact inbox (Sprint 7) |
+
+- **The first owner** is created by `create-admin` (it writes `adminLevel: owner`). An admin with no level is read as an owner, so nothing locks out on upgrade.
+- **One-time migration** for existing admins: `node scripts/migrate-admin-levels.mjs` (dry run by default; `--apply` writes `adminLevel: owner` on accounts with
+  no level; a database whose name does not contain `throwaway` needs `--i-know-this-is-real`). Safe to run twice.
+- **Invite** (Admin users page, owner only): the person gets an email with a link that works once for 7 days (needs `APP_BASE_URL_ADMIN`); they set the password on
+  `/accept-invite`. **Forgot / reset password** are at `/forgot-password` and `/reset-password`.
+- **Protections:** the last active owner cannot be disabled or demoted; nobody changes their own level or disables themselves; every change is in the audit log.
+  A level change or a disable applies on the next request (the account is read on every request, there is no cache).
+- **Audit export** (owner only): Audit log, Export CSV (UTF-8 with BOM, at most 5000 rows; cells starting with = + - @ are guarded). Each export is itself audited.
+
 ### First admin account (CO-05)
 
 ```bash

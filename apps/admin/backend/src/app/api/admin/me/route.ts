@@ -1,6 +1,6 @@
 import { AdminHttpError, errorResponse, requireDatabase, sessionUserOf } from '@/lib/admin-auth';
-import { authorizeAdmin, requirePolicy } from '@/lib/admin-session';
-import { assertCan, User } from '@/lib/workspace';
+import { ANY_ADMIN, authorizeAdmin, requirePolicy } from '@/lib/admin-session';
+import { adminCapabilities, assertCan, User } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,12 +13,13 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId, adminLevel } = await authorizeAdmin(request, ANY_ADMIN);
     await requireDatabase();
     const user = await User.findById(userId).select('name email role store').lean();
     if (!user || user.role !== 'admin') throw new AdminHttpError(401, 'Invalid or expired session');
     requirePolicy(() => assertCan('admin', 'read', 'users', ['name', 'email', 'role', 'store']));
-    return Response.json({ user: sessionUserOf(user) }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    // Sprint 6 (S6-B6): the level and the capability list, so the console can hide what the level cannot use. The server enforces; this only informs the UI.
+    return Response.json({ user: sessionUserOf(user), adminLevel, capabilities: adminCapabilities(adminLevel) }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return errorResponse(err);
   }

@@ -578,3 +578,31 @@ test('S6-B5 adminOrdersView: a seller and the public read nothing through it, an
 for (const actor of ['seller', 'public'] as const) assert.equal(can(actor, 'read', 'adminOrdersView', ['status']), false, actor);
 for (const actor of ['admin', 'system', 'seller', 'public'] as const) for (const op of ['create', 'update', 'delete'] as const) assert.equal(can(actor, op, 'adminOrdersView'), false, actor + ' ' + op);
 });
+
+test('S6-B6: an admin can no longer write role, create a user with a role, or touch adminLevel through the generic users row', () => {
+assert.equal(can('admin', 'update', 'users', ['role']), false);
+assert.equal(can('admin', 'create', 'users', ['role']), false);
+assert.equal(can('admin', 'update', 'users', ['adminLevel']), false);
+assert.equal(can('admin', 'update', 'users', ['name']), true);
+assert.equal(can('admin', 'read', 'users', ['adminLevel']), true);
+for (const actor of ['seller', 'public'] as const) {
+assert.equal(can(actor, 'update', 'users', ['role']), false, actor);
+assert.equal(can(actor, 'update', 'users', ['adminLevel']), false, actor);
+}
+});
+
+test('S6-B6 adminUsers: an admin (the routes then require owner level) invites, changes the level and disables; nobody changes a password hash or deletes', () => {
+assert.equal(can('admin', 'read', 'adminUsers', ['name', 'email', 'adminLevel', 'accountStatus']), true);
+assert.equal(can('admin', 'create', 'adminUsers', ['name', 'email', 'adminLevel']), true);
+assert.equal(can('admin', 'update', 'adminUsers', ['adminLevel', 'accountStatus', 'suspensionReason']), true);
+for (const hidden of ['passwordHash', 'role', 'tokenVersion', 'storeLimitOverride']) {
+assert.equal(can('admin', 'update', 'adminUsers', [hidden]), false, hidden);
+assert.equal(can('admin', 'create', 'adminUsers', [hidden]), false, hidden);
+}
+assert.equal(can('admin', 'read', 'adminUsers', ['passwordHash']), false);
+for (const actor of ['admin', 'system', 'seller', 'public'] as const) assert.equal(can(actor, 'delete', 'adminUsers'), false, actor);
+});
+
+test('S6-B6 adminUsers: a seller and the public read, create and update nothing', () => {
+for (const actor of ['seller', 'public'] as const) for (const op of ['read', 'create', 'update'] as const) assert.equal(can(actor, op, 'adminUsers'), false, actor + ' ' + op);
+});

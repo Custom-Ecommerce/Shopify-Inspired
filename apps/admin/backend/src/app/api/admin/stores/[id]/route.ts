@@ -16,7 +16,7 @@ export interface StoreRouteContext {
 /** GET /api/admin/stores/:id. One store with its owner and its most recent governance history. */
 export async function GET(request: Request, context: StoreRouteContext): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'stores.read');
     requirePolicy(() => {
       assertCan('admin', 'read', 'stores');
       assertCan('admin', 'read', 'users', ['name', 'email']);

@@ -39,7 +39,7 @@ const filter = (): never => ({ globalType: SETTINGS_GLOBAL_TYPE }) as never;
 /** GET /api/admin/commission/default: the platform default commission rate. */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'commission.read');
     requirePolicy(() => assertCan('admin', 'read', 'platformSettings'));
     const found = (await PlatformSettingsModel.findOne(filter()).select(SELECT).lean()) as unknown as Doc | null;
     if (!found) throw new AdminHttpError(404, NOT_SET_UP_MESSAGE);
@@ -58,7 +58,7 @@ export async function GET(request: Request): Promise<Response> {
  */
 export async function PUT(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'commission.write');
     requirePolicy(() => {
       assertCan('admin', 'update', 'platformSettings', FIELD);
       assertCan('system', 'update', 'platformSettings');

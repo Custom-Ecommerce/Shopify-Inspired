@@ -45,7 +45,7 @@ async function loadStore(id: string): Promise<Doc> {
 /** GET /api/admin/commission/stores/:id: the store's rate, its mode and the rate that applies to its next order. */
 export async function GET(request: Request, context: RateRouteContext): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'commission.read');
     requirePolicy(() => {
       assertCan('admin', 'read', 'stores');
       assertCan('admin', 'read', 'platformSettings');
@@ -67,7 +67,7 @@ export async function GET(request: Request, context: RateRouteContext): Promise<
  */
 async function change(request: Request, context: RateRouteContext, mode: 'set' | 'clear'): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'commission.write');
     requirePolicy(() => {
       assertCan('admin', 'update', 'stores', RATE_FIELDS);
       assertCan('system', 'create', 'sync-outbox');

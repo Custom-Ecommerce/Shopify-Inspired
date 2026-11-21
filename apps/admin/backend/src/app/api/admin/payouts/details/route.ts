@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'payouts.manage');
     requirePolicy(() => assertCan('admin', 'read', 'payoutDetails'));
     const body = await readAdminBody(request, payoutDetailsRequestSchema);
     return Response.json({ details: await viewPayoutDetails(userId, body.storeId) }, { headers: NO_STORE });

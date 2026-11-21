@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'sellers.read');
     requirePolicy(() => {
       assertCan('admin', 'read', 'users', ['name', 'email', 'role', 'createdAt']);
       assertCan('admin', 'read', 'stores');

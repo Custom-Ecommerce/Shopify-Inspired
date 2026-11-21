@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'plans.read');
     requirePolicy(() => assertCan('admin', 'read', 'subscriptionPlans'));
 
     const parsed = parsePlanQuery(new URL(request.url).searchParams);
@@ -54,7 +54,7 @@ export async function GET(request: Request): Promise<Response> {
  */
 export async function POST(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'plans.write');
     requirePolicy(() => assertCan('admin', 'create', 'subscriptionPlans', PLAN_CREATE_FIELDS));
     const body = await readAdminBody(request, createPlanRequestSchema);
     const plan = await createPlan(userId, body);

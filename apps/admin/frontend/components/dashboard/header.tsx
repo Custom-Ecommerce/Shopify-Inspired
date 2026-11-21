@@ -13,7 +13,7 @@ import { UserMenu } from "./user-menu";
 
 const FOCUSABLE = "a[href], button:not([disabled])";
 
-export function Header({ user }: { user: SessionUser }) {
+export function Header({ user, capabilities = null }: { user: SessionUser; capabilities?: readonly string[] | null }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -82,7 +82,7 @@ export function Header({ user }: { user: SessionUser }) {
                 <X />
               </Button>
             </div>
-            <SidebarNav onNavigate={() => setOpen(false)} />
+            <SidebarNav onNavigate={() => setOpen(false)} capabilities={capabilities} />
           </div>
         </div>
       ) : null}
