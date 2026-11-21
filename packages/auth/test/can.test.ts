@@ -566,3 +566,15 @@ assert.equal(can('seller', 'update', 'subscriptions', ['pendingPlanKey']), false
 assert.equal(can('seller', 'update', 'subscriptions', ['cancelAtPeriodEnd']), false);
 assert.equal(can('public', 'read', 'subscriptions', ['pendingPlanKey']), false);
 });
+
+test('S6-B5 adminOrdersView: an admin and the system read the safe fields only, and never the shopper name, phone, address or email', () => {
+for (const actor of ['admin', 'system'] as const) {
+assert.equal(can(actor, 'read', 'adminOrdersView', ['orderNumber', 'status', 'total', 'city', 'items', 'totals', 'statusHistory']), true, actor);
+for (const hidden of ['phone', 'phoneKey', 'address', 'customerName', 'customerEmail', 'customerNote', 'customerWhatsapp', 'notes']) assert.equal(can(actor, 'read', 'adminOrdersView', [hidden]), false, actor + ' ' + hidden);
+}
+});
+
+test('S6-B5 adminOrdersView: a seller and the public read nothing through it, and nobody writes or deletes', () => {
+for (const actor of ['seller', 'public'] as const) assert.equal(can(actor, 'read', 'adminOrdersView', ['status']), false, actor);
+for (const actor of ['admin', 'system', 'seller', 'public'] as const) for (const op of ['create', 'update', 'delete'] as const) assert.equal(can(actor, op, 'adminOrdersView'), false, actor + ' ' + op);
+});

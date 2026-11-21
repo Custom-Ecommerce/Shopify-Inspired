@@ -99,3 +99,45 @@ export function outboxRows(overview: AdminOverview): OverviewRow[] {
 export function updatedLabel(generatedAt: string, now: Date = new Date()): string {
   return "Updated " + formatRelative(generatedAt, now);
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 (S6-B5, D-095): the sales KPIs, from the seller backend's NEW ledger. Whole rupees.
+
+export type KpiPeriodKey = "today" | "last7" | "last30";
+export const KPI_PERIODS: ReadonlyArray<{ key: KpiPeriodKey; label: string }> = [
+  { key: "today", label: "Today" },
+  { key: "last7", label: "7 days" },
+  { key: "last30", label: "30 days" },
+];
+
+export interface KpiTile {
+  key: "gatewaySales" | "commission" | "codOrderValue" | "orders" | "unsettled";
+  title: string;
+  value: string;
+  hint: string;
+}
+
+const money = (amount: number): string => "Rs. " + amount.toLocaleString("en-US");
+const plural = (count: number, one: string): string => count + " " + one + (count === 1 ? "" : "s");
+
+/** The five tiles of one period. The unsettled balance is not a period figure: it is everything not yet settled by a payout. */
+export function kpiTiles(kpi: NonNullable<AdminOverview["kpi"]>, period: KpiPeriodKey): KpiTile[] {
+  const p = kpi.periods[period];
+  return [
+    { key: "gatewaySales", title: "Card sales", value: money(p.gatewaySales), hint: plural(p.gatewayOrders, "card order") },
+    { key: "commission", title: "Commission earned", value: money(p.commission), hint: "On card orders" },
+    { key: "codOrderValue", title: "Cash on delivery", value: money(p.codOrderValue), hint: plural(p.codOrders, "order") + ", no commission unless set" },
+    { key: "orders", title: "Orders", value: String(kpi.ordersByPeriod[period]), hint: "All statuses" },
+    { key: "unsettled", title: "Unsettled balance", value: money(Math.abs(kpi.unsettledBalance)), hint: kpi.unsettledBalance < 0 ? "Owed to the platform" : "Held for sellers" },
+  ];
+}
+
+/** Sellers by plan and status: one plain row each. */
+export function planRows(kpi: NonNullable<AdminOverview["kpi"]>): Array<{ key: string; label: string; status: string; count: string }> {
+  return kpi.sellersByPlan.map((row) => ({ key: row.planKey + ":" + row.status, label: row.planKey, status: row.status, count: String(row.count) }));
+}
+
+/** The top stores by sales in the last 30 days, each linking to that store's orders. */
+export function topStoreRows(kpi: NonNullable<AdminOverview["kpi"]>): Array<{ key: string; name: string; sales: string; href: string }> {
+  return kpi.topStores.map((store) => ({ key: store.storeId, name: store.storeName ?? "Unnamed store", sales: money(store.sales), href: "/orders?store=" + store.storeId }));
+}

@@ -78,3 +78,6 @@ export * from './subscription';
 
 // Sprint 6 (S6-B4, D-118): manual subscription payments, downgrade and cancel.
 export * from './subscription-payments';
+
+// Sprint 6 (S6-B5): the admin's read-only orders view (safe fields only).
+export * from './admin-orders';

@@ -1,6 +1,7 @@
 import type { ModerationReview, ModerationReviewList } from "@markaz/contracts";
 import { reviewStateToQuery, type ReviewAction, type ReviewListState } from "@/lib/reviews";
 import { paymentApiQuery, type PaymentAction, type PaymentListState } from "@/lib/subscription-payments";
+import { orderStateToQuery, type OrderListState } from "@/lib/orders";
 import {
   adminStoreDetailSchema,
   adminStoreListEnvelopeSchema,
@@ -25,6 +26,10 @@ import {
   adminCommissionRatesSchema,
   adminSubscriptionPlanListSchema,
   adminPaymentListSchema,
+  adminOrderListSchema,
+  adminOrderDetailResponseSchema,
+  type AdminOrderList,
+  type AdminOrderDetail,
   adminPaymentWriteResponseSchema,
   type AdminPaymentList,
   type AdminPaymentWriteResponse,
@@ -349,4 +354,13 @@ export function runPaymentAction(action: PaymentAction, paymentId: string, body:
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+// Sprint 6 EP-12 (S6-B5): the read-only orders view (safe fields only).
+export function listOrders(state: OrderListState, signal?: AbortSignal): Promise<AdminOrderList> {
+  return call("/api/orders?" + orderStateToQuery(state, true), adminOrderListSchema as Parser<AdminOrderList>, { signal });
+}
+
+export function getOrder(id: string, signal?: AbortSignal): Promise<AdminOrderDetail> {
+  return call("/api/orders/" + encodeURIComponent(id), adminOrderDetailResponseSchema as Parser<{ order: AdminOrderDetail }>, { signal }, (p) => p).then((r) => r.order);
 }

@@ -157,6 +157,9 @@ export const {
   internalDecidePaymentRequestSchema,
 } = contracts;
 
+// Sprint 6 (S6-B5): the admin's read-only orders view.
+export const { internalOrderListRequestSchema, internalOrderDetailRequestSchema } = contracts;
+
 // Sprint 4 EP-04: store settings, delivery, payments, payout, readiness and go-live.
 export const {
   storeSettingsUpdateSchema,

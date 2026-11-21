@@ -88,6 +88,9 @@ export const SELLER_PAYMENT_CREATABLE_FIELDS = ['planKey'] as const;
 export const SELLER_PAYMENT_WRITABLE_FIELDS = ['method', 'reference', 'proofUrl', 'status', 'claimedAt'] as const;
 export const ADMIN_PAYMENT_WRITABLE_FIELDS = ['status', 'decidedBy', 'decidedAt', 'reason', 'periodStart', 'periodEnd'] as const;
 
+// Sprint 6 (S6-B5): the safe fields of the admin's read-only orders view (adminOrdersView row below).
+export const ADMIN_ORDERS_VIEW_FIELDS = ['orderNumber', 'store', 'storeName', 'status', 'paymentMethod', 'total', 'city', 'createdAt', 'updatedAt', 'itemCount', 'items', 'totals', 'statusHistory', 'paymentStatus', 'confirmationStatus'] as const;
+
 // What a seller may set on a category of their store. store and isDemo are never client-writable.
 export const SELLER_CATEGORY_WRITABLE_FIELDS = ['name', 'slug', 'order', 'description'] as const;
 
@@ -192,6 +195,15 @@ read: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_PAYMENT_
 create: { actors: ['seller', 'system'], fields: { seller: SELLER_PAYMENT_CREATABLE_FIELDS, system: '*' } },
 update: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_PAYMENT_WRITABLE_FIELDS, admin: ADMIN_PAYMENT_WRITABLE_FIELDS, system: '*' } },
 // A payment is a record of money: it is voided or rejected, never deleted.
+delete: { actors: [], fields: '*' },
+},
+
+// Sprint 6 (S6-B5): the admin's READ-ONLY view of orders: safe fields only (no name, phone, address or email). The old `orders` row still lets an
+// admin read everything (D-067, CO-32); the admin console's orders and analytics paths use THIS row instead. Nobody writes through it.
+adminOrdersView: {
+read: { actors: ['admin', 'system'], fields: { admin: ADMIN_ORDERS_VIEW_FIELDS, system: ADMIN_ORDERS_VIEW_FIELDS } },
+create: { actors: [], fields: '*' },
+update: { actors: [], fields: '*' },
 delete: { actors: [], fields: '*' },
 },
 

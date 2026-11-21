@@ -20,6 +20,8 @@ import type {
 import type { ModerationReview, ModerationReviewList } from '../../../../../packages/contracts/src/review';
 import type { AdminSellerPlansResponse } from '../../../../../packages/contracts/src/subscription';
 import type { AdminPaymentList, AdminPaymentWriteResponse } from '../../../../../packages/contracts/src/subscription-payments';
+import type { AdminOrderList, AdminOrderDetail } from '../../../../../packages/contracts/src/admin-orders';
+import type { AdminKpi } from '../../../../../packages/contracts/src/admin-overview';
 
 const { INTERNAL_SECRET_MIN_LENGTH, internalRequestHeaders } = unwrapCjs(signatureNs) as typeof signatureNs;
 
@@ -194,3 +196,15 @@ export const rejectSubscriptionPayment = (adminId: string, input: { paymentId: s
 
 export const voidSubscriptionPayment = (adminId: string, input: { paymentId: string; reason: string }): Promise<AdminPaymentWriteResponse> =>
   send('POST', '/api/internal/subscription-payments/void', adminId, input, SUBSCRIPTION_PAYMENT_LABEL);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 (S6-B5, D-093, D-095): the read-only orders view and the overview KPIs. Signed calls to the seller backend, which returns SAFE fields
+// only (no name, phone, address or email) and computes the KPIs from the NEW commission ledger.
+
+export const listAdminOrders = (adminId: string, input: Record<string, unknown>): Promise<AdminOrderList> =>
+  send('POST', '/api/internal/orders', adminId, input, 'Orders');
+
+export const readAdminOrderDetail = (adminId: string, input: { orderId: string }): Promise<{ order: AdminOrderDetail }> =>
+  send('POST', '/api/internal/orders/detail', adminId, input, 'Orders');
+
+export const readKpi = (adminId: string): Promise<AdminKpi> => send('POST', '/api/internal/kpi', adminId, {}, 'Overview KPIs');

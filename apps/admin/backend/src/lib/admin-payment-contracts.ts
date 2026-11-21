@@ -6,3 +6,5 @@ import { unwrapCjs } from '@/lib/cjs';
 const contracts = unwrapCjs(contractsNs) as typeof contractsNs;
 
 export const { adminPaymentListQuerySchema, confirmPaymentBodySchema, decidePaymentBodySchema } = contracts;
+// Sprint 6 (S6-B5): the read-only orders view.
+export const { adminOrderListQuerySchema } = contracts;

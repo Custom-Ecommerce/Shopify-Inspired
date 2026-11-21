@@ -114,3 +114,7 @@ export type { AdminSellerPlan, AdminSellerPlansResponse, EffectivePlanStatus } f
 // Sprint 6 EP-14 (S6-B4, D-118): manual subscription payments.
 export const { adminPaymentListSchema, adminPaymentWriteResponseSchema, confirmPaymentBodySchema, decidePaymentBodySchema } = contracts;
 export type { AdminPayment, AdminPaymentList, AdminPaymentWriteResponse } from "@markaz/contracts";
+
+// Sprint 6 (S6-B5): the read-only orders view and the overview KPIs.
+export const { adminOrderListSchema, adminOrderDetailResponseSchema, ADMIN_ORDER_FORBIDDEN_KEYS } = contracts;
+export type { AdminOrderRow, AdminOrderList, AdminOrderDetail, AdminKpi } from "@markaz/contracts";

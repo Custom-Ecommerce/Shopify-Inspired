@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import { CommissionLedgerModel, Store, SyncOutbox, User, signSession } from '@/lib/workspace';
 import { ADMIN_AUDIENCE } from '@/lib/admin-auth';
 import { ADMIN_OVERVIEW_NEW_SELLER_DAYS, adminOverviewSchema } from '../../../../packages/contracts/src/admin-overview';
-import { NEW_SELLER_WINDOW_DAYS, OVERVIEW_LEDGER_FIELDS, newSellerSince, toOutboxHealth, toOverview, toSellerCounts, toStoreCounts } from '@/lib/admin-overview';
+import { NEW_SELLER_WINDOW_DAYS, newSellerSince, toOutboxHealth, toOverview, toSellerCounts, toStoreCounts } from '@/lib/admin-overview';
 
 const SECRET = 'x'.repeat(40);
 const ADMIN_ID = '65a000000000000000000001';
@@ -29,7 +29,8 @@ interface Stub {
   storeGroups?: unknown;
   sellerTotal?: number;
   sellerRecent?: number;
-  ledgerGroups?: unknown;
+  /** The seller backend's KPI answer; 'down' makes the call fail. */
+  kpi?: unknown;
   counts?: Record<string, number>;
   oldest?: unknown;
   lastSent?: unknown;
@@ -39,6 +40,7 @@ const calls = {
   userCounts: [] as any[],
   storePipelines: [] as any[],
   ledgerPipelines: [] as any[],
+  kpiCalls: [] as any[],
   outboxCounts: [] as any[],
   outboxFinds: [] as any[],
   sorts: [] as any[],
@@ -54,7 +56,16 @@ function install(stub: Stub = {}): () => void {
     ledgerAggregate: LedgerModel.aggregate,
     outboxCount: OutboxModel.countDocuments,
     outboxFindOne: OutboxModel.findOne,
+    fetch: globalThis.fetch,
+    env: { u: process.env.SELLER_BACKEND_URL, s: process.env.MODERATION_API_SECRET },
   };
+  process.env.SELLER_BACKEND_URL = 'http://seller.test';
+  process.env.MODERATION_API_SECRET = 'm'.repeat(40);
+  globalThis.fetch = (async (url: any, init?: RequestInit) => {
+    calls.kpiCalls.push({ url: String(url), method: init?.method });
+    if (stub.kpi === 'down') throw new TypeError('fetch failed');
+    return new Response(JSON.stringify(stub.kpi ?? KPI), { status: 200 });
+  }) as typeof fetch;
   for (const list of Object.values(calls)) (list as unknown[]).length = 0;
   (mongoose as any).connect = async () => mongoose;
   UserModel.findById = () => ({ select: () => ({ lean: async () => ({ role: stub.role ?? 'admin' }) }) });
@@ -80,6 +91,9 @@ function install(stub: Stub = {}): () => void {
     LedgerModel.aggregate = originals.ledgerAggregate;
     OutboxModel.countDocuments = originals.outboxCount;
     OutboxModel.findOne = originals.outboxFindOne;
+    globalThis.fetch = originals.fetch;
+    if (originals.env.u === undefined) delete process.env.SELLER_BACKEND_URL; else process.env.SELLER_BACKEND_URL = originals.env.u;
+    if (originals.env.s === undefined) delete process.env.MODERATION_API_SECRET; else process.env.MODERATION_API_SECRET = originals.env.s;
   };
 }
 
@@ -87,6 +101,16 @@ async function request(bearer?: string | null): Promise<Request> {
   const value = bearer === undefined ? await signSession({ sub: ADMIN_ID, role: 'admin' }, SECRET, ADMIN_AUDIENCE) : bearer;
   return new Request('http://admin.test/api/admin/overview', { headers: value ? { authorization: 'Bearer ' + value } : {} });
 }
+
+const PERIOD = { gatewaySales: 20000, commission: 800, gatewayOrders: 5, codOrderValue: 30000, codOrders: 7 };
+const KPI = {
+  periods: { today: PERIOD, last7: PERIOD, last30: PERIOD },
+  ordersByPeriod: { today: 3, last7: 20, last30: 80 },
+  unsettledBalance: -1200,
+  ordersByStatus: { pending: 4, confirmed: 0, processing: 0, dispatched: 0, delivered: 9, cancelled: 0, returned: 0 },
+  sellersByPlan: [{ planKey: 'growth', status: 'active', count: 3 }],
+  topStores: [{ storeId: '65a000000000000000000011', storeName: 'Zara Lawn', sales: 50000 }],
+};
 
 const FULL: Stub = {
   storeGroups: [
@@ -98,19 +122,13 @@ const FULL: Stub = {
   ],
   sellerTotal: 7,
   sellerRecent: 2,
-  ledgerGroups: [
-    { _id: 'pending', count: 3, orderAmount: 120000, commissionAmount: 4800 },
-    { _id: 'settled', count: 10, orderAmount: 900000, commissionAmount: 36000 },
-    { _id: 'refunded', count: 1, orderAmount: 5, commissionAmount: 5 },
-  ],
   counts: { pending: 1, sent: 10, dead: 2 },
   oldest: { createdAt: T1 },
   lastSent: { sentAt: T2 },
 };
 
-test('the backend window and the ledger fields match the contract and the policy', () => {
+test('the backend window matches the contract', () => {
   assert.equal(NEW_SELLER_WINDOW_DAYS, ADMIN_OVERVIEW_NEW_SELLER_DAYS);
-  assert.deepEqual([...OVERVIEW_LEDGER_FIELDS], ['status', 'orderAmount', 'commissionAmount']);
 });
 
 test('newSellerSince is exactly the window before now', () => {
@@ -147,12 +165,13 @@ test('toOutboxHealth reads counts in pending, sent, dead order and the two times
 
 test('toOverview builds the contract shape from the parts', () => {
   const overview = toOverview(
-    { storeGroups: [], sellerTotal: 0, sellerRecent: 0, ledgerGroups: [], outboxCounts: [0, 0, 0], oldestPending: null, lastSent: null },
+    { storeGroups: [], sellerTotal: 0, sellerRecent: 0, kpi: null, outboxCounts: [0, 0, 0], oldestPending: null, lastSent: null },
     T1,
   );
   assert.equal(adminOverviewSchema.safeParse(overview).success, true);
   assert.equal(overview.generatedAt, T1.toISOString());
-  assert.deepEqual(overview.ledger.pending, { count: 0, orderAmount: 0, commissionAmount: 0 });
+  assert.equal(overview.kpi, null);
+  assert.equal('ledger' in overview, false, 'the old ledger totals are gone');
 });
 
 test('the route answers the headline numbers in the contract shape, with no caching', async () => {
@@ -165,8 +184,9 @@ test('the route answers the headline numbers in the contract shape, with no cach
     assert.equal(adminOverviewSchema.safeParse(body).success, true);
     assert.deepEqual(body.stores, { total: 8, byStatus: { pending: 2, active: 5, suspended: 1, archived: 0 } });
     assert.deepEqual(body.sellers, { total: 7, newInWindow: 2, windowDays: 30 });
-    assert.deepEqual(body.ledger.pending, { count: 3, orderAmount: 120000, commissionAmount: 4800 });
-    assert.deepEqual(body.ledger.settled, { count: 10, orderAmount: 900000, commissionAmount: 36000 });
+    assert.deepEqual(body.kpi, KPI);
+    assert.deepEqual(calls.kpiCalls, [{ url: 'http://seller.test/api/internal/kpi', method: 'POST' }], 'one signed call to the seller backend');
+    assert.equal(calls.ledgerPipelines.length, 0, 'the old ledger is never read');
     assert.deepEqual(body.outbox, { counts: { pending: 1, sent: 10, dead: 2 }, oldestPendingAt: T1.toISOString(), lastSentAt: T2.toISOString() });
     assert.ok(!Number.isNaN(Date.parse(body.generatedAt)));
   } finally {
@@ -178,7 +198,7 @@ test('the route answers only the numbers: no id, name, email, or payload key', a
   const restore = install({ ...FULL, oldest: { _id: 'e1', createdAt: T1, payload: { secret: 1 } }, lastSent: { _id: 'e2', sentAt: T2, payload: { secret: 2 } } });
   try {
     const text = await (await route.GET!(await request())).text();
-    assert.deepEqual(Object.keys(JSON.parse(text)), ['stores', 'sellers', 'ledger', 'outbox', 'generatedAt']);
+    assert.deepEqual(Object.keys(JSON.parse(text)), ['stores', 'sellers', 'kpi', 'outbox', 'generatedAt']);
     assert.doesNotMatch(text, /secret|payload|_id|email/);
   } finally {
     restore();
@@ -203,7 +223,7 @@ test('the route counts sellers by role, the new ones by the window, and reads on
     assert.deepEqual(calls.sorts, [{ createdAt: 1 }, { sentAt: -1 }]);
     assert.deepEqual(calls.selects, ['createdAt', 'sentAt']);
     assert.deepEqual(calls.storePipelines[0], [{ $group: { _id: '$status', count: { $sum: 1 } } }]);
-    assert.equal(calls.ledgerPipelines[0][0].$group._id, '$status');
+    assert.equal(calls.ledgerPipelines.length, 0, 'the admin never reads the old ledger');
   } finally {
     restore();
   }
@@ -218,7 +238,7 @@ test('an empty platform answers zeros and null times, and still passes the contr
     assert.equal(adminOverviewSchema.safeParse(body).success, true);
     assert.equal(body.stores.total, 0);
     assert.equal(body.sellers.total, 0);
-    assert.equal(body.ledger.settled.count, 0);
+    assert.equal(body.kpi.periods.today.gatewaySales, 20000);
     assert.equal(body.outbox.oldestPendingAt, null);
     assert.equal(body.outbox.lastSentAt, null);
   } finally {
@@ -248,4 +268,26 @@ test('no token, a seller-audience token, and a demoted operator are all refused 
 test('the overview is read only: the route exports GET and nothing that writes', () => {
   assert.equal(typeof route.GET, 'function');
   for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) assert.equal(route[method], undefined, method);
+});
+
+test('S6-B5: when the seller backend is down the overview still answers, with kpi null (nothing is faked)', async () => {
+  const restore = install({ ...FULL, kpi: 'down' });
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    const response = await route.GET!(await request());
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as any;
+    assert.equal(body.kpi, null);
+    assert.equal(adminOverviewSchema.safeParse(body).success, true);
+  } finally {
+    console.error = quiet;
+    restore();
+  }
+});
+
+test('S6-B5: the overview route no longer imports the old ledger model or the old totals helper', async () => {
+  const fs = await import('node:fs');
+  const source = fs.readFileSync(new URL('../src/app/api/admin/overview/route.ts', import.meta.url), 'utf8') + fs.readFileSync(new URL('../src/lib/admin-overview.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /CommissionLedgerModel|toLedgerTotals|commissionLedger'/);
 });
