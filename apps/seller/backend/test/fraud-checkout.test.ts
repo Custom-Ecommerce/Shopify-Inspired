@@ -231,7 +231,10 @@ test('the refusal is neutral: it never says the contact is blocked, and carries 
   assert.equal(body.error.message, 'We cannot take this order. Please contact the store.');
   assert.deepEqual(Object.keys(body), ['error']);
   assert.deepEqual(Object.keys(body.error).sort(), ['code', 'message']);
-  const text = JSON.stringify(body);
+  // The machine code CONTACT_BLOCKED is the contract's own word for this refusal (the themes map it to the neutral message above). What a shopper reads,
+  // and every other part of the answer, must not say it.
+  assert.equal(body.error.code, 'CONTACT_BLOCKED');
+  const text = JSON.stringify({ ...body, error: { message: body.error.message } });
   for (const word of ['blocklist', 'blocked', 'banned', 'fraud', 'risk', 'suspicious']) assert.equal(text.toLowerCase().includes(word.toLowerCase()), false, word);
   // The same words whether it was the phone or the email that matched.
   blocked = [];

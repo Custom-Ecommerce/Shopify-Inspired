@@ -88,6 +88,13 @@ function save(body: Row = {}, store = STORE_A, headers: Row = {}) {
   );
 }
 
+/** The limiter counts in fixed windows aligned to the clock: a run that straddles a minute boundary would restart its count. Wait out the last seconds of a window first. */
+async function inSafeWindow(): Promise<void> {
+  const left = 60_000 - (Date.now() % 60_000);
+  if (left < 8_000) await new Promise((resolve) => setTimeout(resolve, left + 50));
+}
+
+
 const json = async (res: Response) => (await res.json()) as any;
 const open = (): Row[] => world.carts.filter((cart) => cart.status === 'open');
 
@@ -198,6 +205,7 @@ test('a contacted cart keeps being refreshed but stays contacted; after a recove
 });
 
 test('rate limited per client address: the 31st call in a minute is 429', async () => {
+  await inSafeWindow();
   let refusedAt = 0;
   for (let call = 1; call <= 32; call += 1) {
     const res = await save({}, STORE_A, { 'x-forwarded-for': '198.51.100.42' });

@@ -13,9 +13,13 @@ import { normalizePhoneE164 } from '../src/checkout';
 
 // Sprint 5 EP-10.US01 / US02 (D-107, D-108): the customer key, the note request and the list and export queries.
 
-const fieldOf = (schema: { safeParse(value: unknown): { success: boolean; error?: { issues: Array<{ path: PropertyKey[] }> } } }, value: unknown): string | null => {
+// Zod 4 reports an unknown key of a strict object with an empty path and the name in "keys"; the routes name the field from "keys" (readAccountBody, readQuery), so this does too.
+const fieldOf = (schema: { safeParse(value: unknown): { success: boolean; error?: { issues: Array<{ path: PropertyKey[]; code?: string; keys?: unknown[] }> } } }, value: unknown): string | null => {
   const parsed = schema.safeParse(value);
-  return parsed.success ? null : parsed.error!.issues[0]!.path.map(String).join('.');
+  if (parsed.success) return null;
+  const issue = parsed.error!.issues[0]!;
+  if (issue.code === 'unrecognized_keys' && Array.isArray(issue.keys) && issue.keys.length > 0) return String(issue.keys[0]);
+  return issue.path.map(String).join('.');
 };
 
 test('one phone rule: the formats seen in orders all give +923xxxxxxxxx, and anything else is not a phone', () => {

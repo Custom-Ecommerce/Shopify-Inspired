@@ -14,7 +14,7 @@ import { createBffRoutes } from "../src/bff/handlers";
 import { ABANDONED_CART_CONSENT_LINE, ABANDONED_CART_DEBOUNCE_MS, planAbandonedCart } from "../src/domain/abandoned-cart";
 import { loadProductPage } from "../src/server/product";
 import { ReviewRefusedError } from "../src/transport/errors";
-import { createMockTransport, mockProduct } from "../src/transport/mock";
+import { DEFAULT_MOCK_PRODUCTS, createMockTransport, mockProduct } from "../src/transport/mock";
 import { createBffTransport, createRemoteTransport } from "../src/transport/remote";
 import type { OrderTransport, StorefrontProductReviews, StorefrontTransport } from "../src/transport/types";
 
@@ -277,13 +277,15 @@ check("the planner behind the ONE debounced call of useCheckout: a valid phone a
 });
 
 check("the product page loader reads the reviews with the product, keeps the page when they cannot be read, and a missing product stays a 404", async () => {
-  const product = mockProduct({ id: "p1", slug: "p1", title: "Shirt", price: 1000 });
-  const base = createMockTransport({ products: [product], reviews: { p1: [{ id: "s1", rating: 5, title: null, body: "Nice", displayName: "A", verified: true, createdAt: "2026-11-01T10:00:00.000Z", reply: null }] } });
-  const ok = await loadProductPage(base, "p1");
+  // A complete product (categories, images, seo): the loader turns it into the page view-model.
+  const product = DEFAULT_MOCK_PRODUCTS[0]!;
+  const slug = product.slug;
+  const base = createMockTransport({ products: [product], reviews: { [slug]: [{ id: "s1", rating: 5, title: null, body: "Nice", displayName: "A", verified: true, createdAt: "2026-11-01T10:00:00.000Z", reply: null }] } });
+  const ok = await loadProductPage(base, slug);
   assert.equal(ok.status, "ok");
   assert.equal(ok.status === "ok" ? ok.reviews?.summary.count : -1, 1);
   const broken: StorefrontTransport = { ...base, getProductReviews: async () => Promise.reject(new Error("backend down")) };
-  const withoutReviews = await loadProductPage(broken, "p1");
+  const withoutReviews = await loadProductPage(broken, slug);
   assert.equal(withoutReviews.status, "ok");
   assert.equal(withoutReviews.status === "ok" ? withoutReviews.reviews : "x", null);
   assert.equal((await loadProductPage(base, "missing")).status, "not-found");

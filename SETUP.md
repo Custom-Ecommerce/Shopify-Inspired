@@ -146,6 +146,31 @@ pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.
 pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/backfill-order-phone-key.mjs --apply
 ```
 
+### Sprint 5: indexes and the data steps, in this order (once per database)
+
+The seller backend connects with `bufferCommands: false`, so Mongoose builds **no index at runtime**. Without the next step the unique and
+TTL indexes of Sprint 5 do not exist (one review per order and product, one open abandoned cart per store and phone, the 7 day cart expiry,
+the return number and blocklist uniques). After deploying the backends run, in this order, each one dry run first and then with `--apply`
+(a database whose name does not contain `throwaway` also needs `--i-know-this-is-real`, for the dry run too). Every step is idempotent:
+
+1. `migrate-commission-index` (moves the ledger's unique index to include `returnId`; it creates the new one before it drops the old one).
+2. `ensure-indexes` (below). It must come after step 1, so the ledger's old index is already replaced.
+3. `backfill-order-phone-key` (previous section).
+4. `bootstrap-admin-data` (section "One shared database").
+5. `mark-sellers-verified` (section 8).
+
+```bash
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/migrate-commission-index.mjs
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/ensure-indexes.mjs
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/ensure-indexes.mjs --apply
+```
+
+`ensure-indexes` calls `createIndexes()` per model and **never** `syncIndexes` or `dropIndexes`: an index nobody declares stays. It prints, per
+model, which indexes are missing and which conflict (an index of the same name with another definition: reported and left alone, that model is
+skipped), then, with `--apply`, creates the missing ones. A unique index can fail when the data already breaks it: that model is reported with
+the error name and the other models are still done (the script then exits with 1). It prints names and counts only. A second run finds nothing missing.
+(Root script: `pnpm ensure:indexes -- --apply`, with `SELLER_MONGODB_URI` exported in the shell.)
+
 ### Required secrets (production)
 
 | App | Secrets |

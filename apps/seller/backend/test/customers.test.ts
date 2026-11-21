@@ -438,7 +438,8 @@ test('export: UTF-8 BOM, header, quoted cells, store-scoped rows, attachment hea
   assert.equal(res.headers.get('x-customers-truncated'), null);
   const bytes = new Uint8Array(await res.arrayBuffer());
   assert.deepEqual([...bytes.slice(0, 3)], [0xef, 0xbb, 0xbf], 'a UTF-8 byte order mark');
-  const text = new TextDecoder().decode(bytes);
+  // ignoreBOM keeps the byte order mark in the text (a decoder drops it by default), so slice(1) removes it explicitly.
+  const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
   const lines = text.slice(1).trimEnd().split('\r\n');
   assert.equal(lines[0], 'Name,Phone,Email,Orders,Delivered,Total spent,Last order,Unsubscribed');
   assert.equal(lines.length, 3);
@@ -477,7 +478,7 @@ test('export: a bad query is 400 with the field, and page and limit are not part
 
 // ------------------------------------------------------------------------------------------------ Sprint 5 EP-13.US03.T05: returns count
 
-test('the customer page counts the customer's real returns: by phoneKey, in this store, rejected ones not counted', async () => {
+test('the customer page counts the real returns of the customer: by phoneKey, in this store, rejected ones not counted', async () => {
   sell(STORE_A, { phone: '0300 1234567', customerName: 'Ayesha' });
   sell(STORE_B, { phone: '0300 1234567', customerName: 'Ayesha elsewhere' });
   world.returns.push(

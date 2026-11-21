@@ -65,6 +65,13 @@ function list(slug = 'shirt', query = '', store = STORE_A, headers: Row = {}) {
   });
 }
 
+/** The limiter counts in fixed windows aligned to the clock: a run that straddles a minute boundary would restart its count. Wait out the last seconds of a window first. */
+async function inSafeWindow(): Promise<void> {
+  const left = 60_000 - (Date.now() % 60_000);
+  if (left < 8_000) await new Promise((resolve) => setTimeout(resolve, left + 50));
+}
+
+
 const json = async (res: Response) => (await res.json()) as any;
 const deliveredOn = (when: Date) => [{ from: 'dispatched', to: 'delivered', by: null, at: when, note: null }];
 
@@ -125,8 +132,9 @@ test('a wrong phone, an unknown order and another store\'s order are the SAME 40
 
   const posted = [await review({ phone: '03009999999' }), await review({}, 'ORD-ZZZZ9999'), await review({}, 'ORD-BBBB2222')];
   assert.deepEqual(posted.map((res) => res.status), [404, 404, 404]);
-  assert.deepEqual(await json(posted[1]!), await json(posted[0]!));
-  assert.deepEqual(await json(posted[2]!), await json(posted[0]!));
+  const postedBodies = [await json(posted[0]!), await json(posted[1]!), await json(posted[2]!)];
+  assert.deepEqual(postedBodies[1], postedBodies[0]);
+  assert.deepEqual(postedBodies[2], postedBodies[0]);
   assert.equal(world.reviews.length, 0, 'nothing was written');
 });
 
@@ -250,6 +258,7 @@ test('the seller\'s email and bell alert escape what the shopper wrote: the temp
 
 test('rate limited per client address AND per order number: the 11th call of one address, and the 11th call at one order from many addresses, are 429', async () => {
   world.deliveredOrder();
+  await inSafeWindow();
   for (let call = 0; call < 10; call += 1) assert.equal((await eligibility('ORD-ABCD2345', PHONE, STORE_A, { 'x-forwarded-for': '198.51.100.7' })).status, 200);
   const byAddress = await eligibility('ORD-ABCD2345', PHONE, STORE_A, { 'x-forwarded-for': '198.51.100.7' });
   assert.equal(byAddress.status, 429);
@@ -257,6 +266,7 @@ test('rate limited per client address AND per order number: the 11th call of one
   assert.ok(byAddress.headers.get('retry-after'));
 
   resetRateLimits();
+  await inSafeWindow();
   let refusedAt = 0;
   for (let call = 1; call <= 12; call += 1) {
     const res = await review({ phone: '03009999999' }, 'ORD-ABCD2345', STORE_A, { 'x-forwarded-for': '192.0.2.' + call });
@@ -317,6 +327,7 @@ test('a product with no review has an empty list and a count of 0; a draft, an u
 });
 
 test('the public list is rate limited per address (a wider limit than the writes)', async () => {
+  await inSafeWindow();
   let refusedAt = 0;
   for (let call = 1; call <= 125; call += 1) {
     const res = await list('shirt', '', STORE_A, { 'x-forwarded-for': '198.51.100.9' });

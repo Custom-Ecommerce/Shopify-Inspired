@@ -7,7 +7,7 @@ import { can } from '../src/can';
 
 test('customerNotes: a seller reads and updates the note and tags only; nobody creates or deletes through the policy', () => {
   assert.equal(can('seller', 'read', 'customerNotes'), true);
-  assert.equal(can('seller', 'update', 'customerNotes'), true);
+  assert.equal(can('seller', 'update', 'customerNotes'), false, 'a field-restricted rule with no field list is denied (can() fails closed)');
   assert.equal(can('seller', 'update', 'customerNotes', ['note', 'tags']), true);
   for (const operation of ['create', 'delete'] as const) assert.equal(can('seller', operation, 'customerNotes'), false, operation);
 });
