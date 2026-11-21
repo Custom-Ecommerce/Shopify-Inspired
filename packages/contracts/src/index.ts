@@ -75,3 +75,6 @@ export * from './plans';
 
 // Sprint 6 EP-14 (D-118): a seller's subscription, the plan they are effectively on, plan usage and the expiry job.
 export * from './subscription';
+
+// Sprint 6 (S6-B4, D-118): manual subscription payments, downgrade and cancel.
+export * from './subscription-payments';

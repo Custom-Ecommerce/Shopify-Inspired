@@ -170,7 +170,9 @@ async function normalizeUpstreamError(
     code === "PLAN_LIMIT_REACHED"
       ? { limitKind: rec.limitKind, limit: rec.limit, used: rec.used, plan: rec.plan, upgradeHint: rec.upgradeHint }
       : undefined;
-  const details = planLimit ?? rec.details ?? errors ?? rec.issues;
+  // Sprint 6 EP-14 (S6-B4): a refused downgrade (DOWNGRADE_EXCEEDS_LIMITS) keeps what exceeds, per limit.
+  const exceeds = code === "DOWNGRADE_EXCEEDS_LIMITS" && Array.isArray(rec.exceeds) ? rec.exceeds : undefined;
+  const details = planLimit ?? exceeds ?? rec.details ?? errors ?? rec.issues;
 
   return apiError(res.status, code, message, {
     details,

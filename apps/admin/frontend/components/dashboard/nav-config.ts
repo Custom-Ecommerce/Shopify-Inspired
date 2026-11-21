@@ -29,6 +29,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Commerce",
     items: [
       { label: "Subscriptions", href: "/subscriptions", icon: "subscriptions", status: "live" },
+      { label: "Subscription payments", href: "/subscription-payments", icon: "subscriptions", status: "live" },
       { label: "Commission", href: "/commission", icon: "commission", status: "live" },
     ],
   },

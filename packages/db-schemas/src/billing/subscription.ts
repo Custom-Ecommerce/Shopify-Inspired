@@ -35,6 +35,8 @@ const subscriptionSchema = new Schema(
     trialEndsAt: { type: Date, default: null },
     source: { type: String, enum: [...SUBSCRIPTION_SOURCES], default: 'manual' },
     cancelAtPeriodEnd: { type: Boolean, default: false },
+    /** Sprint 6 (S6-B4): a downgrade the seller asked for; it takes effect at the period end (the expiry job applies it). null is none. */
+    pendingPlanKey: { type: String, match: PLAN_KEY_PATTERN, maxlength: 30, default: null },
     revision: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true, collection: 'subscriptions' },

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AbandonedCart, CommissionEntry, Review, Return, BlockedContact, Subscription, SubscriptionPlanModel } from '@/lib/services';
+import { AbandonedCart, CommissionEntry, Review, Return, BlockedContact, Subscription, SubscriptionPayment, SubscriptionPlanModel } from '@/lib/services';
 // @ts-expect-error plain .mjs script module without types; tests are not type-checked (tsconfig excludes test)
 import * as planNs from '../../../../scripts/lib/ensure-indexes-plan.mjs';
 
@@ -181,4 +181,36 @@ test('CO-115: every model that declares a unique index is one the ensure-indexes
   const models = [{ model: 'Subscription', collection: 'subscriptions', declared: (Subscription as unknown as { schema: { indexes: () => unknown } }).schema.indexes() as Declared }];
   assert.equal(plan.planAll(models, {}).models[0]!.model, 'Subscription');
   assert.equal((Subscription as unknown as { collection: { name: string } }).collection.name, 'subscriptions');
+});
+
+test('Sprint 6 (S6-B4): a fresh database misses the unique PARTIAL index that keeps one open payment per seller, and nothing conflicts', () => {
+  const declared = (SubscriptionPayment as unknown as { schema: { indexes: () => unknown } }).schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'SubscriptionPayment', collection: 'subscriptionPayments', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['SubscriptionPayment']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string; unique: boolean; partial: boolean }> }).missing;
+  assert.ok(missing.some((m) => m.name === 'seller_open_unique' && m.unique && m.partial), 'unique, and only over the open payments: a decided payment never collides');
+  assert.ok(missing.some((m) => m.name === 'seller_status' && !m.unique), 'the {seller, status} index');
+  assert.equal((SubscriptionPayment as unknown as { collection: { name: string } }).collection.name, 'subscriptionPayments');
+});
+
+test('Sprint 6 (S6-B4): the open-payment index is a unique index on seller whose partial filter is the equality isOpen true (no $in)', () => {
+  const declared = (SubscriptionPayment as unknown as { schema: { indexes: () => Array<[Record<string, number>, Record<string, any> | undefined]> } }).schema.indexes();
+  const unique = declared.filter(([, options]) => options?.unique === true);
+  assert.equal(unique.length, 1, 'the only unique index of the model');
+  assert.deepEqual(unique[0]![0], { seller: 1 });
+  assert.deepEqual(unique[0]![1]!.partialFilterExpression, { isOpen: true });
+});
+
+test('Sprint 6 (S6-B4): once the payment indexes exist nothing is missing, and a plain or a non-partial unique index on seller does not stand in for the partial one', () => {
+  const declared = (SubscriptionPayment as unknown as { schema: { indexes: () => unknown } }).schema.indexes() as Declared;
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.keys(key).join('_') + '_1', key, ...(options as object) }));
+  const done = plan.planAll([{ model: 'SubscriptionPayment', collection: 'subscriptionPayments', declared }], { subscriptionPayments: [ID, ...have] });
+  assert.equal(done.totals.missing, 0);
+  assert.deepEqual(done.toCreate, []);
+  const plain = plan.planAll([{ model: 'SubscriptionPayment', collection: 'subscriptionPayments', declared }], { subscriptionPayments: [ID, { name: 'seller_1', key: { seller: 1 } }] });
+  assert.ok(plain.totals.missing >= 1, 'a plain index on seller is not the partial unique one');
+  const wholeUnique = plan.planAll([{ model: 'SubscriptionPayment', collection: 'subscriptionPayments', declared }], { subscriptionPayments: [ID, { name: 'seller_1', key: { seller: 1 }, unique: true }] });
+  assert.ok(wholeUnique.totals.missing + wholeUnique.totals.conflicts >= 1, 'a unique index over EVERY payment would forbid a second payment ever; it is not the same index');
 });

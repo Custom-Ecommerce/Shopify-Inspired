@@ -70,7 +70,7 @@ test('the expiry job is a dry run unless apply is exactly true, and answers coun
   assert.equal(expiryJobRequestSchema.safeParse({ apply: true }).success, true);
   assert.equal(expiryJobRequestSchema.safeParse({ apply: 'yes' }).success, false);
   assert.equal(expiryJobRequestSchema.safeParse({ apply: true, force: true }).success, false);
-  const counts = { dryRun: true, scanned: 3, trialToExpired: 1, activeToGrace: 1, graceToExpired: 1, cancelledToExpired: 0, skipped: 0, failed: 0 };
+  const counts = { dryRun: true, scanned: 3, trialToExpired: 1, activeToGrace: 1, graceToExpired: 1, cancelledToExpired: 0, downgraded: 0, remindersQueued: 0, expiredNoticesQueued: 0, skipped: 0, failed: 0 };
   assert.equal(expiryJobResponseSchema.safeParse(counts).success, true);
   assert.equal(expiryJobResponseSchema.safeParse({ ...counts, failed: -1 }).success, false);
 });

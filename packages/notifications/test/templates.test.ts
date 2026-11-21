@@ -50,6 +50,13 @@ const FULL: TemplateVars = {
   reviewText: 'Soft fabric, true to size.\nWill order again.',
   // Sprint 6 EP-12.US02: the operator's reason.
   suspensionReason: 'Reported for selling fake products',
+  // Sprint 6 EP-14 (S6-B4): the subscription payment templates.
+  planName: 'Growth',
+  paymentAmount: 'Rs. 2,500',
+  paymentReference: 'TX-77812',
+  periodEnd: '20 December 2026',
+  paymentReason: 'The amount did not match',
+  sellerEmail: 'ayesha@example.com',
 };
 
 test('every template uses only variables it declares, and every declared variable is known', () => {
@@ -241,4 +248,51 @@ test('Sprint 6: a reason cannot add a line to the subject, and a missing reason 
 test('Sprint 6: the reactivated email does not mention a reason and the suspended one does not promise the storefront is down', () => {
   assert.equal(renderTemplate('account_reactivated', FULL).text.includes('Reason'), false);
   assert.ok(renderTemplate('account_suspended', FULL).text.includes('storefront stays online'));
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-14 (S6-B4, D-118): the subscription payment templates.
+
+const PAYMENT_TEMPLATES = ['payment_claimed', 'payment_confirmed', 'payment_rejected', 'subscription_expiring', 'subscription_expired'] as const;
+
+test('the five subscription templates exist, declare their variables and render in both languages', () => {
+  for (const name of PAYMENT_TEMPLATES) {
+    assert.ok(TEMPLATE_NAMES.includes(name), name);
+    const out = renderTemplate(name, FULL);
+    assert.ok(out.subject.includes('Growth'), name + ': the plan is in the subject');
+    assert.ok(out.text.search(/[؀-ۿ]/) > out.text.indexOf('---'), name + ': Urdu below the English');
+  }
+  assert.deepEqual(templateProblems(), []);
+});
+
+test('payment claimed carries the seller, the plan, the amount, the method and the reference', () => {
+  const out = renderTemplate('payment_claimed', FULL);
+  for (const part of ['Ayesha', 'ayesha@example.com', 'Growth', 'Rs. 2,500', 'Cash on delivery', 'TX-77812']) assert.ok(out.text.includes(part), part);
+  assert.equal(out.text.includes('{{'), false);
+});
+
+test('payment confirmed names the end of the period; rejected names the reason; expiring names the date; expired says nothing was deleted', () => {
+  assert.ok(renderTemplate('payment_confirmed', FULL).text.includes('20 December 2026'));
+  assert.ok(renderTemplate('payment_confirmed', FULL).subject.includes('Rs. 2,500'));
+  assert.ok(renderTemplate('payment_rejected', FULL).text.includes('The amount did not match'));
+  assert.ok(renderTemplate('subscription_expiring', FULL).subject.includes('20 December 2026'));
+  assert.match(renderTemplate('subscription_expired', FULL).text, /Nothing was deleted/);
+});
+
+test('the typed reference and the seller name are escaped in HTML', () => {
+  const out = renderTemplate('payment_claimed', { ...FULL, paymentReference: '<img src=x onerror=alert(1)>', customerName: 'A & B <b>' });
+  assert.equal(out.html.includes('<img'), false);
+  assert.equal(out.html.includes('<b>'), false);
+  assert.ok(out.html.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  assert.ok(out.html.includes('A &amp; B &lt;b&gt;'));
+});
+
+test('a subscription email refuses to render with a variable missing', () => {
+  for (const name of PAYMENT_TEMPLATES) {
+    const vars = { ...FULL } as Record<string, string | undefined>;
+    for (const variable of TEMPLATES[name].variables) {
+      const broken = { ...vars, [variable]: '' };
+      assert.throws(() => renderTemplate(name, broken as TemplateVars), TemplateError, name + ' without ' + variable);
+    }
+  }
 });

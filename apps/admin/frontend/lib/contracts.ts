@@ -110,3 +110,7 @@ export type { AdminPlanWriteResponse } from "@markaz/contracts";
 // Sprint 6 EP-14.US02: the plan, status and usage of a seller (the sellers page).
 export const { adminSellerPlansResponseSchema, EFFECTIVE_PLAN_STATUSES } = contracts;
 export type { AdminSellerPlan, AdminSellerPlansResponse, EffectivePlanStatus } from "@markaz/contracts";
+
+// Sprint 6 EP-14 (S6-B4, D-118): manual subscription payments.
+export const { adminPaymentListSchema, adminPaymentWriteResponseSchema, confirmPaymentBodySchema, decidePaymentBodySchema } = contracts;
+export type { AdminPayment, AdminPaymentList, AdminPaymentWriteResponse } from "@markaz/contracts";

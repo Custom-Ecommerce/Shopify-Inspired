@@ -5,6 +5,10 @@
 // Sprint 6 EP-14: the unique index of a subscription plan's key (plan_key_unique, partial: old plans have no key) is declared by the model, so
 // it needs no entry here: the plan below picks it up with every other declared index. A test (ensure-indexes.test.ts) pins that it does.
 //
+// Sprint 6 (S6-B4): the unique, PARTIAL index on subscriptionPayments.seller (seller_open_unique, partialFilterExpression { isOpen: true }) keeps ONE open
+// payment per seller whatever races. It is declared by the SubscriptionPayment model, so the plan below picks it up with every other declared index;
+// a test (ensure-indexes.test.ts) pins that it does. The filter is an equality: $in in a partial filter is not supported by every MongoDB version.
+//
 // The seller backend connects with bufferCommands false, so Mongoose builds no index by itself at runtime. This plan compares the indexes every
 // model DECLARES (schema.indexes()) with the indexes a collection HAS (collection.indexes()) and says which are missing. The script then calls
 // createIndexes() for the models that miss one: it never calls syncIndexes and never drops anything, so an index nobody declares stays.

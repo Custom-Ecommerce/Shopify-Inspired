@@ -75,10 +75,18 @@ export const ADMIN_PLAN_WRITABLE_FIELDS = ['name', 'priceRs', 'limits', 'feature
 
 // Sprint 6 EP-14 (D-118): a seller's subscription. A seller reads their OWN (the route scopes it to the signed-in user: a policy row cannot say
 // "own"); an admin creates and changes it (manual payment marked paid, a trial, a cancel); the revision and the expiry are moved by the system.
-export const SELLER_SUBSCRIPTION_READABLE_FIELDS = ['planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd'] as const;
+export const SELLER_SUBSCRIPTION_READABLE_FIELDS = ['planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd', 'pendingPlanKey'] as const;
 export const ADMIN_SUBSCRIPTION_CREATABLE_FIELDS = ['seller', 'planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd'] as const;
 // The seller never changes (one subscription per seller); revision is the server's.
 export const ADMIN_SUBSCRIPTION_WRITABLE_FIELDS = ['planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd'] as const;
+
+// Sprint 6 (S6-B4, D-118): a manual subscription payment. A seller reads and creates their OWN (the route scopes by the signed-in user; a policy
+// row cannot say "own"), and says "I paid" (method, reference, proof, the claimed status). Only the planKey comes from the seller: the amount is the
+// plan's price, written by the server (system). An admin reads everything and decides (status, who, when, why, the period); nobody deletes.
+export const SELLER_PAYMENT_READABLE_FIELDS = ['planKey', 'amountRs', 'periodStart', 'periodEnd', 'method', 'reference', 'proofUrl', 'status', 'reason', 'claimedAt', 'decidedAt'] as const;
+export const SELLER_PAYMENT_CREATABLE_FIELDS = ['planKey'] as const;
+export const SELLER_PAYMENT_WRITABLE_FIELDS = ['method', 'reference', 'proofUrl', 'status', 'claimedAt'] as const;
+export const ADMIN_PAYMENT_WRITABLE_FIELDS = ['status', 'decidedBy', 'decidedAt', 'reason', 'periodStart', 'periodEnd'] as const;
 
 // What a seller may set on a category of their store. store and isDemo are never client-writable.
 export const SELLER_CATEGORY_WRITABLE_FIELDS = ['name', 'slug', 'order', 'description'] as const;
@@ -176,6 +184,14 @@ read: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_SUBSCRIP
 create: { actors: ['admin', 'system'], fields: { admin: ADMIN_SUBSCRIPTION_CREATABLE_FIELDS, system: '*' } },
 update: { actors: ['admin', 'system'], fields: { admin: ADMIN_SUBSCRIPTION_WRITABLE_FIELDS, system: '*' } },
 // A subscription is never deleted: it expires or is cancelled and stays as the record.
+delete: { actors: [], fields: '*' },
+},
+
+subscriptionPayments: {
+read: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_PAYMENT_READABLE_FIELDS, admin: '*', system: '*' } },
+create: { actors: ['seller', 'system'], fields: { seller: SELLER_PAYMENT_CREATABLE_FIELDS, system: '*' } },
+update: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_PAYMENT_WRITABLE_FIELDS, admin: ADMIN_PAYMENT_WRITABLE_FIELDS, system: '*' } },
+// A payment is a record of money: it is voided or rejected, never deleted.
 delete: { actors: [], fields: '*' },
 },
 

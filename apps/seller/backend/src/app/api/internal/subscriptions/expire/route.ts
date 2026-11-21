@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
  *
  * It is a DRY RUN unless the body says { "apply": true }: an empty body, {} or { "apply": false } only counts. GET is always a dry run.
  *
- *   200 { dryRun, scanned, trialToExpired, activeToGrace, graceToExpired, cancelledToExpired, skipped, failed }
+ *   200 { dryRun, scanned, trialToExpired, activeToGrace, graceToExpired, cancelledToExpired, downgraded, remindersQueued, expiredNoticesQueued, skipped, failed }
  *   400 the body is not { apply?: boolean }   401 the secret is missing on the server, too short, or not the one sent   503 no database
  */
 async function run(request: NextRequest, applyAllowed: boolean): Promise<Response> {

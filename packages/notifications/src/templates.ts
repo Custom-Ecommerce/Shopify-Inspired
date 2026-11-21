@@ -39,6 +39,13 @@ export const TEMPLATE_NAMES = [
   'store_paused',
   'account_suspended',
   'account_reactivated',
+  // Sprint 6 EP-14 (S6-B4, D-118): manual subscription payments. A payment was claimed (to the platform's support address), confirmed or
+  // rejected or voided (to the seller), and a subscription is about to end or has ended (to the seller).
+  'payment_claimed',
+  'payment_confirmed',
+  'payment_rejected',
+  'subscription_expiring',
+  'subscription_expired',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -78,6 +85,13 @@ export const TEMPLATE_VARIABLES = [
   'reviewText',
   // Sprint 6 EP-12.US02: the reason an operator gave when pausing a store or suspending an account.
   'suspensionReason',
+  // Sprint 6 EP-14 (S6-B4): the plan, the amount, the transfer reference, the end of the period, the admin's reason, and the seller's email.
+  'planName',
+  'paymentAmount',
+  'paymentReference',
+  'periodEnd',
+  'paymentReason',
+  'sellerEmail',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
@@ -471,6 +485,98 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'یہ رقم آپ کے بیلنس میں واپس آ گئی ہے اور اگلی ادائیگی میں شامل ہو گی۔ اپنی کمائی دیکھیں: {{dashboardLink}}',
     ],
     whatsapp: 'The payout of {{payoutAmount}} for {{storeName}} was cancelled: {{voidReason}}. {{dashboardLink}}\nآپ کی ادائیگی منسوخ کر دی گئی ہے۔',
+  },
+  payment_claimed: {
+    variables: ['customerName', 'sellerEmail', 'planName', 'paymentAmount', 'paymentMethod', 'paymentReference'],
+    subject: 'Subscription payment to check: {{customerName}}, {{planName}}, {{paymentAmount}}',
+    en: [
+      '{{customerName}} ({{sellerEmail}}) says they paid for the {{planName}} plan.',
+      '',
+      'Amount: {{paymentAmount}}',
+      'Paid by: {{paymentMethod}}',
+      'Reference: {{paymentReference}}',
+      '',
+      'Check the money in your account, then confirm or reject the payment in the admin console under Subscription payments.',
+    ],
+    ur: [
+      '{{customerName}} ({{sellerEmail}}) کا کہنا ہے کہ انہوں نے {{planName}} پلان کی ادائیگی کر دی ہے۔',
+      'رقم: {{paymentAmount}}',
+      'ذریعہ: {{paymentMethod}}',
+      'حوالہ نمبر: {{paymentReference}}',
+      'اپنے اکاؤنٹ میں رقم دیکھیں، پھر ایڈمن کنسول میں ادائیگی کی تصدیق یا انکار کریں۔',
+    ],
+    whatsapp: '{{customerName}} paid {{paymentAmount}} for {{planName}} ({{paymentMethod}}, ref {{paymentReference}}). Please check and confirm.\nادائیگی کی تصدیق درکار ہے۔',
+  },
+  payment_confirmed: {
+    variables: ['customerName', 'planName', 'paymentAmount', 'periodEnd', 'dashboardLink'],
+    subject: 'Your {{planName}} plan payment of {{paymentAmount}} is confirmed',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Thank you. We received your payment of {{paymentAmount}} and your {{planName}} plan is active until {{periodEnd}}.',
+      '',
+      'See your plan: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'شکریہ۔ آپ کی {{paymentAmount}} کی ادائیگی مل گئی ہے اور آپ کا {{planName}} پلان {{periodEnd}} تک فعال ہے۔',
+      'اپنا پلان دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Your {{planName}} plan payment of {{paymentAmount}} is confirmed. Active until {{periodEnd}}. {{dashboardLink}}\nآپ کی ادائیگی کی تصدیق ہو گئی ہے۔',
+  },
+  payment_rejected: {
+    variables: ['customerName', 'planName', 'paymentAmount', 'paymentReason', 'dashboardLink'],
+    subject: 'About your {{planName}} plan payment of {{paymentAmount}}',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Your payment of {{paymentAmount}} for the {{planName}} plan was not accepted.',
+      '',
+      'Reason: {{paymentReason}}',
+      '',
+      'Your plan page shows where things stand, and you can start again from there: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کی {{planName}} پلان کی {{paymentAmount}} کی ادائیگی قبول نہیں کی گئی۔',
+      'وجہ: {{paymentReason}}',
+      'آپ کے پلان کی موجودہ صورتحال اور دوبارہ کوشش کے لیے: {{dashboardLink}}',
+    ],
+    whatsapp: 'We could not accept your {{paymentAmount}} payment for {{planName}}: {{paymentReason}}. {{dashboardLink}}\nآپ کی ادائیگی قبول نہیں ہوئی۔',
+  },
+  subscription_expiring: {
+    variables: ['customerName', 'planName', 'periodEnd', 'dashboardLink'],
+    subject: 'Your {{planName}} plan ends on {{periodEnd}}',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Your {{planName}} plan ends on {{periodEnd}}. To keep your limits, renew before then.',
+      '',
+      'Renew your plan: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کا {{planName}} پلان {{periodEnd}} کو ختم ہو رہا ہے۔ اپنی حدیں برقرار رکھنے کے لیے اس سے پہلے تجدید کریں۔',
+      'پلان کی تجدید کریں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Your {{planName}} plan ends on {{periodEnd}}. Renew: {{dashboardLink}}\nآپ کا پلان جلد ختم ہو رہا ہے۔',
+  },
+  subscription_expired: {
+    variables: ['customerName', 'planName', 'dashboardLink'],
+    subject: 'Your {{planName}} plan has ended',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Your {{planName}} plan has ended and the Free plan limits now apply. Nothing was deleted: your stores, products and orders are all still there. You just cannot add more than the Free plan allows.',
+      '',
+      'Start again any time: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کا {{planName}} پلان ختم ہو گیا ہے اور اب Free پلان کی حدیں لاگو ہیں۔ کچھ بھی حذف نہیں ہوا: آپ کے اسٹورز، مصنوعات اور آرڈرز سب موجود ہیں۔',
+      'دوبارہ شروع کرنے کے لیے: {{dashboardLink}}',
+    ],
+    whatsapp: 'Your {{planName}} plan has ended; the Free limits now apply. Nothing was deleted. {{dashboardLink}}\nآپ کا پلان ختم ہو گیا ہے۔',
   },
   broadcast: {
     variables: ['storeName', 'broadcastSubject', 'broadcastMessage', 'emailFooter', 'unsubscribeLink'],

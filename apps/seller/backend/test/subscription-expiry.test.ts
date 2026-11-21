@@ -2,9 +2,9 @@ import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { AuditLog, PlatformSettingsModel, Subscription } from '@/lib/services';
+import { AuditLog, PlatformSettingsModel, Subscription, SubscriptionPlanModel } from '@/lib/services';
 import { expiryJobResponseSchema } from '../../../../packages/contracts/src/subscription';
-import { EXPIRY_BATCH, expiryFilter, planTransition, runSubscriptionExpiry, type SubRow } from '../src/lib/subscription-expiry';
+import { EXPIRY_BATCH, REMINDER_DAYS, expiryFilter, needsReminder, planTransition, runSubscriptionExpiry, type ExpiryMail, type SubRow } from '../src/lib/subscription-expiry';
 
 // Sprint 6 EP-14.US02 (D-118): the expiry job. Subscriptions are in memory with a compare-and-set that emulates the database; no database.
 
@@ -152,7 +152,7 @@ test('a dry run (the default) counts what would move and writes nothing: no upda
     sub('5', 'active', { currentPeriodEnd: at(5) }),
   ];
   const result = await runSubscriptionExpiry({ now: NOW });
-  assert.deepEqual(result, { dryRun: true, scanned: 4, trialToExpired: 1, activeToGrace: 1, graceToExpired: 1, cancelledToExpired: 1, skipped: 0, failed: 0 });
+  assert.deepEqual(result, { dryRun: true, scanned: 4, trialToExpired: 1, activeToGrace: 1, graceToExpired: 1, cancelledToExpired: 1, downgraded: 0, remindersQueued: 0, expiredNoticesQueued: 0, skipped: 0, failed: 0 });
   assert.equal(writes.length + audits.length, 0);
   assert.deepEqual(rows.map((row) => row.status), ['trial', 'active', 'grace', 'cancelled', 'active']);
   assert.equal(expiryJobResponseSchema.safeParse(result).success, true);
@@ -178,7 +178,7 @@ test('apply: trial to expired when no payment, active to grace at the period end
     sub('5', 'active', { currentPeriodEnd: at(5) }),
   ];
   const result = await runSubscriptionExpiry({ now: NOW, apply: true });
-  assert.deepEqual(result, { dryRun: false, scanned: 4, trialToExpired: 1, activeToGrace: 1, graceToExpired: 1, cancelledToExpired: 1, skipped: 0, failed: 0 });
+  assert.deepEqual(result, { dryRun: false, scanned: 4, trialToExpired: 1, activeToGrace: 1, graceToExpired: 1, cancelledToExpired: 1, downgraded: 0, remindersQueued: 0, expiredNoticesQueued: 0, skipped: 0, failed: 0 });
   assert.deepEqual(rows.map((row) => row.status), ['expired', 'grace', 'expired', 'expired', 'active']);
   assert.equal(rows[1]!.graceUntil.getTime(), at(6).getTime(), 'graceDays defaults to 7');
   assert.deepEqual(rows.map((row) => row.revision), [1, 1, 1, 1, 0], 'every move advances the revision, an untouched row does not');
@@ -331,6 +331,171 @@ test('route: the answer is counts only, and the Authorization: Bearer form of th
   );
   assert.equal(res.status, 200);
   const json = (await res.json()) as Record<string, unknown>;
-  assert.deepEqual(Object.keys(json).sort(), ['activeToGrace', 'cancelledToExpired', 'dryRun', 'failed', 'graceToExpired', 'scanned', 'skipped', 'trialToExpired']);
+  assert.deepEqual(Object.keys(json).sort(), ['activeToGrace', 'cancelledToExpired', 'downgraded', 'dryRun', 'expiredNoticesQueued', 'failed', 'graceToExpired', 'remindersQueued', 'scanned', 'skipped', 'trialToExpired']);
   assert.equal(expiryJobResponseSchema.safeParse(json).success, true);
+});
+
+// ------------------------------------------------------------------------------------------- Sprint 6 (S6-B4): downgrade and emails
+
+const PlanModel = SubscriptionPlanModel as any;
+
+test('planTransition: a pending downgrade to Free applies at the period end: Free, active, no end date, nothing pending', () => {
+  const move = planTransition(sub('a', 'active', { currentPeriodEnd: at(-1), pendingPlanKey: 'free' }) as SubRow, NOW, 7, { key: 'free', free: true })!;
+  assert.deepEqual([move.kind, move.from, move.to], ['downgradeToFree', 'active', 'active']);
+  assert.deepEqual(move.set, { planKey: 'free', status: 'active', periodStart: at(-1), currentPeriodEnd: null, graceUntil: null, trialEndsAt: null, cancelAtPeriodEnd: false, pendingPlanKey: null });
+});
+
+test('planTransition: a pending downgrade to a cheaper paid plan switches the plan and starts its grace; the seller pays its price to keep it', () => {
+  const move = planTransition(sub('a', 'active', { currentPeriodEnd: at(-1), pendingPlanKey: 'starter' }) as SubRow, NOW, 7, { key: 'starter', free: false })!;
+  assert.deepEqual([move.kind, move.to, move.set.planKey, move.set.status, move.set.pendingPlanKey], ['downgradeToPaid', 'grace', 'starter', 'grace', null]);
+  assert.equal((move.set.graceUntil as Date).getTime(), at(6).getTime());
+});
+
+test('planTransition: cancel wins over a pending downgrade; a target that is not usable is ignored; before the period end nothing moves', () => {
+  assert.equal(planTransition(sub('a', 'active', { currentPeriodEnd: at(-1), cancelAtPeriodEnd: true, pendingPlanKey: 'free' }) as SubRow, NOW, 7, { key: 'free', free: true })?.kind, 'cancelledToExpired');
+  assert.equal(planTransition(sub('a', 'active', { currentPeriodEnd: at(-1), pendingPlanKey: 'gone' }) as SubRow, NOW, 7, null)?.kind, 'activeToGrace');
+  assert.equal(planTransition(sub('a', 'active', { currentPeriodEnd: at(-1), pendingPlanKey: 'growth' }) as SubRow, NOW, 7, { key: 'growth', free: false })?.kind, 'activeToGrace', 'the plan it is already on');
+  assert.equal(planTransition(sub('a', 'active', { currentPeriodEnd: at(1), pendingPlanKey: 'free' }) as SubRow, NOW, 7, { key: 'free', free: true }), null);
+});
+
+test('needsReminder: active, ending within 7 days, not leaving and not moving down', () => {
+  assert.equal(REMINDER_DAYS, 7);
+  assert.equal(needsReminder(sub('a', 'active', { currentPeriodEnd: at(3) }) as SubRow, NOW), true);
+  assert.equal(needsReminder(sub('a', 'active', { currentPeriodEnd: at(7) }) as SubRow, NOW), true, 'exactly 7 days is inside');
+  assert.equal(needsReminder(sub('a', 'active', { currentPeriodEnd: at(8) }) as SubRow, NOW), false);
+  assert.equal(needsReminder(sub('a', 'active', { currentPeriodEnd: at(0) }) as SubRow, NOW), false, 'already over: the job moves it');
+  assert.equal(needsReminder(sub('a', 'active', { currentPeriodEnd: at(3), cancelAtPeriodEnd: true }) as SubRow, NOW), false);
+  assert.equal(needsReminder(sub('a', 'active', { currentPeriodEnd: at(3), pendingPlanKey: 'free' }) as SubRow, NOW), false);
+  for (const status of ['trial', 'grace', 'expired', 'cancelled']) assert.equal(needsReminder(sub('a', status, { currentPeriodEnd: at(3) }) as SubRow, NOW), false, status);
+  assert.equal(needsReminder(sub('a', 'active') as SubRow, NOW), false, 'no end date');
+});
+
+/** A find that answers the two queries of the job from the rows: the due ones, and the ones ending within 7 days. */
+function routedFind(): void {
+  SubModel.find = (filter: any) => {
+    if (filter.$or) return chain(() => rows.filter(wanted).map((row) => ({ ...row })));
+    const { $gt, $lte } = filter.currentPeriodEnd;
+    return chain(() => rows.filter((row) => row.status === filter.status && row.currentPeriodEnd > $gt && row.currentPeriodEnd <= $lte).map((row) => ({ ...row })));
+  };
+}
+
+function recorder(): { mail: ExpiryMail; sent: string[] } {
+  const seen = new Set<string>();
+  const sent: string[] = [];
+  const send = (kind: string) => async (fields: any) => {
+    const key = kind + ':' + fields.subscriptionId + ':' + fields.periodEnd.getTime();
+    sent.push(key);
+    if (seen.has(key)) return { outcome: 'duplicate' as const, id: null };
+    seen.add(key);
+    return { outcome: 'queued' as const, id: key };
+  };
+  return { mail: { expiring: send('expiring'), expired: send('expired') }, sent };
+}
+
+test('the job applies a pending downgrade to Free: one audit line naming the new plan, one count, no email (nothing ended badly)', async () => {
+  rows = [sub('1', 'active', { currentPeriodEnd: at(-1), pendingPlanKey: 'free' })];
+  const savedFind = PlanModel.find;
+  PlanModel.find = () => chain(() => [{ key: 'free', priceRs: 0, isActive: true }]);
+  const { mail, sent } = recorder();
+  try {
+    const result = await runSubscriptionExpiry({ now: NOW, apply: true, mail });
+    assert.deepEqual([result.downgraded, result.activeToGrace, result.cancelledToExpired], [1, 0, 0]);
+    assert.deepEqual([rows[0]!.planKey, rows[0]!.status, rows[0]!.currentPeriodEnd, rows[0]!.pendingPlanKey, rows[0]!.revision], ['free', 'active', null, null, 1]);
+    assert.deepEqual(audits.map((a) => a.details), [{ seller: 'seller-1', planKey: 'growth', from: 'active', to: 'active', newPlanKey: 'free', at: NOW.toISOString() }]);
+    assert.deepEqual(sent, []);
+  } finally {
+    PlanModel.find = savedFind;
+  }
+});
+
+test('the job applies a pending downgrade to a cheaper paid plan as grace on that plan; a dry run counts it and writes nothing', async () => {
+  rows = [sub('1', 'active', { currentPeriodEnd: at(-1), pendingPlanKey: 'starter' })];
+  const savedFind = PlanModel.find;
+  PlanModel.find = () => chain(() => [{ key: 'starter', priceRs: 900, isActive: true }]);
+  try {
+    const dry = await runSubscriptionExpiry({ now: NOW, mail: recorder().mail });
+    assert.deepEqual([dry.downgraded, writes.length], [1, 0]);
+    await runSubscriptionExpiry({ now: NOW, apply: true, mail: recorder().mail });
+    assert.deepEqual([rows[0]!.planKey, rows[0]!.status, rows[0]!.pendingPlanKey], ['starter', 'grace', null]);
+    assert.equal(rows[0]!.graceUntil.getTime(), at(6).getTime());
+  } finally {
+    PlanModel.find = savedFind;
+  }
+});
+
+test('a pending downgrade to an archived or missing plan is ignored: the subscription goes to grace as usual', async () => {
+  rows = [sub('1', 'active', { currentPeriodEnd: at(-1), pendingPlanKey: 'old' })];
+  const savedFind = PlanModel.find;
+  PlanModel.find = () => chain(() => [{ key: 'old', priceRs: 100, isActive: false }]);
+  try {
+    const result = await runSubscriptionExpiry({ now: NOW, apply: true, mail: recorder().mail });
+    assert.deepEqual([result.downgraded, result.activeToGrace], [0, 1]);
+    assert.equal(rows[0]!.planKey, 'growth');
+  } finally {
+    PlanModel.find = savedFind;
+  }
+});
+
+test('the 7 day reminder is queued ONCE per subscription and period, however often the job runs', async () => {
+  rows = [sub('1', 'active', { currentPeriodEnd: at(3) }), sub('2', 'active', { currentPeriodEnd: at(20) }), sub('3', 'active', { currentPeriodEnd: at(2), cancelAtPeriodEnd: true }), sub('4', 'active', { currentPeriodEnd: at(2), pendingPlanKey: 'free' })];
+  routedFind();
+  const { mail, sent } = recorder();
+  const first = await runSubscriptionExpiry({ now: NOW, apply: true, mail });
+  assert.deepEqual([first.remindersQueued, sent], [1, ['expiring:1:' + at(3).getTime()]]);
+  const second = await runSubscriptionExpiry({ now: new Date(NOW.getTime() + 3600_000), apply: true, mail });
+  assert.equal(second.remindersQueued, 0, 'the outbox said duplicate');
+  // A renewal moves the period end: the next period has its own key.
+  rows[0]!.currentPeriodEnd = at(33);
+  const later = await runSubscriptionExpiry({ now: at(28), apply: true, mail });
+  assert.equal(later.remindersQueued, 1);
+  assert.equal(new Set(sent).size, 2);
+});
+
+test('a dry run counts the reminders that would go out and sends none', async () => {
+  rows = [sub('1', 'active', { currentPeriodEnd: at(3) })];
+  routedFind();
+  const { mail, sent } = recorder();
+  const result = await runSubscriptionExpiry({ now: NOW, mail });
+  assert.deepEqual([result.dryRun, result.remindersQueued, sent.length], [true, 1, 0]);
+});
+
+test('every move to expired queues the expired email once; the move to grace does not; a failing email changes nothing', async () => {
+  rows = [
+    sub('1', 'trial', { trialEndsAt: at(-2) }),
+    sub('2', 'grace', { currentPeriodEnd: at(-10), graceUntil: at(-3) }),
+    sub('3', 'cancelled', { currentPeriodEnd: at(-1) }),
+    sub('4', 'active', { currentPeriodEnd: at(-1) }),
+    sub('5', 'active', { currentPeriodEnd: at(-1), cancelAtPeriodEnd: true }),
+  ];
+  routedFind();
+  const { mail, sent } = recorder();
+  const result = await runSubscriptionExpiry({ now: NOW, apply: true, mail });
+  assert.equal(result.expiredNoticesQueued, 4, 'the trial, the grace, the cancelled and the cancel-at-end one: 4 moves to expired');
+  assert.deepEqual(sent.filter((key) => key.startsWith('expired:')).map((key) => key.split(':')[1]).sort(), ['1', '2', '3', '5']);
+  assert.equal(rows[3]!.status, 'grace', 'active to grace sends nothing');
+  const again = await runSubscriptionExpiry({ now: NOW, apply: true, mail });
+  assert.equal(again.expiredNoticesQueued, 0, 'a second run finds nothing to send');
+});
+
+test('the expired email names the period that ended (the key), and a mail that throws is logged and the move stands', async () => {
+  rows = [sub('1', 'grace', { currentPeriodEnd: at(-10), graceUntil: at(-3) })];
+  routedFind();
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    const result = await runSubscriptionExpiry({
+      now: NOW,
+      apply: true,
+      mail: {
+        expiring: async () => null,
+        expired: async () => {
+          throw new Error('outbox down');
+        },
+      },
+    });
+    assert.deepEqual([result.graceToExpired, result.expiredNoticesQueued, result.failed], [1, 0, 0]);
+    assert.equal(rows[0]!.status, 'expired');
+  } finally {
+    console.error = quiet;
+  }
 });

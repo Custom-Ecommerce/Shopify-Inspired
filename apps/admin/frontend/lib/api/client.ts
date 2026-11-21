@@ -1,5 +1,6 @@
 import type { ModerationReview, ModerationReviewList } from "@markaz/contracts";
 import { reviewStateToQuery, type ReviewAction, type ReviewListState } from "@/lib/reviews";
+import { paymentApiQuery, type PaymentAction, type PaymentListState } from "@/lib/subscription-payments";
 import {
   adminStoreDetailSchema,
   adminStoreListEnvelopeSchema,
@@ -23,6 +24,10 @@ import {
   adminLedgerListSchema,
   adminCommissionRatesSchema,
   adminSubscriptionPlanListSchema,
+  adminPaymentListSchema,
+  adminPaymentWriteResponseSchema,
+  type AdminPaymentList,
+  type AdminPaymentWriteResponse,
   type AdminLedgerList,
   type AdminCommissionRates,
   type AdminSubscriptionPlanList,
@@ -329,4 +334,19 @@ export function listModerationReviews(state: ReviewListState, signal?: AbortSign
 /** Hides (with a reason) or shows again one review. */
 export function runReviewAction(action: ReviewAction, reviewId: string, reason: string): Promise<ModerationReview> {
   return call("/api/reviews/" + action, looseReview, { method: "POST", body: JSON.stringify(action === "unhide" ? { reviewId } : { reviewId, reason }) });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-14 (S6-B4, D-118): manual subscription payments
+
+export function listSubscriptionPayments(state: PaymentListState, signal?: AbortSignal): Promise<AdminPaymentList> {
+  return call("/api/subscription-payments?" + paymentApiQuery(state), adminPaymentListSchema as Parser<AdminPaymentList>, { signal });
+}
+
+/** Confirm (with the amount seen and a reason), reject or void (with a reason) one payment. The id is the path's. */
+export function runPaymentAction(action: PaymentAction, paymentId: string, body: { amountRs?: number; reason: string }): Promise<AdminPaymentWriteResponse> {
+  return call("/api/subscription-payments/" + encodeURIComponent(paymentId) + "/" + action, adminPaymentWriteResponseSchema as Parser<AdminPaymentWriteResponse>, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }

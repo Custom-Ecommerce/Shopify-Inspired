@@ -518,3 +518,51 @@ test('Sprint 6 subscriptions: nobody deletes a subscription, admin and system in
 for (const actor of ['admin', 'system', 'seller', 'public'] as const) assert.equal(can(actor, 'delete', 'subscriptions'), false, actor);
 assert.deepEqual(POLICY_MATRIX.subscriptions!.delete.actors, []);
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 (S6-B4, D-118): the subscriptionPayments policy row, for every actor.
+
+test('Sprint 6 payments: a seller reads the money facts of their payment and not the admin\'s bookkeeping', () => {
+assert.equal(can('seller', 'read', 'subscriptionPayments', ['planKey', 'amountRs', 'status', 'method', 'reference', 'proofUrl', 'periodStart', 'periodEnd', 'reason', 'claimedAt', 'decidedAt']), true);
+for (const hidden of ['seller', 'decidedBy', 'revision', 'subscriptionBefore', 'subscriptionRevisionAfter', 'isOpen']) assert.equal(can('seller', 'read', 'subscriptionPayments', [hidden]), false, hidden);
+});
+
+test('Sprint 6 payments: a seller creates with the plan key only: the amount, the status and the period are never theirs', () => {
+assert.equal(can('seller', 'create', 'subscriptionPayments', ['planKey']), true);
+for (const field of ['amountRs', 'status', 'periodStart', 'periodEnd', 'seller', 'decidedBy', 'method']) assert.equal(can('seller', 'create', 'subscriptionPayments', [field]), false, field);
+});
+
+test('Sprint 6 payments: a seller can say I paid (method, reference, proof, claimed) and cannot confirm, change the amount or the period', () => {
+assert.equal(can('seller', 'update', 'subscriptionPayments', ['method', 'reference', 'proofUrl', 'status', 'claimedAt']), true);
+for (const field of ['amountRs', 'planKey', 'periodStart', 'periodEnd', 'decidedBy', 'decidedAt', 'reason', 'seller']) assert.equal(can('seller', 'update', 'subscriptionPayments', [field]), false, field);
+});
+
+test('Sprint 6 payments: an admin reads everything and updates the status fields only; an admin never creates a payment', () => {
+assert.equal(can('admin', 'read', 'subscriptionPayments'), true);
+assert.equal(can('admin', 'read', 'subscriptionPayments', ['decidedBy', 'revision', 'seller']), true);
+assert.equal(can('admin', 'update', 'subscriptionPayments', ['status', 'decidedBy', 'decidedAt', 'reason', 'periodStart', 'periodEnd']), true);
+for (const field of ['amountRs', 'planKey', 'seller', 'method', 'reference', 'revision']) assert.equal(can('admin', 'update', 'subscriptionPayments', [field]), false, field);
+assert.equal(can('admin', 'create', 'subscriptionPayments', ['planKey']), false);
+});
+
+test('Sprint 6 payments: the system does what the server needs', () => {
+assert.equal(can('system', 'read', 'subscriptionPayments'), true);
+assert.equal(can('system', 'create', 'subscriptionPayments', ['seller', 'planKey', 'amountRs']), true);
+assert.equal(can('system', 'update', 'subscriptionPayments', ['revision', 'isOpen', 'status']), true);
+});
+
+test('Sprint 6 payments: the public reads, creates and updates nothing', () => {
+for (const op of ['read', 'create', 'update', 'delete'] as const) assert.equal(can('public', op, 'subscriptionPayments'), false, op);
+});
+
+test('Sprint 6 payments: nobody deletes a payment, admin and system included', () => {
+for (const actor of ['admin', 'system', 'seller', 'public'] as const) assert.equal(can(actor, 'delete', 'subscriptionPayments'), false, actor);
+assert.deepEqual(POLICY_MATRIX.subscriptionPayments!.delete.actors, []);
+});
+
+test('Sprint 6 (S6-B4) subscriptions: a seller reads the pending plan of their own subscription, and still cannot write it (the route does, after their request)', () => {
+assert.equal(can('seller', 'read', 'subscriptions', ['pendingPlanKey']), true);
+assert.equal(can('seller', 'update', 'subscriptions', ['pendingPlanKey']), false);
+assert.equal(can('seller', 'update', 'subscriptions', ['cancelAtPeriodEnd']), false);
+assert.equal(can('public', 'read', 'subscriptions', ['pendingPlanKey']), false);
+});

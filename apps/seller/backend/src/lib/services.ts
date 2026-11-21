@@ -82,6 +82,8 @@ export const PlatformSettingsModel = db.PlatformSettingsModel;
 export const SubscriptionPlanModel = db.SubscriptionPlanModel;
 // Sprint 6 EP-14 (D-118): a seller's subscription decides the plan limits that are enforced.
 export const Subscription = db.Subscription;
+// Sprint 6 (S6-B4): manual subscription payments (requested, claimed, confirmed, rejected, void).
+export const SubscriptionPayment = db.SubscriptionPayment;
 export const PLATFORM_SETTINGS_GLOBAL_TYPE = db.PLATFORM_SETTINGS_GLOBAL_TYPE;
 export const {
   createSessionGuard,

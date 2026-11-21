@@ -106,6 +106,9 @@ export const subscriptionPlanKeySchema = z.string().regex(PLAN_KEY_PATTERN);
  *   activeToGrace       the paid period ended: the plan's limits stay until graceUntil
  *   graceToExpired      the grace ended
  *   cancelledToExpired  a cancelled subscription reached the end of its paid period
+ *   downgraded          (S6-B4) a downgrade the seller asked for took effect at the period end
+ *   remindersQueued     (S6-B4) "ending in 7 days" emails newly queued
+ *   expiredNoticesQueued (S6-B4) "expired" emails newly queued
  */
 export const expiryJobRequestSchema = z.object({ apply: z.boolean().optional() }).strict();
 export const expiryJobResponseSchema = z.object({
@@ -115,6 +118,9 @@ export const expiryJobResponseSchema = z.object({
   activeToGrace: z.number().int().min(0),
   graceToExpired: z.number().int().min(0),
   cancelledToExpired: z.number().int().min(0),
+  downgraded: z.number().int().min(0),
+  remindersQueued: z.number().int().min(0),
+  expiredNoticesQueued: z.number().int().min(0),
   skipped: z.number().int().min(0),
   failed: z.number().int().min(0),
 });

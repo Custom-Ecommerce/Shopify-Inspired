@@ -19,6 +19,7 @@ import type {
 
 import type { ModerationReview, ModerationReviewList } from '../../../../../packages/contracts/src/review';
 import type { AdminSellerPlansResponse } from '../../../../../packages/contracts/src/subscription';
+import type { AdminPaymentList, AdminPaymentWriteResponse } from '../../../../../packages/contracts/src/subscription-payments';
 
 const { INTERNAL_SECRET_MIN_LENGTH, internalRequestHeaders } = unwrapCjs(signatureNs) as typeof signatureNs;
 
@@ -175,3 +176,21 @@ export const hideReview = (adminId: string, reviewId: string, reason: string): P
 
 export const unhideReview = (adminId: string, reviewId: string): Promise<ModerationReview> =>
   send('POST', BASE_PATH + '/reviews/unhide', adminId, { reviewId }, REVIEW_LABEL);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-14 (S6-B4, D-118, D-093): manual subscription payments. The payments and the subscriptions live in the seller database, so each of
+// these is one signed call to the seller backend (the same signature as moderation). Only that call decides: the console never writes a payment.
+
+const SUBSCRIPTION_PAYMENT_LABEL = 'Subscription payments';
+
+export const listSubscriptionPayments = (adminId: string, params: { status?: string; page?: number; limit?: number }): Promise<AdminPaymentList> =>
+  send('GET', '/api/internal/subscription-payments' + query(params), adminId, undefined, SUBSCRIPTION_PAYMENT_LABEL);
+
+export const confirmSubscriptionPayment = (adminId: string, input: { paymentId: string; amountRs: number; reason: string }): Promise<AdminPaymentWriteResponse> =>
+  send('POST', '/api/internal/subscription-payments/confirm', adminId, input, SUBSCRIPTION_PAYMENT_LABEL);
+
+export const rejectSubscriptionPayment = (adminId: string, input: { paymentId: string; reason: string }): Promise<AdminPaymentWriteResponse> =>
+  send('POST', '/api/internal/subscription-payments/reject', adminId, input, SUBSCRIPTION_PAYMENT_LABEL);
+
+export const voidSubscriptionPayment = (adminId: string, input: { paymentId: string; reason: string }): Promise<AdminPaymentWriteResponse> =>
+  send('POST', '/api/internal/subscription-payments/void', adminId, input, SUBSCRIPTION_PAYMENT_LABEL);

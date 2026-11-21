@@ -3,3 +3,4 @@ export * from './subscription-plans';
 export * from './platform-settings';
 export * from './stripe-events';
 export * from './subscription';
+export * from './subscription-payment';

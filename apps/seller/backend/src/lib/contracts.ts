@@ -145,6 +145,18 @@ export const {
   expiryJobRequestSchema,
 } = contracts;
 
+// Sprint 6 EP-14 (S6-B4, D-118): manual subscription payments, downgrade and cancel.
+export const {
+  PAYMENT_METHOD_LABELS,
+  upgradeRequestSchema,
+  claimPaymentRequestSchema,
+  downgradeRequestSchema,
+  cancelRequestSchema,
+  adminPaymentListQuerySchema,
+  internalConfirmPaymentRequestSchema,
+  internalDecidePaymentRequestSchema,
+} = contracts;
+
 // Sprint 4 EP-04: store settings, delivery, payments, payout, readiness and go-live.
 export const {
   storeSettingsUpdateSchema,

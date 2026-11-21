@@ -122,6 +122,22 @@ platform setting) and an admin marks it paid. Nothing in this section charges a 
 
 Set the same value on both backends. Leave it empty until the owner decides to take subscriptions by card.
 
+### Manual subscription payments: runbook (Sprint 6, S6-B4)
+
+Payment is by hand (bank, JazzCash, Easypaisa); no gateway is involved.
+
+1. **Set up once.** In Settings fill `paymentInstructions` (plain text, shown to sellers), `supportEmail` (the address that is emailed when a seller says "I paid"),
+   `graceDays` (default 7). Run `pnpm ensure:indexes -- --apply` once per database: it builds the unique partial index `seller_open_unique` on
+   `subscriptionPayments` (one open payment per seller).
+2. **Seller flow.** Billing page: Upgrade (the server writes the amount = the plan's price) -> pay outside the platform -> "I have paid" (method, reference, optional https receipt link).
+3. **Who confirms.** Any admin, in the console under Subscription payments (until the admin levels of S6-B6: then owner and finance confirm, owner voids a confirmed payment).
+   Check the money is in the account, tick the box, give a note, Confirm. The plan is active for one month (a renewal while active extends from the current period end).
+   A double confirm has one effect; the second click is a 409. Reject needs a reason (5+ characters) and the seller is emailed it. Void takes a confirmed payment back only while nothing else changed the subscription.
+4. **Grace and expiry.** The expiry job (section 7) runs daily with `{"apply": true}`. It emails "ending in 7 days" once per period, moves an unpaid period to grace for `graceDays`,
+   then to expired (Free limits, nothing deleted) and emails "expired" once. A downgrade the seller asked for (pending plan) is applied at the period end: Free at once,
+   a cheaper paid plan as grace until its price is paid. Cancel at period end skips grace. Cancel wins over a pending downgrade.
+5. **Carry-over.** Automatic charging of subscriptions comes with the payment-gateways epic; Stripe subscription code stays behind its flag.
+
 ### Sprint 3 deploy variables (still required for those features)
 
 `ORDER_ACCESS_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_ORDER_WEBHOOK_SECRET`, `STOREFRONT_URL`, `CLIENT_ADDRESS_SIGNING_SECRET`
