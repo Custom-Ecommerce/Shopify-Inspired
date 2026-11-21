@@ -1,6 +1,6 @@
 import { recordCodCommission, reverseForReturn, type LedgerOrder } from '@/lib/commission';
 import { databaseReady } from '@/lib/notifications';
-import { refundCapOf } from '@/lib/returns';
+import { completionOf, refundCapOf } from '@/lib/returns';
 import { oid } from '@/lib/ledger-aggregates';
 import { Order, Return } from '@/lib/services';
 
@@ -57,14 +57,15 @@ export async function reconcileReturnReversals(orderId: unknown): Promise<Reconc
   const result: ReconcileResult = { created: 0, existing: 0, nothingDue: 0, failed: 0 };
   if (!databaseReady()) return result;
   try {
-    const order = (await Order.findOne({ _id: orderId }).select('store orderId paymentMethod subtotal discountAmount').lean()) as unknown as Row | null;
+    const order = (await Order.findOne({ _id: orderId }).select('store orderId paymentMethod subtotal discountAmount items').lean()) as unknown as Row | null;
     // Only a cash on delivery order has a commission to give back (a card order's refund is not supported yet, D-108 (7)).
     if (!order || order.paymentMethod !== 'cod') return result;
-    const returns = ((await Return.find({ store: order.store, order: orderId, status: { $in: ['received', 'refunded'] } }).lean()) as unknown as Row[])
-      .filter(hasRefund)
-      .sort((a, b) => firstRefundAt(a) - firstRefundAt(b));
+    // Every received or refunded return of the order: the rule of the whole order (completionOf, SB-6) needs the ones without a refund too.
+    const everything = (await Return.find({ store: order.store, order: orderId, status: { $in: ['received', 'refunded'] } }).lean()) as unknown as Row[];
+    const returns = everything.filter(hasRefund).sort((a, b) => firstRefundAt(a) - firstRefundAt(b));
     for (const doc of returns) {
-      const returnedBase = refundCapOf(doc, order);
+      const completion = completionOf(doc, everything, order);
+      const returnedBase = refundCapOf(doc, order, completion.completes ? completion.earlierBase : null);
       if (returnedBase === null || returnedBase <= 0) {
         result.nothingDue += 1;
         continue;
@@ -73,6 +74,7 @@ export async function reconcileReturnReversals(orderId: unknown): Promise<Reconc
         returnId: doc._id,
         order: { _id: order._id ?? orderId, store: order.store, orderId: String(order.orderId ?? ''), paymentMethod: order.paymentMethod },
         returnedBase,
+        completesOrder: completion.completes,
       });
       if (outcome.outcome === 'created') result.created += 1;
       else if (outcome.outcome === 'exists') result.existing += 1;

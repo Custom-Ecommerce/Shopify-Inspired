@@ -237,6 +237,20 @@ const reportRequest = (search: string, secret = MOD_SECRET): NextRequest => {
   return new NextRequest('http://seller.test' + path, { headers: internalRequestHeaders(secret, { method: 'GET', path, adminId: 'admin-1', body: '' }) });
 };
 
+test('SB-6 (bug 7): 9 orders with 12 return reversals report 9 orders, and a cancelled order still takes one off', async () => {
+  const day = new Date('2026-11-10T08:00:00Z');
+  for (let i = 0; i < 9; i += 1) world.entry({ type: 'cod_commission', order: '65a00000000000000a10' + String(1000 + i).slice(1) + '', balanceEffect: -40, baseAmount: 1000, createdAt: day });
+  for (let i = 0; i < 12; i += 1) {
+    world.entry({ type: 'reversal', reversesType: 'cod_commission', order: '65a00000000000000a10' + String(1000 + (i % 9)).slice(1), balanceEffect: 5, baseAmount: 125, returnId: '65a0000000000000e1' + String(100000 + i).slice(1), createdAt: day });
+  }
+  const report = await buildCommissionReport(commissionReportQuerySchema.parse({ storeId: STORE_A, period: '30' }), NOW);
+  assert.equal(report.ordersCount, 9, 'the old report said 12 (originals less reversals clamped at 0, plus the 12 returns)');
+  assert.equal(report.commissionEarned, 9 * 40 - 12 * 5);
+  // a reversal WITHOUT a returnId is a cancelled order: it still takes one order off the count
+  world.entry({ type: 'reversal', reversesType: 'cod_commission', order: '65a00000000000000a10' + String(1000).slice(1), balanceEffect: 40, baseAmount: 1000, createdAt: day });
+  assert.equal((await buildCommissionReport(commissionReportQuerySchema.parse({ storeId: STORE_A, period: '30' }), NOW)).ordersCount, 8);
+});
+
 test('the report is the same ledger sums as the earnings summary, plus the order count and the balance', async () => {
   ledger();
   const report = await buildCommissionReport(commissionReportQuerySchema.parse({ storeId: STORE_A, period: '30' }), NOW);

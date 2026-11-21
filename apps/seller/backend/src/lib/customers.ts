@@ -462,7 +462,7 @@ export function customersCsv(rows: readonly CustomerRow[]): string {
       yesNo(row.unsubscribed),
     ]);
   }
-  return serializeCsv(records);
+  return serializeCsv(records, { plainPhones: true });
 }
 
 /** The store's customers as a CSV, with the same filters and sort as the list, at most CUSTOMER_EXPORT_MAX_ROWS rows. */

@@ -43,7 +43,7 @@ preview links, cache purge, sync, Cloudinary uploads, email. Each example has a 
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | seller backend, admin backend | SMTP settings when `EMAIL_PROVIDER=smtp`. |
 | `OUTBOX_CRON_SECRET` | seller backend, admin backend | Bearer secret for the internal outbox retry route (EP-07.US01.T02). |
 | `UNSUBSCRIBE_SIGNING_SECRET` | seller backend | Signs the unsubscribe link of broadcast emails (EP-07.US04). 16 characters or more. Without it a broadcast cannot be sent (503) and every unsubscribe link answers 404. |
-| `CARD_CHECKOUT_ENABLED` | seller backend (listed in the storefront example, never read there) | Sprint 5 COD-only mode (D-107). Card checkout is offered to shoppers only when this is `true` or `1` and the Stripe values are set; unset or any other value keeps card off everywhere. Stripe stays for seller billing. |
+| `CARD_CHECKOUT_ENABLED` | seller backend (listed in the storefront example, never read there) | Sprint 5 COD-only mode (D-107). Card checkout is offered to shoppers only when this is `true` or `1` and the Stripe values are set; unset or any other value keeps card off everywhere. Stripe stays for seller billing. **Changing it takes up to 300 seconds to show on a storefront** (SB-6, D-113): the storefront caches each store's answer for `STORE_REVALIDATE_SECONDS` = 300 (`apps/storefront/lib/api/stores.ts`), so after the switch goes off a shopper can still be offered card until the cache is revalidated or the wait ends. The order route refuses card at once (422 `PAYMENT_METHOD_UNAVAILABLE`), so nothing is charged; restart the seller backend, then wait up to 5 minutes (or revalidate the store). |
 | `PLATFORM_DEFAULT_COMMISSION_PERCENT` | seller backend, admin backend | Platform default commission in percent. The placeholder is 5; the owner sets the real value (A-019). |
 | `APP_BASE_URL_SELLER` | seller backend, admin backend | Seller portal base URL for links in emails. |
 | `APP_BASE_URL_ADMIN` | admin backend | Admin console base URL for operator password-reset links (Sprint 4 EP-08). |
@@ -170,6 +170,8 @@ model, which indexes are missing and which conflict (an index of the same name w
 skipped), then, with `--apply`, creates the missing ones. A unique index can fail when the data already breaks it: that model is reported with
 the error name and the other models are still done (the script then exits with 1). It prints names and counts only. A second run finds nothing missing.
 (Root script: `pnpm ensure:indexes -- --apply`, with `SELLER_MONGODB_URI` exported in the shell.)
+
+The **dry run only reads** (SB-6): the script switches Mongoose `autoCreate` and `autoIndex` off before the models load, so nothing is created on connect; only `--apply` creates. `mark-sellers-verified` has the same guard as the other deploy scripts: a database whose name does not contain `throwaway` needs `--i-know-this-is-real`, the dry run included.
 
 ### Required secrets (production)
 

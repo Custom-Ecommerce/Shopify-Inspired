@@ -253,7 +253,37 @@ test('a partial return takes the commission back but the order stays in the coun
   const returns = await returnsTotals(STORE_A, start, end);
   assert.deepEqual(returns, { count: 1, commission: 20, sales: 500 });
   assert.equal(totals.commission, 60);
-  assert.equal(totals.orders, 0, 'the old rule counts one order per original less one per reversal');
-  assert.equal(Math.max(0, totals.orders + returns.count), 1, 'a partial return must not take the order off the count (the report adds the returns back)');
+  // SB-6 (verification bug 7): commissionTotals itself leaves a return's reversal out of the order count (the old rule counted originals minus
+  // every reversal, clamped at 0, and the report then added returns.count back, which overcounted once reversals outnumbered orders).
+  assert.equal(totals.orders, 1, 'a partial return must not take the order off the count');
   assert.equal(await unsettledBalance(STORE_A), -60, 'what the seller owes the platform is lower by the commission given back');
+});
+
+// ------------------------------------------------------------------------------------------------- SB-6: the return that completes the order
+
+test('SB-6 (bug 6): a full return made of three parts reverses the WHOLE commission: 37 + 18 + 19 = 74 (the old rule gave 73)', async () => {
+  commissionOf(1850); // 2000 less a discount of 150, commission 74
+  const first = await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 925 });
+  const second = await reverseForReturn({ returnId: RETURN_2, order, returnedBase: 462 });
+  const third = await reverseForReturn({ returnId: RETURN_3, order, returnedBase: 463, completesOrder: true });
+  assert.deepEqual([first, second, third], [{ outcome: 'created', amount: 37 }, { outcome: 'created', amount: 18 }, { outcome: 'created', amount: 19 }]);
+  assert.equal(given(), 74, 'the reversals add up to the original commission exactly');
+  assert.deepEqual(returnReversals().map((e) => e.baseAmount), [925, 462, 463], 'the bases add up to the order base 1850');
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_3, order, returnedBase: 463, completesOrder: true }), { outcome: 'exists' }, 'a repeat finds the entry and writes nothing');
+  assert.equal(given(), 74);
+});
+
+test('SB-6: the completing return takes what is left even when it is refunded BEFORE an earlier one, and never more than the commission', async () => {
+  commissionOf(1850);
+  const completing = await reverseForReturn({ returnId: RETURN_3, order, returnedBase: 463, completesOrder: true });
+  assert.deepEqual(completing, { outcome: 'created', amount: 74 }, 'everything that is left of the commission');
+  const earlier = await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 925 });
+  assert.deepEqual(earlier, { outcome: 'nothing' }, 'nothing is left for the earlier return, so the total can never go above the original');
+  assert.equal(given(), 74);
+});
+
+test('SB-6: a partial return stays proportional (no completesOrder, no remainder)', async () => {
+  commissionOf(1850);
+  assert.deepEqual(await reverseForReturn({ returnId: RETURN_1, order, returnedBase: 925, completesOrder: false }), { outcome: 'created', amount: 37 });
+  assert.equal(given(), 37);
 });

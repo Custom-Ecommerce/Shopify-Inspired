@@ -28,7 +28,7 @@ export interface CommissionTotals {
   sales: number;
   /** Net commission, positive (reversals subtract). */
   commission: number;
-  /** Net count of orders: one per original commission entry, minus one per reversal. Never below zero. */
+  /** Net count of orders: one per original commission entry, minus one per reversal of a cancelled order (a return's reversal does not count). Never below zero. */
   orders: number;
 }
 
@@ -40,7 +40,13 @@ export async function commissionTotals(store: string, start: Date, end: Date): P
         _id: null,
         sales: { $sum: { $cond: [{ $eq: ['$type', 'reversal'] }, { $multiply: ['$baseAmount', -1] }, '$baseAmount'] } },
         effect: { $sum: '$balanceEffect' },
-        orders: { $sum: { $cond: [{ $eq: ['$type', 'reversal'] }, -1, 1] } },
+        // One per original; a reversal of a CANCELLED order takes one off, but the proportional reversal of a return (it carries a returnId) does not:
+        // a partial return leaves the order in the count (SB-6, verification bug 7).
+        orders: {
+          $sum: {
+            $cond: [{ $eq: ['$type', 'reversal'] }, { $cond: [{ $ne: [{ $ifNull: ['$returnId', null] }, null] }, 0, -1] }, 1],
+          },
+        },
       },
     },
   ])) as Array<{ sales?: number; effect?: number; orders?: number }>;

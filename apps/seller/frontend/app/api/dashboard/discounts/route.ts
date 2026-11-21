@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   return proxyPost(req, "/api/discounts", {
     auth: "dashboard",
+    bindStore: false, // createDiscountSchema is strict and the store comes from x-store-id: a store in the body is a 400 (SB-6)
     logScope: "[api/dashboard/discounts]",
   });
 }

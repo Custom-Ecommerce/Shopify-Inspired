@@ -6,7 +6,7 @@ import { handleRouteError, HttpError } from '@/lib/http';
 import { oid } from '@/lib/ledger-aggregates';
 import { loadOwnedStore, requireSellerActor } from '@/lib/owned-store';
 import { json } from '@/lib/return-routes';
-import { toSellerReturn } from '@/lib/returns';
+import { refundCapsForPage, toSellerReturn } from '@/lib/returns';
 import { assertCan, Order, Return } from '@/lib/services';
 
 export const runtime = 'nodejs';
@@ -48,11 +48,18 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // The customer's name and payment method come from the orders, read for this page only and only in this store.
     const orderIds = [...new Set(rows.map((row) => String(row.order)))];
-    const orders = orderIds.length === 0 ? [] : ((await Order.find({ _id: { $in: orderIds }, store: oid(storeId) }).select('customerName paymentMethod').lean()) as unknown as Row[]);
+    // One query for the page's orders: the lines, subtotal and discount also give each return's refund cap (SB-6, verification bug 8: the list
+    // used to send no refundCap, so the page hid "Record a refund"). The caps come from refundCapsForPage, the rule of the detail and the refund.
+    const orders = orderIds.length === 0 ? [] : ((await Order.find({ _id: { $in: orderIds }, store: oid(storeId) }).select('customerName paymentMethod items subtotal discountAmount').lean()) as unknown as Row[]);
     const byId = new Map(orders.map((order) => [String(order._id), order]));
+    const caps = await refundCapsForPage(storeId, rows, byId);
     const docs = rows.map((row) => {
       const order = byId.get(String(row.order));
-      return toSellerReturn(row, { paymentMethod: typeof order?.paymentMethod === 'string' ? order.paymentMethod : null, customerName: typeof order?.customerName === 'string' ? order.customerName : null });
+      return toSellerReturn(row, {
+        paymentMethod: typeof order?.paymentMethod === 'string' ? order.paymentMethod : null,
+        customerName: typeof order?.customerName === 'string' ? order.customerName : null,
+        refundCap: caps.get(String(row._id)) ?? null,
+      });
     });
 
     const counts: Record<string, number> = Object.fromEntries((RETURN_STATUSES as readonly string[]).map((status) => [status, 0]));

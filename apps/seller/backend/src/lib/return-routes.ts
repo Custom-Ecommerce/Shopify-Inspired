@@ -7,8 +7,8 @@ import { authenticate, type AuthContext } from '@/lib/auth';
 import { HttpError } from '@/lib/http';
 import { loadOwnedStore, requireSellerActor } from '@/lib/owned-store';
 import { readOrderOf, returnNotFound, type Actor } from '@/lib/return-actions';
-import { refundCapOf, toSellerReturn } from '@/lib/returns';
-import { assertCan } from '@/lib/services';
+import { refundCapFor, toSellerReturn } from '@/lib/returns';
+import { Return, assertCan } from '@/lib/services';
 
 /*
  * Sprint 5 EP-13.US02 (D-107): the preamble every seller return route shares, in the standard order:
@@ -74,10 +74,13 @@ export async function prepareReturnRouteNoBody(request: NextRequest, params: { i
 /** The seller's view of a return with what the order adds (the payment method, the customer's name, the refund cap). */
 export async function sellerReturnView(storeId: string, doc: Record<string, unknown>, knownOrder?: Record<string, unknown> | null): Promise<SellerReturn> {
   const order = knownOrder === undefined ? await readOrderOf(storeId, doc) : knownOrder;
+  // The cap follows the rule of the whole order (SB-6): the return that completes the received quantities takes the order base minus the earlier ones.
+  const counted = doc.status === 'received' || doc.status === 'refunded';
+  const siblings = order && counted ? ((await Return.find({ store: storeId, order: doc.order, status: { $in: ['received', 'refunded'] } }).lean()) as unknown as Record<string, unknown>[]) : [];
   return toSellerReturn(doc, {
     paymentMethod: typeof order?.paymentMethod === 'string' ? order.paymentMethod : null,
     customerName: typeof order?.customerName === 'string' ? order.customerName : null,
-    refundCap: order ? refundCapOf(doc, order) : null,
+    refundCap: order ? refundCapFor(doc, order, siblings) : null,
   });
 }
 

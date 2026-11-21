@@ -71,6 +71,36 @@ test('a refund recorded BEFORE the commission exists is reversed when the commis
   assert.equal(String(reversal.order), ORDER_A);
 });
 
+test('SB-6 (bug 6): the reconcile computes the same completion flag: split returns refunded before the commission existed add up to the whole commission', async () => {
+  // 2000 less a discount of 150: base 1850, commission 74. Three returns (kurta, cap, cap) received in that order, all refunded before the cash was collected.
+  world.order({
+    paymentStatus: 'unpaid',
+    subtotal: 2000,
+    discountAmount: 150,
+    total: 2050,
+    items: [
+      { productId: P1, variantId: V1, productTitle: 'Shirt', variantTitle: 'M', sku: 'SH-M', unitPrice: 1000, quantity: 1, stockDeducted: true },
+      { productId: P2, variantId: V2, productTitle: 'Cap', variantTitle: 'Default', sku: null, unitPrice: 500, quantity: 2, stockDeducted: true },
+    ],
+  });
+  const at = (minutes: number) => new Date(Date.now() - DAY + minutes * 60_000);
+  const mk = (line: [string, string, number], minutes: number): Row => {
+    const [productId] = line;
+    const price = productId === P1 ? 1000 : 500;
+    return refundedReturn([line], { receivedAt: at(minutes), updatedAt: at(minutes + 30), refunds: [{ amount: 1, method: 'cash', reference: 'r', at: at(minutes + 30) }], refundAmount: price });
+  };
+  const r1 = mk([P1, V1, 1], 1);
+  const r2 = mk([P2, V2, 1], 2);
+  const r3 = mk([P2, V2, 1], 3);
+  world.orders.find((o) => String(o._id) === ORDER_A)!.paymentStatus = 'collected';
+  await recordAndReconcile(collected());
+  assert.equal(originalEntry()?.balanceEffect, -74);
+  const byReturn = Object.fromEntries(reversals().map((e) => [String(e.returnId), e.balanceEffect]));
+  assert.deepEqual([byReturn[String(r1._id)], byReturn[String(r2._id)], byReturn[String(r3._id)]], [37, 18, 19], 'the last one received takes what is left');
+  assert.equal(reversals().reduce((sum, e) => sum + e.balanceEffect, 0), 74);
+  assert.deepEqual(await reconcileReturnReversals(ORDER_A), { created: 0, existing: 3, nothingDue: 0, failed: 0 }, 'a second run writes nothing');
+});
+
 test('the reconcile is idempotent: run again (or in parallel) and no second reversal is written, the count says it existed', async () => {
   world.order();
   refundedReturn([[P1, V1, 1]]);

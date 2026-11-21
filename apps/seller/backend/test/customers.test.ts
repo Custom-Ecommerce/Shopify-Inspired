@@ -454,10 +454,18 @@ test('export: a cell starting with = + - @ is written as text so it can never ru
   const text = await (await exportCsv(STORE_A, tokenA)).text();
   const cells = text.slice(1).trimEnd().split('\r\n').slice(1).map((line) => line.split(',')[0]!);
   for (const cell of cells) assert.match(cell, /^"?'[=+\-@]/, cell + ' starts with an apostrophe');
-  // The phone starts with + too.
-  assert.ok(text.includes("'+92300000000"), 'the phone column is guarded as well');
+  // The phone starts with + too, but a plain E.164 phone is a number, not a formula: it is written as it is (SB-6, verification bug 3).
+  assert.equal(text.includes("'+92300000000"), false, 'a plain phone has no apostrophe');
+  assert.ok(text.includes(',+923000000000,'), 'the phone is written as it is');
   const csv = customersCsv([{ id: 'k', name: '=cmd', email: '-x', phone: '@y', whatsapp: null, orderCount: 1, lastOrderAt: null, unsubscribed: true, deliveredCount: 0, totalSpent: 0, tags: [] }]);
   assert.ok(csv.includes("'=cmd,'@y,'-x,1,0,0,,yes"));
+  // plain E.164 phones are not guarded; anything else that starts with a formula character still is
+  const row = (name: string, phone: string) => ({ id: 'k', name, email: null, phone, whatsapp: null, orderCount: 1, lastOrderAt: null, unsubscribed: false, deliveredCount: 0, totalSpent: 0, tags: [] });
+  const lines = customersCsv([row('A', '+923001234567'), row('B', '+92300123456789012'), row('C', '+9230012345A'), row('+1+1', '+92300123456')]).split('\r\n');
+  assert.equal(lines[1], 'A,+923001234567,,1,0,0,,no', 'a plain phone: no apostrophe');
+  assert.equal(lines[2], "B,'+92300123456789012,,1,0,0,,no", 'too many digits is not a phone: guarded');
+  assert.equal(lines[3], "C,'+9230012345A,,1,0,0,,no", 'a letter in it: guarded');
+  assert.equal(lines[4], "'+1+1,+92300123456,,1,0,0,,no", 'a name that is a formula is still guarded');
 });
 
 test('export: the same filters as the list, capped at 5000 rows with a truncation header', async () => {

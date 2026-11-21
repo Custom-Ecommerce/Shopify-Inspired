@@ -146,9 +146,11 @@ export function Header(props: StoreLayoutProps) {
             : "py-3 lg:py-4"
         }`}
       >
-        <div className="flex items-center justify-between gap-4">
+        {/* SB-6 (verification bug 5): at 375 px the row was 403 px wide, because the store name could not shrink and pushed the cart button out. The
+            logo cell now takes what is left (min-w-0, truncated name) and the two button groups never shrink, so the cart button stays visible. */}
+        <div className="flex items-center justify-between gap-2 sm:gap-4">
           {/* Mobile Left Controls: Burger + Search Toggle */}
-          <div className="flex items-center gap-1.5 lg:hidden">
+          <div className="flex shrink-0 items-center gap-1.5 lg:hidden">
             <MobileNav
               {...(props as any)}
               store={store}
@@ -174,10 +176,10 @@ export function Header(props: StoreLayoutProps) {
           </div>
 
           {/* Brand Logo ("Local" script/geometric wordmark) */}
-          <div className="flex items-center lg:min-w-[160px]">
+          <div className="flex min-w-0 flex-1 items-center lg:min-w-[160px] lg:flex-none">
             <Link
               href={homeHref}
-              className="inline-flex items-center gap-2 text-2xl sm:text-3xl font-semibold tracking-tight text-[var(--mu-color-ink)] hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--mu-color-focus)] rounded-sm"
+              className="inline-flex min-w-0 max-w-full items-center gap-2 text-2xl sm:text-3xl font-semibold tracking-tight text-[var(--mu-color-ink)] hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--mu-color-focus)] rounded-sm"
             >
               {store?.logoUrl ? (
                 <img
@@ -186,7 +188,7 @@ export function Header(props: StoreLayoutProps) {
                   className="h-9 w-auto max-w-[150px] object-contain"
                 />
               ) : (
-                <span className="italic font-serif tracking-normal">
+                <span className="truncate italic font-serif tracking-normal">
                   {store?.name ?? "Local"}
                 </span>
               )}
@@ -206,7 +208,7 @@ export function Header(props: StoreLayoutProps) {
           </div>
 
           {/* Right Actions: Track/Account Outline Pill + Primary Cart Pill */}
-          <div className="flex items-center justify-end gap-2.5">
+          <div className="flex shrink-0 items-center justify-end gap-2.5">
             <Link
               href={trackHref}
               className={`hidden sm:inline-flex ${buttonVariants({

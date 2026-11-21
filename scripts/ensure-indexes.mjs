@@ -18,6 +18,9 @@
 //   ... the same line followed by --apply
 //   (root script: pnpm ensure:indexes -- --apply, with SELLER_MONGODB_URI exported in the shell)
 import mongoose from 'mongoose';
+// MUST stay above the db-schemas import: it switches autoCreate and autoIndex off before any model is compiled (SB-6, verification bug 1: the dry
+// run used to create every collection and index on connect). Only --apply creates anything, through createIndexes() below.
+import { NO_AUTO_CONNECT_OPTIONS } from './lib/mongoose-no-auto.mjs';
 import '../packages/db-schemas/src/index.ts';
 import { isMissingCollection, planAll, targetDecision } from './lib/ensure-indexes-plan.mjs';
 
@@ -57,7 +60,7 @@ async function main() {
   const decision = targetDecision(databaseNameOf(uri), { apply, iKnowThisIsReal });
   if (!decision.ok) return fail('The database name does not contain "throwaway". Add --i-know-this-is-real to run on it.');
 
-  await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });
+  await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000, ...NO_AUTO_CONNECT_OPTIONS });
   try {
     const models = Object.values(mongoose.models).map((model) => ({ model: model.modelName, collection: model.collection.name, declared: model.schema.indexes() }));
     const existing = {};

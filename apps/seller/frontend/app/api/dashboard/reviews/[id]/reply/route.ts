@@ -6,6 +6,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const { id } = await context.params;
   return proxyPost(req, `/api/reviews/${id}/reply`, {
     auth: "dashboard",
+    bindStore: false, // the backend schema is strict and takes the store from x-store-id: a store in the body is a 400 (SB-6)
     logScope: "[api/dashboard/reviews/:id/reply]",
   });
 }

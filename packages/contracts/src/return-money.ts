@@ -50,12 +50,18 @@ export interface ReversalInput {
   previousBase: number;
   /** What earlier reversals already gave back (positive). */
   previousAmount: number;
+  /**
+   * SB-6 (verification bug 6): true when THIS return completes the received quantities of the whole order (everythingReceived, in the order the
+   * returns were received). It is the last one: it takes everything that is left of the commission, whatever rounding the earlier parts made.
+   */
+  completesOrder?: boolean;
 }
 
 /**
  * The commission this return gives back, in whole rupees. Proportional, rounded to the rupee; when this return brings the order's returned
  * base up to its commission base (everything is back) it takes whatever remains of the commission, so the parts add up to exactly the
- * original; it is never more than what is left of the original commission.
+ * original; it is never more than what is left of the original commission. A return that completesOrder (the received quantities of the whole
+ * order are back with it) always takes what is left, so split returns add up exactly even when each part was rounded.
  */
 export function commissionReversal(input: ReversalInput): number {
   const commission = whole(input.commission);
@@ -63,6 +69,7 @@ export function commissionReversal(input: ReversalInput): number {
   const previousAmount = Math.min(commission, whole(input.previousAmount));
   const left = commission - previousAmount;
   if (commission <= 0 || base <= 0 || left <= 0) return 0;
+  if (input.completesOrder === true) return left;
   const room = Math.max(0, base - whole(input.previousBase));
   const returned = Math.min(whole(input.returnedBase), room);
   if (returned <= 0) return 0;

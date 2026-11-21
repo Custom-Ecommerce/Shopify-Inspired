@@ -4,7 +4,7 @@ import { reverseForReturn, type ReturnReversalResult } from '@/lib/commission';
 import { HttpError } from '@/lib/http';
 import { notifyReturnDecision } from '@/lib/notifications';
 import { restoreOrderStock, stockRestoreSummary, type RestoreLine } from '@/lib/order-stock';
-import { orderLinesOf, refundCapOf } from '@/lib/returns';
+import { completionOf, orderLinesOf, refundCapOf } from '@/lib/returns';
 import { Order, Return, writeAuditLog } from '@/lib/services';
 
 /*
@@ -125,7 +125,7 @@ export async function receiveReturn(storeId: string, id: string, actor: Actor, b
     received.push({ productId: item.productId, variantId: item.variantId, quantity: item.quantity, restock: item.restock });
   }
 
-  const updated = (await Return.findOneAndUpdate({ _id: id, store: storeId, status: 'approved' }, { $set: { status: 'received', received } }, { new: true }).lean()) as unknown as Row | null;
+  const updated = (await Return.findOneAndUpdate({ _id: id, store: storeId, status: 'approved' }, { $set: { status: 'received', received, receivedAt: new Date() } }, { new: true }).lean()) as unknown as Row | null;
   if (!updated) {
     const latest = await readReturn(storeId, id);
     if (!latest) throw returnNotFound();
@@ -223,7 +223,10 @@ export async function recordRefund(storeId: string, id: string, actor: Actor, bo
   if (current.status !== 'received') {
     throw new HttpError(409, current.status === 'refunded' ? 'This return is already fully refunded.' : 'A refund can only be recorded after the items were received.', 'RETURN_STATUS_CHANGED');
   }
-  const cap = refundCapOf(current, order) ?? 0;
+  // SB-6 (bug 6): the return that completes the received quantities of the whole order takes the order base minus what the earlier ones took.
+  const siblings = (await Return.find({ store: storeId, order: current.order, status: { $in: ['received', 'refunded'] } }).lean()) as unknown as Row[];
+  const completion = completionOf(current, siblings, order);
+  const cap = refundCapOf(current, order, completion.completes ? completion.earlierBase : null) ?? 0;
   const recorded = whole(current.refundAmount);
   const room = refundRoom(cap, recorded);
   if (body.amount > room) {
@@ -251,6 +254,7 @@ export async function recordRefund(storeId: string, id: string, actor: Actor, bo
     returnId: updated._id,
     order: { _id: order._id, store: order.store, orderId: String(order.orderId ?? ''), paymentMethod: order.paymentMethod },
     returnedBase: cap,
+    completesOrder: completion.completes,
   });
   await audit('return.refund', actor, id, { storeId, returnNumber: updated.returnNumber ?? null, amount: body.amount, method: body.method, completed });
   return { doc: updated, cap, completed, reversal };

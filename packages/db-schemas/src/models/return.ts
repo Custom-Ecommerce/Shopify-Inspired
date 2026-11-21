@@ -64,6 +64,8 @@ export interface IReturn extends Document {
   /** The seller's reason when a return is rejected. Never copied to the audit log. */
   rejectReason?: string | null;
   received?: IReturnReceived[];
+  /** When the return was received (SB-6): the order of the returns of one order, for the one that completes it. Absent on older returns. */
+  receivedAt?: Date | null;
   refunds?: IReturnRefund[];
   /** When the return was rejected or fully refunded. */
   resolvedAt?: Date | null;
@@ -124,6 +126,7 @@ const ReturnSchema = new Schema<IReturn>(
     reasonCode: { type: String, enum: [...RETURN_REASON_VALUES] },
     rejectReason: { type: String, trim: true, maxlength: RETURN_REJECT_TEXT_MAX },
     received: { type: [ReturnReceivedSchema], default: undefined },
+    receivedAt: { type: Date },
     refunds: { type: [ReturnRefundSchema], default: undefined },
     resolvedAt: { type: Date },
   },

@@ -155,3 +155,16 @@ test('what is left to refund is the cap less what is recorded, never below 0', (
   assert.equal(refundRoom(900, 1200), 0);
   assert.equal(refundRoom(0, 0), 0);
 });
+
+// SB-6 (verification bug 6): the return that completes the received quantities of the order takes everything that is left of the commission.
+test('commissionReversal: completesOrder takes what is left, whatever the earlier parts rounded to', () => {
+  // 2000 with a discount of 150: commission 74, three returns of 925 + 462 + 463; the first two took 37 and 18
+  const base = { commission: 74, orderBase: 1850, previousBase: 1387, previousAmount: 55 };
+  assert.equal(commissionReversal({ ...base, returnedBase: 463 }), 19, 'previous base 1387 + 463 = 1850 reaches the base: the old rule already took the rest here');
+  assert.equal(commissionReversal({ ...base, returnedBase: 462 }), 18, 'one rupee short of the base (rounded shares): proportional, not the rest');
+  assert.equal(commissionReversal({ ...base, returnedBase: 462, completesOrder: true }), 19, 'completesOrder: the rest, so 37 + 18 + 19 = 74');
+  assert.equal(commissionReversal({ ...base, returnedBase: 0, completesOrder: true }), 19);
+  assert.equal(commissionReversal({ commission: 74, orderBase: 1850, previousBase: 0, previousAmount: 0, returnedBase: 1850, completesOrder: true }), 74, 'a single full return');
+  assert.equal(commissionReversal({ ...base, previousAmount: 74, returnedBase: 462, completesOrder: true }), 0, 'never more than the original');
+  assert.equal(commissionReversal({ commission: 0, orderBase: 1850, previousBase: 0, previousAmount: 0, returnedBase: 500, completesOrder: true }), 0, 'no commission, nothing to give back');
+});

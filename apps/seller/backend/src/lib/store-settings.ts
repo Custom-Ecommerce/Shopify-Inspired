@@ -150,6 +150,17 @@ export function readAbandonedCartEmail(paymentSettings: unknown): boolean {
   return record(paymentSettings).abandonedCartEmail === true;
 }
 
+/**
+ * SB-6 (verification bug 11): the moment the abandoned cart email switch last went from off to on, or null (a store that switched it on before
+ * this field existed, which then has no lower bound). Only a cart left AFTER it is emailed: switching the email on never mails the carts that were
+ * already waiting. Private like the switch itself: it is never part of the settings answer.
+ */
+export function readAbandonedCartEmailSince(paymentSettings: unknown): Date | null {
+  const value = record(paymentSettings).abandonedCartEmailSince;
+  const date = value instanceof Date ? value : typeof value === 'string' || typeof value === 'number' ? new Date(value) : null;
+  return date !== null && !Number.isNaN(date.getTime()) ? date : null;
+}
+
 // ----------------------------------------------------------------------------------------------------------- returns
 
 /**
@@ -315,7 +326,10 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
     if (update.messages.emailFooter !== undefined) put('emailFooter', update.messages.emailFooter);
     // Sprint 5 EP-28: the switch is private (paymentSettings, never the public storefront object).
     if (update.messages.abandonedCartEmail !== undefined) {
+      const wasOn = pay.abandonedCartEmail === true;
       pay.abandonedCartEmail = update.messages.abandonedCartEmail;
+      // Set only on the transition off -> on (a save that repeats "on" keeps the moment), so carts left before it are never mailed.
+      if (update.messages.abandonedCartEmail === true && !wasOn) pay.abandonedCartEmailSince = new Date();
       set.paymentSettings = pay;
       fields.add('paymentSettings');
     }

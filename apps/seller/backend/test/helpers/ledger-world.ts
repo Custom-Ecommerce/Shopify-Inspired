@@ -61,15 +61,25 @@ export function matchRow(row: Row, filter: Row): boolean {
   });
 }
 
-const literal = (expr: unknown, doc: Row): unknown => (typeof expr === 'string' && expr.startsWith('$') ? doc[expr.slice(1)] : expr);
+const literal = (expr: unknown, doc: Row): unknown => {
+  if (typeof expr === 'string' && expr.startsWith('$')) return doc[expr.slice(1)];
+  // $ifNull: [value, fallback]; a missing field reads as null in MongoDB.
+  if (typeof expr === 'object' && expr !== null && '$ifNull' in expr) {
+    const [value, fallback] = (expr as { $ifNull: [unknown, unknown] }).$ifNull;
+    const got = literal(value, doc);
+    return got === undefined || got === null ? literal(fallback, doc) : got;
+  }
+  return expr;
+};
 
 function evalExpr(expr: any, doc: Row): number {
   if (typeof expr === 'number') return expr;
   if (typeof expr === 'string') return Number(literal(expr, doc));
   if (expr.$cond) {
     const [test, yes, no] = expr.$cond;
-    const [a, b] = test.$eq;
-    return literal(a, doc) === literal(b, doc) ? evalExpr(yes, doc) : evalExpr(no, doc);
+    const [x, y] = test.$eq ?? test.$ne;
+    const equal = literal(x, doc) === literal(y, doc);
+    return (test.$eq ? equal : !equal) ? evalExpr(yes, doc) : evalExpr(no, doc);
   }
   if (expr.$multiply) return (expr.$multiply as unknown[]).reduce<number>((product, part) => product * evalExpr(part, doc), 1);
   throw new Error('ledger-world: unsupported expression');

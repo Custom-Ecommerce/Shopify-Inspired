@@ -7,7 +7,7 @@ import { unsubscribedAmong } from '@/lib/customers';
 import { oid } from '@/lib/ledger-aggregates';
 import { databaseReady, enqueueEmail, storefrontHomeLink } from '@/lib/notifications';
 import { AbandonedCart, Store } from '@/lib/services';
-import { readAbandonedCartEmail, readMessages } from '@/lib/store-settings';
+import { readAbandonedCartEmail, readAbandonedCartEmailSince, readMessages } from '@/lib/store-settings';
 
 const notifications: typeof notificationsNs = unwrapCjs(notificationsNs);
 
@@ -44,27 +44,31 @@ export async function queueAbandonedCartEmails(now: Date = new Date()): Promise<
     const stores = (await Store.find({ status: 'active', 'paymentSettings.abandonedCartEmail': true })
       .select('name slug storefront paymentSettings')
       .lean()) as unknown as Row[];
-    const byId = new Map<string, { id: string; name: string; slug: string; footer: string | null; link: string }>();
+    const byId = new Map<string, { id: string; name: string; slug: string; footer: string | null; link: string; since: Date | null }>();
     for (const store of stores) {
       if (!readAbandonedCartEmail(store.paymentSettings)) continue;
       const slug = typeof store.slug === 'string' ? store.slug : '';
       const link = storefrontHomeLink(slug);
       if (link === null) continue;
-      byId.set(String(store._id), { id: String(store._id), name: typeof store.name === 'string' ? store.name : 'Your store', slug, footer: readMessages(store.storefront).emailFooter, link });
+      byId.set(String(store._id), { id: String(store._id), name: typeof store.name === 'string' ? store.name : 'Your store', slug, footer: readMessages(store.storefront).emailFooter, link, since: readAbandonedCartEmailSince(store.paymentSettings) });
     }
     if (byId.size === 0) return result;
 
-    const due = (await AbandonedCart.find({
-      store: { $in: [...byId.keys()].map((id) => oid(id)) },
-      status: 'open',
-      emailQueuedAt: null,
-      email: { $ne: null },
-      lastSeenAt: { $lte: new Date(now.getTime() - ABANDONED_CART_EMAIL_DELAY_MS) },
-      expiresAt: { $gt: now },
-    })
-      .sort({ lastSeenAt: 1 })
-      .limit(ABANDONED_EMAIL_BATCH)
-      .lean()) as unknown as Row[];
+    // One query per store, oldest activity first, at most ABANDONED_EMAIL_BATCH carts in all. A store that switched the email on at a moment (since)
+    // only mails carts whose last activity is AFTER it: the carts already waiting when it went on are left alone (SB-6, verification bug 11).
+    const cutoff = new Date(now.getTime() - ABANDONED_CART_EMAIL_DELAY_MS);
+    const due: Row[] = [];
+    for (const store of byId.values()) {
+      const room = ABANDONED_EMAIL_BATCH - due.length;
+      if (room <= 0) break;
+      const lastSeenAt: Record<string, Date> = { $lte: cutoff };
+      if (store.since !== null) lastSeenAt.$gt = store.since;
+      const rows = (await AbandonedCart.find({ store: oid(store.id), status: 'open', emailQueuedAt: null, email: { $ne: null }, lastSeenAt, expiresAt: { $gt: now } })
+        .sort({ lastSeenAt: 1 })
+        .limit(room)
+        .lean()) as unknown as Row[];
+      due.push(...rows);
+    }
 
     for (const cart of due) {
       const store = byId.get(String(cart.store));

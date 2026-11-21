@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import type { ReturnItemView, ReturnReceivedView, ReturnRefundView, SellerReturn } from '@markaz/contracts';
-import { grossOf, returnLineKey, returnedBase } from '@/lib/contracts';
+import { everythingReceived, grossOf, returnLineKey, returnedBase } from '@/lib/contracts';
 import { oid } from '@/lib/ledger-aggregates';
 import { Return } from '@/lib/services';
 
@@ -91,8 +91,12 @@ export function orderLinesOf(order: unknown): OrderLineRow[] {
 /**
  * The most that can be refunded on a return: the paid value of the quantities that came back (their price less their share of the order's
  * discount, delivery excluded), priced with the return's own line prices. Null until the return has been received.
+ *
+ * earlierBase (SB-6, verification bug 6) is given only for the return that COMPLETES the received quantities of the whole order
+ * (see completionOf): its base is then the order's own base (subtotal less discount) minus what the earlier returns took, so the caps of all
+ * the returns of an order add up to the order base exactly, however the discount share rounded in each part.
  */
-export function refundCapOf(returnDoc: unknown, order: unknown): number | null {
+export function refundCapOf(returnDoc: unknown, order: unknown, earlierBase: number | null = null): number | null {
   const doc = record(returnDoc);
   const received = Array.isArray(doc.received) ? (doc.received as unknown[]).map(record) : [];
   if (received.length === 0) return null;
@@ -103,7 +107,83 @@ export function refundCapOf(returnDoc: unknown, order: unknown): number | null {
     quantity: whole(entry.quantity),
   }));
   const o = record(order);
+  if (earlierBase !== null) return Math.max(0, whole(o.subtotal) - whole(o.discountAmount) - Math.max(0, whole(earlierBase)));
   return returnedBase(lines, { subtotal: whole(o.subtotal), discountAmount: whole(o.discountAmount) });
+}
+
+const COUNTED_STATUSES = new Set(['received', 'refunded']);
+
+/** When a return was received: receivedAt, else (a return from before SB-6) its last update, else its request. */
+function receivedKey(doc: Row): number {
+  return (asDate(doc.receivedAt) ?? asDate(doc.updatedAt) ?? asDate(doc.createdAt))?.getTime() ?? 0;
+}
+
+export interface ReturnCompletion {
+  /** True when this return is the one whose receipt brought every delivered quantity of the order back (everythingReceived). */
+  completes: boolean;
+  /** The refund caps of the returns received before this one (their proportional caps): what the completing return's base subtracts. */
+  earlierBase: number;
+}
+
+/**
+ * Whether a return is THE ONE that completes the received quantities of its whole order. The received (or refunded) returns of the order are
+ * taken in the order they were received (receivedAt, then _id); the first one at which everythingReceived holds is the completing one, and a
+ * later receipt cannot change that (nothing is left to return). siblings are the received or refunded returns of the same order (the
+ * return itself may be among them: its own row wins). One rule for the refund, the view, the list and the reconcile.
+ */
+export function completionOf(returnDoc: unknown, siblings: readonly unknown[], order: unknown): ReturnCompletion {
+  const doc = record(returnDoc);
+  const mine = String(doc._id ?? '');
+  const pool = new Map<string, Row>();
+  for (const sibling of siblings) {
+    const row = record(sibling);
+    if (COUNTED_STATUSES.has(String(row.status))) pool.set(String(row._id), row);
+  }
+  if (COUNTED_STATUSES.has(String(doc.status))) pool.set(mine, doc);
+  if (!pool.has(mine)) return { completes: false, earlierBase: 0 };
+  const lines = orderLinesOf(order);
+  const ordered = [...pool.values()].sort((a, b) => receivedKey(a) - receivedKey(b) || String(a._id).localeCompare(String(b._id)));
+  const back: Array<{ productId: string; variantId: string; quantity: number }> = [];
+  let earlierBase = 0;
+  for (const row of ordered) {
+    for (const entry of Array.isArray(row.received) ? (row.received as unknown[]).map(record) : []) {
+      back.push({ productId: String(entry.productId), variantId: String(entry.variantId), quantity: whole(entry.quantity) });
+    }
+    const complete = everythingReceived(lines, back);
+    if (String(row._id) === mine) return { completes: complete, earlierBase };
+    if (complete) return { completes: false, earlierBase };
+    earlierBase += refundCapOf(row, order) ?? 0;
+  }
+  return { completes: false, earlierBase };
+}
+
+/** The refund cap of a return with the rule of the whole order applied: the same number in the refund, the detail, the list and the reconcile. */
+export function refundCapFor(returnDoc: unknown, order: unknown, siblings: readonly unknown[]): number | null {
+  if (!COUNTED_STATUSES.has(String(record(returnDoc).status))) return refundCapOf(returnDoc, order);
+  const completion = completionOf(returnDoc, siblings, order);
+  return refundCapOf(returnDoc, order, completion.completes ? completion.earlierBase : null);
+}
+
+/**
+ * The refund cap of every return of one page (the seller's list), with ONE query for the received and refunded returns of the page's orders
+ * (the completion rule needs a return's siblings). ordersById holds the page's orders, read once by the caller. Keyed by the return id.
+ */
+export async function refundCapsForPage(storeId: string, rows: readonly Row[], ordersById: ReadonlyMap<string, Row>): Promise<Map<string, number | null>> {
+  const counted = rows.filter((row) => COUNTED_STATUSES.has(String(row.status)));
+  const orderRefs = new Map<string, unknown>();
+  for (const row of counted) orderRefs.set(String(row.order), row.order);
+  const siblings =
+    orderRefs.size === 0
+      ? []
+      : ((await Return.find({ store: oid(storeId), order: { $in: [...orderRefs.values()] }, status: { $in: [...COUNTED_STATUSES] } }).lean()) as unknown as Row[]);
+  const byOrder = new Map<string, Row[]>();
+  for (const sibling of siblings) byOrder.set(String(sibling.order), [...(byOrder.get(String(sibling.order)) ?? []), sibling]);
+  const caps = new Map<string, number | null>();
+  for (const row of rows) {
+    const order = ordersById.get(String(row.order));
+    caps.set(String(row._id), order ? refundCapFor(row, order, byOrder.get(String(row.order)) ?? []) : null);
+  }
+  return caps;
 }
 
 /** The gross price of the lines a return asks for (before any discount share): what the shopper sees as the value of the request. */

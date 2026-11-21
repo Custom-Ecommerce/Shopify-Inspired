@@ -1,0 +1,10 @@
+﻿SB6_NEWFILES.txt
+apps/seller/backend/scripts/lib/target-guard.mjs
+apps/seller/backend/test/ensure-indexes-dry-run.test.ts
+apps/seller/backend/test/mark-sellers-verified-guard.test.ts
+apps/seller/backend/test/return-completion.test.ts
+apps/seller/backend/test/returns-completion-routes.test.ts
+apps/seller/frontend/lib/settings-groups.ts
+apps/seller/frontend/test/settings-groups.test.ts
+scripts/lib/mongoose-no-auto.mjs
+themes/mustafa/test/header-width.test.mjs

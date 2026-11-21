@@ -223,6 +223,8 @@ export interface ReturnReversalInput {
   order: LedgerOrder;
   /** The returned base of THIS return: the price of the returned quantities less their discount share, delivery excluded. */
   returnedBase: number;
+  /** SB-6: true when this return completes the received quantities of the whole order (completionOf): it takes everything that is left of the commission. */
+  completesOrder?: boolean;
 }
 
 export type ReturnReversalResult =
@@ -253,7 +255,7 @@ export async function reverseForReturn(input: ReturnReversalInput): Promise<Retu
     const previousBase = reversals.reduce((sum, entry) => sum + num(entry.baseAmount), 0);
     const previousAmount = reversals.reduce((sum, entry) => sum + num(entry.balanceEffect), 0);
     const commission = Math.max(0, -num(original.balanceEffect));
-    const amount = commissionReversal({ commission, orderBase: num(original.baseAmount), returnedBase: input.returnedBase, previousBase, previousAmount });
+    const amount = commissionReversal({ commission, orderBase: num(original.baseAmount), returnedBase: input.returnedBase, previousBase, previousAmount, completesOrder: input.completesOrder === true });
     if (amount <= 0) return { outcome: 'nothing' };
 
     // The base recorded is what this return really adds to the order's returned base, so the next return's remainder check is exact.

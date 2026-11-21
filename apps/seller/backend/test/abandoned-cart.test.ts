@@ -394,6 +394,28 @@ test('switched on: ONE email per due cart, 2 hours after the last activity, once
   assert.equal((await queueAbandonedCartEmails(new Date(NOW.getTime() + 2 * HOUR))).queued, 1);
 });
 
+test('SB-6 (bug 11): switching the email on never mails the carts that were already waiting: only a cart left AFTER the switch went on', async () => {
+  emailWorld();
+  const switchedOn = new Date(NOW.getTime() - 150 * 60_000); // 2 h 30 min ago
+  world.stores[0]!.paymentSettings = { abandonedCartEmail: true, abandonedCartEmailSince: switchedOn };
+  const before = stale({ lastSeenAt: new Date(NOW.getTime() - 3 * HOUR), phone: '+923001110020' }); // left while the email was off
+  const after = stale({ lastSeenAt: new Date(NOW.getTime() - 140 * 60_000), phone: '+923001110021', email: 'sana@example.pk' }); // left after it went on, idle 2 h 20
+  const exactly = stale({ lastSeenAt: switchedOn, phone: '+923001110022', email: 'hira@example.pk' });
+  assert.deepEqual(await queueAbandonedCartEmails(NOW), { queued: 1, skippedUnsubscribed: 0 });
+  assert.deepEqual(queued().map((row) => row.to), ['sana@example.pk']);
+  assert.equal(before.emailQueuedAt, null, 'the older cart is never claimed, so it is never mailed');
+  assert.equal(exactly.emailQueuedAt, null, 'a cart last seen at the very moment of the switch is not after it');
+  assert.ok(after.emailQueuedAt instanceof Date);
+  assert.equal((await queueAbandonedCartEmails(new Date(NOW.getTime() + 5 * HOUR))).queued, 0, 'the old carts stay unmailed later too (they are not after the switch)');
+});
+
+test('a store that switched the email on before the field existed has no lower bound (as before)', async () => {
+  emailWorld();
+  world.stores[0]!.paymentSettings = { abandonedCartEmail: true };
+  stale({ lastSeenAt: new Date(NOW.getTime() - 30 * HOUR) });
+  assert.equal((await queueAbandonedCartEmails(NOW)).queued, 1);
+});
+
 test('a recovered or contacted cart is never emailed, even when it is old enough', async () => {
   emailWorld();
   world.stores[0]!.paymentSettings = { abandonedCartEmail: true };

@@ -609,6 +609,28 @@ test('the switch is saved in the messages group, kept private (paymentSettings, 
   assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, false);
 });
 
+test('SB-6 (bug 11): the moment the switch goes from off to on is recorded, only on that transition, and never shown to the seller', async () => {
+  const before = Date.now();
+  const on = await save({ messages: { abandonedCartEmail: true } });
+  const body = (await on.json()) as { settings: any };
+  const since = stores[STORE_A]!.paymentSettings.abandonedCartEmailSince as Date;
+  assert.ok(since instanceof Date && since.getTime() >= before && since.getTime() <= Date.now(), 'off -> on records the moment');
+  assert.equal(JSON.stringify(body).includes('abandonedCartEmailSince'), false, 'the answer holds only the switch');
+  assert.deepEqual(Object.keys(body.settings.messages).sort(), ['abandonedCartEmail', 'emailFooter', 'whatsappTemplate']);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await save({ messages: { abandonedCartEmail: true } });
+  assert.equal((stores[STORE_A]!.paymentSettings.abandonedCartEmailSince as Date).getTime(), since.getTime(), 'saving "on" again keeps the moment');
+  await save({ messages: { emailFooter: 'Questions?' } });
+  assert.equal((stores[STORE_A]!.paymentSettings.abandonedCartEmailSince as Date).getTime(), since.getTime(), 'another message field leaves it alone');
+
+  await save({ messages: { abandonedCartEmail: false } });
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, false);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await save({ messages: { abandonedCartEmail: true } });
+  assert.ok((stores[STORE_A]!.paymentSettings.abandonedCartEmailSince as Date).getTime() > since.getTime(), 'on again after off: a new moment');
+});
+
 test('the switch must be a boolean, and only the owner can change it', async () => {
   assert.equal((await save({ messages: { abandonedCartEmail: 'yes' } })).status, 400);
   assert.equal((await save({ messages: { abandonedCartEmail: 1 } })).status, 400);
