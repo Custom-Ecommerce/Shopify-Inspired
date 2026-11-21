@@ -53,6 +53,8 @@ export interface EarningsData {
   allTime: { balance: number; totalPaidOut: number };
   entries: { docs: EarningsEntry[]; page: number; limit: number; totalDocs: number; totalPages: number };
   payouts: EarningsPayout[];
+  /** Sprint 5 EP-13: the part of the summary that came from refunded returns (already netted into it). Absent from an older backend. */
+  returns?: { count: number; sales: number; commission: number };
 }
 
 /** "PKR 12,500". A negative amount reads "-PKR 500". */

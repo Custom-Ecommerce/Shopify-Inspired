@@ -42,6 +42,8 @@ Thumbs.db
 *.tmp
 *.bak
 
+graphify-out/
+
 # CSV files folder
 csv-files/
 # EP-01 verification run: holds test passwords and session tokens

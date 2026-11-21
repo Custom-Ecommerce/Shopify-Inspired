@@ -42,6 +42,8 @@ export const ACCOUNT_CODES = {
   BODY_INVALID: 'ACCOUNT_BODY_INVALID',
   /** 429 with Retry-After. */
   RATE_LIMITED: 'RATE_LIMITED',
+  /** 503 (Sprint 5 EP-11.US04.T04): APP_BASE_URL_SELLER is not usable, so a verification email could not carry its link. Nothing is sent. */
+  VERIFY_LINK_UNAVAILABLE: 'VERIFY_LINK_UNAVAILABLE',
 } as const;
 export type AccountCode = (typeof ACCOUNT_CODES)[keyof typeof ACCOUNT_CODES];
 export const EMAIL_NOT_VERIFIED = ACCOUNT_CODES.EMAIL_NOT_VERIFIED;

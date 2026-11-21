@@ -2,6 +2,7 @@ import type { CatalogPageData } from "./catalog";
 import type { ProductDetailVM } from "./product-detail";
 import type { ProductCardVM } from "./product-card";
 import type { CategoryVM } from "./chrome";
+import type { StorefrontProductReviews } from "../transport/types";
 
 /** Shell-level view-models consumed by a theme's Layout (ThemeModule contract v1). */
 export interface StoreVM {
@@ -47,6 +48,11 @@ export interface ProductPageProps {
   slug: string;
   /** Loaded on the server for a live store. Omitted by the demo, which loads it on the client. */
   product?: ProductDetailVM;
+  /**
+   * Sprint 5 EP-21.US01.T03: the product's approved reviews (first page, newest first) with the average and the count, read on the server under the
+   * product's cache tag. Omitted by the demo: a theme then uses useProductReviews, which reads them through the transport.
+   */
+  reviews?: StorefrontProductReviews | null;
 }
 export interface SearchPageProps {
   query: string;

@@ -58,6 +58,8 @@ export function failureCopy(failure: CheckoutFailure): string {
       return "This store is not accepting orders right now.";
     case "discount_rejected":
     case "payment_not_started":
+    // Sprint 5 EP-11.US02: the server's neutral sentence is shown as it is.
+    case "contact_blocked":
       return failure.message;
     case "unavailable":
       return "We could not place your order. Please try again.";

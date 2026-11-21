@@ -2,7 +2,7 @@ import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { Order, Product, StockMovement, Store } from '@/lib/services';
+import { BlockedContact, Order, Product, StockMovement, Store } from '@/lib/services';
 import { storefrontOrderCreatedResponseSchema, storefrontOrderLookupResponseSchema } from '@/lib/contracts';
 import { resetRateLimits } from '../src/lib/storefront/rate-limit';
 
@@ -27,6 +27,8 @@ let lookupPOST: (r: NextRequest, c: any) => Promise<Response>;
 before(async () => {
   process.env.SELLER_MONGODB_URI = 'mongodb://stub.invalid/seller';
   process.env.TRUSTED_PROXY_HOPS = '1';
+  // Sprint 5 EP-11.US02: the order route asks the blocklist one question before it places an order. These tests have no blocked contact.
+  (BlockedContact as any).exists = async () => null;
   createPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/route')).POST;
   lookupPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/lookup/route')).POST;
 });
@@ -271,6 +273,7 @@ test('creates an order: server totals, stock taken, customer and key saved, cont
   assert.equal(saved.idempotencyKey, key);
   assert.equal(saved.customerName, 'Sara Khan');
   assert.equal(saved.phone, '+923001234567', 'phone is stored as E.164');
+  assert.equal(saved.phoneKey, '+923001234567', 'Sprint 5 EP-10 (D-108): the normalized phone the customers are grouped by is stored with the order');
   assert.equal(saved.address, CUSTOMER.address);
   assert.equal(saved.city, 'Karachi');
   assert.equal(saved.paymentMethod, 'cod');
@@ -592,6 +595,7 @@ test('every Pakistani phone format is stored as E.164', async () => {
     await order({ customer: { ...CUSTOMER, phone } });
   }
   assert.deepEqual([...new Set(orders.map((o) => o.phone))], ['+923001234567']);
+  assert.deepEqual([...new Set(orders.map((o) => o.phoneKey))], ['+923001234567'], 'one phoneKey for every spelling');
 });
 
 test('every refused customer field is a 400 that names the field, with the UI bypassed', async () => {

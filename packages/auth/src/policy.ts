@@ -239,6 +239,15 @@ update: { actors: ['seller'], fields: { seller: ['status', 'note', 'courier', 't
 delete: { actors: [], fields: {} },
 },
 
+// Sprint 5 EP-11.US01 (D-107): the seller confirms, marks unreachable or cancels an unconfirmed COD order. Seller only: an admin never
+// decides for a store. Not in ORDER_ACTIONS (the route calls assertCan on this row directly, as the customer note route does).
+orderConfirmation: {
+read: { actors: [], fields: {} },
+create: { actors: [], fields: {} },
+update: { actors: ['seller'], fields: { seller: ['result', 'note'] } },
+delete: { actors: [], fields: {} },
+},
+
 orderCancel: {
 read: { actors: [], fields: {} },
 create: { actors: [], fields: {} },
@@ -321,8 +330,10 @@ delete: { actors: ['system'], fields: '*' },
 },
 };
 
-// B10.0 declarations. Sellers may create and update their store's discounts, and may change only a review's
-// status (ID-21). Deletes are admin and system only. Creating a review is system-only (the storefront writes it).
+// B10.0 declarations. Sellers may create and update their store's discounts. Sprint 5 EP-21 (D-108): a seller no longer changes a review's
+// status (the admin hides and shows reviews); the seller keeps only the reply. Deletes are admin and system only. Creating a review is
+// system-only (the public review route writes it as the system actor).
+export const SELLER_REVIEW_UPDATABLE_FIELDS = ['reply'] as const;
 Object.assign(POLICY_MATRIX, {
   discounts: {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
@@ -343,7 +354,7 @@ Object.assign(POLICY_MATRIX, {
   reviews: {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
     create: { actors: ['system'], fields: { system: '*' } },
-    update: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: ['status'] } },
+    update: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: SELLER_REVIEW_UPDATABLE_FIELDS } },
     delete: { actors: ['admin', 'system'], fields: '*' },
   },
 });
@@ -492,5 +503,54 @@ Object.assign(POLICY_MATRIX, {
     create: { actors: ['seller'], fields: { seller: '*' } },
     update: { actors: [], fields: {} },
     delete: { actors: [], fields: {} },
+  },
+});
+
+// Sprint 5 EP-10.US02 (D-107): the seller's private note and tags on a customer (CustomerNote). Customers themselves stay the
+// read-only derived "customers" row above. Seller only, of their own store (the route checks the store). Nobody creates or
+// deletes through the generic policy: the note route is one upsert, so it is an "update" of the customer's note.
+Object.assign(POLICY_MATRIX, {
+  customerNotes: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: [], fields: {} },
+    update: { actors: ['seller'], fields: { seller: ['note', 'tags'] } },
+    delete: { actors: [], fields: {} },
+  },
+});
+
+// Sprint 5 EP-11.US02 (D-107): the phones and emails a store refuses orders from. Seller only, of their own store (the route checks
+// the store); an admin has no row. Nobody updates a row: a contact is added or removed.
+export const SELLER_BLOCKED_CONTACT_CREATABLE_FIELDS = ['kind', 'value', 'reason'] as const;
+Object.assign(POLICY_MATRIX, {
+  blockedContacts: {
+    read: { actors: ['seller'], fields: { seller: '*' } },
+    create: { actors: ['seller'], fields: { seller: SELLER_BLOCKED_CONTACT_CREATABLE_FIELDS } },
+    update: { actors: [], fields: {} },
+    delete: { actors: ['seller'], fields: { seller: '*' } },
+  },
+});
+
+// Sprint 5 EP-13 (D-107, D-108): the seller's return actions: approve, reject (with a reason), receive (what came back and what is restocked)
+// and record a refund. Each is its own route and its own compare-and-set; the seller never writes the status or the totals directly.
+// Seller only, of their own store (the route checks the store); an admin has no row. The generic PATCH on `returns` stays as it was.
+export const SELLER_RETURN_ACTION_FIELDS = ['reason', 'items', 'amount', 'method', 'reference'] as const;
+Object.assign(POLICY_MATRIX, {
+  returnActions: {
+    read: { actors: [], fields: {} },
+    create: { actors: [], fields: {} },
+    update: { actors: ['seller'], fields: { seller: SELLER_RETURN_ACTION_FIELDS } },
+    delete: { actors: [], fields: {} },
+  },
+});
+
+// Sprint 5 EP-28 (D-107): abandoned carts. The public checkout route writes one as the system actor (create and refresh); the store's owner
+// reads them, marks one contacted (the status field only: the route allows no other move) and deletes one. An admin has no row.
+export const SELLER_ABANDONED_CART_UPDATABLE_FIELDS = ['status'] as const;
+Object.assign(POLICY_MATRIX, {
+  abandonedCarts: {
+    read: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['seller', 'system'], fields: { seller: SELLER_ABANDONED_CART_UPDATABLE_FIELDS, system: '*' } },
+    delete: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
   },
 });

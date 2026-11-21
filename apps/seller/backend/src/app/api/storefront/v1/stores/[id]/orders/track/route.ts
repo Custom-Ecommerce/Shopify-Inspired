@@ -1,8 +1,8 @@
-import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { normalizePhoneE164, storefrontOrderTrackingResponseSchema } from '@/lib/contracts';
+import { storefrontOrderTrackingResponseSchema } from '@/lib/contracts';
 import { Order } from '@/lib/services';
+import { matchOrderPhone } from '@/lib/storefront/order-phone';
 import { PRIVATE_NO_STORE_HEADERS, StorefrontHttpError, handleStorefrontError } from '@/lib/storefront/errors';
 import { toOrderTrackingDto, type OrderTrackingRow } from '@/lib/storefront/order-dto';
 import { parseLookupRequest, readJsonBody } from '@/lib/storefront/order-request';
@@ -13,13 +13,6 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const orderNotFound = (): StorefrontHttpError => new StorefrontHttpError(404, 'ORDER_NOT_FOUND', 'No order matches those details.');
-
-/** Both sides are E.164, so equal-length strings: compare without leaking where they differ. */
-function samePhone(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
-}
 
 /**
  * POST /api/storefront/v1/stores/:id/orders/track   body: { orderId, phone }
@@ -49,8 +42,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (!row) throw orderNotFound();
 
     // Older orders may hold a local phone format, so the stored value is normalised before it is compared.
-    const stored = normalizePhoneE164(row.phone ?? '');
-    if (stored === null || !samePhone(stored, phone)) throw orderNotFound();
+    if (matchOrderPhone(row.phone, phone) === null) throw orderNotFound();
 
     const body = storefrontOrderTrackingResponseSchema.parse({ data: toOrderTrackingDto(row) });
     return NextResponse.json(body, { headers: PRIVATE_NO_STORE_HEADERS });

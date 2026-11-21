@@ -17,6 +17,8 @@ import type {
   ModerationProductList,
 } from '../../../../../packages/contracts/src/moderation';
 
+import type { ModerationReview, ModerationReviewList } from '../../../../../packages/contracts/src/review';
+
 const { INTERNAL_SECRET_MIN_LENGTH, internalRequestHeaders } = unwrapCjs(signatureNs) as typeof signatureNs;
 
 const TIMEOUT_MS = 8000;
@@ -137,3 +139,21 @@ export const readPayoutDetails = (adminId: string, input: { storeId: string }): 
 
 export const readCommissionReport = (adminId: string, params: { storeId: string; period: string; from?: string; to?: string }): Promise<CommissionReport> =>
   send('GET', '/api/internal/commission/report' + query(params), adminId, undefined, 'Commission report');
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 5 EP-21.US01.T05 (D-108): review moderation. The reviews live in the seller database and only the seller backend can purge the
+// storefront's cache, so hiding and showing a review are signed calls to it, like the product moderation above.
+
+const REVIEW_LABEL = 'Review moderation';
+
+export type ReviewListFilters = Record<'page' | 'limit' | 'storeId' | 'status', string | undefined>;
+
+export function listModerationReviews(adminId: string, filters: Partial<ReviewListFilters>): Promise<ModerationReviewList> {
+  return send('GET', BASE_PATH + '/reviews' + query(filters), adminId, undefined, REVIEW_LABEL);
+}
+
+export const hideReview = (adminId: string, reviewId: string, reason: string): Promise<ModerationReview> =>
+  send('POST', BASE_PATH + '/reviews/hide', adminId, { reviewId, reason }, REVIEW_LABEL);
+
+export const unhideReview = (adminId: string, reviewId: string): Promise<ModerationReview> =>
+  send('POST', BASE_PATH + '/reviews/unhide', adminId, { reviewId }, REVIEW_LABEL);

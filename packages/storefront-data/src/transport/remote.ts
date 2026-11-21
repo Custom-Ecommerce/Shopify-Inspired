@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { storeTags } from "@markaz/platform-kit/cache-tags";
 import { PREVIEW_CREDENTIAL_HEADER } from "@markaz/platform-kit/preview";
-import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError } from "./errors";
+import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, ReturnRefusedError, ReviewRefusedError, TransportUnavailableError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
 import type {
   CartQuote,
@@ -14,6 +14,14 @@ import type {
   StorefrontOrder,
   StorefrontOrderTracking,
   StorefrontProductDetail,
+  StorefrontReturnCreated,
+  StorefrontReturnEligibility,
+  SubmitReturnInput,
+  SaveAbandonedCartInput,
+  StorefrontProductReviews,
+  StorefrontReviewCreated,
+  StorefrontReviewEligibility,
+  SubmitReviewInput,
   StorefrontProductSummary,
   StorefrontTransport,
   SubmitOrderPayload,
@@ -25,6 +33,12 @@ import {
   WireOrderCreated,
   WireOrderLookup,
   WireOrderTrackingEnvelope,
+  WireReturnCreatedEnvelope,
+  WireReturnEligibilityEnvelope,
+  WireAbandonedCartSavedEnvelope,
+  WireProductReviewsEnvelope,
+  WireReviewCreatedEnvelope,
+  WireReviewEligibilityEnvelope,
   WireCategoryList,
   WireProductDetailEnvelope,
   WireProductList,
@@ -112,7 +126,7 @@ interface ExchangeRequest {
   cached?: { tags: string[]; revalidateSeconds: number };
 }
 
-type Exchanger = (method: "GET" | "POST", path: string, request: ExchangeRequest) => Promise<Exchange>;
+type Exchanger = (method: "GET" | "POST" | "PUT", path: string, request: ExchangeRequest) => Promise<Exchange>;
 
 const defaultFetch: typeof fetch = (input, init) => globalThis.fetch(input, init);
 
@@ -194,6 +208,8 @@ export function toOrderRejection(body: unknown): OrderRejection | null {
       return { code: "store_inactive" };
     case "PAYMENT_NOT_STARTED":
       return { code: "payment_not_started", message: message ?? "The card payment could not be started." };
+    case "CONTACT_BLOCKED":
+      return { code: "contact_blocked", message: message ?? "We cannot take this order. Please contact the store." };
     case "DISCOUNT_REJECTED":
     case "DISCOUNT_USED_UP":
       return { code: "discount_rejected", reason: code === "DISCOUNT_USED_UP" ? "used_up" : (reason ?? "unknown"), message: message ?? "This code cannot be used." };
@@ -268,8 +284,116 @@ function makeExchanger(options: {
  * The order operations, over any exchanger. The paths are the same on the seller backend (under a store) and on the
  * BFF (under /api/storefront), so one implementation serves both, and the error mapping cannot drift between them.
  */
-function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submitTimeoutMs: number): OrderTransport {
+function makeOrderTransport(
+  exchange: Exchanger,
+  requireHttp: () => void,
+  submitTimeoutMs: number,
+  returnStyle: "backend" | "bff" = "backend",
+  /** The store the server-side transport is bound to: a product's reviews are then cached under that product's tag. The browser's BFF client has none. */
+  cachedStoreId: string | null = null,
+): OrderTransport {
+  /** 422 REVIEW_NOT_ELIGIBLE becomes a ReviewRefusedError carrying the store's sentence for the shopper. */
+  const throwIfReviewRefused = (result: Exchange): void => {
+    if (result.status !== 422 || errorCode(result.body) !== "REVIEW_NOT_ELIGIBLE") return;
+    const body = (result.body ?? {}) as { error?: { message?: unknown }; reason?: unknown; field?: unknown };
+    throw new ReviewRefusedError(
+      typeof body.error?.message === "string" ? body.error.message : "This item cannot be reviewed.",
+      typeof body.reason === "string" ? body.reason : null,
+      typeof body.field === "string" ? body.field : null,
+    );
+  };
+  /** 422 RETURN_NOT_ELIGIBLE becomes a ReturnRefusedError carrying the store's sentence for the shopper. */
+  const throwIfReturnRefused = (result: Exchange): void => {
+    if (result.status !== 422 || errorCode(result.body) !== "RETURN_NOT_ELIGIBLE") return;
+    const body = (result.body ?? {}) as { error?: { message?: unknown }; reason?: unknown; field?: unknown };
+    throw new ReturnRefusedError(
+      typeof body.error?.message === "string" ? body.error.message : "This order cannot be returned.",
+      typeof body.reason === "string" ? body.reason : null,
+      typeof body.field === "string" ? body.field : null,
+    );
+  };
   return {
+    async getReturnEligibility(input: OrderLookupInput): Promise<StorefrontReturnEligibility | null> {
+      requireHttp();
+      // The seller backend has the order number in the path and the phone in the query; the BFF takes both in a POST body.
+      const result =
+        returnStyle === "backend"
+          ? await exchange("GET", "/orders/" + encodeURIComponent(input.orderId) + "/return-eligibility?phone=" + encodeURIComponent(input.phone), { retry: true })
+          : await exchange("POST", "/orders/return-eligibility", { body: { orderId: input.orderId, phone: input.phone }, retry: true });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfRefused(result);
+      return unwrap(result, WireReturnEligibilityEnvelope, "return eligibility").data;
+    },
+
+    async submitReturn(input: SubmitReturnInput): Promise<StorefrontReturnCreated | null> {
+      requireHttp();
+      const body = { phone: input.phone, items: input.items, reasonCode: input.reasonCode, ...(input.note ? { note: input.note } : {}) };
+      const result =
+        returnStyle === "backend"
+          ? await exchange("POST", "/orders/" + encodeURIComponent(input.orderId) + "/returns", { body, retry: false })
+          : await exchange("POST", "/orders/returns", { body: { orderId: input.orderId, ...body }, retry: false });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfReturnRefused(result);
+      throwIfRefused(result);
+      return unwrap(result, WireReturnCreatedEnvelope, "return request").data;
+    },
+
+    async getReviewEligibility(input: OrderLookupInput): Promise<StorefrontReviewEligibility | null> {
+      requireHttp();
+      // Like the return eligibility: the backend has the order number in the path and the phone in the query; the BFF takes both in a POST body.
+      const result =
+        returnStyle === "backend"
+          ? await exchange("GET", "/orders/" + encodeURIComponent(input.orderId) + "/review-eligibility?phone=" + encodeURIComponent(input.phone), { retry: true })
+          : await exchange("POST", "/orders/review-eligibility", { body: { orderId: input.orderId, phone: input.phone }, retry: true });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfRefused(result);
+      return unwrap(result, WireReviewEligibilityEnvelope, "review eligibility").data;
+    },
+
+    async submitReview(input: SubmitReviewInput): Promise<StorefrontReviewCreated | null> {
+      requireHttp();
+      const body = {
+        phone: input.phone,
+        productId: input.productId,
+        rating: input.rating,
+        ...(input.title ? { title: input.title } : {}),
+        body: input.body,
+        ...(input.displayName ? { displayName: input.displayName } : {}),
+      };
+      const result =
+        returnStyle === "backend"
+          ? await exchange("POST", "/orders/" + encodeURIComponent(input.orderId) + "/reviews", { body, retry: false })
+          : await exchange("POST", "/orders/reviews", { body: { orderId: input.orderId, ...body }, retry: false });
+      if (result.status === 404 && errorCode(result.body) === "ORDER_NOT_FOUND") return null;
+      throwIfReviewRefused(result);
+      throwIfRefused(result);
+      return unwrap(result, WireReviewCreatedEnvelope, "review").data;
+    },
+
+    async getProductReviews(slug: string, page = 1): Promise<StorefrontProductReviews> {
+      requireHttp();
+      const result =
+        returnStyle === "backend"
+          ? await exchange("GET", "/products/" + encodeURIComponent(slug) + "/reviews?page=" + page, {
+              retry: true,
+              // Read on the storefront server under the product's own tag, so revalidateStoreProduct (a review published, hidden, shown or answered) drops it.
+              ...(cachedStoreId === null ? {} : { cached: { tags: [storeTags.product(cachedStoreId, slug)], revalidateSeconds: CATALOG_REVALIDATE_SECONDS } }),
+            })
+          : await exchange("POST", "/reviews", { body: { slug, page }, retry: true });
+      throwIfRefused(result);
+      const parsed = unwrap(result, WireProductReviewsEnvelope, "product reviews");
+      return { reviews: parsed.data.reviews, summary: parsed.data.summary, page: parsed.page, totalPages: parsed.totalPages };
+    },
+
+    async saveAbandonedCart(input: SaveAbandonedCartInput): Promise<void> {
+      requireHttp();
+      // Writes are never retried. The backend takes a PUT; the BFF a POST like its other routes. The consent line is shown whenever this is called.
+      const body = { phone: input.phone, ...(input.email ? { email: input.email } : {}), consent: true, lines: input.lines };
+      const result = returnStyle === "backend" ? await exchange("PUT", "/abandoned-cart", { body, retry: false }) : await exchange("POST", "/abandoned-cart", { body, retry: false });
+      throwIfRefused(result);
+      unwrap(result, WireAbandonedCartSavedEnvelope, "abandoned cart");
+    },
+
     async quoteCart(input: CartQuoteInput): Promise<CartQuote> {
       requireHttp();
       // Sprint 4 EP-04.US02: the shipping city, so the quote uses the same rate the order will.
@@ -355,6 +479,9 @@ function makeOrderTransport(exchange: Exchanger, requireHttp: () => void, submit
  *   POST /orders/confirmation   the tab that placed an order reading it back with its token; 404 ORDER_NOT_FOUND becomes null
  *   POST /orders/track          customer tracking by id and phone (journey only); 404 ORDER_NOT_FOUND becomes null
  *   GET  /products?ids=         the Live products among these ids
+ *   GET  /orders/:number/review-eligibility?phone=, POST /orders/:number/reviews   Sprint 5 EP-21: review a delivered order (the number and the phone are the credential)
+ *   GET  /products/:slug/reviews?page=   a product's approved reviews, read under the product's cache tag
+ *   PUT  /abandoned-cart   Sprint 5 EP-28: keeps a cart the shopper left (phone and consent), priced by the server
  *
  * Reads retry once, and only when fetch itself fails. HTTP responses are never retried. Writes are never retried
  * automatically: the caller retries with the same idempotency key.
@@ -381,7 +508,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     }
   };
 
-  const orders = makeOrderTransport(exchange, requireHttp, options.submitTimeoutMs ?? DEFAULT_SUBMIT_REMOTE_TIMEOUT_MS);
+  const orders = makeOrderTransport(exchange, requireHttp, options.submitTimeoutMs ?? DEFAULT_SUBMIT_REMOTE_TIMEOUT_MS, "backend", options.storeId);
 
   const { storeId } = options;
   const productListTags = [storeTags.products(storeId), storeTags.static(storeId)];
@@ -394,6 +521,12 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     lookupOrder: orders.lookupOrder,
     confirmOrder: orders.confirmOrder,
     trackOrder: orders.trackOrder,
+    getReturnEligibility: orders.getReturnEligibility,
+    submitReturn: orders.submitReturn,
+    getReviewEligibility: orders.getReviewEligibility,
+    submitReview: orders.submitReview,
+    getProductReviews: orders.getProductReviews,
+    saveAbandonedCart: orders.saveAbandonedCart,
     getProductsByIds: orders.getProductsByIds,
 
     async getProducts(): Promise<StorefrontProductSummary[]> {
@@ -444,6 +577,6 @@ export function createBffTransport(options: BffTransportOptions = {}): OrderTran
     timeoutMs: options.timeoutMs ?? DEFAULT_BFF_TIMEOUT_MS,
     fetchImpl: options.fetchImpl ?? defaultFetch,
   });
-  return makeOrderTransport(exchange, () => undefined, options.submitTimeoutMs ?? DEFAULT_SUBMIT_BFF_TIMEOUT_MS);
+  return makeOrderTransport(exchange, () => undefined, options.submitTimeoutMs ?? DEFAULT_SUBMIT_BFF_TIMEOUT_MS, "bff");
 }
 /* @theme-integration-patch:remote */

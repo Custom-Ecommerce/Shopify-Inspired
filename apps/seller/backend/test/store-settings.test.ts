@@ -206,9 +206,10 @@ test('the last payment method cannot be switched off', async () => {
   const res = await save({ payments: { codEnabled: false } });
   assert.equal(res.status, 400);
   assert.equal(await fieldOf(res), 'payments.codEnabled');
-  // Card only needs a theme with card checkout (SB-11); the default theme has none, so this store uses Stiletto.
+  // Card only needs a theme with card checkout (SB-11); the default theme has none, so this store uses Stiletto. Sprint 5: and card has to be
+  // available on the platform (the switch and Stripe), or COD cannot go off at all (see the NO_USABLE_PAYMENT_METHOD tests below).
   stores[STORE_A]!.storefront.activeTheme = 'stiletto';
-  assert.equal((await save({ payments: { cardEnabled: true, codEnabled: false } })).status, 200);
+  await withCardEnv(CARD_ON, async () => assert.equal((await save({ payments: { cardEnabled: true, codEnabled: false } })).status, 200));
 });
 
 type Body = { code?: string; field?: string; error?: string; errors?: Array<{ message: string }> };
@@ -224,8 +225,10 @@ test('SB-11: COD cannot go off while the theme has no card checkout (422 CARD_CH
   assert.deepEqual(stores[STORE_A]!.paymentSettings, {}, 'nothing was written');
   stores[STORE_A]!.storefront.activeTheme = 'mustafa';
   assert.equal((await save({ payments: { codEnabled: false, cardEnabled: true } })).status, 422);
-  // Switching the theme in the same request makes it fine.
-  assert.equal((await save({ theme: { activeTheme: 'stiletto' }, payments: { codEnabled: false, cardEnabled: true } })).status, 200);
+  // Switching the theme in the same request makes it fine (Sprint 5: while card is available on the platform).
+  await withCardEnv(CARD_ON, async () =>
+    assert.equal((await save({ theme: { activeTheme: 'stiletto' }, payments: { codEnabled: false, cardEnabled: true } })).status, 200),
+  );
   assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, false);
   assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto');
 });
@@ -324,6 +327,81 @@ test('readiness lists every missing item', async () => {
   const result = await readiness();
   assert.equal(result.ready, false);
   assert.deepEqual(result.missing, ['profile', 'delivery', 'payout', 'product', 'email']);
+});
+
+// Sprint 5 EP-11.US04.T03: when every published product has nothing to buy, the checklist WARNS and never blocks.
+test('Sprint 5: a store whose published products are all out of stock gets a stock warning, still ready, and can go live', async () => {
+  complete();
+  ProductModel.exists = async (filter: any) => (filter.variants?.$elemMatch ? null : { _id: 'p' });
+  const result = (await readiness()) as { ready: boolean; missing: string[]; warnings?: Array<{ key: string; label: string; tab: string }> };
+  assert.equal(result.ready, true, 'a warning is not a blocker');
+  assert.deepEqual(result.missing, []);
+  assert.equal(result.warnings?.length, 1);
+  assert.equal(result.warnings?.[0]?.key, 'stock');
+  assert.equal(result.warnings?.[0]?.tab, 'inventory');
+  assert.match(result.warnings?.[0]?.label ?? '', /out of stock/i);
+  assert.equal((await goLive()).status, 200);
+  assert.equal(stores[STORE_A]!.status, 'active');
+});
+
+test('Sprint 5: the buyable test is the storefront rule (no tracking, or stock above 0), and a store with stock has no warnings field', async () => {
+  complete();
+  let seen: any = null;
+  ProductModel.exists = async (filter: any) => {
+    if (filter.variants?.$elemMatch) seen = filter.variants.$elemMatch;
+    return { _id: 'p' };
+  };
+  const result = (await readiness()) as { ready: boolean; warnings?: unknown };
+  assert.equal(result.ready, true);
+  assert.equal('warnings' in result, false);
+  assert.deepEqual(seen, { $or: [{ trackQuantity: false }, { stockQuantity: { $gt: 0 } }] });
+});
+
+test('Sprint 5: with no published product at all there is the product item to fix, and no stock warning on top', async () => {
+  complete();
+  publishedProduct = false;
+  const result = (await readiness()) as { missing: string[]; warnings?: unknown };
+  assert.deepEqual(result.missing, ['product']);
+  assert.equal('warnings' in result, false);
+});
+
+// Sprint 5 EP-11.US04.T01 (D-107): COD-only mode in the settings answer and the checklist.
+const CARD_ENV = ['CARD_CHECKOUT_ENABLED', 'STRIPE_SECRET_KEY', 'STRIPE_ORDER_WEBHOOK_SECRET'] as const;
+/** The platform offers card: the switch is on and Stripe is configured (STOREFRONT_URL is set by every test). */
+const CARD_ON = { STRIPE_SECRET_KEY: 'sk_test_stub', STRIPE_ORDER_WEBHOOK_SECRET: 'whsec_stub', CARD_CHECKOUT_ENABLED: 'true' } as const;
+async function withCardEnv(values: Partial<Record<(typeof CARD_ENV)[number], string>>, run: () => Promise<void>): Promise<void> {
+  const saved = Object.fromEntries(CARD_ENV.map((key) => [key, process.env[key]]));
+  for (const key of CARD_ENV) delete process.env[key];
+  Object.assign(process.env, values);
+  try {
+    await run();
+  } finally {
+    for (const key of CARD_ENV) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
+}
+const cardAvailable = async () => ((await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any }).settings.payments.cardAvailable;
+
+test('Sprint 5: the settings answer reports cardAvailable false while CARD_CHECKOUT_ENABLED is off, even with every Stripe value set', async () => {
+  const stripe = { STRIPE_SECRET_KEY: 'sk_test_stub', STRIPE_ORDER_WEBHOOK_SECRET: 'whsec_stub' };
+  await withCardEnv({}, async () => assert.equal(await cardAvailable(), false));
+  await withCardEnv({ ...stripe }, async () => assert.equal(await cardAvailable(), false, 'keys alone do not turn card on'));
+  await withCardEnv({ ...stripe, CARD_CHECKOUT_ENABLED: 'false' }, async () => assert.equal(await cardAvailable(), false));
+  await withCardEnv({ CARD_CHECKOUT_ENABLED: 'true' }, async () => assert.equal(await cardAvailable(), false, 'the switch alone is not enough without Stripe'));
+  await withCardEnv({ ...stripe, CARD_CHECKOUT_ENABLED: 'true' }, async () => assert.equal(await cardAvailable(), true));
+});
+
+test('Sprint 5: a store that is card only does not pass the payment check while card is off, and does when the platform offers card', async () => {
+  complete();
+  stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
+  await withCardEnv({}, async () => assert.ok(((await readiness()) as { missing: string[] }).missing.includes('payment')));
+  await withCardEnv({ STRIPE_SECRET_KEY: 'sk_test_stub', STRIPE_ORDER_WEBHOOK_SECRET: 'whsec_stub', CARD_CHECKOUT_ENABLED: 'true' }, async () =>
+    assert.equal(((await readiness()) as { missing: string[] }).missing.includes('payment'), false),
+  );
+  stores[STORE_A]!.paymentSettings = { codEnabled: true, cardEnabled: false };
+  await withCardEnv({}, async () => assert.equal(((await readiness()) as { missing: string[] }).missing.includes('payment'), false, 'COD alone is a payment method'));
 });
 
 test('go-live is refused with 422 and the missing items until the checklist passes', async () => {
@@ -476,7 +554,7 @@ test('the WhatsApp text and the email footer are saved in the messages group, re
   const res = await save({ messages: { whatsappTemplate: 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}', emailFooter: 'Questions? Call 0300 1234567.' } });
   assert.equal(res.status, 200);
   const { settings } = (await res.json()) as { settings: any };
-  assert.deepEqual(settings.messages, { whatsappTemplate: 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}', emailFooter: 'Questions? Call 0300 1234567.' });
+  assert.deepEqual(settings.messages, { whatsappTemplate: 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}', emailFooter: 'Questions? Call 0300 1234567.', abandonedCartEmail: false });
   assert.equal(stores[STORE_A]!.storefront.whatsappTemplate, 'Hi {customerName}, order {orderNumber} from {storeName}: {trackingLink}');
   assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the other storefront keys are kept');
 
@@ -502,4 +580,254 @@ test('the messages group is for the owner only: Seller B and an admin cannot cha
   assert.equal((await save({ messages: { emailFooter: 'Hacked' } }, tokenB)).status, 403);
   assert.equal((await save({ messages: { emailFooter: 'Hacked' } }, tokenAdmin)).status, 403);
   assert.equal(stores[STORE_A]!.storefront.emailFooter, undefined);
+});
+
+// Sprint 5 EP-28.US01.T05 (D-107): the optional abandoned cart email switch, in the messages group.
+test('the abandoned cart email is OFF by default: the settings answer says false and nothing is stored until the seller turns it on', async () => {
+  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  assert.equal(((await read.json()) as { settings: any }).settings.messages.abandonedCartEmail, false);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, undefined);
+});
+
+test('the switch is saved in the messages group, kept private (paymentSettings, never the public storefront object), read back, and can be turned off again', async () => {
+  const on = await save({ messages: { abandonedCartEmail: true } });
+  assert.equal(on.status, 200);
+  assert.equal(((await on.json()) as { settings: any }).settings.messages.abandonedCartEmail, true);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, true);
+  assert.equal('abandonedCartEmail' in stores[STORE_A]!.storefront, false, 'the public storefront object never carries it');
+  assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the other storefront keys are kept');
+
+  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  assert.equal(((await read.json()) as { settings: any }).settings.messages.abandonedCartEmail, true);
+
+  const other = await save({ messages: { emailFooter: 'Questions? Call 0300 1234567.' } });
+  assert.equal(other.status, 200);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, true, 'a change of another message field leaves the switch alone');
+
+  const off = await save({ messages: { abandonedCartEmail: false } });
+  assert.equal(((await off.json()) as { settings: any }).settings.messages.abandonedCartEmail, false);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, false);
+});
+
+test('SB-6 (bug 11): the moment the switch goes from off to on is recorded, only on that transition, and never shown to the seller', async () => {
+  const before = Date.now();
+  const on = await save({ messages: { abandonedCartEmail: true } });
+  const body = (await on.json()) as { settings: any };
+  const since = stores[STORE_A]!.paymentSettings.abandonedCartEmailSince as Date;
+  assert.ok(since instanceof Date && since.getTime() >= before && since.getTime() <= Date.now(), 'off -> on records the moment');
+  assert.equal(JSON.stringify(body).includes('abandonedCartEmailSince'), false, 'the answer holds only the switch');
+  assert.deepEqual(Object.keys(body.settings.messages).sort(), ['abandonedCartEmail', 'emailFooter', 'whatsappTemplate']);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await save({ messages: { abandonedCartEmail: true } });
+  assert.equal((stores[STORE_A]!.paymentSettings.abandonedCartEmailSince as Date).getTime(), since.getTime(), 'saving "on" again keeps the moment');
+  await save({ messages: { emailFooter: 'Questions?' } });
+  assert.equal((stores[STORE_A]!.paymentSettings.abandonedCartEmailSince as Date).getTime(), since.getTime(), 'another message field leaves it alone');
+
+  await save({ messages: { abandonedCartEmail: false } });
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, false);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await save({ messages: { abandonedCartEmail: true } });
+  assert.ok((stores[STORE_A]!.paymentSettings.abandonedCartEmailSince as Date).getTime() > since.getTime(), 'on again after off: a new moment');
+});
+
+test('the switch must be a boolean, and only the owner can change it', async () => {
+  assert.equal((await save({ messages: { abandonedCartEmail: 'yes' } })).status, 400);
+  assert.equal((await save({ messages: { abandonedCartEmail: 1 } })).status, 400);
+  assert.equal((await save({ messages: { abandonedCartEmail: true } }, tokenB)).status, 403);
+  assert.equal((await save({ messages: { abandonedCartEmail: true } }, tokenAdmin)).status, 403);
+  assert.equal(stores[STORE_A]!.paymentSettings.abandonedCartEmail, undefined);
+});
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 5 (D-107, SB-1 follow-up): COD cannot go off while card is not available
+
+test('Sprint 5: COD cannot go off while card is not available: 422 NO_USABLE_PAYMENT_METHOD on payments, and nothing is written', async () => {
+  stores[STORE_A]!.storefront.activeTheme = 'stiletto';
+  const stripe = { STRIPE_SECRET_KEY: 'sk_test_stub', STRIPE_ORDER_WEBHOOK_SECRET: 'whsec_stub' };
+  // Platform switch off (the default), the switch on without Stripe, and Stripe keys without the switch: card is not available in any of them.
+  for (const env of [{}, { CARD_CHECKOUT_ENABLED: 'true' }, { ...stripe }, { ...stripe, CARD_CHECKOUT_ENABLED: 'false' }]) {
+    await withCardEnv(env, async () => {
+      for (const payments of [{ codEnabled: false, cardEnabled: true }, { codEnabled: false }]) {
+        const res = await save({ payments });
+        assert.equal(res.status, 422, JSON.stringify(env) + JSON.stringify(payments));
+        const body = (await res.json()) as Body;
+        assert.equal(body.code, 'NO_USABLE_PAYMENT_METHOD');
+        assert.equal(body.field, 'payments');
+        assert.match(body.errors?.[0]?.message ?? '', /Cash on delivery has to stay on/);
+      }
+    });
+  }
+  assert.deepEqual(stores[STORE_A]!.paymentSettings, {}, 'nothing was written');
+  assert.equal(audits.length, 0);
+});
+
+test('Sprint 5: COD may go off when card is available, and COD only is always fine', async () => {
+  stores[STORE_A]!.storefront.activeTheme = 'stiletto';
+  await withCardEnv({}, async () => {
+    assert.equal((await save({ payments: { codEnabled: true, cardEnabled: false } })).status, 200);
+    assert.equal((await save({ payments: { codEnabled: true, cardEnabled: true } })).status, 200);
+  });
+  await withCardEnv(CARD_ON, async () => {
+    assert.equal((await save({ payments: { codEnabled: false, cardEnabled: true } })).status, 200);
+    assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, false);
+  });
+});
+
+test('Sprint 5: the old "keep one method on" 400 stays first, and the theme rule keeps its own 422 on a theme without card checkout', async () => {
+  await withCardEnv({}, async () => {
+    const both = await save({ payments: { codEnabled: false, cardEnabled: false } });
+    assert.equal(both.status, 400);
+    assert.equal(await fieldOf(both), 'payments.codEnabled');
+    // The default theme cannot take card, so the more specific SB-11 answer wins.
+    const theme = await save({ payments: { codEnabled: false, cardEnabled: true } });
+    assert.equal(theme.status, 422);
+    assert.equal(((await theme.json()) as Body).code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
+  });
+});
+
+test('Sprint 5: the rule judges a payments change only: a store already without a usable method can still save its profile', async () => {
+  stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
+  stores[STORE_A]!.storefront.activeTheme = 'stiletto';
+  await withCardEnv({}, async () => {
+    assert.equal((await save({ profile: { city: 'Lahore' } })).status, 200);
+    assert.equal((await save({ payments: { codEnabled: true } })).status, 200);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 5 EP-11.US01.T01 and US03.T01 (D-107): the 'fraud' group
+
+const readFraudSettings = async () => ((await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any }).settings.fraud;
+
+const THIRTY_CITIES = [
+  'Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad', 'Multan', 'Peshawar', 'Quetta', 'Hyderabad', 'Gujranwala',
+  'Sialkot', 'Sargodha', 'Bahawalpur', 'Sukkur', 'Larkana', 'Sheikhupura', 'Rahim Yar Khan', 'Jhang', 'Dera Ghazi Khan', 'Gujrat',
+  'Sahiwal', 'Wah Cantt', 'Mardan', 'Kasur', 'Okara', 'Mingora', 'Nawabshah', 'Chiniot', 'Kotri', 'Kamoke',
+];
+
+test('fraud: a store that never saved the group reads mode off and no rules', async () => {
+  assert.deepEqual(await readFraudSettings(), { codConfirmation: 'off', riskRules: { flagOrderValueAbove: null, flaggedCities: [], flagReturnsAtLeast: null } });
+});
+
+test('fraud: the mode and the rules are saved in paymentSettings (never in storefront), audited by group and field, and read back', async () => {
+  const res = await save({
+    fraud: { codConfirmation: 'flagged', riskRules: { flagOrderValueAbove: 15000, flaggedCities: ['karachi', 'Quetta'], flagReturnsAtLeast: 2 } },
+  });
+  assert.equal(res.status, 200);
+  const settings = ((await res.json()) as { settings: any }).settings;
+  assert.deepEqual(settings.fraud, {
+    codConfirmation: 'flagged',
+    riskRules: { flagOrderValueAbove: 15000, flaggedCities: ['Karachi', 'Quetta'], flagReturnsAtLeast: 2 },
+  });
+  assert.equal(stores[STORE_A]!.paymentSettings.fraud.codConfirmation, 'flagged');
+  assert.equal('fraud' in stores[STORE_A]!.storefront, false, 'the public storefront reads storefront, so the rules are not kept there');
+  assert.equal(JSON.stringify(stores[STORE_A]!.storefront).includes('Quetta'), false);
+  assert.deepEqual(await readFraudSettings(), settings.fraud);
+  assert.equal(audits.length, 1);
+  assert.deepEqual(audits[0]!.details.groups, ['fraud']);
+  assert.deepEqual(audits[0]!.details.fields, ['paymentSettings']);
+});
+
+test('fraud: only the fields sent change; null clears a rule; the payment switches saved before are kept', async () => {
+  stores[STORE_A]!.paymentSettings = { codEnabled: true, cardEnabled: false };
+  await save({ fraud: { codConfirmation: 'all', riskRules: { flagOrderValueAbove: 9000, flaggedCities: ['Lahore'], flagReturnsAtLeast: 3 } } });
+  await save({ fraud: { riskRules: { flagOrderValueAbove: null } } });
+  assert.deepEqual(await readFraudSettings(), {
+    codConfirmation: 'all',
+    riskRules: { flagOrderValueAbove: null, flaggedCities: ['Lahore'], flagReturnsAtLeast: 3 },
+  });
+  await save({ fraud: { codConfirmation: 'off' } });
+  assert.equal((await readFraudSettings()).codConfirmation, 'off');
+  assert.equal((await readFraudSettings()).riskRules.flaggedCities.length, 1, 'the rules stay while the mode is off');
+  assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, true);
+  assert.equal(stores[STORE_A]!.paymentSettings.cardEnabled, false);
+});
+
+test('fraud: a payments save keeps the saved fraud group', async () => {
+  await save({ fraud: { codConfirmation: 'flagged' } });
+  await save({ payments: { codEnabled: true, cardEnabled: false } });
+  assert.equal((await readFraudSettings()).codConfirmation, 'flagged');
+});
+
+test('fraud: bad values are 400 and name the field; nothing is written', async () => {
+  const cases: Array<[unknown, string]> = [
+    [{ codConfirmation: 'sometimes' }, 'fraud.codConfirmation'],
+    [{ riskRules: { flagOrderValueAbove: 0 } }, 'fraud.riskRules.flagOrderValueAbove'],
+    [{ riskRules: { flagOrderValueAbove: -5 } }, 'fraud.riskRules.flagOrderValueAbove'],
+    [{ riskRules: { flagOrderValueAbove: 1500.5 } }, 'fraud.riskRules.flagOrderValueAbove'],
+    [{ riskRules: { flagOrderValueAbove: '15000' } }, 'fraud.riskRules.flagOrderValueAbove'],
+    [{ riskRules: { flagReturnsAtLeast: 0 } }, 'fraud.riskRules.flagReturnsAtLeast'],
+    [{ riskRules: { flagReturnsAtLeast: 11 } }, 'fraud.riskRules.flagReturnsAtLeast'],
+    [{ riskRules: { flagReturnsAtLeast: 2.5 } }, 'fraud.riskRules.flagReturnsAtLeast'],
+    [{ riskRules: { flaggedCities: ['Atlantis'] } }, 'fraud.riskRules.flaggedCities.0'],
+    [{ riskRules: { flaggedCities: ['Karachi', 'karachi'] } }, 'fraud.riskRules.flaggedCities'],
+    [{ riskRules: { flaggedCities: [...THIRTY_CITIES, 'Hafizabad'] } }, 'fraud.riskRules.flaggedCities'],
+    [{ banana: true }, 'banana'],
+    [{ riskRules: { banana: 1 } }, 'banana'],
+  ];
+  for (const [fraud, field] of cases) {
+    const res = await save({ fraud });
+    assert.equal(res.status, 400, JSON.stringify(fraud).slice(0, 80));
+    assert.equal(await fieldOf(res), field, JSON.stringify(fraud).slice(0, 80));
+  }
+  assert.deepEqual(stores[STORE_A]!.paymentSettings, {});
+  assert.equal(audits.length, 0);
+});
+
+test('fraud: 30 cities are accepted, and so are the edges of the order value and the returns count', async () => {
+  const res = await save({ fraud: { riskRules: { flaggedCities: THIRTY_CITIES, flagOrderValueAbove: 1, flagReturnsAtLeast: 10 } } });
+  assert.equal(res.status, 200);
+  assert.equal((await readFraudSettings()).riskRules.flaggedCities.length, 30);
+});
+
+test("fraud: Seller B cannot change Seller A's fraud settings and an admin session is refused", async () => {
+  assert.equal((await save({ fraud: { codConfirmation: 'all' } }, tokenB)).status, 403);
+  assert.equal((await save({ fraud: { codConfirmation: 'all' } }, tokenAdmin)).status, 403);
+  assert.equal((await readFraudSettings()).codConfirmation, 'off');
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 5 EP-13.US01.T02 (D-107): the 'returns' group (the return window)
+
+const readReturnsSettings = async () => ((await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any }).settings.returns;
+
+test('returns: a store that never saved the window reads 7 days', async () => {
+  assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
+});
+
+test('returns: the window is saved in storefront, audited by group and field, and read back; 0 means no returns, 30 is the most', async () => {
+  for (const days of [14, 0, 30]) {
+    const res = await save({ returns: { returnWindowDays: days } });
+    assert.equal(res.status, 200, String(days));
+    assert.deepEqual(((await res.json()) as { settings: any }).settings.returns, { returnWindowDays: days });
+    assert.equal(stores[STORE_A]!.storefront.returnWindowDays, days);
+  }
+  assert.equal(audits.length, 3);
+  assert.deepEqual(audits[0]!.details.groups, ['returns']);
+  assert.deepEqual(audits[0]!.details.fields, ['storefront']);
+  assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the other storefront settings are kept');
+});
+
+test('returns: a window outside 0 to 30, a decimal or a text is 400 naming the field, and nothing is written', async () => {
+  for (const returnWindowDays of [-1, 31, 7.5, '7', null]) {
+    const res = await save({ returns: { returnWindowDays } });
+    assert.equal(res.status, 400, String(returnWindowDays));
+    assert.equal(await fieldOf(res), 'returns.returnWindowDays');
+  }
+  assert.equal('returnWindowDays' in stores[STORE_A]!.storefront, false);
+  assert.equal((await save({ returns: { banana: 1 } })).status, 400);
+  assert.equal(audits.length, 0);
+});
+
+test("returns: a stored value that is not a whole number from 0 to 30 reads as the default, and Seller B cannot change Seller A's window", async () => {
+  stores[STORE_A]!.storefront.returnWindowDays = 99;
+  assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
+  stores[STORE_A]!.storefront.returnWindowDays = 'soon';
+  assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
+  delete stores[STORE_A]!.storefront.returnWindowDays;
+  assert.equal((await save({ returns: { returnWindowDays: 3 } }, tokenB)).status, 403);
+  assert.equal((await save({ returns: { returnWindowDays: 3 } }, tokenAdmin)).status, 403);
+  assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
 });

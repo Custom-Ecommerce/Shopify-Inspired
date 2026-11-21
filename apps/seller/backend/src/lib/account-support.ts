@@ -84,6 +84,17 @@ export function sellerPortalLink(pathAndQuery: string): string | null {
   }
 }
 
+/**
+ * Sprint 5 EP-11.US04.T04: the confirm-your-email message must never go out without its link. The flows in @markaz/auth fall
+ * back to the words "the link could not be built" when the portal address is not usable; for a verification email that is
+ * worse than no email, so signup and resend ask this first. 503 VERIFY_LINK_UNAVAILABLE, and ONE log line (no address, no value).
+ */
+export function requireVerificationLink(): void {
+  if (sellerPortalLink('/verify-email') !== null) return;
+  console.error('[seller-backend] APP_BASE_URL_SELLER is missing or not a valid URL: no verification email was sent');
+  throw new HttpError(503, 'We cannot send the confirmation email right now. Please try again later.', ACCOUNT_CODES.VERIFY_LINK_UNAVAILABLE);
+}
+
 export function sellerAccountDeps(): AccountFlowDeps {
   return {
     users: User as unknown as AccountUserModelPort,

@@ -20,6 +20,9 @@
     "type-check:all": "pnpm -r run type-check",
     "check:env": "node scripts/check-env-coverage.mjs",
     "bootstrap:admin": "node scripts/bootstrap-admin-data.mjs",
+    "backfill:phone-key": "pnpm --filter @markaz/contracts exec node --import tsx ../../scripts/backfill-order-phone-key.mjs",
+    "migrate:commission-index": "pnpm --filter @markaz/contracts exec node --import tsx ../../scripts/migrate-commission-index.mjs",
+    "ensure:indexes": "pnpm --filter @markaz/contracts exec node --import tsx ../../scripts/ensure-indexes.mjs",
     "test": "pnpm -r --if-present run test",
     "dev:admin-frontend": "pnpm --filter @markaz/admin-frontend dev"
   },

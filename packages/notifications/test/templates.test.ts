@@ -42,6 +42,12 @@ const FULL: TemplateVars = {
   broadcastMessage: 'Everything is 20% off this weekend.',
   unsubscribeLink: 'https://seller.markazify.com/unsubscribe?s=1&e=a&t=b',
   emailFooter: 'Zara Lawn, Lahore',
+  // Sprint 5 EP-13: the return templates.
+  returnNumber: 'RET-7KQ4M2XA',
+  returnReason: 'The item was used',
+  // Sprint 5 EP-21: the new review's rating and text.
+  reviewRating: '5 out of 5',
+  reviewText: 'Soft fabric, true to size.\nWill order again.',
 };
 
 test('every template uses only variables it declares, and every declared variable is known', () => {
@@ -155,4 +161,42 @@ test('payout_voided gives the reason, escaped in HTML and as it is in the text',
   assert.match(out.subject, /a payout of Rs\. 12,500 was cancelled/);
   assert.match(out.text, /[؀-ۿ]/);
   assert.throws(() => renderTemplate('payout_voided', { ...FULL, voidReason: '' }), TemplateError);
+});
+
+// ---------------------------------------------------------------------------------------------------------------- Sprint 5 EP-21, EP-28
+
+test('review_received_seller: the reviewer, the product and the text are escaped in HTML, the text keeps its lines, and the link is an anchor', () => {
+  const out = renderTemplate('review_received_seller', {
+    ...FULL,
+    customerName: '<b>Ayesha</b>',
+    productName: 'Lawn <i>suit</i>',
+    reviewText: '<script>alert(1)</script> Nice & soft\nSecond line',
+  });
+  assert.equal(out.html.includes('<script>'), false);
+  assert.equal(out.html.includes('<b>Ayesha'), false);
+  assert.ok(out.html.includes('&lt;script&gt;alert(1)&lt;/script&gt; Nice &amp; soft<br>Second line'));
+  assert.ok(out.html.includes('<a href="https://seller.markazify.com/s/1/orders/2">'));
+  assert.ok(out.text.includes('<script>alert(1)</script> Nice & soft'), 'the plain text keeps the value as it is');
+  assert.match(out.subject, /^New review for /);
+  assert.equal(/[\r\n]/.test(out.subject), false);
+  assert.ok(out.text.indexOf('---') < out.text.search(/[؀-ۿ]/), 'Urdu follows English');
+});
+
+test('abandoned_cart: bilingual, the items keep their lines, the unsubscribe and store links are anchors, every value is escaped', () => {
+  const out = renderTemplate('abandoned_cart', {
+    ...FULL,
+    storeName: 'Zara <Lawn>',
+    items: 'Lawn suit (Blue) x 2 - Rs. 7,000\n<img src=x onerror=alert(1)> x 1 - Rs. 100',
+    total: 'Rs. 7,100',
+  });
+  assert.equal(out.html.includes('<img'), false, 'an item name is escaped');
+  assert.equal(out.html.includes('Zara <Lawn>'), false, 'the store name is escaped');
+  assert.ok(out.html.includes('Lawn suit (Blue) x 2 - Rs. 7,000<br>'));
+  assert.ok(out.html.includes('<a href="https://zara.markazify.com">'));
+  assert.ok(out.html.includes('<a href="https://seller.markazify.com/unsubscribe?s=1&amp;e=a&amp;t=b">'));
+  assert.ok(out.text.includes('To stop these emails: https://seller.markazify.com/unsubscribe?s=1&e=a&t=b'));
+  assert.ok(out.text.indexOf('---') < out.text.search(/[؀-ۿ]/), 'Urdu follows English');
+  assert.match(out.subject, /you left something in your cart/);
+  // No hole: a missing unsubscribe link refuses the message, so one can never go out without it.
+  assert.throws(() => renderTemplate('abandoned_cart', { ...FULL, unsubscribeLink: '' }), TemplateError);
 });

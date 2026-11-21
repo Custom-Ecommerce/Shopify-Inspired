@@ -209,3 +209,65 @@ export const WireRefusal = z.object({
   reason: z.string().optional(),
 });
 /* @theme-integration-patch:wire */
+
+/** Sprint 5 EP-13: the return eligibility and the return created. Mirror ReturnEligibility and ReturnCreated in @markaz/contracts. */
+export const WireReturnEligibilityEnvelope = z.object({
+  data: z.object({
+    eligible: z.boolean(),
+    reason: z.enum(["not_delivered", "window_closed", "returns_off", "card_order", "nothing_left"]).nullable(),
+    windowDays: z.number().int().min(0),
+    deliveredAt: z.string().nullable(),
+    windowEndsAt: z.string().nullable(),
+    lines: z.array(
+      z.object({
+        productId: z.string().min(1),
+        variantId: z.string().min(1),
+        productTitle: z.string(),
+        variantTitle: z.string(),
+        unitPrice: z.number().int().min(0),
+        deliveredQuantity: z.number().int().min(0),
+        returnableQuantity: z.number().int().min(0),
+      }),
+    ),
+  }),
+});
+
+export const WireReturnCreatedEnvelope = z.object({
+  data: z.object({ returnNumber: z.string().min(1), status: z.literal("requested") }),
+});
+
+/** Sprint 5 EP-21: the review eligibility, the review created and a product's reviews. Mirror ReviewEligibility, ReviewCreated and ProductReviewsResponse in @markaz/contracts. */
+export const WireReviewEligibilityEnvelope = z.object({
+  data: z.object({
+    eligible: z.boolean(),
+    reason: z.enum(["not_delivered", "nothing_to_review", "already_reviewed", "unknown_product"]).nullable(),
+    items: z.array(z.object({ productId: z.string().min(1), productTitle: z.string() })),
+  }),
+});
+
+export const WireReviewCreatedEnvelope = z.object({
+  data: z.object({ id: z.string().min(1), status: z.literal("approved") }),
+});
+
+export const WireProductReviewsEnvelope = z.object({
+  data: z.object({
+    reviews: z.array(
+      z.object({
+        id: z.string().min(1),
+        rating: z.number().int().min(1).max(5),
+        title: z.string().nullable(),
+        body: z.string(),
+        displayName: z.string(),
+        verified: z.boolean(),
+        createdAt: z.string(),
+        reply: z.object({ text: z.string(), at: z.string() }).nullable(),
+      }),
+    ),
+    summary: z.object({ average: z.number().min(0).max(5), count: z.number().int().min(0) }),
+  }),
+  page: z.number().int().min(1),
+  totalPages: z.number().int().min(0),
+});
+
+/** Sprint 5 EP-28: the answer of the abandoned cart save. */
+export const WireAbandonedCartSavedEnvelope = z.object({ data: z.object({ saved: z.literal(true) }) });

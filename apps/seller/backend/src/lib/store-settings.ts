@@ -5,10 +5,14 @@ import {
   CARD_CHECKOUT_UNSUPPORTED_BY_THEME,
   CARD_CHECKOUT_UNSUPPORTED_MESSAGE,
   CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
+  NO_USABLE_PAYMENT_METHOD,
+  RETURN_WINDOW_DAYS_DEFAULT,
+  NO_USABLE_PAYMENT_METHOD_MESSAGE,
   cityKey,
   maskAccountNumber,
   matchPakistanCity,
 } from '@/lib/contracts';
+import { readFraud } from '@/lib/fraud';
 import { HttpError } from '@/lib/http';
 import { Media } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
@@ -138,6 +142,36 @@ export function readMessages(storefront: unknown): MessageOverrides {
   return { whatsappTemplate: text(sf.whatsappTemplate), emailFooter: text(sf.emailFooter) };
 }
 
+/**
+ * Sprint 5 EP-28.US01.T05 (D-107): whether the store wants the optional automatic email about a cart left behind. Kept in paymentSettings (like
+ * the fraud settings: the public storefront never reads it), shown to the seller in the messages group. OFF unless it is exactly true.
+ */
+export function readAbandonedCartEmail(paymentSettings: unknown): boolean {
+  return record(paymentSettings).abandonedCartEmail === true;
+}
+
+/**
+ * SB-6 (verification bug 11): the moment the abandoned cart email switch last went from off to on, or null (a store that switched it on before
+ * this field existed, which then has no lower bound). Only a cart left AFTER it is emailed: switching the email on never mails the carts that were
+ * already waiting. Private like the switch itself: it is never part of the settings answer.
+ */
+export function readAbandonedCartEmailSince(paymentSettings: unknown): Date | null {
+  const value = record(paymentSettings).abandonedCartEmailSince;
+  const date = value instanceof Date ? value : typeof value === 'string' || typeof value === 'number' ? new Date(value) : null;
+  return date !== null && !Number.isNaN(date.getTime()) ? date : null;
+}
+
+// ----------------------------------------------------------------------------------------------------------- returns
+
+/**
+ * Sprint 5 EP-13.US01.T02: how many days after delivery a shopper may ask for a return (0 = the store takes no returns, default 7). A
+ * stored value that is not a whole number from 0 to 30 reads as the default. Kept in storefront next to the other shopper-facing policy.
+ */
+export function readReturnWindowDays(storefront: unknown): number {
+  const value = record(storefront).returnWindowDays;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 30 ? value : (RETURN_WINDOW_DAYS_DEFAULT as number);
+}
+
 // ------------------------------------------------------------------------------------------------------------- theme
 
 export function installedThemeSlugs(): string[] {
@@ -191,7 +225,10 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     payments: { ...readPayments(doc.paymentSettings), cardAvailable: cardPaymentsAvailable() },
     payout: maskPayout(doc.payoutDetails),
     theme: { activeTheme: effectiveTheme(sf), supportsCardCheckout: themeSupportsCardCheckout(effectiveTheme(sf)) },
-    messages: readMessages(sf),
+    messages: { ...readMessages(sf), abandonedCartEmail: readAbandonedCartEmail(doc.paymentSettings) },
+    // Sprint 5 EP-11: kept in paymentSettings (never in storefront, which the public storefront reads).
+    fraud: readFraud(doc.paymentSettings),
+    returns: { returnWindowDays: readReturnWindowDays(sf) },
     updatedAt: iso(doc.updatedAt),
   };
 }
@@ -215,8 +252,8 @@ export function settingsFieldsOf(update: StoreSettingsUpdate): string[] {
   const fields = new Set<string>();
   if (update.profile?.name !== undefined) fields.add('name');
   const profileRest = update.profile ? Object.keys(update.profile).filter((key) => key !== 'name') : [];
-  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages) fields.add('storefront');
-  if (update.payments) fields.add('paymentSettings');
+  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns) fields.add('storefront');
+  if (update.payments || update.fraud || update.messages?.abandonedCartEmail !== undefined) fields.add('paymentSettings');
   if (update.payout !== undefined) fields.add('payoutDetails');
   return [...fields];
 }
@@ -232,7 +269,7 @@ export function referencedMedia(update: StoreSettingsUpdate): Array<{ field: str
 
 /**
  * Merges an update into the stored settings and checks the rules that need both: at least one payment method stays on,
- * and the theme is an installed one. The whole storefront and paymentSettings objects are written (one $set), so a store
+ * and the theme is an installed one; COD may not go off while card is unavailable (422 NO_USABLE_PAYMENT_METHOD, field payments). The whole storefront and paymentSettings objects are written (one $set), so a store
  * whose Mixed field is missing or null is handled the same as any other. Throws 400 STORE_SETTINGS_INVALID naming the field, or 422 CARD_CHECKOUT_UNSUPPORTED_BY_THEME when the store would be card only on a theme without card checkout (SB-11).
  */
 export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, now: Date = new Date()): SettingsWrite {
@@ -287,6 +324,18 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
   if (update.messages) {
     if (update.messages.whatsappTemplate !== undefined) put('whatsappTemplate', update.messages.whatsappTemplate);
     if (update.messages.emailFooter !== undefined) put('emailFooter', update.messages.emailFooter);
+    // Sprint 5 EP-28: the switch is private (paymentSettings, never the public storefront object).
+    if (update.messages.abandonedCartEmail !== undefined) {
+      const wasOn = pay.abandonedCartEmail === true;
+      pay.abandonedCartEmail = update.messages.abandonedCartEmail;
+      // Set only on the transition off -> on (a save that repeats "on" keeps the moment), so carts left before it are never mailed.
+      if (update.messages.abandonedCartEmail === true && !wasOn) pay.abandonedCartEmailSince = new Date();
+      set.paymentSettings = pay;
+      fields.add('paymentSettings');
+    }
+  }
+  if (update.returns) {
+    if (update.returns.returnWindowDays !== undefined) put('returnWindowDays', update.returns.returnWindowDays);
   }
   if (storefrontChanged) {
     set.storefront = sf;
@@ -304,6 +353,22 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
     if (!after.codEnabled && before.codEnabled && !themeSupportsCardCheckout(themeAfter)) {
       throw cardUnsupported('payments.codEnabled', CARD_CHECKOUT_UNSUPPORTED_MESSAGE);
     }
+    // Sprint 5 (D-107, SB-1 follow-up): cash on delivery off while card is not available leaves shoppers no way to pay. Checked on the
+    // RESULT, after the SB-11 theme rule above, so a theme that cannot take card keeps its own, more specific answer.
+    if (!after.codEnabled && !cardPaymentsAvailable()) {
+      throw new HttpError(422, NO_USABLE_PAYMENT_METHOD_MESSAGE, NO_USABLE_PAYMENT_METHOD, 'payments');
+    }
+    set.paymentSettings = pay;
+    fields.add('paymentSettings');
+  }
+  // Sprint 5 EP-11 (D-107): the phone confirmation mode and the risk rules. Only the fields sent change; the rest keep their value.
+  if (update.fraud) {
+    const current = readFraud(pay);
+    const sent = Object.fromEntries(Object.entries(update.fraud.riskRules ?? {}).filter(([, value]) => value !== undefined));
+    pay.fraud = {
+      codConfirmation: update.fraud.codConfirmation ?? current.codConfirmation,
+      riskRules: { ...current.riskRules, ...sent },
+    };
     set.paymentSettings = pay;
     fields.add('paymentSettings');
   }

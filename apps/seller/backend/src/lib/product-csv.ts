@@ -119,6 +119,14 @@ export const UTF8_BOM = '﻿';
  * order mark (bytes EF BB BF once encoded), so Excel reads it as UTF-8: every file we hand a seller (export, template,
  * failed rows) goes through here.
  */
-export function serializeCsv(records: ReadonlyArray<readonly string[]>): string {
-  return UTF8_BOM + records.map((record) => record.map((cell) => quoteCell(neutraliseCell(cell))).join(',')).join('\r\n') + '\r\n';
+export function serializeCsv(records: ReadonlyArray<readonly string[]>, options: { plainPhones?: boolean } = {}): string {
+  const guard = (cell: string): string => (options.plainPhones === true && PLAIN_PHONE.test(cell) ? cell : neutraliseCell(cell));
+  return UTF8_BOM + records.map((record) => record.map((cell) => quoteCell(guard(cell))).join(',')).join('\r\n') + '\r\n';
 }
+
+/**
+ * A plain E.164 phone: a + and 10 to 15 digits, nothing else. A spreadsheet reads it as a number, not a formula, so with plainPhones a cell like
+ * that is written as it is (SB-6, verification bug 3: every phone of the customers CSV had an apostrophe in front). Any other cell starting with
+ * = + - @ is still neutralised, a phone with letters or a formula tail included.
+ */
+const PLAIN_PHONE = /^[+][0-9]{10,15}$/;

@@ -2,6 +2,7 @@
 
 import type { AddressDetails } from "../../model";
 import { paths } from "../../adapters/paths";
+import { ABANDONED_CART_CONSENT_LINE } from "@markaz/storefront-data";
 import { useStilettoCheckout } from "../../adapters/checkout";
 import { firstErrorBox } from "../../adapters/checkout-fields";
 import type { StilettoCheckoutField, StilettoFieldErrors } from "../../adapters/checkout-fields";
@@ -350,10 +351,17 @@ export function CheckoutSection({
     focusTick,
     clearFieldError,
     submit,
+    noteContact,
   } = useStilettoCheckout(shippingAddress.city);
 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+
+  // Sprint 5 EP-28.US01.T03: the checkout keeps the cart for the seller once the phone is valid (one debounced call, made by useCheckout). It is told
+  // what the shopper has typed, because this form keeps its own boxes. The consent line is shown under the phone box below.
+  useEffect(() => {
+    noteContact({ phone, email });
+  }, [noteContact, phone, email]);
   const [sameOnWhatsapp, setSameOnWhatsapp] = useState(true);
   const [whatsapp, setWhatsapp] = useState("");
   const [notes, setNotes] = useState("");
@@ -500,6 +508,9 @@ export function CheckoutSection({
                 <FieldError id="checkout-phone-error" message={fieldErrors.phone} />
                 <p className="text-[11px] text-(--text-primary)/50">
                   Used for delivery and for order updates on WhatsApp.
+                </p>
+                <p className="text-[11px] text-(--text-primary)/50" data-testid="abandoned-cart-consent">
+                  {ABANDONED_CART_CONSENT_LINE}
                 </p>
               </div>
 

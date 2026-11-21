@@ -4,6 +4,7 @@ import { HttpError } from '@/lib/http';
 import type { AuthContext } from '@/lib/auth';
 import { seedStoreDemoData } from '@/lib/demo-data';
 import { connectSellerDb } from '@/lib/mongo';
+import { ensureSellerMirror } from '@/lib/seller-mirror';
 import { Store, User } from '@/lib/services';
 import { newStoreStorefront } from '@/lib/store-defaults';
 
@@ -172,6 +173,8 @@ export async function provisionStore(ctx: AuthContext, rawName: unknown): Promis
     try {
       const created = await Store.create({ name, slug, owner: ctx.userObjectId, status: newStoreStatus(), storefront: newStoreStorefront() });
       await seedStoreDemoData(String(created._id));
+      // Sprint 5 EP-11.US04.T02 (D-106): the `sellers` mirror row, best effort, never fails the creation.
+      await ensureSellerMirror(ctx.userObjectId);
       return {
         ok: true,
         store: { id: String(created._id), name: String(created.name), slug: String(created.slug), status: String(created.status) },

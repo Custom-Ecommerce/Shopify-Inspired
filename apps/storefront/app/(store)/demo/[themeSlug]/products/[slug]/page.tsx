@@ -21,5 +21,5 @@ export default async function DemoProductPage({
   const outcome = await loadProductPage(transport, slug);
   if (outcome.status === "not-found") notFound();
   if (outcome.status === "unavailable") return <Unavailable message="The demo product could not be loaded." retryHref={storePaths.product(slug)} />;
-  return <Product slug={slug} product={outcome.product} />;
+  return <Product slug={slug} product={outcome.product} reviews={outcome.reviews ?? null} />;
 }

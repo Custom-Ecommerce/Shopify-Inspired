@@ -1,5 +1,5 @@
 import type { OrderStockRestore } from '@markaz/contracts';
-import { cancelRefusal, paidCardOrder } from '@/lib/contracts';
+import { CONFIRMATION_LOG_MAX, cancelRefusal, paidCardOrder } from '@/lib/contracts';
 import { reverseLedgerForOrder } from '@/lib/commission';
 import { notifyOrderStatus } from '@/lib/notifications';
 import { restoreOrderStock, stockRestoreSummary, type RestoreLine } from '@/lib/order-stock';
@@ -27,6 +27,12 @@ export interface CancelOrderInput {
   actor: CancelActor;
   /** Cancels only while the order is unpaid, as part of the same write. A paid order is never cancelled automatically. */
   onlyIfUnpaid?: boolean;
+  /**
+   * Sprint 5 EP-11.US01: the seller declined the order on the confirmation call. The SAME compare-and-set then also requires
+   * confirmationStatus to still be unconfirmed or unreachable and pushes this entry onto confirmationLog, so the decision and the cancel are one write
+   * and a parallel confirmation cannot both win. Stock and the discount use go back through this path, once, as for any cancel.
+   */
+  confirmationEntry?: { at: Date; by: unknown; result: 'cancelled'; note: string | null };
 }
 
 export type CancelOrderResult =
@@ -124,6 +130,8 @@ export async function cancelOrder(input: CancelOrderInput): Promise<CancelOrderR
       discountRestoredAt: { $exists: false },
       // In the write itself, so a payment landing after the read still wins.
       ...(input.onlyIfUnpaid ? { paymentStatus: 'unpaid' } : current.paymentMethod === 'card' ? { paymentStatus: { $ne: 'paid' } } : {}),
+      // D-109: a decision to cancel is accepted from unconfirmed and from unreachable (unreachable is not final).
+      ...(input.confirmationEntry ? { confirmationStatus: { $in: ['unconfirmed', 'unreachable'] } } : {}),
     },
     {
       $set: {
@@ -133,7 +141,10 @@ export async function cancelOrder(input: CancelOrderInput): Promise<CancelOrderR
         stockRestoredAt: now,
         ...(current.discountCode ? { discountRestoredAt: now } : {}),
       },
-      $push: { statusHistory: { from, to: 'cancelled', by: actor.userObjectId, at: now, note: input.note ? input.note : null } },
+      $push: {
+        statusHistory: { from, to: 'cancelled', by: actor.userObjectId, at: now, note: input.note ? input.note : null },
+        ...(input.confirmationEntry ? { confirmationLog: { $each: [input.confirmationEntry], $slice: -CONFIRMATION_LOG_MAX } } : {}),
+      },
     },
     { new: true, runValidators: true },
   ).lean();

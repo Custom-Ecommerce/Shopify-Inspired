@@ -234,9 +234,96 @@ export const storeMessagesUpdateSchema = z
   .object({
     whatsappTemplate: clearable(whatsappTemplateText),
     emailFooter: clearable(plainText(EMAIL_FOOTER_MAX, 'the email footer')),
+    /** Sprint 5 EP-28 (D-107): the optional automatic email about a cart left behind. Off unless the seller turns it on. */
+    abandonedCartEmail: z.boolean(),
   })
   .partial()
   .strict();
+
+// ---------------------------------------------------------------------------------------------------- fraud (Sprint 5 EP-11)
+
+
+export const COD_CONFIRMATION_MODES = ['off', 'flagged', 'all'] as const;
+export type CodConfirmationMode = (typeof COD_CONFIRMATION_MODES)[number];
+
+export const FLAGGED_CITIES_MAX = 30;
+export const FLAG_RETURNS_MIN = 1;
+export const FLAG_RETURNS_MAX = 10;
+/** The largest order value a rule can name, whole rupees. */
+export const FLAG_ORDER_VALUE_MAX = 10_000_000;
+
+export interface RiskRules {
+  /** An order whose total is above this many rupees is flagged. null: no such rule. */
+  flagOrderValueAbove: number | null;
+  /** Canonical names from the shared city list. */
+  flaggedCities: string[];
+  /** A customer with at least this many returns is flagged. null: no such rule. */
+  flagReturnsAtLeast: number | null;
+}
+
+export interface FraudSettings {
+  codConfirmation: CodConfirmationMode;
+  riskRules: RiskRules;
+}
+
+export const DEFAULT_FRAUD_SETTINGS: FraudSettings = {
+  codConfirmation: 'off',
+  riskRules: { flagOrderValueAbove: null, flaggedCities: [], flagReturnsAtLeast: null },
+};
+
+const orderValueRule = z.union([
+  z.null(),
+  z
+    .number({ error: 'the order value must be a number' })
+    .int('the order value must be whole rupees')
+    .min(1, 'the order value must be at least 1')
+    .max(FLAG_ORDER_VALUE_MAX, 'the order value is too large'),
+]);
+
+const returnsRule = z.union([
+  z.null(),
+  z
+    .number({ error: 'the number of returns must be a number' })
+    .int('the number of returns must be a whole number')
+    .min(FLAG_RETURNS_MIN, 'the number of returns must be at least ' + FLAG_RETURNS_MIN)
+    .max(FLAG_RETURNS_MAX, 'the number of returns can be at most ' + FLAG_RETURNS_MAX),
+]);
+
+/** Up to 30 cities from the shared list (matched with matchPakistanCity), each once; stored as the canonical name. */
+const flaggedCitiesRule = z
+  .array(
+    z
+      .string({ error: 'a city must be text' })
+      .refine((value) => matchPakistanCity(value) !== null, 'choose a city from the list')
+      .transform((value) => matchPakistanCity(value) as string),
+  )
+  .max(FLAGGED_CITIES_MAX, 'at most ' + FLAGGED_CITIES_MAX + ' cities')
+  .refine((rows) => new Set(rows).size === rows.length, 'each city can be listed once');
+
+export const riskRulesUpdateSchema = z
+  .object({ flagOrderValueAbove: orderValueRule, flaggedCities: flaggedCitiesRule, flagReturnsAtLeast: returnsRule })
+  .partial()
+  .strict();
+
+/** The settings group 'fraud' of PATCH /api/stores/:id. Strict: an unknown field is a 400 that names it. */
+export const storeFraudUpdateSchema = z
+  .object({
+    codConfirmation: z.enum(COD_CONFIRMATION_MODES, { error: 'choose off, flagged or all' }),
+    riskRules: riskRulesUpdateSchema,
+  })
+  .partial()
+  .strict();
+export type StoreFraudUpdate = z.output<typeof storeFraudUpdateSchema>;
+
+/** The group as the settings screen reads it. */
+export const storeFraudSchema = z.object({
+  codConfirmation: z.enum(COD_CONFIRMATION_MODES),
+  riskRules: z.object({
+    flagOrderValueAbove: z.number().int().nullable(),
+    flaggedCities: z.array(z.string()),
+    flagReturnsAtLeast: z.number().int().nullable(),
+  }),
+});
 
 /** 422 on PATCH /api/stores/:id: the store would be card only on a theme whose checkout cannot take a card payment (SB-11, V-06). */
 export const CARD_CHECKOUT_UNSUPPORTED_BY_THEME = 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME';
@@ -244,6 +331,31 @@ export const CARD_CHECKOUT_UNSUPPORTED_BY_THEME = 'CARD_CHECKOUT_UNSUPPORTED_BY_
 /** The sentences the seller sees for it; the server, the Payments tab and the Theme tab use these. */
 export const CARD_CHECKOUT_UNSUPPORTED_MESSAGE = 'This theme cannot take card payments yet, so cash on delivery has to stay on. Choose the Stiletto theme to accept card only.';
 export const CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE = 'This theme cannot take card payments yet. Turn cash on delivery on first, or choose the Stiletto theme.';
+
+/**
+ * 422 on PATCH /api/stores/:id (Sprint 5, D-107): the save would leave the store with no payment method a shopper can use, that is
+ * cash on delivery off while card is not available (the platform switch is off, or Stripe is not set up). Field: payments.
+ */
+export const NO_USABLE_PAYMENT_METHOD = 'NO_USABLE_PAYMENT_METHOD';
+export const NO_USABLE_PAYMENT_METHOD_MESSAGE = 'Cash on delivery has to stay on: card payments are not available yet, so shoppers would have no way to pay.';
+
+// ---------------------------------------------------------------------------------------------------- returns (Sprint 5 EP-13)
+
+export const RETURN_WINDOW_DAYS_DEFAULT = 7;
+export const RETURN_WINDOW_DAYS_MAX = 30;
+
+/** The settings group 'returns': how many days after delivery a shopper may ask for a return. 0 means the store takes no returns. */
+export const storeReturnsUpdateSchema = z
+  .object({
+    returnWindowDays: z
+      .number({ error: 'the return window must be a number' })
+      .int('the return window must be a whole number of days')
+      .min(0, 'the return window cannot be negative')
+      .max(RETURN_WINDOW_DAYS_MAX, 'the return window can be at most ' + RETURN_WINDOW_DAYS_MAX + ' days'),
+  })
+  .partial()
+  .strict();
+export const storeReturnsSchema = z.object({ returnWindowDays: z.number().int().min(0).max(RETURN_WINDOW_DAYS_MAX) });
 
 export const storeThemeUpdateSchema = z.object({ activeTheme: z.string().regex(/^[a-z0-9-]{2,40}$/, 'choose a theme from the list') }).strict();
 
@@ -263,6 +375,10 @@ export const storeSettingsUpdateSchema = z
     payout: payoutDetailsSchema.nullable(),
     theme: storeThemeUpdateSchema,
     messages: storeMessagesUpdateSchema,
+    // Sprint 5 EP-11: phone confirmation mode and the risk rules.
+    fraud: storeFraudUpdateSchema,
+    // Sprint 5 EP-13: the return window.
+    returns: storeReturnsUpdateSchema,
   })
   .partial()
   .strict()
@@ -318,7 +434,9 @@ export const storeSettingsSchema = z.object({
   }),
   payout: maskedPayoutSchema.nullable(),
   theme: z.object({ activeTheme: z.string(), supportsCardCheckout: z.boolean() }),
-  messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable() }),
+  messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable(), abandonedCartEmail: z.boolean() }),
+  fraud: storeFraudSchema,
+  returns: storeReturnsSchema,
   updatedAt: z.string().nullable(),
 });
 export type StoreSettings = z.output<typeof storeSettingsSchema>;
@@ -329,11 +447,17 @@ export type StoreSettings = z.output<typeof storeSettingsSchema>;
 export const STORE_READINESS_ITEMS = ['profile', 'delivery', 'payment', 'payout', 'product', 'email'] as const;
 export type StoreReadinessItem = (typeof STORE_READINESS_ITEMS)[number];
 
+/** Sprint 5 EP-11.US04.T03: a warning does not block go-live. Only 'stock' exists: every published product is out of stock. */
+export const STORE_READINESS_WARNINGS = ['stock'] as const;
+export type StoreReadinessWarningKey = (typeof STORE_READINESS_WARNINGS)[number];
+
 export const storeReadinessSchema = z.object({
   ready: z.boolean(),
   status: z.string(),
   items: z.array(z.object({ key: z.enum(STORE_READINESS_ITEMS), ok: z.boolean(), label: z.string(), tab: z.string() })),
   missing: z.array(z.enum(STORE_READINESS_ITEMS)),
+  /** Absent when there is nothing to warn about. Never part of `missing`, never blocks go-live. */
+  warnings: z.array(z.object({ key: z.enum(STORE_READINESS_WARNINGS), label: z.string(), tab: z.string() })).optional(),
 });
 export type StoreReadiness = z.output<typeof storeReadinessSchema>;
 

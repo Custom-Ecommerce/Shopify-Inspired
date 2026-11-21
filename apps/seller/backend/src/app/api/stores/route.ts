@@ -7,6 +7,7 @@ import { authenticate } from '@/lib/auth';
 import { seedStoreDemoData } from '@/lib/demo-data';
 import { HttpError, handleRouteError, isDuplicateKeyError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
+import { ensureSellerMirror } from '@/lib/seller-mirror';
 import { SELLER_STORE_READABLE_FIELDS, Store, assertCan } from '@/lib/services';
 import { newStoreStorefront } from '@/lib/store-defaults';
 
@@ -147,6 +148,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     await seedStoreDemoData(String(created._id));
+    // Sprint 5 EP-11.US04.T02 (D-106): the `sellers` mirror row, best effort, never fails the creation.
+    await ensureSellerMirror(ownerId);
 
     return NextResponse.json(
       {

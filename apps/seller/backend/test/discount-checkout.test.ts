@@ -2,7 +2,7 @@ import { afterEach, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { Discount, Order, Product, StockMovement, Store } from '@/lib/services';
+import { BlockedContact, Discount, Order, Product, StockMovement, Store } from '@/lib/services';
 import { storefrontCartQuoteResponseSchema } from '@/lib/contracts';
 import { StorefrontHttpError } from '@/lib/storefront/errors';
 import { placeOrder } from '../src/lib/storefront/order-service';
@@ -268,6 +268,8 @@ let quotePOST: Handler;
 let orderPOST: Handler;
 
 before(async () => {
+  // Sprint 5 EP-11.US02: the order route asks the blocklist one question before it places an order. These tests have no blocked contact.
+  (BlockedContact as any).exists = async () => null;
   quotePOST = (await import('../src/app/api/storefront/v1/stores/[id]/cart/quote/route')).POST;
   orderPOST = (await import('../src/app/api/storefront/v1/stores/[id]/orders/route')).POST;
 });

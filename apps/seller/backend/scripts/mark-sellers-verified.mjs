@@ -6,10 +6,12 @@
 //   node --env-file=.env --import tsx scripts/mark-sellers-verified.mjs           (dry run: prints how many)
 //   node --env-file=.env --import tsx scripts/mark-sellers-verified.mjs --apply   (sets emailVerifiedAt = now)
 //
+// A database whose name does not contain "throwaway" needs --i-know-this-is-real (dry run included), like the other deploy scripts.
 // Reads SELLER_MONGODB_URI. Prints counts only: never an email, a name or a secret. Run it once, right after the
 // Sprint 4 deploy of the seller backend (SETUP.md, deploy notes). Running it again finds nothing left to do.
 import mongoose from 'mongoose';
 import * as dbNs from '@markaz/db-schemas';
+import { databaseNameOf, targetDecision } from './lib/target-guard.mjs';
 
 const { User } = dbNs.default ?? dbNs;
 
@@ -21,6 +23,14 @@ async function main() {
   const uri = (process.env.SELLER_MONGODB_URI ?? '').trim();
   if (uri === '') {
     console.error('SELLER_MONGODB_URI is not set. Nothing was done.');
+    process.exitCode = 1;
+    return;
+  }
+  // SB-6 (verification bug 10): the same guard as the other deploy scripts, for the dry run too: a database whose name does not contain
+  // "throwaway" needs --i-know-this-is-real. It is checked BEFORE anything connects.
+  const decision = targetDecision(databaseNameOf(uri), { apply, iKnowThisIsReal: process.argv.includes('--i-know-this-is-real') });
+  if (!decision.ok) {
+    console.error('The database name does not contain "throwaway". Add --i-know-this-is-real to run on it. Nothing was changed.');
     process.exitCode = 1;
     return;
   }

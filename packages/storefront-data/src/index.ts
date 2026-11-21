@@ -1,6 +1,7 @@
 export { toMoney } from "./domain/money";
 export type { Money } from "./domain/money";
 export { MAX_LINE_QTY } from "./domain/cart";
+export { ABANDONED_CART_CONSENT_LINE } from "./domain/abandoned-cart";
 export { MAX_SEARCH_LENGTH, searchProductSummaries } from "./domain/search";
 export { toProductCardVM } from "./view-models/product-card";
 export type { ProductCardVM } from "./view-models/product-card";
@@ -36,6 +37,17 @@ export type {
   StorefrontOrderItem,
   StorefrontOrderTracking,
   StorefrontOrderTrackingDates,
+  StorefrontReturnCreated,
+  StorefrontReturnEligibility,
+  StorefrontReturnableLine,
+  ReturnReasonCode,
+  StorefrontProductReviews,
+  StorefrontReview,
+  StorefrontReviewCreated,
+  StorefrontReviewEligibility,
+  SaveAbandonedCartInput,
+  SubmitReviewInput,
+  ReviewIneligibleReasonValue,
   StorefrontTransport,
   TransportKind,
 } from "./transport/types";

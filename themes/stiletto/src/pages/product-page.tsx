@@ -9,10 +9,10 @@ import { useStoreData } from "../shared/context/StoreDataContext";
 import { StilettoFooter, StilettoHeader } from "./shell";
 import { UnavailablePage } from "./unavailable-page";
 
-export function ProductPage({ slug, product }: ProductPageProps) {
+export function ProductPage({ slug, product, reviews }: ProductPageProps) {
   const { content, categories } = useStilettoChrome();
   const { products } = useStoreData();
-  const mapped = useMemo(() => (product ? toStilettoProduct(product, content.sampleReviews) : null), [product, content.sampleReviews]);
+  const mapped = useMemo(() => (product ? toStilettoProduct(product) : null), [product]);
   if (!product || !mapped) return <UnavailablePage message="We could not load this product just now. Please try again in a moment." />;
   return (
     <div className="min-h-screen bg-[var(--featured-bg,#FAF9F6)]">
@@ -24,7 +24,7 @@ export function ProductPage({ slug, product }: ProductPageProps) {
           detail={product}
           allProducts={products}
           categories={categories}
-          reviews={mapped.reviews}
+          initialReviews={reviews}
           productHandle={slug}
           shippingDetails={content.shippingDetails}
         />

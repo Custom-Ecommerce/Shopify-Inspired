@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { storefrontOrderCreatedResponseSchema } from '@/lib/contracts';
+import { CONTACT_BLOCKED_MESSAGE, DEFAULT_FRAUD_SETTINGS, storefrontOrderCreatedResponseSchema } from '@/lib/contracts';
+import { assessNewOrder, isContactBlocked } from '@/lib/fraud';
 import { PRIVATE_NO_STORE_HEADERS, StorefrontHttpError, previewOrderBlocked } from '@/lib/storefront/errors';
 import { cardCheckoutUrl } from '@/lib/storefront/card-payment';
 import { issueOrderAccessToken } from '@/lib/storefront/order-access';
@@ -11,6 +12,8 @@ import { carriesPreviewCredential, storefrontFailure } from '@/lib/storefront/pr
 import { ORDER_CREATE_LIMIT, enforceRateLimit } from '@/lib/storefront/rate-limit';
 import { assertStoreId, loadActiveStore } from '@/lib/storefront/store-guard';
 import { notifyOrderPlaced } from '@/lib/notifications';
+import { markCartRecovered } from '@/lib/abandoned-carts';
+import { phoneKeyOf } from '@/lib/storefront/order-phone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,6 +34,9 @@ export const dynamic = 'force-dynamic';
  *                  (header Idempotent-Replayed: true), nothing new is saved and no stock moves
  *   400 INVALID_REQUEST | EMPTY_ORDER | INVALID_QUANTITY. A bad input also names its `field`, e.g. customer.phone
  *   422 PAYMENT_METHOD_UNAVAILABLE   the store does not offer this method (Sprint 4: 422, it was 400)
+ *   422 CONTACT_BLOCKED    the phone (compared as its normalized form) or the email is on the store's blocklist (Sprint 5 EP-11.US02).
+ *                          Checked right after the method checks and BEFORE placeOrder, so nothing is reserved. The message is
+ *                          neutral and never says the contact is blocked.
  *   404 STORE_NOT_FOUND    403 STORE_NOT_ACTIVE
  *   409 OUT_OF_STOCK (productId)   409 IDEMPOTENCY_CONFLICT (the key was used for a different order)
  *   422 VARIANT_REQUIRED (productId)  a product with several variants and no variantId
@@ -61,10 +67,34 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       throw new StorefrontHttpError(422, 'PAYMENT_METHOD_UNAVAILABLE', 'Card payments are not available for this store.');
     }
 
-    const { order, replayed } = await placeOrder(id, store, parsed);
+    // Sprint 5 EP-11.US02 (D-107): the blocklist, before anything is priced or reserved.
+    if (await isContactBlocked(id, { phone: parsed.customer.phone, email: parsed.customer.email })) {
+      throw new StorefrontHttpError(422, 'CONTACT_BLOCKED', CONTACT_BLOCKED_MESSAGE);
+    }
+
+    // Sprint 5 EP-11.US01 and US03: the risk rules run on the priced total inside placeOrder, still before any stock moves. They set
+    // the order's flags and confirmation status; they never reject it.
+    const settings = store.fraud ?? DEFAULT_FRAUD_SETTINGS;
+    const { order, replayed } = await placeOrder(id, store, parsed, {
+      assess: async (priced) => {
+        const context = { storeId: id, settings, paymentMethod: parsed.paymentMethod, total: priced.total, city: parsed.customer.city, phone: parsed.customer.phone };
+        try {
+          return await assessNewOrder(context);
+        } catch (err) {
+          // A failed lookup must not lose the order. It fails toward the seller's phone call: a COD order is then left unconfirmed.
+          console.error('[seller-backend] could not assess the order risk', err instanceof Error ? err.name : 'unknown');
+          const confirm = settings.codConfirmation !== 'off' && parsed.paymentMethod === 'cod';
+          return { riskFlags: [], confirmationStatus: confirm ? 'unconfirmed' : 'not_required' };
+        }
+      },
+    });
     // EP-07.US01.T03: after the response, never part of the result. A card order is announced when it is paid (card-webhook.ts),
     // so a shopper who leaves the Stripe page gets no confirmation for an order that is then cancelled.
     if (!replayed && order.paymentMethod !== 'card') notifyOrderPlaced(id, order);
+
+    // Sprint 5 EP-28.US01.T03: an order with the phone key of an open abandoned cart recovers that cart, with the order id, in this same request.
+    // Best effort: it logs and never fails the order.
+    if (!replayed) await markCartRecovered(id, phoneKeyOf(parsed.customer.phone), order._id);
 
     const checkoutUrl = order.paymentMethod === 'card' ? await cardCheckoutUrl(id, order, replayed) : null;
 

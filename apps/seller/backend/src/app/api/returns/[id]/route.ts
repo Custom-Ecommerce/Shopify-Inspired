@@ -58,6 +58,12 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
 
     const from = String((current as unknown as { status: string }).status);
     const to = body.data.status;
+    // Sprint 5 EP-13: receiving (restock, order returned) and refunding (ledger) have their own actions under /api/stores/:id/returns, so this
+    // generic update can neither make those moves nor touch the refund fields of a return that has reached them.
+    if (to === 'received' || to === 'refunded') throw new HttpError(409, 'Use the receive and refund actions of the Returns page for this change');
+    if ((from === 'received' || from === 'refunded') && (body.data.refundAmount !== undefined || body.data.refundType !== undefined)) {
+      throw new HttpError(409, 'The refund of this return is recorded with the refund action');
+    }
     if (to !== undefined && to !== from) {
       const allowed = (RETURN_TRANSITIONS as Record<string, string[]>)[from] ?? [];
       if (!allowed.includes(to)) {

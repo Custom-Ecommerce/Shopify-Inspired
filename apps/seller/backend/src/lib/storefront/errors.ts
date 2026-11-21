@@ -21,7 +21,12 @@ export type StorefrontErrorCode =
   | 'PREVIEW_ORDER_BLOCKED'
   | 'DISCOUNT_REJECTED'
   | 'DISCOUNT_USED_UP'
-  | 'PAYMENT_NOT_STARTED';
+  | 'PAYMENT_NOT_STARTED'
+  // Sprint 5 EP-11.US02: the phone or email is on the store's blocklist. The message never says so.
+  | 'CONTACT_BLOCKED'
+  // Sprint 5 EP-13.US01 and EP-21.US01: a return or a review that cannot be made. The message says why, the extra carries the reason.
+  | 'RETURN_NOT_ELIGIBLE'
+  | 'REVIEW_NOT_ELIGIBLE';
 
 /** Carries the storefront error envelope: { error: { code, message }, ...extra }. */
 export class StorefrontHttpError extends Error {

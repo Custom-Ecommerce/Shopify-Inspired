@@ -1,4 +1,5 @@
 import { recordCardEntries, recordCodCommission, type LedgerOrder } from '@/lib/commission';
+import { reconcileRecentReturnReversals, reconcileReturnReversals } from '@/lib/return-reconcile';
 import { Order } from '@/lib/services';
 
 /** At most this many orders per call, oldest first. */
@@ -35,13 +36,19 @@ export async function backfillCommission(): Promise<{ scanned: number; written: 
   for (const order of orders) {
     if (order.paymentMethod === 'cod') {
       const outcome = await recordCodCommission(order);
-      if (outcome === 'created') written += 1;
-      else if (outcome === 'failed') failed += 1;
+      if (outcome === 'created') {
+        written += 1;
+        // The commission exists now: a return refunded before it did gets its reversal (EP-13.US03.T07).
+        await reconcileReturnReversals(order._id);
+      } else if (outcome === 'failed') failed += 1;
     } else {
       const outcome = await recordCardEntries(order);
       if (outcome === 'ok') written += 1;
       else if (outcome === 'failed') failed += 1;
     }
   }
+  // EP-13.US03.T07 (D-110): the refunds of the last 30 days whose reversal is still missing (a ledger write that failed, or an original that
+  // appeared in an earlier call). Idempotent; its counts are logged by the reconcile itself and do not change this job's answer.
+  await reconcileRecentReturnReversals();
   return { scanned: orders.length, written, failed };
 }

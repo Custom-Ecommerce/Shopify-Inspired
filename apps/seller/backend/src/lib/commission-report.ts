@@ -15,13 +15,17 @@ export async function buildCommissionReport(query: CommissionReportQuery, now: D
   const store = (await Store.findById(query.storeId).select('name').lean()) as unknown as { name?: string } | null;
   if (!store) throw new HttpError(404, 'Store not found');
 
-  const [totals, balance] = await Promise.all([commissionTotals(query.storeId, period.start, period.end), unsettledBalance(query.storeId)]);
+  const [totals, balance] = await Promise.all([
+    commissionTotals(query.storeId, period.start, period.end),
+    unsettledBalance(query.storeId),
+  ]);
   return {
     storeId: query.storeId,
     storeName: store.name ?? '',
     period: { key: period.period, from: karachiDayLabel(period.start), to: karachiDayLabel(new Date(period.end.getTime() - 1)) },
     commissionEarned: totals.commission,
     sales: totals.sales,
+    // commissionTotals already leaves a return's reversal out of the count: a partial return reverses part of the commission and the order stays.
     ordersCount: totals.orders,
     balance,
   };

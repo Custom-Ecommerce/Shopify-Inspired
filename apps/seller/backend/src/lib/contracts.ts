@@ -183,3 +183,99 @@ export const {
   customerListQuerySchema,
   unsubscribeRequestSchema,
 } = contracts;
+
+// Sprint 5 EP-10 (D-107): customers derived from orders, their notes, the detail and the CSV export.
+export const {
+  CUSTOMER_CSV_COLUMNS,
+  CUSTOMER_DETAIL_ADDRESSES_MAX,
+  CUSTOMER_DETAIL_ORDERS_MAX,
+  CUSTOMER_EXPORT_MAX_ROWS,
+  CUSTOMER_NOTE_MAX,
+  customerExportQuerySchema,
+  customerNoteRequestSchema,
+  normalizeCustomerKey,
+} = contracts;
+
+// Sprint 5 EP-11 (D-107, D-108): phone confirmation, risk rules, the blocklist and the address book.
+export const {
+  ADDRESS_BOOK_MAX,
+  ADDRESS_BOOK_SCAN_MAX,
+  BLOCKLIST_MAX,
+  BLOCK_KINDS,
+  COD_CONFIRMATION_MODES,
+  CONFIRMATION_LOG_MAX,
+  CONFIRMATION_STATUSES,
+  CONTACT_BLOCKED,
+  CONTACT_BLOCKED_MESSAGE,
+  DEFAULT_FRAUD_SETTINGS,
+  NO_USABLE_PAYMENT_METHOD,
+  NO_USABLE_PAYMENT_METHOD_MESSAGE,
+  ORDER_CONFIRMATION_DECIDED,
+  ORDER_NOT_CONFIRMED,
+  ORDER_NOT_CONFIRMED_MESSAGE,
+  RISK_FLAGS,
+  SELLER_ALERT_KINDS,
+  assessOrderRisk,
+  blockedContactRequestSchema,
+  normalizeBlockValue,
+  orderConfirmationRequestSchema,
+  readConfirmationStatus,
+  readRiskFlags,
+} = contracts;
+
+// Sprint 5 EP-13 (D-107, D-108, D-109): returns, refunds and the arithmetic behind them.
+export const {
+  CARD_REFUND_UNSUPPORTED,
+  CARD_REFUND_UNSUPPORTED_MESSAGE,
+  RETURN_ITEMS_MAX,
+  RETURN_REASON_LABELS,
+  RETURN_STATUSES,
+  RETURN_WINDOW_DAYS_DEFAULT,
+  commissionReversal,
+  discountShare,
+  everythingReceived,
+  grossOf,
+  refundRoom,
+  returnCreateRequestSchema,
+  returnLineKey,
+  returnListQuerySchema,
+  returnReceiveRequestSchema,
+  returnRefundRequestSchema,
+  returnRejectRequestSchema,
+  returnWindow,
+  returnableQuantities,
+  returnedBase,
+} = contracts;
+
+// Sprint 5 EP-21 (D-107, D-108): reviews of delivered orders, the seller's reply and the admin's hide.
+export const {
+  REVIEW_ALREADY_REPLIED,
+  REVIEW_BODY_MAX,
+  REVIEW_DEFAULT_DISPLAY_NAME,
+  REVIEW_INELIGIBLE_MESSAGES,
+  REVIEW_NOT_ELIGIBLE,
+  REVIEW_NOT_REPLIED,
+  REVIEW_PAGE_DEFAULT_LIMIT,
+  REVIEW_STATUS_CHANGED,
+  cleanReviewText,
+  productReviewsQuerySchema,
+  reviewCreateRequestSchema,
+  reviewHideRequestSchema,
+  reviewModerationListQuerySchema,
+  reviewReplyRequestSchema,
+  reviewUnhideRequestSchema,
+  sellerReviewListQuerySchema,
+} = contracts;
+
+// Sprint 5 EP-28 (D-107): abandoned carts.
+export const {
+  ABANDONED_CART_CONSENT_LINE,
+  ABANDONED_CART_EMAIL_DELAY_MS,
+  ABANDONED_CART_ITEMS_MAX,
+  ABANDONED_CART_NOT_FOUND,
+  ABANDONED_CART_STATUS_CHANGED,
+  ABANDONED_CART_TTL_DAYS,
+  abandonedCartContactedRequestSchema,
+  abandonedCartListQuerySchema,
+  abandonedCartRequestSchema,
+} = contracts;

@@ -1,7 +1,7 @@
 import { unwrapCjs } from '@/lib/cjs';
 import { PAYMENT_NOT_COMPLETED_REASON, PAYMENT_SYSTEM_ACTOR, cancelOrder } from '@/lib/order-cancel';
 import { Order, Store } from '@/lib/services';
-import { CARD_SESSION_LIFETIME_MS, cardPaymentsAvailable, checkoutReturnUrl } from '@/lib/storefront/card-config';
+import { CARD_SESSION_LIFETIME_MS, checkoutReturnUrl, stripeCardConfigured } from '@/lib/storefront/card-config';
 import { StorefrontHttpError } from '@/lib/storefront/errors';
 import type { OrderRow } from '@/lib/storefront/order-dto';
 
@@ -116,7 +116,8 @@ export async function cardCheckoutUrl(storeId: string, order: OrderRow, replayed
  * never throws. Stripe refuses to expire a session that is no longer open, which is how a payment that got there first shows up.
  */
 export async function expireCardSession(order: { orderId?: string; stripeSessionId: string }): Promise<void> {
-  if (!cardPaymentsAvailable()) return;
+  // The Stripe configuration, not the platform switch: a session opened before the switch went off must still be closed.
+  if (!stripeCardConfigured()) return;
   const context = { orderId: order.orderId, sessionId: order.stripeSessionId };
   try {
     const stripe = await stripeClient();

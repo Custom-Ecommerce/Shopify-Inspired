@@ -10,7 +10,7 @@ import { resolveOwnedStoreId } from '@/lib/data-plane';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const RETURN_STATUSES = ['requested', 'approved', 'rejected', 'completed'];
+const RETURN_STATUSES = ['requested', 'approved', 'rejected', 'received', 'refunded', 'completed'];
 
 async function requireDatabase(): Promise<void> {
   await connectSellerDb().catch(() => {
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const params = request.nextUrl.searchParams;
     const status = params.get('status');
     if (status !== null && !RETURN_STATUSES.includes(status)) {
-      return jsonError(422, 'status must be requested, approved, rejected, or completed');
+      return jsonError(422, 'status must be requested, approved, rejected, received, refunded, or completed');
     }
     const page = parseIntParam(params.get('page'), 1, 1, 100000);
     const limit = parseIntParam(params.get('limit'), 20, 1, 100);

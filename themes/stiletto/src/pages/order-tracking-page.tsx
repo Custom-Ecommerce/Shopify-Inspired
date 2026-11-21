@@ -6,6 +6,8 @@ import { useOrderTracking } from "@markaz/storefront-data/client";
 import { paths } from "../adapters/paths";
 import { toTrackingSteps, trackingPlacedOn } from "../adapters/order";
 import { useStilettoChrome } from "../adapters/chrome-context";
+import { ReturnRequest } from "../components/misc/return-request";
+import { ReviewOrder } from "../components/misc/review-order";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Package, Search, Truck, ExternalLink, AlertCircle, Loader2, PackageSearch, XCircle } from "lucide-react";
@@ -258,6 +260,11 @@ function TrackOrderContent({ initialOrderId }: { initialOrderId: string }) {
                     </li>
                   ))}
                 </ol>
+
+                {/* Sprint 5 EP-13.US01.T04: a delivered order can be returned. The phone is the one typed above (kept in state only). */}
+                {tracking.status === "delivered" ? <ReturnRequest orderId={tracking.orderId} phone={lookup.values.phone} /> : null}
+                {/* Sprint 5 EP-21.US01.T04: and its items can be reviewed (published at once). */}
+                {tracking.status === "delivered" ? <ReviewOrder orderId={tracking.orderId} phone={lookup.values.phone} /> : null}
               </div>
             )}
           </div>

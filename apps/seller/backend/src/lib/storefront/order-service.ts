@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
+import type { RiskAssessment } from '@markaz/contracts';
 import { isDuplicateKeyError } from '@/lib/http';
 import { discountRefusalMessage, toWholeRupees } from '@/lib/contracts';
+import { confirmationFieldsOf } from '@/lib/fraud';
 import { revalidateStoreProduct } from '@/lib/revalidate';
 import { Order, Product } from '@/lib/services';
 import { CARD_SESSION_LIFETIME_MS } from '@/lib/storefront/card-config';
@@ -9,6 +11,7 @@ import { claimDiscountUse, findDiscountRule, returnDiscountUse } from '@/lib/sto
 import { StorefrontHttpError, discountRefused, productUnavailable } from '@/lib/storefront/errors';
 import { isLiveProduct, type LiveFlags } from '@/lib/storefront/live-product';
 import { generateOrderId } from '@/lib/storefront/order-id';
+import { phoneKeyOf } from '@/lib/storefront/order-phone';
 import type { OrderRow } from '@/lib/storefront/order-dto';
 import type { ParsedOrderRequest } from '@/lib/storefront/order-request';
 import { priceCart } from '@/lib/storefront/pricing';
@@ -20,6 +23,15 @@ export interface PlaceOrderResult {
   order: OrderRow;
   /** True when an earlier request with the same idempotency key already created this order. */
   replayed: boolean;
+}
+
+/**
+ * Sprint 5 EP-11 (D-107). `assess` is called once, after the order is priced and BEFORE any stock or discount use is taken, with the
+ * priced totals; what it answers (the risk flags and the confirmation status) is stored on the order. It never rejects an order. Not
+ * called for a replayed request (the first order already holds its answer).
+ */
+export interface PlaceOrderOptions {
+  assess?: (priced: { total: number; subtotal: number }) => Promise<RiskAssessment>;
 }
 
 interface CatalogRow extends LiveFlags {
@@ -170,11 +182,18 @@ async function insertOrder(data: Record<string, unknown>): Promise<OrderRow> {
  *      request with the same key saved first (the unique index decides), this request gives back its stock and use and
  *      returns the winner's order, so a double submit costs one unit of stock and one use, once.
  */
-export async function placeOrder(storeId: string, commerce: StoreCommerce, request: ParsedOrderRequest): Promise<PlaceOrderResult> {
+export async function placeOrder(
+  storeId: string,
+  commerce: StoreCommerce,
+  request: ParsedOrderRequest,
+  options: PlaceOrderOptions = {},
+): Promise<PlaceOrderResult> {
   const existing = await findByKey(storeId, request.idempotencyKey);
   if (existing) return replay(existing, request.fingerprint);
 
   const { lines, totals, applied } = await priceOrder(storeId, commerce, request);
+  // Sprint 5 EP-11: the risk rules, on the priced total. Nothing is reserved yet, so this can take as long as it needs.
+  const assessment = options.assess ? await options.assess({ total: totals.total, subtotal: totals.subtotal }) : null;
 
   if (applied !== null && !(await claimDiscountUse(storeId, applied.discountId))) {
     // A retry of this very order may have taken the last use and saved by now.
@@ -216,6 +235,8 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       paymentMethod: request.paymentMethod,
       customerName: request.customer.customerName,
       phone: request.customer.phone,
+      // Sprint 5 EP-10 (D-108): the normalized phone the seller's customers are grouped by. Left absent when there is none.
+      ...(phoneKeyOf(request.customer.phone) === undefined ? {} : { phoneKey: phoneKeyOf(request.customer.phone) }),
       address: request.customer.address,
       city: request.customer.city,
       customerEmail: request.customer.email,
@@ -236,6 +257,7 @@ export async function placeOrder(storeId: string, commerce: StoreCommerce, reque
       deliveryCharges: totals.deliveryCharges,
       total: totals.total,
       ...(applied === null ? {} : { discountCode: applied.code, discountAmount: applied.amount, discountSnapshot: applied.snapshot }),
+      ...(assessment === null ? {} : confirmationFieldsOf(assessment)),
       ...(request.paymentMethod === 'card' ? { stripeSessionExpiresAt: new Date(Date.now() + CARD_SESSION_LIFETIME_MS) } : {}),
     });
     // Only once the order is saved: until then a failure would give the units back.

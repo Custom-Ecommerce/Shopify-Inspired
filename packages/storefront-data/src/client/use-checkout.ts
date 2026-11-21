@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ABANDONED_CART_DEBOUNCE_MS, planAbandonedCart } from "../domain/abandoned-cart";
 import { EMPTY_CHECKOUT_VALUES, validateCheckout } from "../domain/checkout";
 import type { CheckoutField, CheckoutFieldErrors, CheckoutValues } from "../domain/checkout";
 import type { Money } from "../domain/money";
@@ -37,6 +38,11 @@ export interface UseCheckoutResult {
   setField: (field: CheckoutField, value: string) => void;
   /** Places the order. A theme that owns its own form passes the values here; without them the hook's own values are used. */
   submit: (override?: CheckoutValues, options?: { paymentMethod?: PaymentMethod }) => Promise<void>;
+  /**
+   * Sprint 5 EP-28: a theme that keeps its own phone and email boxes (and so never calls setField for them) reports them here on every change. The
+   * hook then keeps the cart for the seller once the phone is valid (one debounced call, failures ignored). A theme that uses setField needs no call.
+   */
+  noteContact: (contact: { phone: string; email?: string }) => void;
 }
 
 interface Attempt {
@@ -70,6 +76,9 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const inFlight = useRef(false);
   const attempt = useRef<Attempt | null>(null);
+  // Sprint 5 EP-28: what a theme with its own boxes reported (null: the hook's own values are the contact), and the last cart kept.
+  const [reportedContact, setReportedContact] = useState<{ phone: string; email: string } | null>(null);
+  const savedCart = useRef<string | null>(null);
 
   const errors = useMemo<CheckoutFieldErrors>(() => {
     if (!attempted) return {};
@@ -80,6 +89,33 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
   const setField = useCallback((field: CheckoutField, value: string) => {
     setValues((previous) => ({ ...previous, [field]: value }));
   }, []);
+
+  const noteContact = useCallback((contact: { phone: string; email?: string }) => {
+    const next = { phone: contact.phone, email: contact.email ?? "" };
+    setReportedContact((previous) => (previous !== null && previous.phone === next.phone && previous.email === next.email ? previous : next));
+  }, []);
+
+  // Sprint 5 EP-28.US01.T03 (D-107): the ONE call that keeps the cart for the seller. Once the phone is a valid Pakistani mobile number and the cart
+  // is not empty, and the shopper has stopped typing for a moment, the cart goes to the store (the server prices it from the ids: only ids and
+  // quantities leave here). The consent line is shown next to the phone field of both themes, so reaching a valid phone means it was shown.
+  // Nothing is sent while the order is being placed or after it was. A failure is ignored: the shopper's checkout never depends on this.
+  const contactPhone = reportedContact?.phone ?? values.phone;
+  const contactEmail = reportedContact?.email ?? values.email;
+  useEffect(() => {
+    if (!isHydrated || lines.length === 0 || status === "submitting" || status === "success") return;
+    if (typeof transport.saveAbandonedCart !== "function") return;
+    const plan = planAbandonedCart(contactPhone, contactEmail, lines);
+    if (plan === null || savedCart.current === plan.signature) return;
+    const timer = setTimeout(() => {
+      savedCart.current = plan.signature;
+      try {
+        void Promise.resolve(transport.saveAbandonedCart(plan.input)).catch(() => undefined);
+      } catch {
+        // Ignored on purpose.
+      }
+    }, ABANDONED_CART_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [contactPhone, contactEmail, lines, isHydrated, status, transport]);
 
   const submit = useCallback(async (override?: CheckoutValues, options?: { paymentMethod?: PaymentMethod }) => {
     const submitted = override ?? values;
@@ -148,6 +184,7 @@ export function useCheckout(transportOverride?: OrderTransport): UseCheckoutResu
     subtotal: cart.subtotal,
     setField,
     submit,
+    noteContact,
   };
 }
 /* @theme-integration-patch:checkout-hook */

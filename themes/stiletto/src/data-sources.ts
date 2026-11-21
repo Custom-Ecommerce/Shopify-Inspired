@@ -33,6 +33,6 @@ export const SECTION_SOURCES: SectionSource[] = [
   { id: "product-gallery", file: "components/product-detail/ProductGallery.tsx", badge: "dynamic", note: "Images come from the product." },
   { id: "product-info", file: "components/product-detail/ProductInfo.tsx", badge: "partial", note: "Title, price and stock are the product's. Sizes, colours and packs are not supported by the platform." },
   { id: "product-accordion", file: "components/product-detail/ProductAccordion.tsx", badge: "partial", note: "Description is the product's; shipping and care text is theme content." },
-  { id: "product-reviews", file: "components/product-detail/ProductReviewsSection.tsx", badge: "static", note: "Sample reviews. The platform has no review list yet, so every store shows the same samples." },
+  { id: "product-reviews", file: "components/product-detail/ProductReviewsSection.tsx", badge: "dynamic", note: "The product's own approved reviews, their average and count, and the seller's replies. A product with no reviews shows an empty state." },
   { id: "checkout", file: "components/checkout/checkout-section.tsx", badge: "partial", note: "Cart, delivery charges and totals are live. Email, billing address and notes are shown but not stored." },
 ];

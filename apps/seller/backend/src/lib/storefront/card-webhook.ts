@@ -3,7 +3,7 @@ import { connectSellerDb } from '@/lib/mongo';
 import { notifyOrderPlaced } from '@/lib/notifications';
 import { PAYMENT_NOT_COMPLETED_REASON, PAYMENT_SYSTEM_ACTOR, cancelOrder } from '@/lib/order-cancel';
 import { assertCan, Order, ORDER_ACTIONS, writeAuditLog } from '@/lib/services';
-import { cardPaymentsAvailable, orderWebhookSecret } from '@/lib/storefront/card-config';
+import { orderWebhookSecret, stripeCardConfigured } from '@/lib/storefront/card-config';
 import { stripeClient, type StripeClient } from '@/lib/storefront/card-payment';
 
 const HEX_ID = /^[0-9a-fA-F]{24}$/;
@@ -142,7 +142,8 @@ async function onNotCompleted(session: SessionFields, eventId: string): Promise<
  * fires on every declined card while the session is still open and the shopper can try another.
  */
 export async function handleOrderPaymentWebhook(rawBody: string, signature: string | null): Promise<WebhookAnswer> {
-  if (!cardPaymentsAvailable()) return { status: 503, body: { error: 'Card payments are not configured' } };
+  // The Stripe configuration, not the platform switch: a payment for an order placed before the switch went off must still be recorded.
+  if (!stripeCardConfigured()) return { status: 503, body: { error: 'Card payments are not configured' } };
   if (!signature) return { status: 400, body: { error: 'missing stripe-signature header' } };
 
   const stripe = await stripeClient();

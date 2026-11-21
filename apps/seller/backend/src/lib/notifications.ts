@@ -2,8 +2,9 @@ import mongoose from 'mongoose';
 import { after } from 'next/server';
 import * as notificationsNs from '@markaz/notifications';
 import type { EnqueueInput, EnqueueResult, NotificationOutboxModel, TemplateName } from '@markaz/notifications';
+import type { SellerAlertKind } from '@markaz/contracts';
 import { unwrapCjs } from '@/lib/cjs';
-import { readNotificationPrefs } from '@/lib/contracts';
+import { readConfirmationStatus, readNotificationPrefs } from '@/lib/contracts';
 import { NotificationOutbox, SellerAlert, Store, User } from '@/lib/services';
 import { readMessages } from '@/lib/store-settings';
 
@@ -122,7 +123,8 @@ export async function loadStoreNotifyInfo(storeId: string): Promise<StoreNotifyI
 
 export interface NewSellerAlert {
   store: string;
-  kind: 'new_order' | 'low_stock' | 'out_of_stock';
+  /** One of SELLER_ALERT_KINDS (contracts), the same list the model and lib/seller-alerts.ts use; test/seller-alert-kinds.test.ts keeps the four places in step. */
+  kind: SellerAlertKind;
   title: string;
   body: string;
   link: string | null;
@@ -171,6 +173,8 @@ interface OrderFields {
   city: string;
   courier: string;
   trackingNumber: string;
+  /** Sprint 5 EP-11: an order waiting for the seller's phone confirmation. */
+  unconfirmed: boolean;
   items: Array<{ title: string; variantTitle: string | null; quantity: number; unitPrice: number }>;
 }
 
@@ -189,6 +193,7 @@ function orderFields(order: unknown): OrderFields {
     city: str(row.city).trim() || '-',
     courier: str(row.courier),
     trackingNumber: str(row.trackingNumber),
+    unconfirmed: readConfirmationStatus(row.confirmationStatus) === 'unconfirmed',
     items: items.map((item) => ({
       title: str(item.productTitle) || 'Item',
       variantTitle: str(item.variantTitle) || null,
@@ -249,10 +254,12 @@ export async function sendOrderPlaced(storeId: string, order: unknown): Promise<
     });
   }
 
+  // Sprint 5 EP-11 (D-108): ONE bell alert per order. A COD order waiting for the seller's phone confirmation raises the
+  // unconfirmed_order kind in place of new_order, under the same key, so the order never alerts twice.
   await createSellerAlert({
     store: storeId,
-    kind: 'new_order',
-    title: 'New order ' + o.orderNumber,
+    kind: o.unconfirmed ? 'unconfirmed_order' : 'new_order',
+    title: o.unconfirmed ? 'Order ' + o.orderNumber + ' needs a confirmation call' : 'New order ' + o.orderNumber,
     body: o.customerName + ', ' + o.city + ' - ' + total + ' (' + o.paymentMethod + ')',
     link: '/orders/' + o.id,
     dedupeKey: 'neworder:' + o.id,
@@ -396,4 +403,140 @@ export function notifyPayoutPaid(storeId: string, payout: PayoutMessageFields): 
 
 export function notifyPayoutVoided(storeId: string, payout: PayoutMessageFields): void {
   runAfterResponse('payout_voided', () => sendPayoutVoided(storeId, payout));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Returns (Sprint 5 EP-13.US01.T04, US02.T02)
+
+interface ReturnFields {
+  id: string;
+  returnNumber: string;
+  orderObjectId: string;
+}
+
+function returnFields(doc: unknown): ReturnFields {
+  const row = (doc ?? {}) as Record<string, unknown>;
+  return { id: String(row._id ?? ''), returnNumber: str(row.returnNumber), orderObjectId: String(row.order ?? '') };
+}
+
+/**
+ * A shopper asked for a return: ONE email to the seller (unless new-order emails are switched off) and ONE bell alert of the return_requested
+ * kind, each under its own key (return:<id>:requested), so a repeat queues nothing. Never throws; run it after the response.
+ */
+export async function sendReturnRequested(storeId: string, returnDoc: unknown, order: unknown): Promise<void> {
+  const r = returnFields(returnDoc);
+  const o = orderFields(order);
+  if (r.id === '' || r.returnNumber === '') return;
+  const store = await loadStoreNotifyInfo(storeId);
+  if (!store) return;
+  if (store.emailNewOrder) {
+    await enqueueEmail({
+      template: 'return_requested_seller',
+      to: store.ownerEmail,
+      vars: {
+        storeName: store.name,
+        orderNumber: o.orderNumber,
+        returnNumber: r.returnNumber,
+        customerName: o.customerName,
+        dashboardLink: sellerDashboardLink(storeId, '/returns') ?? DASHBOARD_FALLBACK,
+      },
+      store: storeId,
+      order: r.orderObjectId,
+      dedupeKey: 'return:' + r.id + ':requested',
+    });
+  }
+  await createSellerAlert({
+    store: storeId,
+    kind: 'return_requested',
+    title: 'Return request ' + r.returnNumber,
+    body: o.customerName + ' asked to return items from order ' + o.orderNumber,
+    link: '/returns',
+    dedupeKey: 'return:' + r.id + ':requested',
+    order: r.orderObjectId === '' ? null : r.orderObjectId,
+  });
+}
+
+export function notifyReturnRequested(storeId: string, returnDoc: unknown, order: unknown): void {
+  runAfterResponse('return_requested', () => sendReturnRequested(storeId, returnDoc, order));
+}
+
+/** The seller's decision, told to the shopper by email when the order has one (most shoppers have none: the seller gets a wa.me link). */
+export async function sendReturnDecision(storeId: string, returnDoc: unknown, order: unknown, decision: 'approved' | 'rejected', reason: string | null): Promise<void> {
+  const r = returnFields(returnDoc);
+  const o = orderFields(order);
+  if (r.id === '' || r.returnNumber === '' || o.customerEmail === null) return;
+  const store = await loadStoreNotifyInfo(storeId);
+  if (!store) return;
+  await enqueueEmail({
+    template: decision === 'approved' ? 'return_approved_customer' : 'return_rejected_customer',
+    to: o.customerEmail,
+    vars: {
+      storeName: store.name,
+      customerName: o.customerName,
+      orderNumber: o.orderNumber,
+      returnNumber: r.returnNumber,
+      ...(decision === 'rejected' ? { returnReason: reason && reason.trim() !== '' ? reason : 'Not stated' } : {}),
+    },
+    store: storeId,
+    order: r.orderObjectId,
+    dedupeKey: 'return:' + r.id + ':' + decision,
+    footer: store.emailFooter,
+  });
+}
+
+export function notifyReturnDecision(storeId: string, returnDoc: unknown, order: unknown, decision: 'approved' | 'rejected', reason: string | null): void {
+  runAfterResponse('return_decision', () => sendReturnDecision(storeId, returnDoc, order, decision, reason));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Reviews (Sprint 5 EP-21.US02.T02)
+
+export interface ReviewMessageFields {
+  id: string;
+  productId: string;
+  productTitle: string;
+  rating: number;
+  /** The text the shopper wrote: plain text, escaped by the email template and by the dashboard. */
+  body: string;
+  displayName: string;
+}
+
+/**
+ * A shopper left a review: ONE email to the seller (unless new-order emails are switched off) and ONE bell alert of the review_received kind,
+ * each under the key review:<id>, so a repeat queues nothing. Never throws; run it after the response.
+ */
+export async function sendReviewReceived(storeId: string, review: ReviewMessageFields): Promise<void> {
+  if (review.id === '') return;
+  const store = await loadStoreNotifyInfo(storeId);
+  if (!store) return;
+  const rating = String(Math.round(review.rating)) + ' out of 5';
+  if (store.emailNewOrder) {
+    await enqueueEmail({
+      template: 'review_received_seller',
+      to: store.ownerEmail,
+      vars: {
+        storeName: store.name,
+        productName: review.productTitle,
+        customerName: review.displayName,
+        reviewRating: rating,
+        reviewText: review.body.slice(0, 500),
+        dashboardLink: sellerDashboardLink(storeId, '/reviews') ?? DASHBOARD_FALLBACK,
+      },
+      store: storeId,
+      dedupeKey: 'review:' + review.id,
+    });
+  }
+  await createSellerAlert({
+    store: storeId,
+    kind: 'review_received',
+    title: 'New review: ' + rating,
+    body: review.displayName + ' reviewed ' + review.productTitle,
+    link: '/reviews',
+    dedupeKey: 'review:' + review.id,
+    product: review.productId === '' ? null : review.productId,
+  });
+}
+
+export function notifyReviewReceived(storeId: string, review: ReviewMessageFields): void {
+  runAfterResponse('review_received', () => sendReviewReceived(storeId, review));
 }

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import type { ProductDetailVM } from "@markaz/storefront-data";
-import type { NormalizedCategory, NormalizedProduct, ReviewItem } from "../../types";
+import type { StorefrontProductReviews } from "@markaz/storefront-data";
+import type { NormalizedCategory, NormalizedProduct } from "../../types";
 import { CategoryCarousel } from "../category/CategoryCarousel";
 import { ProductCarousel } from "../showcase/ProductCarousel";
 import { ProductAccordion } from "./ProductAccordion";
@@ -17,7 +18,8 @@ interface ProductDetailViewProps {
   detail: ProductDetailVM;
   allProducts: NormalizedProduct[];
   categories: NormalizedCategory[];
-  reviews?: ReviewItem[];
+  /** The product's approved reviews, read on the server for a live store. Without them the reviews section loads its own. */
+  initialReviews?: StorefrontProductReviews | null;
   productHandle?: string;
   shippingDetails?: string[];
 }
@@ -27,7 +29,7 @@ export function ProductDetailView({
   detail,
   allProducts,
   categories,
-  reviews = [],
+  initialReviews,
   productHandle = "",
   shippingDetails = [],
 }: ProductDetailViewProps) {
@@ -69,7 +71,7 @@ export function ProductDetailView({
         </div>
 
         <ProductReviewsSection
-          reviews={reviews}
+          initialReviews={initialReviews}
           productHandle={productHandle || product.handle || ""}
         />
 

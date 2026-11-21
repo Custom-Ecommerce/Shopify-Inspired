@@ -23,7 +23,10 @@ function PaymentSwitches({ settings, save, onDirty }: TabProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const form = useTabSave(save);
   // SB-11 (V-06): on a theme whose checkout has no card option, cash on delivery cannot be switched off (the server refuses it too).
-  const codLocked = !settings.theme.supportsCardCheckout && draft.codEnabled;
+  // Sprint 5 EP-11.US04 (D-107): COD-only mode. While the platform has card checkout off, cash on delivery is the only way to pay,
+  // so it cannot be switched off, and the card switch and the Stripe wording are not shown at all.
+  const cardAvailable = settings.payments.cardAvailable;
+  const codLocked = draft.codEnabled && (!cardAvailable || !settings.theme.supportsCardCheckout);
 
   useEffect(() => {
     setDraft(saved);
@@ -49,7 +52,7 @@ function PaymentSwitches({ settings, save, onDirty }: TabProps) {
 
   return (
     <form onSubmit={onSubmit} noValidate>
-      <SectionCard title="Payment methods" description="What shoppers can choose at checkout.">
+      <SectionCard title="Payment methods" description={cardAvailable ? "What shoppers can choose at checkout." : "Shoppers pay cash on delivery. You confirm each order by phone or WhatsApp before you dispatch it."}>
         <div className="flex flex-col gap-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -57,7 +60,12 @@ function PaymentSwitches({ settings, save, onDirty }: TabProps) {
               <p className="text-sm text-muted-foreground">The shopper pays the courier when the parcel arrives. You keep the cash.</p>
               {codLocked ? (
                 <p id="cod-reason" className="mt-1 text-sm text-muted-foreground">
-                  {CARD_CHECKOUT_UNSUPPORTED_MESSAGE}
+                  {cardAvailable ? CARD_CHECKOUT_UNSUPPORTED_MESSAGE : "Cash on delivery is the only payment method for now, so it stays on."}
+                </p>
+              ) : null}
+              {!cardAvailable && !draft.codEnabled ? (
+                <p role="alert" className="mt-1 text-sm text-destructive">
+                  Shoppers cannot check out while cash on delivery is off. Switch it on and save.
                 </p>
               ) : null}
             </div>
@@ -70,16 +78,15 @@ function PaymentSwitches({ settings, save, onDirty }: TabProps) {
               aria-describedby={codLocked ? "cod-reason" : undefined}
             />
           </div>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <Label htmlFor="card">Card payments</Label>
-              <p className="text-sm text-muted-foreground">
-                Card money is collected by Markazify and paid out to you after our commission.
-                {settings.payments.cardAvailable ? "" : " Card payments are not available on the platform yet, so shoppers will not see this option."}
-              </p>
+          {cardAvailable ? (
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <Label htmlFor="card">Card payments</Label>
+                <p className="text-sm text-muted-foreground">Card money is collected by Markazify and paid out to you after our commission.</p>
+              </div>
+              <Switch id="card" checked={draft.cardEnabled} onCheckedChange={(on) => toggle("cardEnabled", on)} aria-label="Card payments" />
             </div>
-            <Switch id="card" checked={draft.cardEnabled} onCheckedChange={(on) => toggle("cardEnabled", on)} aria-label="Card payments" />
-          </div>
+          ) : null}
           {notice ? (
             <p role="alert" className="text-sm text-destructive">
               {notice}

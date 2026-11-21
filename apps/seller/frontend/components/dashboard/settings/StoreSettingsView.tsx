@@ -10,8 +10,10 @@ import { useActiveStoreId } from "@/lib/dashboard-context";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import type { StoreSettings } from "@markaz/contracts/store-settings";
 import { DeliveryTab } from "./DeliveryTab";
+import { FraudTab } from "./FraudTab";
 import { MessagesTab } from "./MessagesTab";
 import { PaymentsTab } from "./PaymentsTab";
+import { ReturnsTab } from "./ReturnsTab";
 import { ProfileTab } from "./ProfileTab";
 import { SeoTab } from "./SeoTab";
 import type { SaveResult } from "./shared";
@@ -24,6 +26,10 @@ export const SETTINGS_TABS = [
   { value: "theme", label: "Theme" },
   { value: "seo", label: "SEO & Social" },
   { value: "messages", label: "Messages" },
+  // Sprint 5 EP-11: phone confirmation, risk rules and the blocklist link.
+  { value: "fraud", label: "Fraud" },
+  // Sprint 5 EP-13: the return window.
+  { value: "returns", label: "Returns" },
 ] as const;
 
 type TabValue = (typeof SETTINGS_TABS)[number]["value"];
@@ -147,6 +153,8 @@ export function StoreSettingsView() {
           {tab === "theme" ? <ThemeTab settings={settings} save={save} onDirty={onDirty} /> : null}
           {tab === "seo" ? <SeoTab settings={settings} save={save} onDirty={onDirty} /> : null}
           {tab === "messages" ? <MessagesTab settings={settings} save={save} onDirty={onDirty} /> : null}
+          {tab === "fraud" ? <FraudTab settings={settings} save={save} onDirty={onDirty} /> : null}
+          {tab === "returns" ? <ReturnsTab settings={settings} save={save} onDirty={onDirty} /> : null}
         </>
       )}
     </div>

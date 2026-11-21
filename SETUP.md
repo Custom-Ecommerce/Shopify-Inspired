@@ -43,6 +43,7 @@ preview links, cache purge, sync, Cloudinary uploads, email. Each example has a 
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | seller backend, admin backend | SMTP settings when `EMAIL_PROVIDER=smtp`. |
 | `OUTBOX_CRON_SECRET` | seller backend, admin backend | Bearer secret for the internal outbox retry route (EP-07.US01.T02). |
 | `UNSUBSCRIBE_SIGNING_SECRET` | seller backend | Signs the unsubscribe link of broadcast emails (EP-07.US04). 16 characters or more. Without it a broadcast cannot be sent (503) and every unsubscribe link answers 404. |
+| `CARD_CHECKOUT_ENABLED` | seller backend (listed in the storefront example, never read there) | Sprint 5 COD-only mode (D-107). Card checkout is offered to shoppers only when this is `true` or `1` and the Stripe values are set; unset or any other value keeps card off everywhere. Stripe stays for seller billing. **Changing it takes up to 300 seconds to show on a storefront** (SB-6, D-113): the storefront caches each store's answer for `STORE_REVALIDATE_SECONDS` = 300 (`apps/storefront/lib/api/stores.ts`), so after the switch goes off a shopper can still be offered card until the cache is revalidated or the wait ends. The order route refuses card at once (422 `PAYMENT_METHOD_UNAVAILABLE`), so nothing is charged; restart the seller backend, then wait up to 5 minutes (or revalidate the store). |
 | `PLATFORM_DEFAULT_COMMISSION_PERCENT` | seller backend, admin backend | Platform default commission in percent. The placeholder is 5; the owner sets the real value (A-019). |
 | `APP_BASE_URL_SELLER` | seller backend, admin backend | Seller portal base URL for links in emails. |
 | `APP_BASE_URL_ADMIN` | admin backend | Admin console base URL for operator password-reset links (Sprint 4 EP-08). |
@@ -132,6 +133,45 @@ The second writes it. A database whose name contains `throwaway` or `test` does 
 script stops if `SELLER_MONGODB_URI` is set and names a different database than `MONGODB_URI`. No code creates the
 mirror row for a seller who signs up later, so re-run the script (it is safe) whenever a per-store rate change shows
 `OWNER_TRANSLATION_PENDING`.
+
+### Sprint 5: customers and the phone key (run once per database)
+
+The seller's Customers pages group orders by `Order.phoneKey` (the normalized phone, `+923xxxxxxxxx`). New orders get it at
+checkout. Orders placed before Sprint 5 have none, and until they are backfilled their phone-only customers are not listed.
+Run the backfill once on each database, dry run first (it writes nothing unless `--apply`, never changes `phone`, and is safe to
+repeat). A database whose name does not contain `throwaway` also needs `--i-know-this-is-real`:
+
+```bash
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/backfill-order-phone-key.mjs
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/backfill-order-phone-key.mjs --apply
+```
+
+### Sprint 5: indexes and the data steps, in this order (once per database)
+
+The seller backend connects with `bufferCommands: false`, so Mongoose builds **no index at runtime**. Without the next step the unique and
+TTL indexes of Sprint 5 do not exist (one review per order and product, one open abandoned cart per store and phone, the 7 day cart expiry,
+the return number and blocklist uniques). After deploying the backends run, in this order, each one dry run first and then with `--apply`
+(a database whose name does not contain `throwaway` also needs `--i-know-this-is-real`, for the dry run too). Every step is idempotent:
+
+1. `migrate-commission-index` (moves the ledger's unique index to include `returnId`; it creates the new one before it drops the old one).
+2. `ensure-indexes` (below). It must come after step 1, so the ledger's old index is already replaced.
+3. `backfill-order-phone-key` (previous section).
+4. `bootstrap-admin-data` (section "One shared database").
+5. `mark-sellers-verified` (section 8).
+
+```bash
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/migrate-commission-index.mjs
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/ensure-indexes.mjs
+pnpm --filter @markaz/contracts exec node --env-file=../../apps/seller/backend/.env --import tsx ../../scripts/ensure-indexes.mjs --apply
+```
+
+`ensure-indexes` calls `createIndexes()` per model and **never** `syncIndexes` or `dropIndexes`: an index nobody declares stays. It prints, per
+model, which indexes are missing and which conflict (an index of the same name with another definition: reported and left alone, that model is
+skipped), then, with `--apply`, creates the missing ones. A unique index can fail when the data already breaks it: that model is reported with
+the error name and the other models are still done (the script then exits with 1). It prints names and counts only. A second run finds nothing missing.
+(Root script: `pnpm ensure:indexes -- --apply`, with `SELLER_MONGODB_URI` exported in the shell.)
+
+The **dry run only reads** (SB-6): the script switches Mongoose `autoCreate` and `autoIndex` off before the models load, so nothing is created on connect; only `--apply` creates. `mark-sellers-verified` has the same guard as the other deploy scripts: a database whose name does not contain `throwaway` needs `--i-know-this-is-real`, the dry run included.
 
 ### Required secrets (production)
 

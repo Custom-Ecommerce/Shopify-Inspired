@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { discountPercent } from "@/lib/product-pricing";
-import { MAX_OPTIONS, MAX_OPTION_VALUES, MAX_VARIANTS, rowProblem } from "@/lib/variant-matrix";
+import { MAX_OPTIONS, MAX_OPTION_VALUES, MAX_VARIANTS, OUT_OF_STOCK_HINT, rowProblem, willShowOutOfStock } from "@/lib/variant-matrix";
 import type { MatrixRow, OptionDraft, RowValues, VariantMatrix } from "@/lib/variant-matrix";
 
 const cell = "h-8 min-w-20 font-mono text-xs";
@@ -306,6 +306,11 @@ export function VariantBuilder({
               </tbody>
             </table>
           </div>
+          {rows.some((row) => row.id === null && willShowOutOfStock(valuesOf(row).trackQuantity, valuesOf(row).stock)) ? (
+            <p role="status" className="rounded-md bg-warning/15 px-2 py-1 text-sm text-foreground">
+              {OUT_OF_STOCK_HINT}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

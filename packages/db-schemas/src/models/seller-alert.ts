@@ -1,6 +1,7 @@
 import mongoose, { Schema, type Model, type Types } from 'mongoose';
 
-export const SELLER_ALERT_KINDS = ['new_order', 'low_stock', 'out_of_stock'] as const;
+/** Same list as SELLER_ALERT_KINDS in @markaz/contracts. Keep them identical (a test compares them). */
+export const SELLER_ALERT_KINDS = ['new_order', 'low_stock', 'out_of_stock', 'unconfirmed_order', 'return_requested', 'review_received'] as const;
 export type SellerAlertKind = (typeof SELLER_ALERT_KINDS)[number];
 
 /**

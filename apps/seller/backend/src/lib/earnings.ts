@@ -1,6 +1,6 @@
 import type { EarningsEntryRow, EarningsPayoutRow, EarningsQuery, EarningsResponse } from '@markaz/contracts';
 import { HttpError } from '@/lib/http';
-import { commissionTotals, oid, totalPaidOut, unsettledBalance } from '@/lib/ledger-aggregates';
+import { commissionTotals, oid, returnsTotals, totalPaidOut, unsettledBalance } from '@/lib/ledger-aggregates';
 import { ACCOUNT_CODES, karachiDayLabel, resolvePeriod } from '@/lib/contracts';
 import { CommissionEntry, Order, Payout } from '@/lib/services';
 
@@ -86,7 +86,7 @@ export async function buildEarnings(storeId: string, query: EarningsQuery, now: 
     ...(query.type ? { type: query.type } : {}),
   };
 
-  const [totals, balance, paidOut, rows, totalDocs, payouts] = await Promise.all([
+  const [totals, balance, paidOut, rows, totalDocs, payouts, returns] = await Promise.all([
     commissionTotals(storeId, period.start, period.end),
     unsettledBalance(storeId),
     totalPaidOut(storeId),
@@ -101,6 +101,7 @@ export async function buildEarnings(storeId: string, query: EarningsQuery, now: 
       .sort({ createdAt: -1, _id: -1 })
       .limit(PAYOUTS_SHOWN)
       .lean() as unknown as Promise<PayoutDoc[]>,
+    returnsTotals(storeId, period.start, period.end),
   ]);
 
   const numbers = await orderNumbersFor(rows.map((row) => String(row.order)), storeId);
@@ -108,6 +109,8 @@ export async function buildEarnings(storeId: string, query: EarningsQuery, now: 
   return {
     period: { key: period.period, from: karachiDayLabel(period.start), to: karachiDayLabel(lastDay), start: period.start.toISOString(), end: period.end.toISOString() },
     summary: { sales: totals.sales, commission: totals.commission, net: totals.sales - totals.commission },
+    // Sprint 5 EP-13: how much of the summary above came from returns (already netted into it).
+    returns,
     allTime: { balance, totalPaidOut: paidOut },
     entries: { docs: rows.map((row) => toEntryRow(row, numbers)), page: query.page, limit: query.limit, totalDocs, totalPages: Math.ceil(totalDocs / query.limit) },
     payouts: payouts.map(toPayoutRow),

@@ -10,6 +10,8 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Field, fieldDescribedBy } from "../components/ui/field";
 import { Input } from "../components/ui/input";
+import { ReturnRequest } from "../components/return-request";
+import { ReviewOrder } from "../components/review-order";
 import { ORDER_STATUS_STEPS, PAYMENT_LABELS, orderStatusCopy } from "../lib/order-status";
 
 const ORDER_FIELD = "track-order-id";
@@ -89,7 +91,17 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
 }
 
 function LookupOutcome({ lookup }: { lookup: UseOrderLookupResult }) {
-  if (lookup.status === "found" && lookup.order) return <OrderDetails order={lookup.order} />;
+  if (lookup.status === "found" && lookup.order) {
+    return (
+      <div className="flex flex-col gap-6">
+        <OrderDetails order={lookup.order} />
+        {/* Sprint 5 EP-13.US01.T04: a delivered order can be returned. The phone is the one typed above (kept in state only). */}
+        {lookup.order.status === "delivered" ? <ReturnRequest orderId={lookup.order.orderId} phone={lookup.values.phone} /> : null}
+        {/* Sprint 5 EP-21.US01.T04: and its items can be reviewed (published at once). */}
+        {lookup.order.status === "delivered" ? <ReviewOrder orderId={lookup.order.orderId} phone={lookup.values.phone} /> : null}
+      </div>
+    );
+  }
   if (lookup.status === "not_found") {
     return (
       <Alert tone="danger">

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { objectIdSchema } from './object-id';
 import { STOREFRONT_ORDER_STATUSES } from './storefront';
+import { CONFIRMATION_LOG_RESULTS, CONFIRMATION_STATUSES, RISK_FLAGS } from './fraud';
 
 export const orderLineSchema = z.object({
   productId: z.string().min(1),
@@ -115,6 +116,8 @@ export const dashboardOrderListQuerySchema = z
       .string()
       .transform((value) => value.trim().slice(0, ORDER_SEARCH_MAX_LENGTH).trim())
       .optional(),
+    /** Sprint 5 EP-11.US01: confirmation=unconfirmed keeps only the orders waiting for the seller's phone confirmation. */
+    confirmation: z.enum(['unconfirmed']).optional(),
     page: z.coerce.number().int().min(1).max(ORDER_LIST_MAX_PAGE).default(1),
     limit: z.coerce
       .number()
@@ -144,6 +147,10 @@ export const dashboardOrderListItemSchema = z.object({
   courier: z.string().nullable(),
   trackingNumber: z.string().nullable(),
   createdAt: z.string().min(1),
+  /** Sprint 5 EP-11 (D-107). Optional so a response from an older backend still parses; an absent value reads as not_required. */
+  confirmationStatus: z.enum(CONFIRMATION_STATUSES).optional(),
+  /** Why the order was flagged at checkout. Empty for an order with no flags. */
+  riskFlags: z.array(z.enum(RISK_FLAGS)).optional(),
 });
 
 /** Orders per status for the tabs: same store, dates and search as the list, without its status filter. */
@@ -168,6 +175,8 @@ export const dashboardOrderListResponseSchema = z.object({
   hasNextPage: z.boolean(),
   hasPrevPage: z.boolean(),
   counts: dashboardOrderCountsSchema,
+  /** Sprint 5 EP-11.US01: how many of the store's orders wait for phone confirmation (dates and search do not apply). */
+  unconfirmedCount: z.number().int().min(0).optional(),
 });
 
 export const dashboardOrderItemSchema = z.object({
@@ -261,6 +270,13 @@ export const dashboardOrderDetailSchema = z.object({
   canMarkCollected: z.boolean(),
   /** The order placed, every history entry and every note, newest first (OB-5a). */
   timeline: z.array(dashboardOrderTimelineEntrySchema),
+  /** Sprint 5 EP-11 (D-107). Optional so a response from an older backend still parses. */
+  confirmationStatus: z.enum(CONFIRMATION_STATUSES).optional(),
+  riskFlags: z.array(z.enum(RISK_FLAGS)).optional(),
+  /** The seller's phone confirmation decisions, newest first. */
+  confirmationLog: z.array(z.object({ at: z.string().min(1), by: z.string().nullable(), result: z.enum(CONFIRMATION_LOG_RESULTS), note: z.string().nullable() })).optional(),
+  /** The customer this order belongs to (the key of /customers/:key): the normalized phone, else the lower-case email. */
+  customerKey: z.string().nullable().optional(),
 });
 
 // EP-02 OB-2: POST /api/orders/:id/transition.

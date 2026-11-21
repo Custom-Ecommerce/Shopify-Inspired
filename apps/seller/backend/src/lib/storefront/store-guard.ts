@@ -1,4 +1,6 @@
+import type { FraudSettings } from '@markaz/contracts';
 import { objectIdSchema } from '@/lib/contracts';
+import { readFraud } from '@/lib/fraud';
 import { connectSellerDb } from '@/lib/mongo';
 import { Store } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
@@ -16,6 +18,8 @@ export interface StoreCommerce {
   cityRates: Readonly<Record<string, number>>;
   /** The shipping city of a quote or an order, set by the caller. */
   city?: string | null;
+  /** Sprint 5 EP-11: the phone confirmation mode and the risk rules (read from paymentSettings, never from storefront). */
+  fraud?: FraudSettings;
 }
 
 interface ActiveStoreRow {
@@ -49,6 +53,7 @@ export function readStoreCommerce(row: ActiveStoreRow): StoreCommerce {
     codEnabled: payments.codEnabled,
     cardEnabled: cardPaymentsAvailable() && payments.cardEnabled,
     cityRates: cityRateMap(delivery),
+    fraud: readFraud(row.paymentSettings),
   };
 }
 

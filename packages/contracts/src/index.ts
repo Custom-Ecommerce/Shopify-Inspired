@@ -21,6 +21,8 @@ export * from './discount';
 
 // B10.2: returns and referrals.
 export * from './return';
+// Sprint 5 EP-13: the arithmetic of returns (returned base, commission reversal, window, quantities).
+export * from './return-money';
 export * from './referral';
 
 // B10.3: media.
@@ -60,3 +62,10 @@ export * from './store-settings';
 export * from './payouts';
 // Sprint 4 EP-07.US04: customers and email broadcasts.
 export * from './broadcast';
+// Sprint 5 EP-10 (D-107): customers derived from orders, their notes and tags, the detail and the CSV export.
+export * from './customers';
+// Sprint 5 EP-11 (D-107): phone confirmation, risk rules, blocklist and the address book.
+export * from './fraud';
+
+// Sprint 5 EP-28: abandoned carts (the capture request, the seller's list).
+export * from './abandoned-cart';

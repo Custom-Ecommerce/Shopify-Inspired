@@ -38,7 +38,10 @@ import {
   CreditCard,
   Settings,
   Globe,
-  ExternalLink, UserCog
+  ExternalLink, UserCog,
+  Contact,
+  Ban,
+  ShoppingBasket,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -58,9 +61,15 @@ export const NAV_GROUPS = [
       { href: "/products", label: "Products", icon: Package },
       { href: "/categories", label: "Categories", icon: FolderTree },
       { href: "/orders", label: "Orders", icon: ShoppingCart },
+      // Sprint 5 EP-10.US02: the customers who ordered, with private notes.
+      { href: "/customers", label: "Customers", icon: Contact },
+      // Sprint 5 EP-11.US02: the phones and emails the store refuses orders from.
+      { href: "/blocklist", label: "Blocklist", icon: Ban },
       { href: "/inventory", label: "Inventory", icon: Archive },
       { href: "/returns", label: "Returns", icon: RotateCcw },
       { href: "/reviews", label: "Reviews", icon: Star },
+      // Sprint 5 EP-28: carts shoppers left behind, with a WhatsApp link for each.
+      { href: "/abandoned-carts", label: "Abandoned carts", icon: ShoppingBasket },
     ],
   },
   {

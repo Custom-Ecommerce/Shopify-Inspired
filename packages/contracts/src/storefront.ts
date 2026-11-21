@@ -56,6 +56,12 @@ export const STOREFRONT_ERROR_CODES = [
   'DISCOUNT_USED_UP',
   // Card payment (D-082).
   'PAYMENT_NOT_STARTED',
+  // Sprint 5 EP-11.US02: a blocked phone or email. Neutral on purpose: it does not say the contact is blocked.
+  'CONTACT_BLOCKED',
+  // Sprint 5 EP-13.US01: a return request (the order is not delivered, outside the window, nothing left to return, a card order).
+  'RETURN_NOT_ELIGIBLE',
+  // Sprint 5 EP-21.US01: a review that cannot be written (the order is not delivered, the product is already reviewed or not in the order).
+  'REVIEW_NOT_ELIGIBLE',
 ] as const;
 export type StorefrontErrorCode = (typeof STOREFRONT_ERROR_CODES)[number];
 

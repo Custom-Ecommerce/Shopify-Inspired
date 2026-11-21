@@ -14,6 +14,7 @@ import { DataTable } from "@/components/dashboard/shared/DataTable";
 import type { ColumnDef } from "@/components/dashboard/shared/DataTable";
 import { EmptyState } from "@/components/dashboard/shared/EmptyState";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
+import { ConfirmationBadge, RiskFlagChips } from "@/components/dashboard/orders/ConfirmationBits";
 import { OrderCheckbox, OrderSelectionBar, OrderSelectionProvider, SelectPageCheckbox } from "@/components/dashboard/orders/OrderSelection";
 import {
   ORDER_STATUS_LABEL,
@@ -42,6 +43,8 @@ interface OrderFilters {
   from: string;
   to: string;
   page: number;
+  /** Sprint 5 EP-11.US01: "unconfirmed" shows only the orders waiting for the seller's phone confirmation. */
+  confirmation: string;
 }
 
 const single = (value: string | string[] | undefined): string => (typeof value === "string" ? value : "");
@@ -57,6 +60,7 @@ function readFilters(search: SearchParams): OrderFilters {
     from: DAY_PATTERN.test(from) ? from : "",
     to: DAY_PATTERN.test(to) ? to : "",
     page: Math.max(1, Number.parseInt(single(search.page), 10) || 1),
+    confirmation: single(search.confirmation) === "unconfirmed" ? "unconfirmed" : "",
   };
 }
 
@@ -67,6 +71,7 @@ function queryOf(filters: OrderFilters): string {
   if (filters.q) query.set("q", filters.q);
   if (filters.from) query.set("from", filters.from);
   if (filters.to) query.set("to", filters.to);
+  if (filters.confirmation) query.set("confirmation", filters.confirmation);
   if (filters.page > 1) query.set("page", String(filters.page));
   return query.toString();
 }
@@ -122,8 +127,17 @@ function buildOrderColumns(storeId: string, pageIds: readonly string[]): ColumnD
         </Link>
       ),
     },
-    { header: "Status", render: (o) => <OrderStatusBadge status={o.status} /> },
+    {
+      header: "Status",
+      render: (o) => (
+        <span className="flex flex-col items-start gap-1">
+          <OrderStatusBadge status={o.status} />
+          <ConfirmationBadge status={o.confirmationStatus} />
+        </span>
+      ),
+    },
     { header: "Payment", render: (o) => <PaymentCell order={o} /> },
+    { header: "Flags", render: (o) => <RiskFlagChips flags={o.riskFlags} />, className: "hidden lg:table-cell" },
     { header: "Customer", render: (o) => o.customerName ?? "—" },
     { header: "City", render: (o) => o.city ?? "—", className: "hidden md:table-cell" },
     {
@@ -159,6 +173,8 @@ function OrderCard({ storeId, order }: { storeId: string; order: DashboardOrderL
           {order.paymentMethod ? PAYMENT_METHOD_LABEL[order.paymentMethod] : "—"}
           <PaymentStatusBadge status={order.paymentStatus} />
         </span>
+        <ConfirmationBadge status={order.confirmationStatus} />
+        <RiskFlagChips flags={order.riskFlags} />
         <span className="flex items-center justify-between gap-2 text-sm">
           <span className="tabular-nums font-medium">{money(order.total)}</span>
           <span className="text-xs text-muted-foreground tabular-nums">{shortDate(order.createdAt)}</span>
@@ -179,11 +195,11 @@ function StatusTabs({ storeId, filters, list }: { storeId: string; filters: Orde
   return (
     <nav aria-label="Order status" className="flex flex-wrap items-center gap-2">
       {tabs.map((tab) => {
-        const active = filters.status === tab.value;
+        const active = filters.status === tab.value && filters.confirmation === "";
         return (
           <Link
             key={tab.value || "all"}
-            href={ordersHref(storeId, { ...filters, status: tab.value, page: 1 })}
+            href={ordersHref(storeId, { ...filters, status: tab.value, confirmation: "", page: 1 })}
             aria-current={active ? "page" : undefined}
             className={
               active
@@ -196,6 +212,21 @@ function StatusTabs({ storeId, filters, list }: { storeId: string; filters: Orde
           </Link>
         );
       })}
+      {/* Sprint 5 EP-11.US01: the orders waiting for a confirmation call, whatever their status. Kept out of the status counts. */}
+      {(list.unconfirmedCount ?? 0) > 0 || filters.confirmation === "unconfirmed" ? (
+        <Link
+          href={ordersHref(storeId, { ...filters, status: "", confirmation: filters.confirmation === "unconfirmed" ? "" : "unconfirmed", page: 1 })}
+          aria-current={filters.confirmation === "unconfirmed" ? "page" : undefined}
+          className={
+            filters.confirmation === "unconfirmed"
+              ? "inline-flex items-center gap-1.5 rounded-full bg-warning px-3 py-1 text-xs font-medium text-foreground"
+              : "inline-flex items-center gap-1.5 rounded-full border border-warning/60 bg-warning/10 px-3 py-1 text-xs font-medium text-foreground transition-colors hover:bg-warning/20"
+          }
+        >
+          Needs confirmation
+          <span className="tabular-nums opacity-70">{list.unconfirmedCount ?? 0}</span>
+        </Link>
+      ) : null}
     </nav>
   );
 }
@@ -304,6 +335,7 @@ export default async function DashboardOrdersPage({
       {/* A plain GET form: Enter or the button submits, and the filters land in the URL. The tab is kept, the page resets. */}
       <form className="flex flex-wrap items-end gap-2" role="search">
         {filters.status ? <input type="hidden" name="status" value={filters.status} /> : null}
+        {filters.confirmation ? <input type="hidden" name="confirmation" value={filters.confirmation} /> : null}
         <label className="flex w-full min-w-0 flex-col gap-1 text-xs text-muted-foreground sm:w-64">
           Search
           <Input
@@ -324,7 +356,7 @@ export default async function DashboardOrdersPage({
         </label>
         <Button type="submit" variant="clay-soft">Search</Button>
         {filtered ? (
-          <Button variant="link" render={<Link href={ordersHref(storeId, { status: filters.status, q: "", from: "", to: "", page: 1 })} />}>
+          <Button variant="link" render={<Link href={ordersHref(storeId, { status: filters.status, q: "", from: "", to: "", page: 1, confirmation: filters.confirmation })} />}>
             Clear
           </Button>
         ) : null}
