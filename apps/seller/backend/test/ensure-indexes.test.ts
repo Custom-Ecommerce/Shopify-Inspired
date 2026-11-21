@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AbandonedCart, CommissionEntry, Review, Return, BlockedContact } from '@/lib/services';
+import { AbandonedCart, CommissionEntry, Review, Return, BlockedContact, SubscriptionPlanModel } from '@/lib/services';
 // @ts-expect-error plain .mjs script module without types; tests are not type-checked (tsconfig excludes test)
 import * as planNs from '../../../../scripts/lib/ensure-indexes-plan.mjs';
 
@@ -134,4 +134,24 @@ test('a missing collection is the driver\'s NamespaceNotFound (code 26), nothing
   assert.equal(plan.isMissingCollection({ code: 13 }), false);
   assert.equal(plan.isMissingCollection(null), false);
   assert.equal(plan.isMissingCollection(new Error('x')), false);
+});
+
+test('Sprint 6 EP-14: a fresh database misses the unique, partial index on the subscription plan key, and nothing conflicts', () => {
+  const declared = (SubscriptionPlanModel as unknown as { schema: { indexes: () => unknown } }).schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'SubscriptionPlan', collection: 'subscriptionPlans', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['SubscriptionPlan']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string; unique: boolean; partial: boolean }> }).missing;
+  assert.ok(missing.some((m) => m.name === 'plan_key_unique' && m.unique && m.partial), 'one plan per key, old plans without a key excluded');
+});
+
+test('Sprint 6 EP-14: once the plan key index exists the plan finds nothing missing, and a plain (non unique) index on the same key does not count', () => {
+  const declared = (SubscriptionPlanModel as unknown as { schema: { indexes: () => unknown } }).schema.indexes() as Declared;
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.keys(key).join('_') + '_1', key, ...(options as object) }));
+  const done = plan.planAll([{ model: 'SubscriptionPlan', collection: 'subscriptionPlans', declared }], { subscriptionPlans: [ID, ...have] });
+  assert.equal(done.totals.missing, 0);
+  assert.deepEqual(done.toCreate, []);
+  const plain = plan.planAll([{ model: 'SubscriptionPlan', collection: 'subscriptionPlans', declared }], { subscriptionPlans: [ID, { name: 'key_1', key: { key: 1 } }] });
+  assert.ok(plain.totals.missing >= 1, 'a non-unique index on the key does not stand in for the unique one');
 });

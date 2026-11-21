@@ -92,22 +92,33 @@ export const billingPortsImpl = {
     return plan ? { name: plan.name, stripePriceId: plan.stripePriceId, tier: plan.tier } : null;
   },
 
-  /** The seller's store for a signed-in actor (a user id). Stores are PK, the launch market. */
-  async findSellerStoreForActor(actorId: string): Promise<{
+  /**
+   * The seller's store for a signed-in actor (a user id). Stores are PK, the launch market.
+   * CO-73: a seller can own several stores, so this no longer reads User.store. With storeId it is that store, if the actor owns it;
+   * without, the actor's oldest owned store. Only when the actor owns no store does the old User.store field answer (data from before
+   * stores had an owner).
+   */
+  async findSellerStoreForActor(actorId: string, storeId?: string): Promise<{
     storeId: string;
     ownerEmail: string;
     countryCode: string;
     stripeCustomerId: string | null;
     stripeAccountId: string | null;
   } | null> {
+    type StoreRow = { _id: unknown; billing?: { stripeCustomerId?: string; stripeAccountId?: string } };
     const user = (await User.findById(actorId).select('store email').lean()) as { store?: unknown; email?: string } | null;
-    if (!user || !user.store) return null;
-    const store = (await Store.findById(user.store).select('billing').lean()) as
-      | { billing?: { stripeCustomerId?: string; stripeAccountId?: string } }
-      | null;
+    if (!user) return null;
+    let store: StoreRow | null;
+    if (storeId !== undefined) {
+      // A store that is not the actor's own is not found: never another seller's.
+      store = (await Store.findOne({ _id: storeId, owner: actorId }).select('billing').lean()) as StoreRow | null;
+    } else {
+      store = (await Store.findOne({ owner: actorId }).sort({ createdAt: 1, _id: 1 }).select('billing').lean()) as StoreRow | null;
+      if (!store && user.store) store = (await Store.findById(user.store).select('billing').lean()) as StoreRow | null;
+    }
     if (!store) return null;
     return {
-      storeId: String(user.store),
+      storeId: String(store._id),
       ownerEmail: String(user.email ?? ''),
       countryCode: 'PK',
       stripeCustomerId: store.billing?.stripeCustomerId ?? null,

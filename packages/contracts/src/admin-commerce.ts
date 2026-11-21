@@ -77,13 +77,38 @@ export const adminCommissionRatesSchema = envelopeOf(adminCommissionRateItemSche
 
 export const ADMIN_SUBSCRIPTION_TIERS = ['basic', 'pro', 'premium'] as const;
 
+/** The limits of a plan as the console lists them. null is unlimited. */
+const adminPlanLimitsSchema = z.object({
+  stores: z.number().int().min(0).nullable(),
+  products: z.number().int().min(0).nullable(),
+  staffSeats: z.number().int().min(0).nullable(),
+  apiKeys: z.number().int().min(0).nullable(),
+  customDomain: z.boolean(),
+  premiumThemes: z.boolean(),
+});
+
+/**
+ * Sprint 6 (D-118): plans are data. A plan from before Sprint 6 has only a name, a Stripe price and a tier: its key, price and limits are
+ * null here, and a new plan has no tier. Every Sprint 6 field has a default, so an older backend's answer still parses.
+ */
 export const adminSubscriptionPlanSchema = z.object({
   id: objectIdSchema,
   name: z.string(),
-  tier: z.enum(ADMIN_SUBSCRIPTION_TIERS),
-  stripePriceId: z.string(),
+  tier: z.enum(ADMIN_SUBSCRIPTION_TIERS).nullable().default(null),
+  stripePriceId: z.string().nullable().default(null),
   createdAt: isoDate,
   updatedAt: isoDate,
+  key: z.string().nullable().default(null),
+  /** Whole rupees; null for an old plan. */
+  priceRs: z.number().int().min(0).nullable().default(null),
+  interval: z.enum(['month']).default('month'),
+  limits: adminPlanLimitsSchema.nullable().default(null),
+  features: z.array(z.string()).default([]),
+  isActive: z.boolean().default(true),
+  sortOrder: z.number().int().default(0),
+  /** The compare-and-set counter of the write routes. */
+  revision: z.number().int().min(0).default(0),
+  archivedAt: isoDate.nullable().default(null),
 });
 
 export const adminSubscriptionPlanListSchema = envelopeOf(adminSubscriptionPlanSchema).extend({

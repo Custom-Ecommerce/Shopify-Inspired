@@ -33,7 +33,7 @@ import { syncStateToQuery, type SyncListState } from "@/lib/sync";
 import { listStateToQuery, type StoreListState } from "@/lib/stores";
 import { ledgerStateToQuery, ratesStateToQuery, type CommissionListState } from "@/lib/commission";
 import { subscriptionStateToQuery, type SubscriptionListState } from "@/lib/subscriptions";
-import { adminOverviewSchema, type AdminOverview } from "@/lib/contracts";
+import { adminOverviewSchema, adminPlanWriteResponseSchema, type AdminOverview, type AdminPlanWriteResponse } from "@/lib/contracts";
 import {
   commissionReportSchema,
   payoutBalanceListSchema,
@@ -198,6 +198,24 @@ export function listRateHistory(page: number, signal?: AbortSignal): Promise<Rat
 
 export function listSubscriptionPlans(state: SubscriptionListState, signal?: AbortSignal): Promise<AdminSubscriptionPlanList> {
   return call("/api/subscription-plans?" + subscriptionStateToQuery(state, true), adminSubscriptionPlanListSchema as Parser<AdminSubscriptionPlanList>, { signal });
+}
+
+/** Sprint 6 EP-14.US01: create a plan. The answer is the new plan (revision 0). */
+export function createPlan(input: unknown): Promise<AdminPlanWriteResponse> {
+  return call("/api/subscription-plans", adminPlanWriteResponseSchema as Parser<AdminPlanWriteResponse>, { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Sprint 6 EP-14.US01: change a plan. The body carries the revision the admin saw and a reason. */
+export function updatePlan(id: string, input: unknown): Promise<AdminPlanWriteResponse> {
+  return call("/api/subscription-plans/" + encodeURIComponent(id), adminPlanWriteResponseSchema as Parser<AdminPlanWriteResponse>, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+/** Sprint 6 EP-14.US01: archive a plan (the only removal). The body carries the revision and a reason. */
+export function archivePlan(id: string, input: { revision: number; reason: string }): Promise<AdminPlanWriteResponse> {
+  return call("/api/subscription-plans/" + encodeURIComponent(id) + "/archive", adminPlanWriteResponseSchema as Parser<AdminPlanWriteResponse>, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 /** The platform settings. The answer is one document, so there is no list envelope and no id. */

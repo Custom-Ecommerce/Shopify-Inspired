@@ -77,3 +77,97 @@ test('a store\'s Stripe account id is written under the billing group, and only 
     (Store as any).updateOne = original;
   }
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// CO-73 (Sprint 6): findSellerStoreForActor no longer assumes User.store.
+
+import { User } from '../src/models/user';
+
+const OWNER = '65a000000000000000000007';
+const OWN_STORE = '65a0000000000000000000a1';
+const OLDER_STORE = '65a0000000000000000000a0';
+const OTHER_STORE = '65a0000000000000000000b1';
+const LEGACY_STORE = '65a0000000000000000000c1';
+
+function stubStoreLookups(rows: Record<string, { owner: string; billing?: Record<string, string> }>, user: Record<string, unknown> | null) {
+  const originals = { userFindById: (User as any).findById, findOne: (Store as any).findOne, findById: (Store as any).findById };
+  const seen = { findOne: [] as any[], findById: [] as string[] };
+  const chain = (value: () => unknown) => {
+    const q: any = { select: () => q, sort: () => q, lean: async () => value() };
+    return q;
+  };
+  (User as any).findById = () => chain(() => user);
+  (Store as any).findOne = (filter: any) => {
+    seen.findOne.push(filter);
+    return chain(() => {
+      const ids = Object.keys(rows).sort();
+      const id = filter._id !== undefined ? ids.find((candidate) => candidate === String(filter._id) && rows[candidate]!.owner === String(filter.owner)) : ids.find((candidate) => rows[candidate]!.owner === String(filter.owner));
+      return id === undefined ? null : { _id: id, billing: rows[id]!.billing };
+    });
+  };
+  (Store as any).findById = (id: unknown) => {
+    seen.findById.push(String(id));
+    return chain(() => (rows[String(id)] ? { _id: String(id), billing: rows[String(id)]!.billing } : null));
+  };
+  return {
+    seen,
+    restore: () => {
+      (User as any).findById = originals.userFindById;
+      (Store as any).findOne = originals.findOne;
+      (Store as any).findById = originals.findById;
+    },
+  };
+}
+
+test('CO-73: with no store given, the seller\'s oldest OWNED store is used, whatever User.store says', async () => {
+  const stub = stubStoreLookups({ [OLDER_STORE]: { owner: OWNER }, [OWN_STORE]: { owner: OWNER }, [OTHER_STORE]: { owner: 'someone-else' } }, { email: 'a@example.com', store: OTHER_STORE });
+  try {
+    const found = await billingPortsImpl.findSellerStoreForActor(OWNER);
+    assert.equal(found?.storeId, OLDER_STORE);
+    assert.equal(found?.ownerEmail, 'a@example.com');
+    assert.deepEqual(stub.seen.findOne[0], { owner: OWNER });
+    assert.equal(stub.seen.findById.length, 0, 'User.store is not read when the seller owns a store');
+  } finally {
+    stub.restore();
+  }
+});
+
+test('CO-73: a given store is used only if the seller owns it; another seller\'s store is null', async () => {
+  const stub = stubStoreLookups({ [OWN_STORE]: { owner: OWNER, billing: { stripeCustomerId: 'cus_1' } }, [OTHER_STORE]: { owner: 'someone-else' } }, { email: 'a@example.com' });
+  try {
+    const mine = await billingPortsImpl.findSellerStoreForActor(OWNER, OWN_STORE);
+    assert.equal(mine?.storeId, OWN_STORE);
+    assert.equal(mine?.stripeCustomerId, 'cus_1');
+    assert.equal(await billingPortsImpl.findSellerStoreForActor(OWNER, OTHER_STORE), null);
+    assert.deepEqual(stub.seen.findOne[1], { _id: OTHER_STORE, owner: OWNER });
+    assert.equal(stub.seen.findById.length, 0);
+  } finally {
+    stub.restore();
+  }
+});
+
+test('CO-73: only a seller who owns no store falls back to the old User.store field', async () => {
+  const stub = stubStoreLookups({ [LEGACY_STORE]: { owner: 'nobody' } }, { email: 'old@example.com', store: LEGACY_STORE });
+  try {
+    assert.equal((await billingPortsImpl.findSellerStoreForActor(OWNER))?.storeId, LEGACY_STORE);
+    // ...but never when a store was asked for by id
+    assert.equal(await billingPortsImpl.findSellerStoreForActor(OWNER, OWN_STORE), null);
+  } finally {
+    stub.restore();
+  }
+});
+
+test('CO-73: an unknown user, or a seller with no store at all, is null', async () => {
+  const none = stubStoreLookups({}, null);
+  try {
+    assert.equal(await billingPortsImpl.findSellerStoreForActor(OWNER), null);
+  } finally {
+    none.restore();
+  }
+  const noStore = stubStoreLookups({}, { email: 'a@example.com' });
+  try {
+    assert.equal(await billingPortsImpl.findSellerStoreForActor(OWNER), null);
+  } finally {
+    noStore.restore();
+  }
+});

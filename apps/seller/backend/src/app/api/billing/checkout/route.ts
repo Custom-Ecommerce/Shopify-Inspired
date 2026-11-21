@@ -1,7 +1,7 @@
 
 import { loadBillingPorts } from '@/lib/services';
 import { callAdminBridge } from '../_bridge';
-import { isRecord, jsonResponse, requireBillingCaller, requireEnv } from '../_shared';
+import { isRecord, jsonResponse, requireBillingCaller, requireEnv, subscriptionStripeEnabled, subscriptionStripeOff } from '../_shared';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,6 +9,8 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request): Promise<Response> {
   const caller = await requireBillingCaller(request);
   if (!caller.ok) return caller.response;
+  // Sprint 6 (D-118): Stripe subscriptions are off. Signed-in sellers get a 404 with a code the dashboard can read.
+  if (!subscriptionStripeEnabled()) return subscriptionStripeOff();
 
   const baseUrl = requireEnv('SELLER_APP_URL');
   if (!baseUrl) return jsonResponse({ error: 'SELLER_APP_URL is not set' }, 500);
@@ -22,7 +24,11 @@ export async function POST(request: Request): Promise<Response> {
   const priceId = isRecord(body) && typeof body.priceId === 'string' ? body.priceId : '';
   if (!priceId) return jsonResponse({ error: 'priceId is required' }, 422);
 
-  const store = await (await loadBillingPorts()).findSellerStoreForActor(caller.actorId);
+  // CO-73: a seller can own several stores. The dashboard says which one; without it the seller's oldest store is used.
+  const rawStoreId = isRecord(body) ? body.storeId : undefined;
+  if (rawStoreId !== undefined && (typeof rawStoreId !== 'string' || !/^[0-9a-fA-F]{24}$/.test(rawStoreId))) return jsonResponse({ error: 'storeId is not valid' }, 422);
+
+  const store = await (await loadBillingPorts()).findSellerStoreForActor(caller.actorId, rawStoreId);
   if (!store) return jsonResponse({ error: 'seller store not found' }, 404);
 
   return callAdminBridge('/api/internal/stripe/checkout-session', {

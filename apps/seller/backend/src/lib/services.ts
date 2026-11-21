@@ -78,6 +78,8 @@ export const Payout = db.Payout;
 export const AuthToken = db.AuthToken;
 // Sprint 4 EP-04.US06 (D-095): go-live reads storeApprovalRequired from the platform settings.
 export const PlatformSettingsModel = db.PlatformSettingsModel;
+// Sprint 6 EP-14 (D-118): GET /api/plans reads the active subscription plans.
+export const SubscriptionPlanModel = db.SubscriptionPlanModel;
 export const PLATFORM_SETTINGS_GLOBAL_TYPE = db.PLATFORM_SETTINGS_GLOBAL_TYPE;
 export const {
   createSessionGuard,

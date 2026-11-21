@@ -66,6 +66,13 @@ export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
 'codCommissionPercent', 'paymentInstructions', 'graceDays', 'trialDays', 'supportEmail', 'supportPhone',
 ] as const;
 
+// Sprint 6 EP-14 (D-118): subscription plans are data. What a seller (or the public) may read of a plan: the plan facts, never the Stripe
+// price id, the revision or the archive data. The admin creates, edits and archives; the revision is moved by the server (system) only.
+export const PUBLIC_PLAN_READABLE_FIELDS = ['key', 'name', 'priceRs', 'interval', 'limits', 'features', 'sortOrder', 'isActive'] as const;
+export const ADMIN_PLAN_CREATABLE_FIELDS = ['key', 'name', 'priceRs', 'interval', 'limits', 'features', 'sortOrder', 'stripePriceId', 'isActive'] as const;
+// The key never changes after creation, and archivedAt/isActive are how a plan is archived (there is no delete).
+export const ADMIN_PLAN_WRITABLE_FIELDS = ['name', 'priceRs', 'limits', 'features', 'sortOrder', 'stripePriceId', 'isActive', 'archivedAt'] as const;
+
 // What a seller may set on a category of their store. store and isDemo are never client-writable.
 export const SELLER_CATEGORY_WRITABLE_FIELDS = ['name', 'slug', 'order', 'description'] as const;
 
@@ -317,10 +324,15 @@ delete: { actors: [], fields: {} },
 },
 
 subscriptionPlans: {
-read: { actors: ['public', 'admin', 'system'], fields: { public: ['name', 'tier'], admin: '*', system: '*' } },
-create: { actors: ['admin', 'system'], fields: '*' },
-update: { actors: ['admin', 'system'], fields: '*' },
-delete: { actors: ['admin', 'system'], fields: '*' },
+// Sprint 6: a seller reads the public view (GET /api/plans); the anonymous storefront may too (pricing). Admin and system read everything.
+read: {
+actors: ['public', 'seller', 'admin', 'system'],
+fields: { public: PUBLIC_PLAN_READABLE_FIELDS, seller: PUBLIC_PLAN_READABLE_FIELDS, admin: '*', system: '*' },
+},
+create: { actors: ['admin', 'system'], fields: { admin: ADMIN_PLAN_CREATABLE_FIELDS, system: '*' } },
+update: { actors: ['admin', 'system'], fields: { admin: ADMIN_PLAN_WRITABLE_FIELDS, system: '*' } },
+// Archiving (update isActive false) is the only removal: nobody deletes a plan, system included.
+delete: { actors: [], fields: '*' },
 },
 
 // The outbox is written only by server-side services running as 'system'.

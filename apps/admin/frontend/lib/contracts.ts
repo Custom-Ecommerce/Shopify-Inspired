@@ -102,3 +102,7 @@ export type {
   PayoutRow,
   PayoutStatusValue,
 } from "@markaz/contracts";
+
+// Sprint 6 EP-14 (D-118): subscription plans are data (create, update, archive).
+export const { createPlanRequestSchema, updatePlanRequestSchema, archivePlanRequestSchema, adminPlanWriteResponseSchema } = contracts;
+export type { AdminPlanWriteResponse } from "@markaz/contracts";

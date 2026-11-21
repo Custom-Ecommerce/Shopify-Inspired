@@ -45,6 +45,7 @@ preview links, cache purge, sync, Cloudinary uploads, email. Each example has a 
 | `UNSUBSCRIBE_SIGNING_SECRET` | seller backend | Signs the unsubscribe link of broadcast emails (EP-07.US04). 16 characters or more. Without it a broadcast cannot be sent (503) and every unsubscribe link answers 404. |
 | `CARD_CHECKOUT_ENABLED` | seller backend (listed in the storefront example, never read there) | Sprint 5 COD-only mode (D-107). Card checkout is offered to shoppers only when this is `true` or `1` and the Stripe values are set; unset or any other value keeps card off everywhere. Stripe stays for seller billing. **Changing it takes up to 300 seconds to show on a storefront** (SB-6, D-113): the storefront caches each store's answer for `STORE_REVALIDATE_SECONDS` = 300 (`apps/storefront/lib/api/stores.ts`), so after the switch goes off a shopper can still be offered card until the cache is revalidated or the wait ends. The order route refuses card at once (422 `PAYMENT_METHOD_UNAVAILABLE`), so nothing is charged; restart the seller backend, then wait up to 5 minutes (or revalidate the store). |
 | `PLATFORM_DEFAULT_COMMISSION_PERCENT` | seller backend, admin backend | Platform default commission in percent. The placeholder is 5; the owner sets the real value (A-019). |
+| `SUBSCRIPTION_STRIPE_ENABLED` | seller backend, admin backend | Sprint 6 (D-118): `true` or `1` turns Stripe subscriptions on; empty or anything else (the default) keeps them off. See Plans and subscriptions. |
 | `COD_COMMISSION_PERCENT` | seller backend | Sprint 6 (D-116): commission percent on cash-on-delivery orders, used only while the platform settings document is not in the seller database. Empty or `0` (the default) means COD carries no commission; a store's own rate never applies to COD. A COD order is still written to the ledger at 0 percent (rate 0, balance effect 0). The admin console setting `codCommissionPercent` wins when present. |
 | `SELLER_MAX_STORES` | seller backend, admin backend | Stores per seller when no seller override, plan limit or platform setting applies (default 3). The seller backend enforces it; the admin backend only reads it to show a seller's effective limit in the Store limit dialog, so give both the same value. |
 | `APP_BASE_URL_SELLER` | seller backend, admin backend | Seller portal base URL for links in emails. |
@@ -65,6 +66,48 @@ Each change needs a reason, is audited, advances the settings revision and is se
 
 The seller's store limit is resolved in this order: the seller's own override (admin, with a reason) first, then the plan limit
 (EP-14, once built), then the platform setting `maxStoresPerSeller`, then `SELLER_MAX_STORES`, then 3.
+
+## Plans and subscriptions
+
+Plans are **data**, not code (D-118). They live in the `subscriptionPlans` collection of the shared database and are edited in the admin
+console under Subscriptions. Money is whole rupees; a limit left empty is unlimited (`null`).
+
+**Seed.** `pnpm bootstrap:admin -- --apply` (see the bootstrap section above) creates two plans, each only when no plan has its key, and never
+touches a plan that exists, so an edit made in the console survives every later run:
+
+| Key | Price | Stores | Products | Staff seats | API keys | Custom domain | Premium themes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `free` | Rs 0 | 1 | 10 | 0 | 0 | no | no |
+| `growth` | Rs 2500 / month | 3 | unlimited | 3 | 3 | yes | yes |
+
+The Free and Growth price, product limit, custom domain and themes must match `apps/storefront/content/marketing/pricing.ts`; a test fails if
+they drift. Change the marketing file only with the owner's approval.
+
+**Index.** The plan key is unique (index `plan_key_unique`, partial: plans from before Sprint 6 have no key). The seller and admin backends
+build no index at runtime, so run `pnpm ensure:indexes -- --apply` once after deploying (dry run first, without `--apply`).
+
+**Edit plans in the console.** Subscriptions, New plan / Edit / Archive. Every change needs a reason, is audited (`plan.create`,
+`plan.update`, `plan.archive`), and is conditional on the revision you loaded: if someone else saved first the console says so and nothing is
+overwritten. The key cannot change. Archiving takes a plan off sale and is the only removal: nothing is ever deleted, and sellers already on
+the plan keep it. The Free plan cannot be archived: it is what every seller falls back to when a subscription expires. A plan from before
+Sprint 6 (name, Stripe price and tier only) is listed as "Old plan"; edit it to give it a price and limits.
+
+**What sellers see.** `GET /api/plans` on the seller backend (and `/api/dashboard/plans` in the seller dashboard) lists the active plans with
+their public fields only: key, name, price, interval, limits, features, sort order. Never the Stripe price id or the revision.
+
+**Payment is manual first.** A seller pays a plan by bank transfer, JazzCash or Easypaisa (the instructions are the `paymentInstructions`
+platform setting) and an admin marks it paid. Nothing in this section charges a card.
+
+**Stripe subscriptions are off.** The Stripe subscription code stays in the repository behind `SUBSCRIPTION_STRIPE_ENABLED` (default off; only
+`true` or `1` turns it on). While it is off:
+
+- `POST /api/billing/checkout` on the seller backend and `POST /api/internal/stripe/checkout-session` on the admin backend answer
+  `404` with the code `SUBSCRIPTION_STRIPE_OFF`;
+- the admin Stripe webhook acknowledges `customer.subscription.created`, `customer.subscription.updated` and subscription checkout sessions
+  with `200` and ignores them (CO-62: a subscription session used to answer `500` and Stripe retried it for days). A storefront card order
+  checkout is handled exactly as before.
+
+Set the same value on both backends. Leave it empty until the owner decides to take subscriptions by card.
 
 ### Sprint 3 deploy variables (still required for those features)
 

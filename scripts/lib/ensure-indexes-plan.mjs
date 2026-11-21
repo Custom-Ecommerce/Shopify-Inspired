@@ -1,6 +1,9 @@
 // Pure planning for scripts/ensure-indexes.mjs (Sprint 5 EP-11.US04.T04, D-111 (7)). No database, no env, no output.
 // Tested by apps/seller/backend/test/ensure-indexes.test.ts.
 //
+// Sprint 6 EP-14: the unique index of a subscription plan's key (plan_key_unique, partial: old plans have no key) is declared by the model, so
+// it needs no entry here: the plan below picks it up with every other declared index. A test (ensure-indexes.test.ts) pins that it does.
+//
 // The seller backend connects with bufferCommands false, so Mongoose builds no index by itself at runtime. This plan compares the indexes every
 // model DECLARES (schema.indexes()) with the indexes a collection HAS (collection.indexes()) and says which are missing. The script then calls
 // createIndexes() for the models that miss one: it never calls syncIndexes and never drops anything, so an index nobody declares stays.

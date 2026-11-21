@@ -8,7 +8,9 @@
 //
 // Creates, only when missing:
 //   1. the platform-settings document (collection globals, globalType platformSettings) with the defaults the code uses;
-//   2. one `sellers` mirror row (_id = the seller user's id, sellerId = that id as text) per seller user that owns a store.
+//   2. one `sellers` mirror row (_id = the seller user's id, sellerId = that id as text) per seller user that owns a store;
+//   3. the plans "free" and "growth" (Sprint 6, D-118) in subscriptionPlans, each only when no plan has its key. A plan that exists is
+//      never changed: an admin may have edited it in the console.
 // It never updates or deletes an existing document, prints counts only (never a URI, an email or an id), and is safe to run twice.
 // Reads MONGODB_URI. If SELLER_MONGODB_URI is also set it must name the same database, or the script stops.
 import mongoose from 'mongoose';
@@ -56,12 +58,24 @@ async function main() {
     const stores = await db.collection('stores').find({ owner: { $ne: null } }, { projection: { owner: 1 } }).toArray();
     const sellerMirrors = await db.collection('sellers').find({}, { projection: { _id: 1, sellerId: 1 } }).toArray();
 
-    const plan = planBootstrap({ settingsDocs, sellerUsers, stores, sellerMirrors });
+    const planDocs = await db.collection('subscriptionPlans').find({ key: { $type: 'string' } }, { projection: { key: 1 } }).toArray();
+
+    const plan = planBootstrap({ settingsDocs, sellerUsers, stores, sellerMirrors, planDocs });
 
     let createdSettings = 0;
     let createdMirrors = 0;
+    let createdPlans = 0;
     if (apply) {
       const now = new Date();
+      for (const row of plan.createPlans) {
+        try {
+          await db.collection('subscriptionPlans').insertOne({ ...row, createdAt: now, updatedAt: now });
+          createdPlans += 1;
+        } catch (err) {
+          if (err && err.code === 11000) continue; // the key appeared since the read (the unique index): left as it is
+          throw err;
+        }
+      }
       if (plan.createSettings) {
         await db.collection('globals').insertOne({ ...plan.createSettings, createdAt: now, updatedAt: now });
         createdSettings = 1;
@@ -80,8 +94,8 @@ async function main() {
 
     console.log((apply ? 'APPLY' : 'DRY RUN') + ' (writes nothing unless --apply)');
     for (const [key, value] of Object.entries(plan.counts)) console.log('  ' + key + ': ' + value);
-    if (apply) console.log('  created settings: ' + createdSettings + ', created mirrors: ' + createdMirrors);
-    else console.log('  would create settings: ' + plan.counts.settingsToCreate + ', would create mirrors: ' + plan.counts.mirrorsToCreate);
+    if (apply) console.log('  created settings: ' + createdSettings + ', created mirrors: ' + createdMirrors + ', created plans: ' + createdPlans);
+    else console.log('  would create settings: ' + plan.counts.settingsToCreate + ', would create mirrors: ' + plan.counts.mirrorsToCreate + ', would create plans: ' + plan.counts.plansToCreate);
   } finally {
     await mongoose.disconnect();
   }
