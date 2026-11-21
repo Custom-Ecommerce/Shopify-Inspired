@@ -95,6 +95,19 @@ Sprint 6 (name, Stripe price and tier only) is listed as "Old plan"; edit it to 
 **What sellers see.** `GET /api/plans` on the seller backend (and `/api/dashboard/plans` in the seller dashboard) lists the active plans with
 their public fields only: key, name, price, interval, limits, features, sort order. Never the Stripe price id or the revision.
 
+**Subscriptions and limits (Sprint 6).** A seller has at most one subscription (`subscriptions`, unique on `seller`; run `pnpm ensure:indexes -- --apply`
+once after deploying). The limits that are enforced are those of the plan the seller is *effectively* on, worked out from the dates on every request:
+trial, active and grace give the subscribed plan's limits; expired, cancelled past its period, no subscription, or a plan that no longer exists give the
+Free plan's (1 store, 10 products per store, 0 staff seats, 0 API keys). If the Free plan document is missing the same limits are built in and one
+line is logged. A seller's own store limit (set by an admin in Sellers, Store limit) wins over the plan for stores. Only an ADD is refused, with
+`403 PLAN_LIMIT_REACHED` (product create, import rows that create, duplicate, restore from trash, new store); editing, publishing and deleting never are,
+and a seller already over a limit keeps everything.
+
+**Expiry job.** `POST /api/internal/subscriptions/expire` on the seller backend, with the `OUTBOX_CRON_SECRET` (`x-cron-secret` or `Authorization: Bearer`),
+moves the stored status along the calendar: trial to expired, active to grace at the period end (`graceDays`, default 7), grace to expired at
+`graceUntil`, cancelled to expired. It is a **dry run unless the body is `{"apply": true}`** (a GET never applies); it answers counts only, one audit line
+per applied change. Run it daily, first as a dry run. The limits do not wait for it.
+
 **Payment is manual first.** A seller pays a plan by bank transfer, JazzCash or Easypaisa (the instructions are the `paymentInstructions`
 platform setting) and an admin marks it paid. Nothing in this section charges a card.
 

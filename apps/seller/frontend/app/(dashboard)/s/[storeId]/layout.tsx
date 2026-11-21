@@ -28,6 +28,8 @@ import { DashboardBreadcrumb } from "@/components/dashboard/shared/DashboardBrea
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { AlertBell } from "@/components/dashboard/AlertBell";
 import { VerifyEmailBanner } from "@/components/dashboard/VerifyEmailBanner";
+import { UpgradeDialogHost } from "@/components/dashboard/UpgradeDialog";
+import { storeHref } from "@/lib/store-routes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
@@ -118,6 +120,8 @@ export default async function StoreDashboardLayout({
               {/* Sprint 4 EP-08.US02.T02: an unverified seller can prepare the store but not go live or be paid. */}
               {user.emailVerified === false ? <VerifyEmailBanner email={user.email} /> : null}
               <DashboardDataProvider key={activeStore.id}>{children}</DashboardDataProvider>
+              {/* Sprint 6 EP-14: opens when any add is refused with PLAN_LIMIT_REACHED (product form, duplicate, restore). */}
+              <UpgradeDialogHost billingHref={storeHref(activeStore.id, "/billing")} />
             </div>
           </SidebarInset>
         </SidebarProvider>

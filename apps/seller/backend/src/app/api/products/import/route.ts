@@ -23,6 +23,9 @@ const tooLarge = (): ProductRequestError => new ProductRequestError(413, 'IMPORT
  *
  *   200 the report: created, updated, failed, and one entry per row
  *   413 IMPORT_FILE_TOO_LARGE   422 IMPORT_TOO_MANY_ROWS, IMPORT_BAD_FILE, all before anything is written
+ *   400 STORE_ID_REQUIRED       no store was named (CO-72)
+ * Sprint 6 (D-118): a row that would CREATE a product past the plan's product limit fails with PLAN_LIMIT_REACHED in its message; rows that update
+ * a product are never refused, and neither is a seller who is already over the limit (they just cannot add).
  */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -38,7 +41,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
     const report = await runProductImport(storeId, await file.text(), form?.get('dryRun') === 'true');
     return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {

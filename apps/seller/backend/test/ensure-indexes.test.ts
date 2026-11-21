@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AbandonedCart, CommissionEntry, Review, Return, BlockedContact, SubscriptionPlanModel } from '@/lib/services';
+import { AbandonedCart, CommissionEntry, Review, Return, BlockedContact, Subscription, SubscriptionPlanModel } from '@/lib/services';
 // @ts-expect-error plain .mjs script module without types; tests are not type-checked (tsconfig excludes test)
 import * as planNs from '../../../../scripts/lib/ensure-indexes-plan.mjs';
 
@@ -154,4 +154,31 @@ test('Sprint 6 EP-14: once the plan key index exists the plan finds nothing miss
   assert.deepEqual(done.toCreate, []);
   const plain = plan.planAll([{ model: 'SubscriptionPlan', collection: 'subscriptionPlans', declared }], { subscriptionPlans: [ID, { name: 'key_1', key: { key: 1 } }] });
   assert.ok(plain.totals.missing >= 1, 'a non-unique index on the key does not stand in for the unique one');
+});
+
+test('CO-115 (Sprint 6): a fresh database misses the unique index on subscription.seller (one subscription per seller), and nothing conflicts', () => {
+  const declared = (Subscription as unknown as { schema: { indexes: () => unknown } }).schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'Subscription', collection: 'subscriptions', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['Subscription']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string; unique: boolean; partial: boolean }> }).missing;
+  assert.ok(missing.some((m) => m.name === 'seller_unique' && m.unique && !m.partial), 'a unique seller index with no partial filter: every subscription has a seller');
+  assert.ok(missing.some((m) => m.name === 'status_period_end' && !m.unique), 'the expiry job index');
+});
+
+test('CO-115: once the subscription indexes exist the plan finds nothing missing, and a plain index on seller does not stand in for the unique one', () => {
+  const declared = (Subscription as unknown as { schema: { indexes: () => unknown } }).schema.indexes() as Declared;
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.keys(key).join('_') + '_1', key, ...(options as object) }));
+  const done = plan.planAll([{ model: 'Subscription', collection: 'subscriptions', declared }], { subscriptions: [ID, ...have] });
+  assert.equal(done.totals.missing, 0);
+  assert.deepEqual(done.toCreate, []);
+  const plain = plan.planAll([{ model: 'Subscription', collection: 'subscriptions', declared }], { subscriptions: [ID, { name: 'seller_1', key: { seller: 1 } }] });
+  assert.ok(plain.totals.missing >= 1, 'a non-unique index on seller is not the unique one');
+});
+
+test('CO-115: every model that declares a unique index is one the ensure-indexes plan sees: the subscription model is registered like the others', () => {
+  const models = [{ model: 'Subscription', collection: 'subscriptions', declared: (Subscription as unknown as { schema: { indexes: () => unknown } }).schema.indexes() as Declared }];
+  assert.equal(plan.planAll(models, {}).models[0]!.model, 'Subscription');
+  assert.equal((Subscription as unknown as { collection: { name: string } }).collection.name, 'subscriptions');
 });

@@ -18,6 +18,7 @@ import type {
 } from '../../../../../packages/contracts/src/moderation';
 
 import type { ModerationReview, ModerationReviewList } from '../../../../../packages/contracts/src/review';
+import type { AdminSellerPlansResponse } from '../../../../../packages/contracts/src/subscription';
 
 const { INTERNAL_SECRET_MIN_LENGTH, internalRequestHeaders } = unwrapCjs(signatureNs) as typeof signatureNs;
 
@@ -116,6 +117,13 @@ export const setSellerStoreLimit = (
   input: { userId: string; storeLimitOverride: number | null },
 ): Promise<{ userId: string; storeLimitOverride: number | null; changed: boolean }> =>
   send('POST', '/api/internal/accounts/store-limit', adminId, input, 'Seller store limit');
+
+/**
+ * Sprint 6 EP-14.US02.T08 (D-118): the plan, status and usage of up to 100 sellers, read in the seller database (POST
+ * /api/internal/plans/sellers, signed like the store-limit call). Read only.
+ */
+export const readSellerPlans = (adminId: string, input: { sellerIds: string[] }): Promise<AdminSellerPlansResponse> =>
+  send('POST', '/api/internal/plans/sellers', adminId, input, 'Seller plans');
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Sprint 4 EP-05.US03, US06 (D-090): payouts and the commission report. The ledger and the payouts live in the seller

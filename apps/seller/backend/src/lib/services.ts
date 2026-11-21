@@ -80,6 +80,8 @@ export const AuthToken = db.AuthToken;
 export const PlatformSettingsModel = db.PlatformSettingsModel;
 // Sprint 6 EP-14 (D-118): GET /api/plans reads the active subscription plans.
 export const SubscriptionPlanModel = db.SubscriptionPlanModel;
+// Sprint 6 EP-14 (D-118): a seller's subscription decides the plan limits that are enforced.
+export const Subscription = db.Subscription;
 export const PLATFORM_SETTINGS_GLOBAL_TYPE = db.PLATFORM_SETTINGS_GLOBAL_TYPE;
 export const {
   createSessionGuard,

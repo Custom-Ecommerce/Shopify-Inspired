@@ -6,6 +6,7 @@ import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError, jsonError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { ProductRequestError, handleProductError, loadSellerProduct, productNotFound } from '@/lib/products';
+import { assertProductSlot } from '@/lib/plan';
 import { revalidateStoreProduct } from '@/lib/revalidate';
 import { assertCan, Product } from '@/lib/services';
 
@@ -61,7 +62,10 @@ export async function changePublished(request: NextRequest, context: ProductRout
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'update', 'productLifecycle', ['isPublished']);
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    // Sprint 6 EP-14 (D-118): publishing adds no product to the count (every product that is not in trash counts, a draft included), so it is
+    // never refused for the plan: assertProductSlot(storeId, 0) is a no-op by design. A seller over the limit can still publish what they have.
+    await assertProductSlot(storeId, 0);
 
     if (published) {
       const row = (await Product.findOne({ _id: id, store: storeId, deletedAt: null })
@@ -89,6 +93,7 @@ export async function changePublished(request: NextRequest, context: ProductRout
 }
 
 interface TrashState {
+  isDemo?: boolean | null;
   deletedAt?: Date | null;
   deletedBy?: { role?: string | null } | null;
 }
@@ -104,12 +109,15 @@ export async function restoreProduct(request: NextRequest, context: ProductRoute
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'update', 'productLifecycle', ['deletedAt']);
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
 
-    const row = (await Product.findOne({ _id: id, store: storeId }).select('deletedAt deletedBy').lean()) as unknown as TrashState | null;
+    const row = (await Product.findOne({ _id: id, store: storeId }).select('deletedAt deletedBy isDemo').lean()) as unknown as TrashState | null;
     if (!row) throw productNotFound();
     if (!row.deletedAt) throw new ProductRequestError(409, 'PRODUCT_NOT_IN_TRASH', 'This product is not in trash.');
     if (row.deletedBy?.role === 'admin') throw adminDeleted();
+    // Sprint 6 EP-14 (D-118): a restored product counts again, so it is an add. After the 404/409/403 above, before the write. The sample
+    // (demo) product never counts, so restoring it adds nothing.
+    await assertProductSlot(storeId, row.isDemo === true ? 0 : 1);
 
     const restored = await Product.findOneAndUpdate(
       { _id: id, store: storeId, deletedAt: { $ne: null }, 'deletedBy.role': { $ne: 'admin' } },

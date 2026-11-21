@@ -3,6 +3,7 @@ import { PRODUCT_SLUG_MAX, PRODUCT_TITLE_MAX } from '@/lib/contracts';
 import { takenDown } from '@/lib/product-lifecycle';
 import { isDuplicateKeyError } from '@/lib/http';
 import { ProductVariantError, prepareProductVariants } from '@/lib/product-variants';
+import { assertProductSlot } from '@/lib/plan';
 import { ProductRequestError, productNotFound, type VariantRow } from '@/lib/products';
 import { Product } from '@/lib/services';
 
@@ -102,6 +103,8 @@ export async function duplicateProduct(storeId: string, productId: string): Prom
   if (!source || source.deletedAt) throw productNotFound();
   if (source.moderation) throw takenDown(source.moderation.reason);
   if (source.isDemo === true) throw new ProductRequestError(422, 'PRODUCT_DEMO_NOT_DUPLICABLE', 'This is the sample product. Edit it first, then duplicate it.');
+  // Sprint 6 EP-14 (D-118): the copy is a new product. After the store and record checks above (404, 403, 422), before the write.
+  await assertProductSlot(storeId);
 
   // The free slug and SKUs are read, then written. A writer that takes one in between loses the race (see lostRace);
   // reading again, after a short random pause, finds the next -copy / -COPY candidate. If every attempt loses, the seller

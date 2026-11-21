@@ -7,6 +7,7 @@ import { PRODUCT_CSV_COLUMNS, productCreateRequestSchema, productUpdateRequestSc
 import { neutraliseCell, parseCsv, restoreCell, serializeCsv } from '@/lib/product-csv';
 import { copyTitle } from '@/lib/product-duplicate';
 import { Category, Media, Product, Review, ArchivedReview, Store, signSession } from '@/lib/services';
+import { setPlanLoader, type EffectivePlan } from '@/lib/plan';
 
 const AUTH_SECRET = 'x'.repeat(40);
 const SELLER = '65a000000000000000000001';
@@ -791,4 +792,133 @@ test('media: no route can delete a Media row, and purging one product leaves the
   assert.equal(media.length, 3);
   const survivor = products.find((candidate) => candidate._id === copy.id);
   assert.deepEqual(survivor?.media.map(String), [IMAGE]);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-14.US02 (D-118): the plan's product limit on duplicate and import. The plan is installed through setPlanLoader.
+
+const planWith = (productLimit: number | null): EffectivePlan => ({
+  key: 'free',
+  name: 'Free',
+  status: 'none',
+  subscribedPlanKey: null,
+  limits: { stores: 1, products: productLimit, staffSeats: 0, apiKeys: 0, customDomain: false, premiumThemes: false },
+  periodEnd: null,
+  graceUntil: null,
+  daysLeft: null,
+  fallbackLimits: false,
+});
+
+function withProductLimit(limit: number | null): void {
+  setPlanLoader(async () => planWith(limit));
+  stubs.store.findById = () => chain(() => ({ owner: SELLER }));
+}
+
+const countedIn = (store: string): number => products.filter((p) => p.store === store && !p.deletedAt && !p.isDemo).length;
+
+test('plan: duplicate at the limit is 403 PLAN_LIMIT_REACHED and writes nothing; under the limit it makes the copy', async () => {
+  const used = countedIn(STORE);
+  withProductLimit(used);
+  try {
+    const before = products.length;
+    const res = await duplicate(SOURCE);
+    assert.equal(res.status, 403);
+    const body = (await res.json()) as { code: string; limit: number; used: number; plan: string; upgradeHint: string };
+    assert.deepEqual([body.code, body.limit, body.used, body.plan], ['PLAN_LIMIT_REACHED', used, used, 'free']);
+    assert.ok(body.upgradeHint.length > 0);
+    assert.equal(products.length, before);
+    assert.equal(writes, 0);
+  } finally {
+    setPlanLoader(null);
+  }
+  withProductLimit(used + 1);
+  try {
+    assert.equal((await duplicate(SOURCE)).status, 201);
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: duplicate checks the record first: a foreign product is 404, a trashed one 404, the sample 422, a taken-down one 403 PRODUCT_TAKEN_DOWN, never a plan message', async () => {
+  withProductLimit(0);
+  try {
+    for (const [id, status] of [[FOREIGN, 404], [TRASHED, 404], [DEMO, 422], [TAKEN, 403]] as const) {
+      const res = await duplicate(id);
+      assert.equal(res.status, status, id);
+      const refusal = await errorOf(res.clone());
+      assert.notEqual(refusal.code, 'PLAN_LIMIT_REACHED', id);
+    }
+    assert.equal(writes, 0);
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: duplicate that names no store is 400 STORE_ID_REQUIRED (CO-72)', async () => {
+  const res = await duplicatePOST(
+    new NextRequest('http://seller.test/api/products/' + SOURCE + '/duplicate', { method: 'POST', headers: { authorization: 'Bearer ' + token } }),
+    ctx(SOURCE),
+  );
+  assert.equal(res.status, 400);
+  assert.equal(((await res.json()) as { code: string }).code, 'STORE_ID_REQUIRED');
+  assert.equal(writes, 0);
+});
+
+test('plan: an import creates new products only up to the limit; the rest fail with PLAN_LIMIT_REACHED in their message, and nothing past the limit is written', async () => {
+  const used = countedIn(STORE);
+  withProductLimit(used + 2);
+  try {
+    const report = await run(csv(newRow({ Handle: 'one' }), newRow({ Handle: 'two' }), newRow({ Handle: 'three' }), newRow({ Handle: 'four' })));
+    assert.equal(report.created, 2);
+    assert.equal(report.failed, 2);
+    const failed = report.rows.filter((entry) => entry.status === 'error');
+    assert.deepEqual(failed.map((entry) => entry.handle), ['three', 'four']);
+    for (const entry of failed) assert.match(entry.message ?? '', /PLAN_LIMIT_REACHED: your Free plan allows \d+ products and you have \d+\./);
+    assert.equal(countedIn(STORE), used + 2);
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: an import that UPDATES a product is never refused for a plan, even when the seller is over the limit; only new ones fail', async () => {
+  withProductLimit(0);
+  try {
+    const report = await run(csv({ Handle: 'blue-suit', Title: 'Blue suit (renamed)' }, newRow({ Handle: 'brand-new' })));
+    assert.equal(report.updated, 1);
+    assert.equal(report.created, 0);
+    assert.equal(report.failed, 1);
+    assert.equal(report.rows.find((entry) => entry.handle === 'brand-new')?.status, 'error');
+    assert.equal(row('blue-suit').title, 'Blue suit (renamed)');
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: a dry run counts the same slots as a real run and writes nothing; an unlimited plan takes every row', async () => {
+  const used = countedIn(STORE);
+  withProductLimit(used + 1);
+  try {
+    const before = products.length;
+    const dry = await run(csv(newRow({ Handle: 'one' }), newRow({ Handle: 'two' })), true);
+    assert.deepEqual([dry.created, dry.failed], [1, 1]);
+    assert.equal(products.length, before);
+  } finally {
+    setPlanLoader(null);
+  }
+  withProductLimit(null);
+  try {
+    const report = await run(csv(newRow({ Handle: 'one' }), newRow({ Handle: 'two' }), newRow({ Handle: 'three' })));
+    assert.deepEqual([report.created, report.failed], [3, 0]);
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: an import that names no store is 400 STORE_ID_REQUIRED (CO-72) and reads nothing', async () => {
+  const form = new FormData();
+  form.append('file', new Blob([csv(newRow())], { type: 'text/csv' }), 'products.csv');
+  const res = await importPOST(new NextRequest('http://seller.test/api/products/import', { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: form }));
+  assert.equal(res.status, 400);
+  assert.equal(((await res.json()) as { code: string }).code, 'STORE_ID_REQUIRED');
+  assert.equal(writes, 0);
 });

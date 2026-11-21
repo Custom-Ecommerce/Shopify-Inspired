@@ -165,7 +165,12 @@ async function normalizeUpstreamError(
   const code = str(rec.code) ?? str(firstData?.code) ?? str(first?.code) ?? defaultCodeForStatus(res.status);
   const message =
     str(rec.error) ?? str(rec.message) ?? str(first?.message) ?? `Request failed with status ${res.status}.`;
-  const details = rec.details ?? errors ?? rec.issues;
+  // Sprint 6 EP-14: a refused add (PLAN_LIMIT_REACHED) keeps its numbers and its upgrade hint, so the dashboard can open the upgrade dialog.
+  const planLimit =
+    code === "PLAN_LIMIT_REACHED"
+      ? { limitKind: rec.limitKind, limit: rec.limit, used: rec.used, plan: rec.plan, upgradeHint: rec.upgradeHint }
+      : undefined;
+  const details = planLimit ?? rec.details ?? errors ?? rec.issues;
 
   return apiError(res.status, code, message, {
     details,

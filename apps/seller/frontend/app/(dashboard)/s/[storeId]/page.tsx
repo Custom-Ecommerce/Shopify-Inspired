@@ -2,6 +2,7 @@ import type { Order as PayloadOrderDoc } from "@markaz/contracts";
 import type { ListEnvelope as PayloadFindResponse } from "@markaz/api-compat";
 import Link from "next/link";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
+import { PlanBanner } from "@/components/dashboard/PlanBanner";
 import { resolveStorePage } from "@/lib/resolve-store-page";
 import { storeHref } from "@/lib/store-routes";
 
@@ -215,6 +216,9 @@ export default async function DashboardOverviewPage({
 
       {/* ── Onboarding checklist (only shows until dismissed or complete) */}
       <OnboardingChecklist />
+
+      {/* ── Sprint 6 EP-14: the plan and what is used of it ─────────────── */}
+      <PlanBanner compact />
 
       {/* ── Orders waiting for a confirmation call (Sprint 5 EP-11.US03.T03) ─ */}
       {unconfirmed > 0 ? (

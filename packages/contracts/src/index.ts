@@ -72,3 +72,6 @@ export * from './abandoned-cart';
 
 // Sprint 6 EP-14 (D-118): subscription plans are data (admin requests, the admin view, the public view a seller reads).
 export * from './plans';
+
+// Sprint 6 EP-14 (D-118): a seller's subscription, the plan they are effectively on, plan usage and the expiry job.
+export * from './subscription';

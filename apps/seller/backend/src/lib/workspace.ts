@@ -3,7 +3,9 @@ import { STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from '@markaz/platform-k
 import { HttpError } from '@/lib/http';
 import type { AuthContext } from '@/lib/auth';
 import { seedStoreDemoData } from '@/lib/demo-data';
-import { DEFAULT_ENV_STORE_LIMIT, parseEnvStoreLimit, resolveStoreLimit, type EffectiveStoreLimit } from '@/lib/effective-limits';
+import { DEFAULT_ENV_STORE_LIMIT, parseEnvStoreLimit, positiveWhole, resolveStoreLimit, type EffectiveStoreLimit } from '@/lib/effective-limits';
+import { PlanLimitError } from '@/lib/http';
+import { assertWithinPlan, canCheckPlans, loadEffectivePlan } from '@/lib/plan';
 import { connectSellerDb } from '@/lib/mongo';
 import { readPlatformSettings } from '@/lib/platform-settings';
 import { ensureSellerMirror } from '@/lib/seller-mirror';
@@ -43,6 +45,19 @@ export function maxStoresPerSeller(): number {
 export async function effectiveStoreLimitFor(override: unknown, planLimit?: unknown): Promise<EffectiveStoreLimit> {
   const settings = await readPlatformSettings();
   return resolveStoreLimit({ override, planLimit, platformMax: settings.maxStoresPerSeller, envMax: process.env.SELLER_MAX_STORES });
+}
+
+/** A plan with no store limit shows as this many in the workspace (the largest override an admin can set). */
+export const UNLIMITED_STORES_SHOWN = 1000;
+
+/**
+ * Sprint 6 EP-14 (D-118): the store limit WITH the seller's plan: the override first, then the effective plan's store limit (a plan with no
+ * store limit is unlimited, shown as UNLIMITED_STORES_SHOWN), then the platform setting and the environment. Where plans cannot be checked
+ * (a unit test with no connection) the plan step is skipped, as before.
+ */
+export async function storeLimitWithPlan(ownerId: string, override: unknown): Promise<EffectiveStoreLimit> {
+  const planLimit = canCheckPlans() ? ((await loadEffectivePlan(ownerId)).limits.stores ?? UNLIMITED_STORES_SHOWN) : undefined;
+  return effectiveStoreLimitFor(override, planLimit);
 }
 
 /**
@@ -150,7 +165,7 @@ export async function loadWorkspace(ctx: AuthContext) {
   await connect();
   const [account, stores] = await Promise.all([loadAccount(ctx), loadStores(ctx)]);
   const { limitOverride, ...user } = account;
-  const { limit: max, source } = await effectiveStoreLimitFor(limitOverride);
+  const { limit: max, source } = await storeLimitWithPlan(ctx.userId, limitOverride);
   return {
     user,
     stores,
@@ -180,9 +195,20 @@ export async function provisionStore(ctx: AuthContext, rawName: unknown): Promis
   }
 
   const used = await Store.countDocuments({ owner: ctx.userObjectId });
-  const { limit: max, source } = await effectiveStoreLimitFor(account.limitOverride);
-  if (used >= max) {
-    return { ok: false, status: 409, body: { error: 'Store limit reached.', code: 'STORE_LIMIT_REACHED', used, max, source } };
+  if (positiveWhole(account.limitOverride) !== null || !canCheckPlans()) {
+    // An admin's override for this seller (it wins over the plan), or no plan to check: the limit of Sprint 6 EP-12, answered as before.
+    const { limit: max, source } = await effectiveStoreLimitFor(account.limitOverride);
+    if (used >= max) {
+      return { ok: false, status: 409, body: { error: 'Store limit reached.', code: 'STORE_LIMIT_REACHED', used, max, source } };
+    }
+  } else {
+    // Sprint 6 EP-14 (D-118): the plan's store limit. After the account checks above, before the write: 403 PLAN_LIMIT_REACHED.
+    try {
+      await assertWithinPlan({ kind: 'stores', ownerId: ctx.userId });
+    } catch (err) {
+      if (err instanceof PlanLimitError) return { ok: false, status: 403, body: { error: err.message, ...err.body } };
+      throw err;
+    }
   }
 
   const base = slugify(name);

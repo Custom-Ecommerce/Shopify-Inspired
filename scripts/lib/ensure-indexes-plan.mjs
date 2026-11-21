@@ -1,6 +1,7 @@
 // Pure planning for scripts/ensure-indexes.mjs (Sprint 5 EP-11.US04.T04, D-111 (7)). No database, no env, no output.
 // Tested by apps/seller/backend/test/ensure-indexes.test.ts.
 //
+// Sprint 6 CO-115: the unique index on subscription.seller (seller_unique, one subscription per seller) is declared by the Subscription model the same way.
 // Sprint 6 EP-14: the unique index of a subscription plan's key (plan_key_unique, partial: old plans have no key) is declared by the model, so
 // it needs no entry here: the plan below picks it up with every other declared index. A test (ensure-indexes.test.ts) pins that it does.
 //

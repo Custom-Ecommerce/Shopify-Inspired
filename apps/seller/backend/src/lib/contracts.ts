@@ -141,6 +141,8 @@ export const {
   sellerAccountStatusRequestSchema,
   internalAccountStatusRequestSchema,
   internalStoreLimitRequestSchema,
+  internalSellerPlansRequestSchema,
+  expiryJobRequestSchema,
 } = contracts;
 
 // Sprint 4 EP-04: store settings, delivery, payments, payout, readiness and go-live.

@@ -33,7 +33,7 @@ import { syncStateToQuery, type SyncListState } from "@/lib/sync";
 import { listStateToQuery, type StoreListState } from "@/lib/stores";
 import { ledgerStateToQuery, ratesStateToQuery, type CommissionListState } from "@/lib/commission";
 import { subscriptionStateToQuery, type SubscriptionListState } from "@/lib/subscriptions";
-import { adminOverviewSchema, adminPlanWriteResponseSchema, type AdminOverview, type AdminPlanWriteResponse } from "@/lib/contracts";
+import { adminOverviewSchema, adminPlanWriteResponseSchema, adminSellerPlansResponseSchema, type AdminOverview, type AdminPlanWriteResponse, type AdminSellerPlansResponse } from "@/lib/contracts";
 import {
   commissionReportSchema,
   payoutBalanceListSchema,
@@ -198,6 +198,11 @@ export function listRateHistory(page: number, signal?: AbortSignal): Promise<Rat
 
 export function listSubscriptionPlans(state: SubscriptionListState, signal?: AbortSignal): Promise<AdminSubscriptionPlanList> {
   return call("/api/subscription-plans?" + subscriptionStateToQuery(state, true), adminSubscriptionPlanListSchema as Parser<AdminSubscriptionPlanList>, { signal });
+}
+
+/** Sprint 6 EP-14.US02.T08: the plan, status and usage of the sellers on the page (a failure only hides the plan column). */
+export function getSellerPlans(ids: readonly string[], signal?: AbortSignal): Promise<AdminSellerPlansResponse> {
+  return call("/api/sellers/plans?ids=" + ids.map(encodeURIComponent).join(","), adminSellerPlansResponseSchema as Parser<AdminSellerPlansResponse>, { signal });
 }
 
 /** Sprint 6 EP-14.US01: create a plan. The answer is the new plan (revision 0). */

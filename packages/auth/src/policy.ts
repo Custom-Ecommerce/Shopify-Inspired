@@ -73,6 +73,13 @@ export const ADMIN_PLAN_CREATABLE_FIELDS = ['key', 'name', 'priceRs', 'interval'
 // The key never changes after creation, and archivedAt/isActive are how a plan is archived (there is no delete).
 export const ADMIN_PLAN_WRITABLE_FIELDS = ['name', 'priceRs', 'limits', 'features', 'sortOrder', 'stripePriceId', 'isActive', 'archivedAt'] as const;
 
+// Sprint 6 EP-14 (D-118): a seller's subscription. A seller reads their OWN (the route scopes it to the signed-in user: a policy row cannot say
+// "own"); an admin creates and changes it (manual payment marked paid, a trial, a cancel); the revision and the expiry are moved by the system.
+export const SELLER_SUBSCRIPTION_READABLE_FIELDS = ['planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd'] as const;
+export const ADMIN_SUBSCRIPTION_CREATABLE_FIELDS = ['seller', 'planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd'] as const;
+// The seller never changes (one subscription per seller); revision is the server's.
+export const ADMIN_SUBSCRIPTION_WRITABLE_FIELDS = ['planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd'] as const;
+
 // What a seller may set on a category of their store. store and isDemo are never client-writable.
 export const SELLER_CATEGORY_WRITABLE_FIELDS = ['name', 'slug', 'order', 'description'] as const;
 
@@ -160,6 +167,15 @@ update: {
 actors: ['admin', 'system'],
 fields: { admin: ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS, system: '*' },
 },
+delete: { actors: [], fields: '*' },
+},
+
+subscriptions: {
+// Seller: own only (the route filters by the signed-in user). The public reads none.
+read: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_SUBSCRIPTION_READABLE_FIELDS, admin: '*', system: '*' } },
+create: { actors: ['admin', 'system'], fields: { admin: ADMIN_SUBSCRIPTION_CREATABLE_FIELDS, system: '*' } },
+update: { actors: ['admin', 'system'], fields: { admin: ADMIN_SUBSCRIPTION_WRITABLE_FIELDS, system: '*' } },
+// A subscription is never deleted: it expires or is cancelled and stays as the record.
 delete: { actors: [], fields: '*' },
 },
 
