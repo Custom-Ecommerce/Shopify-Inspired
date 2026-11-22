@@ -28,6 +28,7 @@ const LABELS: Record<string, string> = {
   referrals: "Referrals",
   broadcast: "Broadcast",
   blog: "Blog & Lookbook",
+  pages: "Pages",
   store: "Store Settings",
   analytics: "Analytics",
   domain: "Domain",

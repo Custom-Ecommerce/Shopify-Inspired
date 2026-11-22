@@ -19,6 +19,7 @@ export * from './models/media';
 
 // B10.4: store articles and orders.
 export * from './models/store-article';
+export * from './models/store-page';
 export * from './models/order';
 
 // B11.2: the billing ports, one implementation for every app.

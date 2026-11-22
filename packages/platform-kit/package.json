@@ -17,6 +17,7 @@
     "./reservation": "./src/reservation/index.ts",
     "./themes": "./src/themes/index.ts",
     "./content-markdown": "./src/content-markdown.ts",
+    "./page-templates": "./src/page-templates.ts",
     "./revalidate": "./src/revalidate/index.ts",
     "./cache-tags": "./src/revalidate/tags.ts",
     "./client-ip": "./src/client-ip.ts",

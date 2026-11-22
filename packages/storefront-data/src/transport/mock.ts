@@ -27,6 +27,7 @@ import type {
 } from "./types";
 import { OrderRejectedError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
+import type { StorefrontArticle, StorefrontArticleList, StorefrontPage, StorefrontPageLink, StorefrontPageLookup } from "./content-types";
 import { discountRefusalMessage, normalizePhoneE164 } from "@markaz/contracts/checkout";
 
 // Hardcoded dummy catalogue. Includes edge cases (no image, discount, out of stock,
@@ -169,6 +170,9 @@ export interface MockFixtures {
   /** Sprint 5 EP-21: sample reviews by product slug, for a theme's demo. Without them every product shows the empty state. */
   reviews?: Record<string, StorefrontReview[]>;
   products: StorefrontProductDetail[];
+  /** Sprint 7 (S7-B3): sample published articles and pages, for a theme's demo. Without them the demo has no blog and no pages. */
+  articles?: StorefrontArticle[];
+  pages?: StorefrontPage[];
 }
 
 /**
@@ -471,6 +475,35 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     return { items: items.slice((page - 1) * limit, page * limit).map(toSummary), page, totalPages };
   }
 
+  // Sprint 7 (S7-B3): the blog and the pages over the fixtures (published only: fixtures hold nothing else).
+  async function listArticles(page = 1, limit = 12): Promise<StorefrontArticleList> {
+    const all = fixtures.articles ?? [];
+    const totalPages = Math.max(1, Math.ceil(all.length / limit));
+    const current = Math.min(Math.max(1, page), totalPages);
+    const items = all.slice((current - 1) * limit, current * limit).map((article) => {
+      const { content: _content, seoTitle: _seoTitle, seoDescription: _seoDescription, ...summary } = article;
+      void _content;
+      void _seoTitle;
+      void _seoDescription;
+      return clone(summary);
+    });
+    return { items, page: current, totalPages, totalDocs: all.length };
+  }
+
+  async function getArticle(slug: string): Promise<StorefrontArticle | null> {
+    const found = (fixtures.articles ?? []).find((article) => article.slug === slug);
+    return found ? clone(found) : null;
+  }
+
+  async function listPages(): Promise<StorefrontPageLink[]> {
+    return (fixtures.pages ?? []).map((page, index) => ({ slug: page.slug, title: page.title, showInFooter: true, sortOrder: index, updatedAt: page.updatedAt }));
+  }
+
+  async function getPage(slug: string): Promise<StorefrontPageLookup> {
+    const found = (fixtures.pages ?? []).find((page) => page.slug === slug);
+    return found ? { kind: "found", page: clone(found) } : { kind: "none" };
+  }
+
   return {
     kind: "mock",
     getProducts,
@@ -489,6 +522,10 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     submitReview,
     getProductReviews,
     saveAbandonedCart,
+    listArticles,
+    getArticle,
+    listPages,
+    getPage,
   };
 }
 

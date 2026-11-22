@@ -59,6 +59,7 @@ export const Media = db.Media;
 
 // B10.4 shims: the store article and order models.
 export const StoreArticle = db.StoreArticle;
+export const StorePage = db.StorePage;
 export const Order = db.Order;
 // Track B shims: the storefront API reads stores and the catalog.
 export const Store = db.Store;

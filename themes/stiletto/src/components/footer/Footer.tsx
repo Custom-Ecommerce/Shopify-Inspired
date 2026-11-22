@@ -69,6 +69,16 @@ export function Footer({ config }: FooterProps) {
               </ul>
             ) : null}
 
+            {config.storeLinks && config.storeLinks.length > 0 ? (
+              <ul data-section="store-links" aria-label="Store pages" className="flex flex-wrap gap-x-6 gap-y-1 font-sans text-[13px]">
+                {config.storeLinks.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} className="inline-flex min-h-11 items-center opacity-90 hover:opacity-100 hover:underline">{link.label}</Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
             <ul className="flex flex-col gap-5 mt-2">
               {footerDictionary.navLinks.map((link) => (
                 <li key={link}>

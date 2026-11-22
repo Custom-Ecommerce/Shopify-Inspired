@@ -251,3 +251,26 @@ test('Sprint 7 (S7-B2, CO-115): the article model declares the unique {store, sl
   const plain = plan.planAll([{ model: 'StoreArticle', collection: 'storearticles', declared }], { storearticles: [ID, { name: 'store_1_slug_1', key: { store: 1, slug: 1 } }] });
   assert.ok(plain.totals.missing + plain.totals.conflicts >= 1);
 });
+
+test('Sprint 7 (S7-B3, CO-115): the page model declares the unique {store, slug} index, the {store, mediaRefs} index and the footer lookup, a fresh database misses all of them, and once they exist nothing is missing', () => {
+  const model = (dbSchemas as any).StorePage ?? (dbSchemas as any).default?.StorePage;
+  const declared = model.schema.indexes() as Declared;
+  const keys = declared.map(([key]) => Object.keys(key).join('+'));
+  assert.ok(keys.includes('store+slug'), 'a slug is unique per store');
+  assert.ok(keys.includes('store+mediaRefs'), 'the media registry asks which pages use a file');
+  assert.ok(keys.includes('store+status+sortOrder'), 'the storefront lists published pages in footer order');
+  const unique = declared.filter(([, options]) => (options as { unique?: boolean } | undefined)?.unique === true);
+  assert.deepEqual(unique.map(([key]) => key), [{ store: 1, slug: 1 }], 'only the slug index is unique');
+  const fresh = plan.planAll([{ model: 'StorePage', collection: 'storepages', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['StorePage']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string; unique: boolean }> }).missing;
+  assert.ok(missing.some((m) => m.name === 'store_1_slug_1' && m.unique), 'the unique slug index is planned');
+  assert.ok(missing.some((m) => m.name === 'store_1_mediaRefs_1' && !m.unique));
+  assert.ok(missing.some((m) => m.name === 'store_1_status_1_sortOrder_1' && !m.unique));
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  assert.equal(plan.planAll([{ model: 'StorePage', collection: 'storepages', declared }], { storepages: [ID, ...have] }).totals.missing, 0);
+  const plain = plan.planAll([{ model: 'StorePage', collection: 'storepages', declared }], { storepages: [ID, { name: 'store_1_slug_1', key: { store: 1, slug: 1 } }] });
+  assert.ok(plain.totals.missing + plain.totals.conflicts >= 1, 'a plain index on the same key is not the unique one');
+});

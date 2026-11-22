@@ -37,7 +37,7 @@ export interface StilettoContent {
  * from the store's real categories. Hero, marquee, philosophy, video story, testimonials and features are not editable
  * by sellers yet, so they are the theme's defaults for every store.
  */
-export function buildStilettoContent(store: StoreData, categories: NormalizedCategory[]): StilettoContent {
+export function buildStilettoContent(store: StoreData, categories: NormalizedCategory[], storeLinks: Array<{ label: string; href: string }> = []): StilettoContent {
   const demo = store.mode === "demo";
   const logo = store.logoUrl ?? STILETTO_LOGO;
   const menuLogo = store.logoUrl ?? STILETTO_LOGO_LIGHT;
@@ -62,7 +62,7 @@ export function buildStilettoContent(store: StoreData, categories: NormalizedCat
     },
     testimonials,
     featuresConfig,
-    footerConfig: { ...footerConfig, brand: footerBrand, contact: demo ? undefined : store.contact, social: demo ? undefined : store.social },
+    footerConfig: { ...footerConfig, brand: footerBrand, contact: demo ? undefined : store.contact, social: demo ? undefined : store.social, storeLinks: demo ? undefined : storeLinks },
     promoBanner,
     productShowcase: { banner: productShowcase.banner },
     shippingDetails,

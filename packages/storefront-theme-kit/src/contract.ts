@@ -39,6 +39,9 @@ export interface ThemeModule {
     Collection?: ComponentType<VM.CollectionPageProps>;
     Feedback?: ComponentType<VM.FeedbackPageProps>;
     Favourites?: ComponentType<VM.FavouritesPageProps>;
+    /** Sprint 7 (S7-B3): the blog list and one article. A theme without them has no blog: the storefront answers 404 for /blog. */
+    Blog?: ComponentType<VM.BlogPageProps>;
+    BlogPost?: ComponentType<VM.ArticlePageProps>;
   };
   /** Set to have the container load the store's catalogue once and pass it to Layout as `chrome`. */
   wantsChrome?: boolean;

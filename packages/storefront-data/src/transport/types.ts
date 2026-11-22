@@ -317,6 +317,7 @@ export type OrderRejection =
   | { code: "contact_blocked"; message: string };
 
 import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from "@markaz/contracts/checkout";
+import type { StorefrontArticle, StorefrontArticleList, StorefrontPageLink, StorefrontPageLookup } from "./content-types";
 
 /** Which adapter produced the data. Lets callers and logs say which source they got. */
 export type TransportKind = "mock" | "remote";
@@ -410,5 +411,13 @@ export interface StorefrontTransport extends OrderTransport {
   listProducts?(query?: ProductQuery): Promise<ProductListPage>;
   /** Resolves to null when no product has this slug. The route turns that into a 404. */
   getProduct(slug: string): Promise<StorefrontProductDetail | null>;
+  /** Sprint 7 (S7-B3): the published blog articles, newest first, one page at a time. Optional so existing transports (and test doubles) keep working: a store without it has no blog. */
+  listArticles?(page?: number, limit?: number): Promise<StorefrontArticleList>;
+  /** One published article by slug, its text as the safe tree. null for a draft, an unknown slug or another type. */
+  getArticle?(slug: string): Promise<StorefrontArticle | null>;
+  /** The published static pages in footer order (address and title only). */
+  listPages?(): Promise<StorefrontPageLink[]>;
+  /** One static page by slug: found, a draft (404, no default copy) or none (the default copy may be used). */
+  getPage?(slug: string): Promise<StorefrontPageLookup>;
 }
 /* @theme-integration-patch:types */

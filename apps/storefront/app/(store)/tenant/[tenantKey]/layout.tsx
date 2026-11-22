@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { StorefrontProvider } from '@markaz/storefront-data/client';
-import { loadStoreChrome } from '@markaz/storefront-data/server';
+import { loadContentFooterLinks, loadStoreChrome } from '@markaz/storefront-data/server';
 import { resolveStore } from '@/lib/tenancy/resolve-store';
 import { resolveTransport } from '@/lib/sources';
 import { getTheme, resolveEffectiveTheme } from '@/lib/themes';
@@ -110,13 +110,18 @@ export default async function TenantLayout({
   const transport = theme.wantsChrome ? await resolveTransport({ kind: 'tenant', key: tenantKey }) : null;
   const chrome = transport ? await loadStoreChrome(transport) : undefined;
 
+  // Sprint 7 (S7-B3): the footer links the store's content adds: the published pages the seller put in the footer, and the Blog when there is an article.
+  // Read under the store's static tag (a publish, unpublish or delete of an article or page drops it). Never throws for an unreachable backend.
+  const contentTransport = transport ?? (await resolveTransport({ kind: 'tenant', key: tenantKey }));
+  const contentLinks = contentTransport ? await loadContentFooterLinks(contentTransport) : [];
+
   // The storefront provider keeps this store's cart apart from every other store's, and sends orders and quotes through
   // the same-origin BFF.
   return (
     <TenantProvider value={snapshot}>
       <ThemeScope slug={effectiveTheme.slug} />
       <StorefrontProvider storeKey={store.id} cardEnabled={store.commerce.cardEnabled} codEnabled={store.commerce.codEnabled} preview={result.previewToken !== null}>
-        <StoreShell snapshot={snapshot} theme={theme} chrome={chrome}>
+        <StoreShell snapshot={snapshot} theme={theme} chrome={chrome} contentLinks={contentLinks}>
           <div className="tenant-boundary">{children}</div>
         </StoreShell>
         {result.previewToken !== null && <PreviewBanner notLiveYet={store.status !== 'active'} />}

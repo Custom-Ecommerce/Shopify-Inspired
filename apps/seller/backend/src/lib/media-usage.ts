@@ -1,4 +1,4 @@
-import { Product, Store, StoreArticle } from '@/lib/services';
+import { Product, Store, StoreArticle, StorePage } from '@/lib/services';
 
 /**
  * Sprint 7 (S7-B1, CO-10): the ONE place that knows where a media file is used. Every feature that can hold a Media id registers here, so the
@@ -123,6 +123,23 @@ registerMediaFeature({
     const [count, rows] = await Promise.all([
       StoreArticle.countDocuments(filter),
       StoreArticle.find(filter).select('title').limit(MEDIA_USAGE_ITEM_CAP).lean() as unknown as Promise<Array<{ _id: unknown; title?: unknown }>>,
+    ]);
+    return { count, items: rows.map((row) => ({ id: String(row._id), title: typeof row.title === 'string' ? row.title : '' })) };
+  },
+});
+
+/**
+ * Sprint 7 (S7-B3): static pages. A page uses a file through the images in its text; the server keeps them in the page's `mediaRefs` every time the body is
+ * written, so one indexed question answers it. A used image can never be deleted.
+ */
+registerMediaFeature({
+  key: 'pages',
+  label: 'Pages',
+  async find(storeId, mediaId) {
+    const filter = { store: storeId, mediaRefs: mediaId };
+    const [count, rows] = await Promise.all([
+      StorePage.countDocuments(filter),
+      StorePage.find(filter).select('title').limit(MEDIA_USAGE_ITEM_CAP).lean() as unknown as Promise<Array<{ _id: unknown; title?: unknown }>>,
     ]);
     return { count, items: rows.map((row) => ({ id: String(row._id), title: typeof row.title === 'string' ? row.title : '' })) };
   },

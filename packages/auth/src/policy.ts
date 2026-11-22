@@ -469,6 +469,8 @@ Object.assign(POLICY_MATRIX, {
 // B10.4 declarations, added only where the matrix does not already declare the collection. Sellers read their
 // store's orders (writes: system and admin only, as in Payload); since Sprint 7 they also write their store's articles.
 export const SELLER_ARTICLE_FIELDS = ['type', 'title', 'slug', 'excerpt', 'content', 'coverImage', 'status', 'tags', 'seoTitle', 'seoDescription'] as const;
+// Sprint 7 (S7-B3): the fields of a static page a seller may write (the contract's PAGE_WRITE_FIELDS).
+export const SELLER_PAGE_FIELDS = ['title', 'slug', 'body', 'status', 'showInFooter', 'sortOrder'] as const;
 {
   const declarations: Record<string, unknown> = {
     // Sprint 7 (S7-B2, CO-116): a seller writes the articles of their own store, through an explicit field list. The store, the publish date, the
@@ -484,6 +486,14 @@ export const SELLER_ARTICLE_FIELDS = ['type', 'title', 'slug', 'excerpt', 'conte
       create: { actors: ['system'], fields: { system: '*' } },
       update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
       delete: { actors: ['admin', 'system'], fields: '*' },
+    },
+    // Sprint 7 (S7-B3): a seller writes the static pages of their own store, through an explicit field list. The store, the revision, the publish date,
+    // the template and the media references are the server's. The admin may read (for moderation) and nothing else.
+    storePages: {
+      read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+      create: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_PAGE_FIELDS] } },
+      update: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_PAGE_FIELDS] } },
+      delete: { actors: ['system', 'seller'], fields: '*' },
     },
   };
   for (const [name, rule] of Object.entries(declarations)) {

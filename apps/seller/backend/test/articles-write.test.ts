@@ -2,7 +2,7 @@ import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { AuditLog, Media, Product, signSession, Store, StoreArticle } from '@/lib/services';
+import { AuditLog, Media, Product, signSession, Store, StoreArticle, StorePage } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { settleRevalidations } from '../src/lib/revalidate';
 import { findMediaUsage } from '../src/lib/media-usage';
@@ -30,6 +30,7 @@ const ART_B = oid(302);
 const T0 = new Date('2026-11-01T10:00:00Z');
 
 const ArticleModel = StoreArticle as any;
+const PageModel = StorePage as any;
 const MediaModel = Media as any;
 const ProductModel = Product as any;
 const StoreModel = Store as any;
@@ -110,6 +111,7 @@ beforeEach(() => {
     product: Object.fromEntries(['find', 'countDocuments'].map((m) => [m, ProductModel[m]])),
     store: Object.fromEntries(['findOne', 'findById', 'exists'].map((m) => [m, StoreModel[m]])),
     audit: AuditModel.create,
+    page: Object.fromEntries(['countDocuments', 'find'].map((m) => [m, PageModel[m]])),
   };
   (mongoose as any).connect = async () => mongoose;
   globalThis.fetch = (async (url: string) => {
@@ -153,6 +155,9 @@ beforeEach(() => {
   };
   MediaModel.findOne = (filter: any) => chain(() => structuredClone(media.find((row) => matches(row, filter)) ?? null));
   MediaModel.find = (filter: any) => chain(() => structuredClone(media.filter((row) => matches(row, filter))));
+  // Sprint 7 (S7-B3): the registry also asks the pages feature; no page uses any file in this test.
+  PageModel.countDocuments = async () => 0;
+  PageModel.find = () => chain(() => []);
   ProductModel.countDocuments = async () => 0;
   ProductModel.find = () => chain(() => []);
   StoreModel.findOne = (filter: any) => chain(() => (stores[String(filter._id)] ? structuredClone(stores[String(filter._id)]) : null));
@@ -170,6 +175,7 @@ beforeEach(() => {
     for (const [m, fn] of Object.entries(saved.product)) ProductModel[m] = fn;
     for (const [m, fn] of Object.entries(saved.store)) StoreModel[m] = fn;
     AuditModel.create = saved.audit;
+    for (const [m, fn] of Object.entries(saved.page)) PageModel[m] = fn;
     delete process.env.STOREFRONT_URL;
     delete process.env.REVALIDATE_SECRET;
   };

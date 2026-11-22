@@ -34,6 +34,7 @@ import {
   Megaphone,
   BookOpen,
   Images,
+  FileText,
   BarChart,
   DollarSign,
   CreditCard,
@@ -82,6 +83,8 @@ export const NAV_GROUPS = [
       { href: "/referrals", label: "Referrals", icon: Users },
       { href: "/broadcast", label: "Broadcast", icon: Megaphone },
       { href: "/blog", label: "Blog & Lookbook", icon: BookOpen },
+      // Sprint 7 (S7-B3): the static pages (about, contact, shipping, returns, privacy) and their footer links.
+      { href: "/pages", label: "Pages", icon: FileText },
     ],
   },
   {

@@ -3,6 +3,8 @@ import { storeTags } from "@markaz/platform-kit/cache-tags";
 import { PREVIEW_CREDENTIAL_HEADER } from "@markaz/platform-kit/preview";
 import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, ReturnRefusedError, ReviewRefusedError, TransportUnavailableError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
+import type { StorefrontArticle, StorefrontArticleList, StorefrontPageLink, StorefrontPageLookup } from "./content-types";
+import { WireArticleEnvelope, WireArticleListEnvelope, WirePageEnvelope, WirePageListEnvelope } from "./content-wire";
 import type {
   CartQuote,
   CartQuoteInput,
@@ -482,6 +484,8 @@ function makeOrderTransport(
  *   GET  /orders/:number/review-eligibility?phone=, POST /orders/:number/reviews   Sprint 5 EP-21: review a delivered order (the number and the phone are the credential)
  *   GET  /products/:slug/reviews?page=   a product's approved reviews, read under the product's cache tag
  *   PUT  /abandoned-cart   Sprint 5 EP-28: keeps a cart the shopper left (phone and consent), priced by the server
+ *   GET  /articles?page=&limit=, GET /articles/:slug   Sprint 7 (S7-B3): the published blog; 404 ARTICLE_NOT_FOUND becomes null
+ *   GET  /pages, GET /pages/:slug   Sprint 7 (S7-B3): the published static pages; 404 PAGE_NOT_PUBLISHED is a draft, 404 PAGE_NOT_FOUND is none
  *
  * Reads retry once, and only when fetch itself fails. HTTP responses are never retried. Writes are never retried
  * automatically: the caller retries with the same idempotency key.
@@ -554,6 +558,42 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
       const result = await exchange("GET", "/products" + (qs ? "?" + qs : ""), read);
       const list = unwrap(result, WireProductList, "product list");
       return { items: list.data, page: list.page, totalPages: list.totalPages };
+    },
+
+    // Sprint 7 (S7-B3): the blog and the static pages. Read under the store's `static` tag, the one tag the seller backend's revalidateStore drops on every
+    // article or page publish, unpublish, edit and delete, so a change shows at once.
+    async listArticles(page = 1, limit = 12): Promise<StorefrontArticleList> {
+      requireHttp();
+      const params = new URLSearchParams();
+      if (page > 1) params.set("page", String(page));
+      params.set("limit", String(limit));
+      const result = await exchange("GET", "/articles?" + params.toString(), catalogRead([storeTags.static(storeId)]));
+      const list = unwrap(result, WireArticleListEnvelope, "article list");
+      return { items: list.data, page: list.page, totalPages: list.totalPages, totalDocs: list.totalDocs };
+    },
+
+    async getArticle(slug: string): Promise<StorefrontArticle | null> {
+      requireHttp();
+      const result = await exchange("GET", "/articles/" + encodeURIComponent(slug), catalogRead([storeTags.static(storeId)]));
+      if (result.status === 404 && errorCode(result.body) === "ARTICLE_NOT_FOUND") return null;
+      return unwrap(result, WireArticleEnvelope, "article").data;
+    },
+
+    async listPages(): Promise<StorefrontPageLink[]> {
+      requireHttp();
+      const result = await exchange("GET", "/pages", catalogRead([storeTags.static(storeId)]));
+      return unwrap(result, WirePageListEnvelope, "page list").data;
+    },
+
+    async getPage(slug: string): Promise<StorefrontPageLookup> {
+      requireHttp();
+      const result = await exchange("GET", "/pages/" + encodeURIComponent(slug), catalogRead([storeTags.static(storeId)]));
+      if (result.status === 404) {
+        const code = errorCode(result.body);
+        if (code === "PAGE_NOT_PUBLISHED") return { kind: "draft" };
+        if (code === "PAGE_NOT_FOUND") return { kind: "none" };
+      }
+      return { kind: "found", page: unwrap(result, WirePageEnvelope, "page").data };
     },
 
     async getProduct(slug: string): Promise<StorefrontProductDetail | null> {

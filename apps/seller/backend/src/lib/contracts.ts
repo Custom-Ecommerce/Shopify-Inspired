@@ -315,3 +315,17 @@ export const {
   articleCreateSchema,
   articleUpdateSchema,
 } = contracts;
+
+// Sprint 7 (S7-B3): static pages.
+export const {
+  PAGE_INVALID,
+  PAGE_REVISION_CONFLICT,
+  PAGE_SLUG_RESERVED,
+  PAGE_SLUG_TAKEN,
+  PAGE_SLUG_MAX,
+  PAGE_TEMPLATE_UNKNOWN,
+  isReservedPageSlug,
+  pageCreateSchema,
+  pageFromTemplateSchema,
+  pageUpdateSchema,
+} = contracts;

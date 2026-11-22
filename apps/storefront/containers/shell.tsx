@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { ThemeModule } from "@markaz/storefront-theme-kit";
 import { storePaths } from "@markaz/storefront-data";
-import type { FooterVM, NavVM, StoreChromeVM, StoreVM } from "@markaz/storefront-data";
+import type { FooterLink, FooterVM, NavVM, StoreChromeVM, StoreVM } from "@markaz/storefront-data";
 import type { TenantSnapshot } from "@/context/tenant-context";
 
 /**
@@ -12,11 +12,14 @@ export function StoreShell({
   snapshot,
   theme,
   chrome,
+  contentLinks = [],
   children,
 }: {
   snapshot: TenantSnapshot;
   theme: ThemeModule;
   chrome?: StoreChromeVM;
+  /** Sprint 7 (S7-B3): the footer links the store's pages and blog add. */
+  contentLinks?: FooterLink[];
   children: ReactNode;
 }) {
   const Layout = theme.Layout;
@@ -48,6 +51,7 @@ export function StoreShell({
     links: [
       { label: "Track order", href: storePaths.track() },
       { label: "Cart", href: storePaths.cart },
+      ...contentLinks,
     ],
     copyright: "© " + new Date().getFullYear() + " " + snapshot.storeName,
   };

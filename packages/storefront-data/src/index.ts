@@ -14,6 +14,23 @@ export { toCartVM } from "./view-models/cart";
 export type { CartVM, CartLineVM } from "./view-models/cart";
 export type { CatalogPageData } from "./view-models/catalog";
 export { storePaths } from "./view-models/paths";
+export { renderContentTree } from "./view-models/content-nodes";
+export type { ContentClasses } from "./view-models/content-nodes";
+export {
+  articleDescription,
+  articleTitle,
+  buildStoreRobotsTxt,
+  buildStoreSitemapXml,
+  canonicalUrl,
+  cleanOrigin,
+  contentFooterLinks,
+  formatPublishedDate,
+  toArticleCardVM,
+  toArticleVM,
+  toContentPageVM,
+} from "./domain/content";
+export type { ArticleCardVM, ArticleVM, ContentPageVM, FooterLink } from "./domain/content";
+export type { StorefrontArticle, StorefrontArticleList, StorefrontArticleSummary, StorefrontPage, StorefrontPageLink, StorefrontPageLookup } from "./transport/content-types";
 export { toCategoryVMs } from "./view-models/chrome";
 export type { CategoryVM, StoreChromeVM } from "./view-models/chrome";
 export { createMockTransport, mockProduct } from "./transport/mock";
@@ -66,6 +83,8 @@ export type {
   OrderConfirmationPageProps,
   OrderTrackingPageProps,
   ContentPageProps,
+  BlogPageProps,
+  ArticlePageProps,
   NotFoundPageProps,
   UnavailablePageProps,
   CollectionsPageProps,

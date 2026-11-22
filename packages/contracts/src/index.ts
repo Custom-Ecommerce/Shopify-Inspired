@@ -9,6 +9,7 @@ export * from './order-flow';
 // EP-02 OB-5a: the order timeline.
 export * from './order-timeline';
 export * from './store-article';
+export * from './store-page';
 export * from './workspace';
 export * from './sync-envelope';
 export * from './auth';

@@ -466,3 +466,27 @@ per-IP bucket**: a handful of forgot-password requests (5 per hour) or failed lo
 locks every seller out of those pages with "Too many attempts". The Sprint 4 verification hit exactly this. After a deploy
 check it: open `/forgot-password` from two different networks; both must work, and one must not use up the other's five.
 
+## 9. Content: articles and pages (Sprint 7)
+
+A store has a **blog** and **static pages**. Sellers write both in the dashboard (Blog, Pages); shoppers read them on the store's own host.
+
+- **Articles** (`/blog`, `/blog/<slug>`): blog articles only. A draft is private. Publishing sets the publish date once and keeps it. Written through
+  `api/storeArticles`; the storefront reads only published blog articles (`GET /api/storefront/v1/stores/:id/articles`, `.../articles/:slug`).
+- **Pages** (`/pages/<slug>`): about, contact, shipping, returns, privacy, or any page the seller writes. Written through `api/storePages`. A page can be
+  linked in the footer (`showInFooter`, ordered by `sortOrder`). The words `products`, `cart`, `checkout`, `track`, `favourites`, `search`, `collections`, `blog`,
+  `pages`, `account`, `api`, `orders` and `feedback` cannot be a page address.
+- **Default pages are never created for a seller.** Opening the Pages screen creates nothing; each of the five templates is made only when the seller chooses
+  "Create from template", as a draft. The templates live in `packages/platform-kit/src/page-templates.ts`. The legal ones (returns, privacy) carry visible
+  `[[EDIT: ...]]` placeholders: the editor warns while one is in the text and asks for confirmation before publishing it.
+- **Default copy**: a store with no page at `/pages/about` or `/pages/contact` shows the platform's default text from `apps/storefront/lib/content-pages.ts`. A
+  store that has a page there, even a draft, never shows it (a draft is a 404).
+- **The text format** is plain text with a small Markdown subset: `#`, `##`, `###` headings (shown as h2 to h4), `**bold**`, `*italic*`, `-` and `1.` lists,
+  `[text](https://link)` links (http, https, mailto, tel only) and `![alt](https://image)` pictures (https only; in the dashboard they must be files of the
+  store's own media library). Everything else is plain text: raw HTML is never rendered, it is shown as the letters it is made of. Up to 50,000 characters. The
+  parser is `packages/platform-kit/src/content-markdown.ts`; the seller backend, the dashboard preview and the storefront all use it.
+- **Caching**: the storefront reads the blog and the pages under the store's `static` cache tag. Every publish, unpublish, edit and delete of an article or page
+  makes the seller backend purge that tag (`revalidateStore`), so a change shows at once. Needs `STOREFRONT_URL` and `REVALIDATE_SECRET` on the seller backend.
+- **Sitemap and robots**: every live store serves `/sitemap.xml` (home, products, blog, each published article and page) and `/robots.txt` on its own host. A
+  store that is not live, and any preview, is closed.
+- **Indexes**: run `ensure-indexes` after deploying Sprint 7. New: a unique `{store, slug}` on `storepages` (and `storearticles` already had one), plus
+  `{store, mediaRefs}` on both, so a media file used by an article or a page can never be deleted.
