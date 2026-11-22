@@ -102,7 +102,7 @@ export function StoresView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  const filtered = state.q !== "" || state.status !== "" || state.domain !== "";
+  const filtered = state.q !== "" || state.status !== "" || (state.domain ?? "") !== "";
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -140,7 +140,7 @@ export function StoresView() {
         <Select
           aria-label="Filter by custom domain"
           className="sm:w-52"
-          value={state.domain}
+          value={state.domain ?? ""}
           onChange={(event) => go({ ...state, domain: event.target.value as StoreListState["domain"], page: 1 })}
         >
           <option value="">Any domain</option>

@@ -41,7 +41,7 @@ export default function DashboardPagesPage() {
     void load();
   }, [load]);
 
-  async function useTemplate(key: string) {
+  async function createFromTemplate(key: string) {
     setBusy(key);
     const result = await createPageFromTemplate(storeFetch, key);
     setBusy(null);
@@ -106,7 +106,7 @@ export default function DashboardPagesPage() {
                   {template.exists ? (
                     <span className="shrink-0 text-xs text-muted-foreground">Already created</span>
                   ) : (
-                    <Button type="button" variant="outline" className="min-h-11 shrink-0" disabled={busy !== null} onClick={() => void useTemplate(template.key)}>
+                    <Button type="button" variant="outline" className="min-h-11 shrink-0" disabled={busy !== null} onClick={() => void createFromTemplate(template.key)}>
                       {busy === template.key ? "Creating…" : "Create from template"}
                     </Button>
                   )}

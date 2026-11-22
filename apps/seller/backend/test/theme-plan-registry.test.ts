@@ -115,7 +115,7 @@ test('the theme config is a registered media feature: a hero picture in use is r
   StoreModel.findOne = (filter: any) => {
     asked.push(filter);
     const uses = String(filter._id) === STORE && filter['storefront.themeConfig.heroImage'] === HERO;
-    return { select: () => ({ lean: async () => (uses ? { _id: STORE } : null) }) };
+    return { select: () => ({ lean: async () => (uses ? { storefront: { themeConfig: { heroImage: HERO } } } : null) }) };
   };
   assert.deepEqual(await feature!.find(STORE, HERO), { count: 1, items: [{ id: 'heroImage', title: 'Home page hero picture' }] });
   assert.deepEqual(await feature!.find(STORE, '65a0000000000000000c0002'), { count: 0, items: [] }, 'a picture the config does not hold is free');
@@ -130,7 +130,7 @@ test('findMediaUsage includes the theme config, so the delete route (which asks 
   const others = list().filter((entry) => entry.key !== 'themeConfig');
   for (const other of others) unregisterMediaFeature(other.key);
   try {
-    StoreModel.findOne = () => ({ select: () => ({ lean: async () => ({ _id: STORE }) }) });
+    StoreModel.findOne = () => ({ select: () => ({ lean: async () => ({ storefront: { themeConfig: { heroImage: HERO } } }) }) });
     const usage = await findMediaUsage(STORE, HERO);
     assert.equal(usage.inUse, true);
     assert.deepEqual(usage.features.map((entry) => entry.key), ['themeConfig']);

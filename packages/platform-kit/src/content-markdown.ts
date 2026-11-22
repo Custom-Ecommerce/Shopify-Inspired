@@ -41,7 +41,8 @@ const IMAGE_PROTOCOLS: ReadonlySet<string> = new Set(["https:"]);
 
 /** The address as the tree keeps it, or null when it is not allowed. Never throws. */
 export function safeUrl(raw: string, kind: "link" | "image"): string | null {
-  const value = raw.trim();
+  // No trim: an address with a space anywhere, the ends included, is not an address (the control-character rule below refuses U+0020).
+  const value = raw;
   if (value === "" || value.length > MAX_URL_LENGTH) return null;
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u0020\u007f-\u009f\u2028\u2029<>"'`\\]/.test(value)) return null;

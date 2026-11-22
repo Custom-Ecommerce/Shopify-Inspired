@@ -20,7 +20,8 @@ export interface StoreListState {
   page: number;
   q: string;
   status: StoreStatusValue | "";
-  domain: DomainFilterValue | "";
+  /** S7-B5: optional so callers that only know page, search and status (the overview, older tests) still type-check. */
+  domain?: DomainFilterValue | "";
 }
 
 export const DEFAULT_LIST_STATE: StoreListState = { page: 1, q: "", status: "", domain: "" };

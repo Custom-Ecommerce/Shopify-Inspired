@@ -119,8 +119,12 @@ registerMediaFeature({
   key: 'themeConfig',
   label: 'Theme (hero picture)',
   async find(storeId, mediaId) {
-    const store = (await Store.findOne({ _id: storeId, 'storefront.themeConfig.heroImage': mediaId }).select('_id').lean()) as { _id?: unknown } | null;
-    return store ? { count: 1, items: [{ id: 'heroImage', title: 'Home page hero picture' }] } : { count: 0, items: [] };
+    const store = (await Store.findOne({ _id: storeId, 'storefront.themeConfig.heroImage': mediaId })
+      .select('storefront.themeConfig.heroImage')
+      .lean()) as { storefront?: { themeConfig?: { heroImage?: unknown } | null } | null } | null;
+    // The answer is read, not assumed from "a row came back": the file counts only when the row really holds it as the hero.
+    const holds = store?.storefront?.themeConfig?.heroImage;
+    return holds !== undefined && holds !== null && String(holds) === mediaId ? { count: 1, items: [{ id: 'heroImage', title: 'Home page hero picture' }] } : { count: 0, items: [] };
   },
 });
 

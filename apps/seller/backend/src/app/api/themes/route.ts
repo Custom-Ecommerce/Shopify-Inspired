@@ -27,7 +27,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       slug: entry.slug,
       name: entry.label,
       tier: entry.tier,
-      previewImage: previewImageUrl(entry.previewImage),
+      previewImage: previewImageUrl(entry.previewImage, process.env.STOREFRONT_URL),
       isDefaultForNewStores: entry.slug === themes.NEW_STORE_THEME_SLUG,
       supportsCardCheckout: themes.themeSupportsCardCheckout(entry.slug),
       ...themeLockFlags(entry.slug, premiumAllowed),

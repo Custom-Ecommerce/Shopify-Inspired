@@ -64,7 +64,8 @@ test('indexes: ONE review per order and product (unique, partial so older review
   assert.ok(indexes.some(([fields]) => fields.product === 1 && fields.status === 1 && fields.createdAt === -1), '{ product, status, createdAt }');
 });
 
-test('the seller alert model lists review_received, last of the kinds so far', () => {
-  assert.equal(SELLER_ALERT_KINDS.at(-1), 'review_received');
+test('the seller alert model lists review_received, after the Sprint 5 kinds (later sprints add kinds after it, such as contact_message)', () => {
+  assert.ok(SELLER_ALERT_KINDS.includes('review_received'));
+  assert.ok(SELLER_ALERT_KINDS.indexOf('review_received') > SELLER_ALERT_KINDS.indexOf('return_requested'));
   assert.equal(new SellerAlert({ store: STORE, title: 'New review: 5 out of 5', body: '', open: true, kind: 'review_received' }).validateSync(), undefined);
 });

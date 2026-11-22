@@ -71,6 +71,10 @@ export function validateCustomDomain(input: unknown, platformHosts: readonly str
   if (raw.includes('*')) return refuse('wildcard', 'A wildcard domain cannot be used. Enter one full domain.');
   if (isIP(raw) !== 0) return refuse('ip', 'An IP address cannot be used. Use a domain name.');
 
+  // A last part that is all digits (or 0x...) makes the URL parser read the whole name as an IPv4 address and refuse it, so say so before it does.
+  const lastPart = raw.toLowerCase().split('.').pop() ?? '';
+  if (/^[0-9]+$/.test(lastPart) || /^0x[0-9a-f]*$/.test(lastPart)) return refuse('ip', 'An IP address cannot be used. Use a domain name.');
+
   const ascii = domainToASCII(raw.toLowerCase());
   if (ascii === '') return refuse('characters', 'This domain has characters that are not allowed.');
   if (ascii.length > 253) return refuse('too-long', 'This domain is too long (253 characters at most).');

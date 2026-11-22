@@ -20,8 +20,7 @@ const FULL: TemplateVars = {
   contactName: 'Sara Khan',
   contactEmail: 'sara@example.com',
   contactPhone: '0300 1234567',
-  contactMessage: 'Do you deliver to Quetta?
-Please tell me the charge.',
+  contactMessage: 'Do you deliver to Quetta?\nPlease tell me the charge.',
   replyText: 'Yes, we deliver to Quetta for Rs. 300.',
   ticketSubject: 'My payout is late',
   customerName: 'Ayesha',
@@ -306,8 +305,7 @@ test('a subscription email refuses to render with a variable missing', () => {
 
 test('Sprint 7 (S7-B4): the four support templates exist, keep a message on separate lines, and escape what a sender typed', () => {
   for (const name of ['contact_message_store', 'contact_message_platform', 'contact_reply', 'ticket_admin_reply'] as const) assert.ok((TEMPLATE_NAMES as readonly string[]).includes(name), name);
-  const out = renderTemplate('contact_message_store', { ...FULL, contactMessage: '<img src=x onerror=alert(1)>
-second line' });
+  const out = renderTemplate('contact_message_store', { ...FULL, contactMessage: '<img src=x onerror=alert(1)>\nsecond line' });
   assert.equal(out.html.includes('<img'), false);
   assert.ok(out.html.includes('&lt;img src=x onerror=alert(1)&gt;'));
   assert.ok(out.text.includes('second line'));
