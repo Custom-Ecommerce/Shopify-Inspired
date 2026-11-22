@@ -42,6 +42,8 @@ function matches(row: Any, filter: Any): boolean {
 let orders: Any[];
 let stock: number;
 let discount: Any;
+/** Sprint 8 (S8-B1): extra keys of the store's storefront object, for the tax tests. */
+let storefrontExtra: Any;
 let creates: Array<{ params: Any; options: Any }>;
 let retrieves: string[];
 let createBehaviour: () => Promise<Any>;
@@ -85,6 +87,7 @@ beforeEach(() => {
   orders = [];
   stock = 5;
   discount = null;
+  storefrontExtra = {};
   creates = [];
   retrieves = [];
   warnings = [];
@@ -159,7 +162,7 @@ beforeEach(() => {
     discount.usedCount += update.$inc.usedCount;
     return { matchedCount: 1 };
   };
-  StoreStub.findById = () => chain({ _id: STORE, slug: 'alpha-store', status: 'active', storefront: { deliveryRate: 250, freeDeliveryThreshold: 5000 }, paymentSettings: { codEnabled: true } });
+  StoreStub.findById = () => chain({ _id: STORE, slug: 'alpha-store', status: 'active', storefront: { deliveryRate: 250, freeDeliveryThreshold: 5000, ...storefrontExtra }, paymentSettings: { codEnabled: true } });
 
   restore = () => {
     (mongoose as Any).connect = saved.connect;
@@ -272,6 +275,45 @@ test('the discount and delivery are already inside the amount', async () => {
   await place({ discountCode: 'EID10' });
   assert.equal(creates[0]!.params.line_items[0].price_data.unit_amount, 115000, '1000 - 100 + 250');
   assert.equal(discount.usedCount, 1, 'the use is taken as for COD');
+});
+
+test('S8-B1 an exclusive tax is inside the card amount: items + tax + delivery, x 100', async () => {
+  storefrontExtra = { tax: { enabled: true, ratePercent: 17, mode: 'exclusive', label: 'Tax' } };
+  const res = await place();
+  assert.equal(res.status, 201);
+  const order = orders[0]!;
+  assert.equal(order.taxAmount, 170);
+  assert.equal(order.total, 1420);
+  assert.equal(creates[0]!.params.line_items[0].price_data.unit_amount, 142000, 'Rs. 1,000 + Rs. 170 tax + Rs. 250 delivery');
+});
+
+test('S8-B1 an inclusive tax is already inside the prices: the card amount is as without tax', async () => {
+  storefrontExtra = { tax: { enabled: true, ratePercent: 17, mode: 'inclusive', label: 'Tax' } };
+  await place();
+  const order = orders[0]!;
+  assert.equal(order.taxAmount, 145);
+  assert.equal(order.total, 1250);
+  assert.equal(creates[0]!.params.line_items[0].price_data.unit_amount, 125000);
+});
+
+test('S8-B1 the card amount follows discount and tax together: tax is on the items after the discount', async () => {
+  storefrontExtra = { tax: { enabled: true, ratePercent: 10, mode: 'exclusive', label: 'Tax' } };
+  discount = { _id: DISCOUNT, store: STORE, code: 'EID10', type: 'percentage', value: 10, usedCount: 0, maxUses: null, isActive: true, applicableProducts: [] };
+  await place({ discountCode: 'EID10' });
+  assert.equal(orders[0]!.taxAmount, 90, '10% of 900');
+  assert.equal(creates[0]!.params.line_items[0].price_data.unit_amount, 124000, '1000 - 100 + 90 + 250');
+});
+
+test('S8-B1 the payment webhook accepts the taxed amount and refuses the untaxed one', async () => {
+  storefrontExtra = { tax: { enabled: true, ratePercent: 17, mode: 'exclusive', label: 'Tax' } };
+  await place();
+  const order = orders[0]!;
+  const wrong = await webhook(COMPLETED, sessionFor(order, { amount_total: 125000 }));
+  assert.equal(wrong.status, 200);
+  assert.equal(order.paymentStatus, 'unpaid', 'the amount without the tax does not match the order');
+  const right = await webhook(COMPLETED, sessionFor(order), { id: 'evt_2' });
+  assert.equal(right.status, 200);
+  assert.equal(order.paymentStatus, 'paid');
 });
 
 test('the return addresses come from configuration and the stored slug, never the browser', async () => {

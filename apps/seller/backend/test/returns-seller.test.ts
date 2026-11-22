@@ -572,3 +572,81 @@ test('the generic PATCH still approves, but cannot move a return to received or 
   assert.equal(done.refundAmount, 500);
   assert.equal((await patch(String(done._id), { status: 'refunded' })).status, 409);
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 8 (S8-B1, D-118): the refund cap carries the return's share of the tax that was paid; the commission stays tax-free (D-089)
+
+// The order of these tests: items 2500, discount 250, so the base is 2250; 17% exclusive tax on 2250 = 382.5 -> 383; delivery 200; total 2833.
+const TAXED = { taxAmount: 383, taxMode: 'exclusive', taxRatePercent: 17, taxLabel: 'Tax', total: 2833 };
+
+async function receivedOnTaxed(order: Row): Promise<Row> {
+  world.order(order);
+  const ret = world.ret({ status: 'approved' });
+  assert.equal((await call(receivePOST, 'POST', String(ret._id), { body: ALL_BACK })).status, 200);
+  return stored(ret._id);
+}
+
+test('S8-B1 refund with an exclusive tax: the cap of the whole order is the base plus the tax paid (2250 + 383), delivery still excluded', async () => {
+  const ret = await receivedOnTaxed(TAXED);
+  const view = await json(await call(detailGET, 'GET', String(ret._id)));
+  assert.equal(view.refundCap, 2633);
+  const tooMuch = await call(refundPOST, 'POST', String(ret._id), { body: { amount: 2634, method: 'cash' } });
+  assert.equal(tooMuch.status, 422);
+  assert.equal((await json(tooMuch)).code, 'REFUND_EXCEEDS_CAP');
+  assert.equal(stored(ret._id).refundAmount, null);
+  const ok = await json(await call(refundPOST, 'POST', String(ret._id), { body: { amount: 2633, method: 'cash' } }));
+  assert.equal(ok.completed, true);
+  assert.equal(stored(ret._id).status, 'refunded');
+  assert.equal(stored(ret._id).refundAmount, 2633);
+});
+
+test('S8-B1 refund with an inclusive tax: the prices already contain it, so the cap is the base alone (no double counting)', async () => {
+  const ret = await receivedOnTaxed({ taxAmount: 327, taxMode: 'inclusive', taxRatePercent: 17, taxLabel: 'Tax', total: 2450 });
+  const view = await json(await call(detailGET, 'GET', String(ret._id)));
+  assert.equal(view.refundCap, 2250);
+  assert.equal((await call(refundPOST, 'POST', String(ret._id), { body: { amount: 2251, method: 'cash' } })).status, 422);
+  assert.equal((await call(refundPOST, 'POST', String(ret._id), { body: { amount: 2250, method: 'cash' } })).status, 200);
+});
+
+test('S8-B1 an order from before tax (no tax fields) keeps the cap it always had', async () => {
+  const ret = await received();
+  assert.equal((await json(await call(detailGET, 'GET', String(ret._id)))).refundCap, 2250);
+});
+
+test('S8-B1 the commission reversal ignores the tax: the whole commission comes back with a whole return, and the ledger base is still tax-free', async () => {
+  const ret = await receivedOnTaxed(TAXED);
+  cod(2250, 90);
+  const first = await json(await call(refundPOST, 'POST', String(ret._id), { body: { amount: 1000, method: 'cash' } }));
+  assert.equal(first.commissionReversed, 90, 'the commission was taken on 2250, never on the tax');
+  assert.equal(reversals().reduce((sum, e) => sum + e.balanceEffect, 0), 90);
+  assert.equal(world.ledger.find((e) => e.type === 'cod_commission')!.baseAmount, 2250);
+});
+
+test('S8-B1 two partial returns of a taxed order: the caps add up to base + tax exactly (900 + 153, then 1350 + 230 = 2633), and the reversals are unchanged (36 + 54)', async () => {
+  world.order(TAXED);
+  cod(2250, 90);
+  const one = world.ret({ status: 'approved', items: [{ productId: P1, variantId: V1, productTitle: 'Shirt', variantTitle: 'M', quantity: 1, unitPrice: 1000 }] });
+  const two = world.ret({ status: 'approved', items: [{ productId: P1, variantId: V1, productTitle: 'Shirt', variantTitle: 'M', quantity: 1, unitPrice: 1000 }, { productId: P2, variantId: V2, productTitle: 'Cap', variantTitle: 'Default', quantity: 1, unitPrice: 500 }] });
+  await call(receivePOST, 'POST', String(one._id), { body: { items: [{ productId: P1, variantId: V1, quantity: 1, restock: true }] } });
+  await call(receivePOST, 'POST', String(two._id), { body: { items: [{ productId: P1, variantId: V1, quantity: 1, restock: true }, { productId: P2, variantId: V2, quantity: 1, restock: true }] } });
+  const capOne = (await json(await call(detailGET, 'GET', String(one._id)))).refundCap;
+  const capTwo = (await json(await call(detailGET, 'GET', String(two._id)))).refundCap;
+  assert.equal(capOne, 1053, '900 + round(383 x 900 / 2250) = 153');
+  assert.equal(capTwo, 1580, '1350 + the tax that is left, 383 - 153 = 230');
+  assert.equal(capOne + capTwo, 2633, 'no rupee lost or created: base 2250 + tax 383');
+  assert.equal((await call(refundPOST, 'POST', String(one._id), { body: { amount: 1054, method: 'cash' } })).status, 422);
+  const a = await json(await call(refundPOST, 'POST', String(one._id), { body: { amount: 1053, method: 'cash' } }));
+  assert.equal(a.commissionReversed, 36);
+  const b = await json(await call(refundPOST, 'POST', String(two._id), { body: { amount: 1580, method: 'cash' } }));
+  assert.equal(b.commissionReversed, 54);
+  assert.equal(reversals().reduce((sum, e) => sum + e.balanceEffect, 0), 90);
+  assert.equal(stored(one._id).status, 'refunded');
+  assert.equal(stored(two._id).status, 'refunded');
+});
+
+test('S8-B1 the list shows the same taxed cap as the detail', async () => {
+  const ret = await receivedOnTaxed(TAXED);
+  const list = await json(await call(listGET, 'GET', undefined));
+  const row = list.docs.find((doc: Row) => doc.id === String(ret._id));
+  assert.equal(row.refundCap, 2633);
+});

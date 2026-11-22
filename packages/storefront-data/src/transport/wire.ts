@@ -141,6 +141,10 @@ export const WireOrder = z.object({
   subtotal: price,
   deliveryCharges: price,
   discount: price.default(0),
+  /** Sprint 8 (S8-B1): the order's own tax snapshot (0 and null on an order with no tax). Mirrors storefrontOrderCreatedSchema. */
+  taxAmount: price.default(0),
+  taxMode: z.enum(["exclusive", "inclusive"]).nullable().default(null),
+  taxLabel: z.string().nullable().default(null),
   total: price,
   createdAt: z.string().min(1),
   customerName: z.string(),

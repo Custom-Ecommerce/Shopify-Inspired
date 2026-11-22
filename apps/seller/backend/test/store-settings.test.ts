@@ -1071,3 +1071,124 @@ test('S7-B7 a stored value that is no longer valid (a hand-edited document) read
   assert.equal(config.heroCtaLink, null);
   assert.equal(config.showBlog, false, 'a valid stored value is kept');
 });
+
+// ------------------------------------------------------------------------------------------- Sprint 8 (S8-B1, D-118): store tax
+
+test('S8-B1 a store that never saved tax reads the defaults: off, 0%, exclusive, "Tax"', async () => {
+  assert.deepEqual((await readSettings()).tax, { enabled: false, ratePercent: 0, mode: 'exclusive', label: 'Tax' });
+});
+
+test('S8-B1 a tax save is stored under storefront.tax, read back with the defaults, audited and purges the storefront once', async () => {
+  const res = await save({ tax: { enabled: true, ratePercent: 17.5, mode: 'inclusive', label: '  GST  ' } });
+  assert.equal(res.status, 200);
+  const { settings } = (await res.json()) as { settings: any };
+  assert.deepEqual(settings.tax, { enabled: true, ratePercent: 17.5, mode: 'inclusive', label: 'GST' });
+  assert.deepEqual(stores[STORE_A]!.storefront.tax, { enabled: true, ratePercent: 17.5, mode: 'inclusive', label: 'GST' });
+  assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the rest of the storefront is untouched');
+  assert.equal(stores[STORE_A]!.slug, 'zara');
+  await settleRevalidations();
+  assert.equal(purges.filter((url) => url.includes('/api/revalidate')).length, 1);
+  assert.equal(audits.at(-1)!.action, 'store.settings');
+  assert.deepEqual(audits.at(-1)!.details.groups, ['tax']);
+  assert.deepEqual(audits.at(-1)!.details.fields, ['storefront']);
+  assert.deepEqual((await readSettings()).tax, settings.tax);
+});
+
+test('S8-B1 a second save changes only the fields it names; turning tax off keeps the rate', async () => {
+  await save({ tax: { enabled: true, ratePercent: 17, label: 'Tax' } });
+  await save({ tax: { mode: 'inclusive' } });
+  assert.deepEqual(stores[STORE_A]!.storefront.tax, { enabled: true, ratePercent: 17, label: 'Tax', mode: 'inclusive' });
+  await save({ tax: { enabled: false } });
+  assert.deepEqual((await readSettings()).tax, { enabled: false, ratePercent: 17, mode: 'inclusive', label: 'Tax' });
+});
+
+test('S8-B1 the rate accepts 0, 0.01, 17, 17.5 and 100 and nothing else', async () => {
+  for (const rate of [0, 0.01, 17, 17.5, 17.55, 100]) {
+    const res = await save({ tax: { enabled: true, ratePercent: rate } });
+    assert.equal(res.status, 200, String(rate));
+    assert.equal(stores[STORE_A]!.storefront.tax.ratePercent, rate);
+  }
+});
+
+test('S8-B1 an invalid tax value is a 400 naming the field and NEVER reaches the database', async () => {
+  const attempts: Array<[Record<string, unknown>, string]> = [
+    [{ enabled: true, ratePercent: 17.555 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: 0.001 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: -1 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: -0.01 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: 100.01 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: 101 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: '17' }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: null }, 'tax.ratePercent'],
+    [{ enabled: 'yes', ratePercent: 17 }, 'tax.enabled'],
+    [{ enabled: true, ratePercent: 17, mode: 'both' }, 'tax.mode'],
+    [{ enabled: true, ratePercent: 17, label: '<b>Tax</b>' }, 'tax.label'],
+    [{ enabled: true, ratePercent: 17, label: 'x'.repeat(21) }, 'tax.label'],
+    [{ enabled: true, ratePercent: 17, label: '   ' }, 'tax.label'],
+    [{ enabled: true, ratePercent: 17, label: 5 }, 'tax.label'],
+    // Enabled with no valid rate: the store never saved one, so turning tax on alone is refused.
+    [{ enabled: true }, 'tax.ratePercent'],
+  ];
+  let writes = 0;
+  const original = StoreModel.findOneAndUpdate;
+  StoreModel.findOneAndUpdate = (...args: unknown[]) => {
+    writes += 1;
+    return original(...args);
+  };
+  for (const [tax, field] of attempts) {
+    const res = await save({ tax });
+    assert.equal(res.status, 400, JSON.stringify(tax));
+    assert.equal(await fieldOf(res), field, JSON.stringify(tax));
+  }
+  assert.equal(writes, 0, 'not one of them reached the database');
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined);
+});
+
+test('S8-B1 an unknown key of the group is a 400 and nothing is written', async () => {
+  for (const key of ['rate', 'currency', 'perLine', 'inclusive', '__proto__x']) {
+    const res = await save({ tax: { enabled: true, ratePercent: 17, [key]: 5 } });
+    assert.equal(res.status, 400, key);
+  }
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined);
+});
+
+test('S8-B1 turning tax on is allowed once the store has a rate, in a later save', async () => {
+  assert.equal((await save({ tax: { ratePercent: 17 } })).status, 200);
+  assert.equal(stores[STORE_A]!.storefront.tax.enabled, undefined);
+  assert.equal((await save({ tax: { enabled: true } })).status, 200);
+  assert.deepEqual((await readSettings()).tax, { enabled: true, ratePercent: 17, mode: 'exclusive', label: 'Tax' });
+  // ...and the rate cannot be taken away while tax is on: no group value can make an enabled store without a rate.
+  assert.equal((await save({ tax: { ratePercent: null } })).status, 400);
+});
+
+test('S8-B1 the save is a compare-and-set on the store revision: a change made in another tab is a 409 and nothing is written', async () => {
+  const original = StoreModel.findOneAndUpdate;
+  StoreModel.findOneAndUpdate = (filter: any, update: any, options: any) => {
+    stores[STORE_A]!.updatedAt = new Date(T0.getTime() + 5000);
+    return original(filter, update, options);
+  };
+  const res = await save({ tax: { enabled: true, ratePercent: 17 } });
+  assert.equal(res.status, 409);
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined);
+});
+
+test('S8-B1 isolation: another seller cannot write this store tax, and an admin cannot either', async () => {
+  const other = await save({ tax: { enabled: true, ratePercent: 17 } }, tokenB, STORE_A);
+  assert.equal(other.status, 403);
+  const admin = await save({ tax: { enabled: true, ratePercent: 17 } }, tokenAdmin, STORE_A);
+  assert.equal(admin.status, 403);
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined);
+  const own = await save({ tax: { enabled: true, ratePercent: 5 } }, tokenB, STORE_B);
+  assert.equal(own.status, 200);
+  assert.equal(stores[STORE_B]!.storefront.tax.ratePercent, 5);
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined, 'one store tax never lands in another');
+});
+
+test('S8-B1 a stored tax that is no longer valid (a hand-edited document) reads as off and as the defaults, never as the stored value', async () => {
+  stores[STORE_A]!.storefront = { deliveryRate: 250, tax: { enabled: true, ratePercent: 'lots', mode: 'weird', label: '<b>x</b>' } };
+  assert.deepEqual((await readSettings()).tax, { enabled: false, ratePercent: 0, mode: 'exclusive', label: 'Tax' });
+  stores[STORE_A]!.storefront = { tax: { enabled: true, ratePercent: 17.555 } };
+  assert.equal((await readSettings()).tax.enabled, false, 'three decimals is not a rate');
+  stores[STORE_A]!.storefront = { tax: { enabled: true, ratePercent: 17, mode: 'inclusive' } };
+  assert.deepEqual((await readSettings()).tax, { enabled: true, ratePercent: 17, mode: 'inclusive', label: 'Tax' });
+});

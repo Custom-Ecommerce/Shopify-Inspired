@@ -1,4 +1,4 @@
-import { storefrontOrderCreatedSchema, storefrontOrderSchema, storefrontOrderTrackingSchema } from '@/lib/contracts';
+import { readOrderTax, storefrontOrderCreatedSchema, storefrontOrderSchema, storefrontOrderTrackingSchema } from '@/lib/contracts';
 
 /** An order as .lean() (or toObject) returns it. */
 export interface OrderRow {
@@ -25,6 +25,11 @@ export interface OrderRow {
   subtotal?: number | null;
   deliveryCharges?: number | null;
   total?: number | null;
+  /** Sprint 8 (S8-B1): the tax snapshot. Absent on an order from before tax (reads as tax 0). */
+  taxAmount?: number | null;
+  taxMode?: string | null;
+  taxRatePercent?: number | null;
+  taxLabel?: string | null;
   discountCode?: string | null;
   discountAmount?: number | null;
   idempotencyKey?: string | null;
@@ -39,7 +44,10 @@ function iso(value: Date | string | null | undefined): string {
   return new Date(0).toISOString();
 }
 
+const plainTaxLabel = (value: unknown): string => (typeof value === 'string' && value.trim() !== '' ? value.trim() : 'Tax');
+
 function created(row: OrderRow) {
+  const tax = readOrderTax(row);
   return {
     orderId: row.orderId,
     status: row.status,
@@ -48,6 +56,10 @@ function created(row: OrderRow) {
     subtotal: row.subtotal ?? 0,
     deliveryCharges: row.deliveryCharges ?? 0,
     discount: row.discountAmount ?? 0,
+    // Sprint 8 (S8-B1): the order's own tax snapshot. taxLabel is the store's plain name for the line; the theme adds "(included)" for an inclusive order.
+    taxAmount: tax.taxAmount,
+    taxMode: tax.taxMode,
+    taxLabel: tax.taxAmount > 0 ? plainTaxLabel(row.taxLabel) : null,
     total: row.total ?? 0,
     createdAt: iso(row.createdAt),
   };

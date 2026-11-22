@@ -314,3 +314,41 @@ test('Sprint 7 (S7-B4): the four support templates exist, keep a message on sepa
   assert.equal(renderTemplate('ticket_admin_reply', FULL).subject, 'Markazify support answered: My payout is late');
   assert.deepEqual(templateProblems(), []);
 });
+
+test('Sprint 8 (S8-B1): the order placed emails show the tax line only when it has a value; an order without tax reads exactly as before', () => {
+  for (const name of ['order_placed_customer', 'order_placed_seller'] as const) {
+    assert.deepEqual(TEMPLATES[name].optionalVariables, ['taxLine'], name);
+    assert.equal(TEMPLATES[name].variables.includes('taxLine' as never), false, 'optional, so it is never required');
+    const without = renderTemplate(name, FULL);
+    const empty = renderTemplate(name, { ...FULL, taxLine: '' });
+    const blank = renderTemplate(name, { ...FULL, taxLine: '   ' });
+    assert.deepEqual(empty, without);
+    assert.deepEqual(blank, without);
+    assert.equal(without.text.includes('{{'), false, 'no placeholder is left in the text');
+    assert.equal(without.html.includes('<p style="margin:0 0 12px"></p>'), false, 'no empty paragraph is left in the HTML');
+    assert.ok(without.text.includes('Total: Rs. 8,450') || without.text.includes('Total: ' + FULL.total), name);
+
+    const taxed = renderTemplate(name, { ...FULL, taxLine: 'Tax (included): Rs. 170' });
+    assert.ok(taxed.text.includes('Tax (included): Rs. 170'), name);
+    assert.ok(taxed.html.includes('Tax (included): Rs. 170'), name);
+    assert.ok(taxed.text.indexOf('Tax (included): Rs. 170') < taxed.text.indexOf('Total: '), 'the tax line is above the total');
+    // The Urdu half carries the line too.
+    assert.ok(taxed.text.split('---')[1]!.includes('Tax (included): Rs. 170'), name);
+  }
+  assert.deepEqual(templateProblems(), []);
+});
+
+test('Sprint 8 (S8-B1): the tax line is escaped in HTML and cannot add lines; the other templates do not take it', () => {
+  const out = renderTemplate('order_placed_customer', { ...FULL, taxLine: '<b>GST</b>: Rs. 5
+Bcc: x@y.z' });
+  assert.equal(out.html.includes('<b>GST</b>'), false);
+  assert.ok(out.html.includes('&lt;b&gt;GST&lt;/b&gt;'));
+  assert.equal(out.text.includes('
+Bcc: x@y.z'), false, 'a control character in the value becomes a space');
+  for (const name of TEMPLATE_NAMES) {
+    if (name === 'order_placed_customer' || name === 'order_placed_seller') continue;
+    assert.equal(TEMPLATES[name].optionalVariables, undefined, name);
+  }
+  const plain = renderTemplate('order_confirmed', { ...FULL, taxLine: 'Tax: Rs. 1' });
+  assert.equal(plain.text.includes('Tax: Rs. 1'), false, 'a template that does not use the variable ignores it');
+});

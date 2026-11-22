@@ -155,7 +155,7 @@ async function priceOrder(storeId: string, commerce: StoreCommerce, request: Par
   // The shopper was shown a total that counted on this code, so the order is refused rather than charged without it.
   if (refusal !== null) throw discountRefused(refusal.reason, refusal.message);
 
-  return { lines: priced, totals, applied };
+  return { lines: priced, totals, applied, taxRatePercent: commerce.tax?.enabled ? commerce.tax.ratePercent : 0 };
 }
 
 /** Saves the order, retrying with a fresh order id on the (astronomically rare) id collision. */
@@ -191,7 +191,7 @@ export async function placeOrder(
   const existing = await findByKey(storeId, request.idempotencyKey);
   if (existing) return replay(existing, request.fingerprint);
 
-  const { lines, totals, applied } = await priceOrder(storeId, commerce, request);
+  const { lines, totals, applied, taxRatePercent } = await priceOrder(storeId, commerce, request);
   // Sprint 5 EP-11: the risk rules, on the priced total. Nothing is reserved yet, so this can take as long as it needs.
   const assessment = options.assess ? await options.assess({ total: totals.total, subtotal: totals.subtotal }) : null;
 
@@ -256,6 +256,9 @@ export async function placeOrder(
       subtotal: totals.subtotal,
       deliveryCharges: totals.deliveryCharges,
       total: totals.total,
+      // Sprint 8 (S8-B1, D-118): the tax is the SERVER's (priceCart above), never anything the client sent; a snapshot, so later changes of the store's tax never
+      // rewrite this order. Only when the store had tax on: every other order keeps no tax fields and reads as tax 0. A card payment is charged `total`.
+      ...(totals.taxMode ? { taxAmount: totals.taxAmount, taxMode: totals.taxMode, taxRatePercent, taxLabel: totals.taxLabel ?? null } : {}),
       ...(applied === null ? {} : { discountCode: applied.code, discountAmount: applied.amount, discountSnapshot: applied.snapshot }),
       ...(assessment === null ? {} : confirmationFieldsOf(assessment)),
       ...(request.paymentMethod === 'card' ? { stripeSessionExpiresAt: new Date(Date.now() + CARD_SESSION_LIFETIME_MS) } : {}),

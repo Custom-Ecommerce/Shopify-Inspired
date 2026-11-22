@@ -45,6 +45,8 @@ export { createMockTransport, mockProduct } from "./transport/mock";
 export type { MockFixtures, MockProductInput } from "./transport/mock";
 export { validateCheckout } from "./domain/checkout";
 export { cartLineNotice, checkoutBlockReason, compareCartToQuote } from "./view-models/cart-quote";
+export { DEFAULT_TAX_LABEL, taxLineLabel, toTaxLine } from "./view-models/tax-line";
+export type { TaxLineInput, TaxLineVM, TaxMode } from "./view-models/tax-line";
 export type { CartLineNotice, CartQuoteChanges } from "./view-models/cart-quote";
 export type { CheckoutValues, CheckoutFieldErrors } from "./domain/checkout";
 export type { ProductQuery, ProductListPage, ProductSort, StorefrontCategory, StorefrontProductDetail, StorefrontProductSummary } from "./transport/types";

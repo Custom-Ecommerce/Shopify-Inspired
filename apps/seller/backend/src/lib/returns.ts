@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import type { ReturnItemView, ReturnReceivedView, ReturnRefundView, SellerReturn } from '@markaz/contracts';
-import { everythingReceived, grossOf, returnLineKey, returnedBase } from '@/lib/contracts';
+import { everythingReceived, grossOf, returnLineKey, returnTaxShare, returnedBase } from '@/lib/contracts';
 import { oid } from '@/lib/ledger-aggregates';
 import { Return } from '@/lib/services';
 
@@ -162,11 +162,31 @@ export function completionOf(returnDoc: unknown, siblings: readonly unknown[], o
   return { completes: false, earlierBase, earlier };
 }
 
-/** The refund cap of a return with the rule of the whole order applied: the same number in the refund, the detail, the list and the reconcile. */
+/**
+ * Sprint 8 (S8-B1, D-118): the part of the order's tax that comes back with a return of `base` (the tax-free returned base) after earlier returns that took
+ * `previousBase`. Exclusive tax only: an inclusive price already contains it. See contracts returnTaxShare.
+ */
+export function refundTaxShareOf(order: unknown, base: number, previousBase: number): number {
+  const o = record(order);
+  return returnTaxShare({
+    taxAmount: whole(o.taxAmount),
+    taxMode: typeof o.taxMode === 'string' ? o.taxMode : null,
+    orderBase: Math.max(0, whole(o.subtotal) - whole(o.discountAmount)),
+    previousBase: whole(previousBase),
+    returnedBase: whole(base),
+  });
+}
+
+/** The refund cap of a return: its tax-free base plus its share of the tax that was paid (S8-B1). The commission reversal keeps using the base alone (D-089). */
+export function refundCapWithTax(order: unknown, base: number | null, previousBase: number): number | null {
+  return base === null ? null : base + refundTaxShareOf(order, base, previousBase);
+}
+
+/** The refund cap of a return with the rule of the whole order applied: the same number in the refund, the detail, the list and the reconcile. It includes the tax share (S8-B1). */
 export function refundCapFor(returnDoc: unknown, order: unknown, siblings: readonly unknown[]): number | null {
-  if (!COUNTED_STATUSES.has(String(record(returnDoc).status))) return refundCapOf(returnDoc, order);
+  if (!COUNTED_STATUSES.has(String(record(returnDoc).status))) return refundCapWithTax(order, refundCapOf(returnDoc, order), 0);
   const completion = completionOf(returnDoc, siblings, order);
-  return refundCapOf(returnDoc, order, completion.completes ? completion.earlierBase : null);
+  return refundCapWithTax(order, refundCapOf(returnDoc, order, completion.completes ? completion.earlierBase : null), completion.earlierBase);
 }
 
 /**

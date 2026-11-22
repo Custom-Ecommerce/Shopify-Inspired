@@ -232,3 +232,48 @@ test('a repeated and a parallel transition email the customer once: only the win
   assert.deepEqual(changed.filter(Boolean).length, 1, 'one request moved the order');
   assert.deepEqual(templates(), ['order_confirmed']);
 });
+
+// Sprint 8 (S8-B1, D-118): the order confirmation includes the tax line only when the order carries tax (> 0).
+
+test('S8-B1 an order with no tax reads exactly as before: no tax line in the customer or the seller email', async () => {
+  await sendOrderPlaced(STORE, order());
+  for (const row of outbox) {
+    assert.equal(/Tax|GST|VAT/.test(row.bodyText), false, row.template);
+    assert.equal(/Tax|GST|VAT/.test(row.bodyHtml), false, row.template);
+  }
+  const customer = outbox.find((r) => r.template === 'order_placed_customer')!;
+  assert.ok(customer.bodyText.includes('Rs. 7,250'));
+  assert.equal(customer.bodyText.includes('\n\n\n'), false, 'no blank line is left where the tax line would be');
+});
+
+test('S8-B1 an order with an exclusive tax shows "GST: Rs. 1,190" above the total, in the customer and the seller email', async () => {
+  await sendOrderPlaced(STORE, order({ taxAmount: 1190, taxMode: 'exclusive', taxRatePercent: 17, taxLabel: 'GST', total: 8440 }));
+  for (const template of ['order_placed_customer', 'order_placed_seller']) {
+    const row = outbox.find((r) => r.template === template)!;
+    assert.ok(row.bodyText.includes('GST: Rs. 1,190'), template);
+    assert.ok(row.bodyHtml.includes('GST: Rs. 1,190'), template);
+    assert.ok(row.bodyText.includes('Rs. 8,440'), template + ' total includes the tax');
+    assert.ok(row.bodyText.indexOf('GST: Rs. 1,190') < row.bodyText.indexOf('Rs. 8,440'), 'the tax line comes before the total');
+  }
+});
+
+test('S8-B1 an inclusive tax is labelled "(included)" and the total is unchanged', async () => {
+  await sendOrderPlaced(STORE, order({ taxAmount: 1017, taxMode: 'inclusive', taxRatePercent: 17, taxLabel: 'Tax', total: 7250 }));
+  const customer = outbox.find((r) => r.template === 'order_placed_customer')!;
+  assert.ok(customer.bodyText.includes('Tax (included): Rs. 1,017'));
+  assert.ok(customer.bodyText.includes('Rs. 7,250'));
+});
+
+test('S8-B1 a tax of 0, or an amount with no mode, adds no line; a label with markup is escaped in the HTML', async () => {
+  await sendOrderPlaced(STORE, order({ taxAmount: 0, taxMode: 'exclusive', taxLabel: 'Tax' }));
+  assert.equal(outbox.some((r) => r.bodyText.includes('Tax')), false);
+  outbox = [];
+  sellerAlerts = [];
+  await sendOrderPlaced(STORE, order({ taxAmount: 500 }));
+  assert.equal(outbox.some((r) => r.bodyText.includes('Tax')), false, 'an amount with no mode is not a tax');
+  outbox = [];
+  sellerAlerts = [];
+  await sendOrderPlaced(STORE, order({ taxAmount: 500, taxMode: 'exclusive', taxLabel: '<i>Tax</i>', total: 7750 }));
+  const customer = outbox.find((r) => r.template === 'order_placed_customer')!;
+  assert.equal(customer.bodyHtml.includes('<i>'), false);
+});

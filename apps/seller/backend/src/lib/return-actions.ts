@@ -4,7 +4,7 @@ import { reverseForReturn, type ReturnReversalResult } from '@/lib/commission';
 import { HttpError } from '@/lib/http';
 import { notifyReturnDecision } from '@/lib/notifications';
 import { restoreOrderStock, stockRestoreSummary, type RestoreLine } from '@/lib/order-stock';
-import { completionOf, orderLinesOf, refundCapOf } from '@/lib/returns';
+import { completionOf, orderLinesOf, refundCapOf, refundCapWithTax } from '@/lib/returns';
 import { Order, Return, writeAuditLog } from '@/lib/services';
 
 /*
@@ -226,7 +226,9 @@ export async function recordRefund(storeId: string, id: string, actor: Actor, bo
   // SB-6 (bug 6): the return that completes the received quantities of the whole order takes the order base minus what the earlier ones took.
   const siblings = (await Return.find({ store: storeId, order: current.order, status: { $in: ['received', 'refunded'] } }).lean()) as unknown as Row[];
   const completion = completionOf(current, siblings, order);
-  const cap = refundCapOf(current, order, completion.completes ? completion.earlierBase : null) ?? 0;
+  // S8-B1: the refund cap carries the return's share of the tax that was paid; the commission reversal below keeps the tax-free base (D-089).
+  const base = refundCapOf(current, order, completion.completes ? completion.earlierBase : null) ?? 0;
+  const cap = refundCapWithTax(order, base, completion.earlierBase) ?? 0;
   const recorded = whole(current.refundAmount);
   const room = refundRoom(cap, recorded);
   if (body.amount > room) {
@@ -253,7 +255,7 @@ export async function recordRefund(storeId: string, id: string, actor: Actor, bo
   const reversal = await reverseForReturn({
     returnId: updated._id,
     order: { _id: order._id, store: order.store, orderId: String(order.orderId ?? ''), paymentMethod: order.paymentMethod },
-    returnedBase: cap,
+    returnedBase: base,
     completesOrder: completion.completes,
     earlierReturns: completion.earlier,
   });

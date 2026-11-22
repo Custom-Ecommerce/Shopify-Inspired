@@ -17,6 +17,7 @@ import { ReturnsTab } from "./ReturnsTab";
 import { ProfileTab } from "./ProfileTab";
 import { SeoTab } from "./SeoTab";
 import type { SaveResult } from "./shared";
+import { TaxTab } from "./TaxTab";
 import { ThemeTab } from "./ThemeTab";
 
 export const SETTINGS_TABS = [
@@ -30,6 +31,8 @@ export const SETTINGS_TABS = [
   { value: "fraud", label: "Fraud" },
   // Sprint 5 EP-13: the return window.
   { value: "returns", label: "Returns" },
+  // Sprint 8 (S8-B1, D-118): the store tax.
+  { value: "tax", label: "Tax" },
 ] as const;
 
 type TabValue = (typeof SETTINGS_TABS)[number]["value"];
@@ -155,6 +158,7 @@ export function StoreSettingsView() {
           {tab === "messages" ? <MessagesTab settings={settings} save={save} onDirty={onDirty} /> : null}
           {tab === "fraud" ? <FraudTab settings={settings} save={save} onDirty={onDirty} /> : null}
           {tab === "returns" ? <ReturnsTab settings={settings} save={save} onDirty={onDirty} /> : null}
+          {tab === "tax" ? <TaxTab settings={settings} save={save} onDirty={onDirty} /> : null}
         </>
       )}
     </div>

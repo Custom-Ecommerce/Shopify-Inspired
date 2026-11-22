@@ -285,6 +285,13 @@ export const storefrontOrderCreatedSchema = z.object({
   deliveryCharges: price,
   /** Rupees taken off the subtotal by a code. */
   discount: price.default(0),
+  /**
+   * Sprint 8 (S8-B1, D-118): the tax the order was placed with, whole rupees, from the order's own snapshot. 0 and null mode on an order with no
+   * tax (including every order from before tax existed). Exclusive: part of `total`. Inclusive: already inside the prices, `total` unchanged.
+   */
+  taxAmount: price.default(0),
+  taxMode: z.enum(['exclusive', 'inclusive']).nullable().default(null),
+  taxLabel: z.string().max(40).nullable().default(null),
   total: price,
   createdAt: z.string().min(1),
 });

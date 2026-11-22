@@ -11,6 +11,10 @@ import {
   RETURN_WINDOW_DAYS_DEFAULT,
   NO_USABLE_PAYMENT_METHOD_MESSAGE,
   THEME_CONFIG_KEYS,
+  TAX_KEYS,
+  TAX_RATE_REQUIRED_MESSAGE,
+  isValidTaxRate,
+  resolveTaxSettings,
   resolveThemeConfig,
   cityKey,
   maskAccountNumber,
@@ -193,6 +197,16 @@ export function readThemeConfig(storefront: unknown) {
   return resolveThemeConfig(record(storefront).themeConfig);
 }
 
+// ------------------------------------------------------------------------------------------------------------- tax
+
+/**
+ * Sprint 8 (S8-B1, D-118): the tax settings of a store, the defaults filled in (off, 0%, exclusive, "Tax"). Kept in storefront.tax. A stored value that does not
+ * pass its rule reads as the default for that field, and tax that is on without a valid rate reads as off.
+ */
+export function readTax(storefront: unknown) {
+  return resolveTaxSettings(record(storefront).tax);
+}
+
 /** The code and message of a hero image that is not one of the seller's own pictures (422). */
 export const THEME_CONFIG_IMAGE_INVALID = 'THEME_CONFIG_IMAGE_INVALID';
 export const THEME_CONFIG_IMAGE_MESSAGE = 'Choose a picture from your own media library for the hero.';
@@ -262,6 +276,7 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     returns: { returnWindowDays: readReturnWindowDays(sf) },
     domain: { redirectToCustomDomain: readRedirectToCustomDomain(sf) },
     themeConfig: { ...themeConfig, heroImage },
+    tax: readTax(sf),
     updatedAt: iso(doc.updatedAt),
   };
 }
@@ -285,7 +300,7 @@ export function settingsFieldsOf(update: StoreSettingsUpdate): string[] {
   const fields = new Set<string>();
   if (update.profile?.name !== undefined) fields.add('name');
   const profileRest = update.profile ? Object.keys(update.profile).filter((key) => key !== 'name') : [];
-  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns || update.domain || update.themeConfig !== undefined) fields.add('storefront');
+  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns || update.domain || update.themeConfig !== undefined || update.tax) fields.add('storefront');
   if (update.payments || update.fraud || update.messages?.abandonedCartEmail !== undefined) fields.add('paymentSettings');
   if (update.payout !== undefined) fields.add('payoutDetails');
   return [...fields];
@@ -392,6 +407,17 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
       if (value !== undefined) stored[key] = value;
     }
     put('themeConfig', stored);
+  }
+  // Sprint 8 (S8-B1): the tax group changes only the fields it names, onto what is stored. Every value was validated by the schema; what is left to check
+  // here needs the stored value too: tax cannot be on without a valid rate (400, field tax.ratePercent), so a broken setting never reaches the database.
+  if (update.tax) {
+    const stored = { ...record(sf.tax) };
+    for (const key of TAX_KEYS) {
+      const value = (update.tax as Record<string, unknown>)[key];
+      if (value !== undefined) stored[key] = value;
+    }
+    if (stored.enabled === true && !isValidTaxRate(stored.ratePercent)) throw invalid('tax.ratePercent', TAX_RATE_REQUIRED_MESSAGE);
+    put('tax', stored);
   }
   if (storefrontChanged) {
     set.storefront = sf;

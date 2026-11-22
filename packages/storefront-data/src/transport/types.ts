@@ -155,6 +155,11 @@ export interface StorefrontOrder {
   subtotal: number;
   deliveryCharges: number;
   discount: number;
+  /** Sprint 8 (S8-B1): the tax the order was placed with (a snapshot). Absent or 0 when the order has none. Exclusive: part of `total`. Inclusive: already in the prices. */
+  taxAmount?: number;
+  taxMode?: "exclusive" | "inclusive" | null;
+  /** The store's own name for the tax, as it was when the order was placed. */
+  taxLabel?: string | null;
   total: number;
   createdAt: string;
   updatedAt: string;

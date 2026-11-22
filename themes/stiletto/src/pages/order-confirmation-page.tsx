@@ -6,6 +6,7 @@ import React, { Suspense } from "react";
 import type { OrderConfirmationPageProps, StorefrontOrder } from "@markaz/storefront-data";
 import { useOrderLookup } from "@markaz/storefront-data/client";
 import { paths } from "../adapters/paths";
+import { orderTotalRows } from "../adapters/order-totals";
 import { paymentSummary, whatHappensNext } from "../adapters/last-order";
 import { useConfirmedOrder } from "../adapters/order-payment";
 
@@ -56,10 +57,9 @@ function OrderDetails({ order, sellerWhatsappLink }: { order: StorefrontOrder; s
           ))}
         </ul>
         <div className="space-y-2 pt-2 border-t border-white/10">
-          <Row label="Subtotal" value={money(order.subtotal)} />
-          {order.discount > 0 && <Row label="Discount" value={`-${money(order.discount)}`} />}
-          <Row label="Delivery" value={order.deliveryCharges > 0 ? money(order.deliveryCharges) : "Free"} />
-          <Row label="Total" value={money(order.total)} strong />
+          {orderTotalRows(order).map((row) => (
+            <Row key={row.key} label={row.label} value={row.value} strong={row.strong} />
+          ))}
         </div>
       </div>
 

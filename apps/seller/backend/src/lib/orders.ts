@@ -25,6 +25,7 @@ import {
   dashboardOrderListQuerySchema,
   nextStatuses,
   orderListDaySchema,
+  readOrderTax,
 } from '@/lib/contracts';
 import { confirmationLogOf, confirmationStatusOf, riskFlagsOf } from '@/lib/fraud';
 import { HttpError, handleRouteError } from '@/lib/http';
@@ -359,6 +360,17 @@ export function customerKeyOf(row: Row): string | null {
 }
 
 /**
+ * Sprint 8 (S8-B1, D-118): the order's tax snapshot for the seller, only when the order carries tax (an older order and an order of a store with tax off add
+ * nothing: they read as tax 0). The rate is part of the detail page only.
+ */
+function taxFieldsOf(row: Row, withRate: boolean): { taxAmount?: number; taxMode?: 'exclusive' | 'inclusive'; taxRatePercent?: number; taxLabel?: string } {
+  const tax = readOrderTax(row);
+  if (tax.taxAmount <= 0 || tax.taxMode === null) return {};
+  const label = typeof row.taxLabel === 'string' && row.taxLabel.trim() !== '' ? row.taxLabel.trim() : 'Tax';
+  return { taxAmount: tax.taxAmount, taxMode: tax.taxMode, ...(withRate ? { taxRatePercent: tax.taxRatePercent } : {}), taxLabel: label };
+}
+
+/**
  * The detail page's order, allowlisted the same way. statusHistory and notes are newest first. allowedNext comes from the
  * stored status as it is, and a corrupt status shows as unknown and has no legal moves.
  */
@@ -403,6 +415,7 @@ export function toDashboardOrderDetail(doc: unknown): DashboardOrderDetail {
     discountCode: text(row.discountCode),
     discountAmount: num(row.discountAmount),
     total: num(row.total),
+    ...taxFieldsOf(row, true),
     courier: text(row.courier),
     trackingNumber: text(row.trackingNumber),
     trackingUrl: text(row.trackingUrl),
@@ -445,7 +458,7 @@ export function parseOrderPrintIds(raw: string | null): string[] {
 
 /** The fields a printout reads. Notes, history and the idempotency fields are never loaded. */
 export const ORDER_PRINT_PROJECTION =
-  'orderId createdAt status customerName phone address city items paymentMethod paymentStatus total courier trackingNumber';
+  'orderId createdAt status customerName phone address city items paymentMethod paymentStatus total courier trackingNumber taxAmount taxMode taxRatePercent taxLabel';
 
 /** One order as a label and a slip read it. Strings pass through whole; long values are the page's CSS problem. */
 export function toOrderPrintSheet(doc: unknown): OrderPrintSheet {
@@ -470,5 +483,6 @@ export function toOrderPrintSheet(doc: unknown): OrderPrintSheet {
     codAmount: labelCodAmount(row),
     courier: text(row.courier),
     trackingNumber: text(row.trackingNumber),
+    ...taxFieldsOf(row, false),
   };
 }

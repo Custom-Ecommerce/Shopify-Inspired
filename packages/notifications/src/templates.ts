@@ -107,6 +107,8 @@ export const TEMPLATE_VARIABLES = [
   'contactMessage',
   'replyText',
   'ticketSubject',
+  // Sprint 8 (S8-B1, D-118): the tax line of an order ("Tax (included): Rs. 170"), only when the order carries tax. Optional in the templates that use it.
+  'taxLine',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
@@ -119,6 +121,11 @@ const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink', 'ac
 export interface TemplateDefinition {
   /** The variables the texts may use; every one must have a value when rendering. */
   variables: readonly TemplateVariable[];
+  /**
+   * Variables the texts may use that need no value (Sprint 8, S8-B1: taxLine). A line made of only an optional placeholder is left out entirely when the
+   * value is missing or empty, so an order without tax reads exactly as it did before.
+   */
+  optionalVariables?: readonly TemplateVariable[];
   subject: string;
   /** Lines of the English part. An empty string is a blank line. */
   en: readonly string[];
@@ -131,6 +138,7 @@ export interface TemplateDefinition {
 export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
   order_placed_customer: {
     variables: ['storeName', 'customerName', 'orderNumber', 'items', 'total', 'paymentMethod', 'trackingLink'],
+    optionalVariables: ['taxLine'],
     subject: '{{storeName}}: we received your order {{orderNumber}}',
     en: [
       'Hi {{customerName}},',
@@ -139,6 +147,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       '',
       '{{items}}',
       '',
+      '{{taxLine}}',
       'Total: {{total}}',
       'Payment: {{paymentMethod}}',
       '',
@@ -147,6 +156,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
     ur: [
       '{{customerName}}، السلام علیکم،',
       '{{storeName}} سے آرڈر کرنے کا شکریہ۔ آپ کا آرڈر نمبر {{orderNumber}} ہے۔',
+      '{{taxLine}}',
       'کل رقم: {{total}}',
       'ادائیگی: {{paymentMethod}}',
       'اپنا آرڈر یہاں دیکھیں: {{trackingLink}}',
@@ -155,6 +165,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
   },
   order_placed_seller: {
     variables: ['storeName', 'orderNumber', 'customerName', 'items', 'total', 'paymentMethod', 'city', 'dashboardLink'],
+    optionalVariables: ['taxLine'],
     subject: 'New order {{orderNumber}} for {{storeName}}',
     en: [
       'You have a new order on {{storeName}}.',
@@ -162,6 +173,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'Order: {{orderNumber}}',
       'Customer: {{customerName}}, {{city}}',
       'Payment: {{paymentMethod}}',
+      '{{taxLine}}',
       'Total: {{total}}',
       '',
       '{{items}}',
@@ -172,6 +184,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       '{{storeName}} پر نیا آرڈر آیا ہے۔',
       'آرڈر نمبر: {{orderNumber}}',
       'گاہک: {{customerName}}، {{city}}',
+      '{{taxLine}}',
       'کل رقم: {{total}}',
       'آرڈر دیکھیں: {{dashboardLink}}',
     ],
@@ -727,8 +740,8 @@ export function templateProblems(templates: Record<string, TemplateDefinition> =
   const known = new Set<string>(TEMPLATE_VARIABLES);
   const problems: string[] = [];
   for (const [name, template] of Object.entries(templates)) {
-    const declared = new Set<string>(template.variables);
-    for (const variable of template.variables) {
+    const declared = new Set<string>([...template.variables, ...(template.optionalVariables ?? [])]);
+    for (const variable of [...template.variables, ...(template.optionalVariables ?? [])]) {
       if (!known.has(variable)) problems.push(name + ': declares unknown variable ' + variable);
     }
     for (const text of [template.subject, ...template.en, ...template.ur, template.whatsapp]) {
@@ -757,7 +770,22 @@ function requireValues(name: TemplateName, template: TemplateDefinition, vars: T
     if (typeof value !== 'string' || value.trim() === '') throw new TemplateError(name + ': missing value for ' + variable);
     values[variable] = value;
   }
+  // An optional variable has a value or is empty; it never fails a render.
+  for (const variable of template.optionalVariables ?? []) {
+    const value = vars[variable];
+    values[variable] = typeof value === 'string' ? singleLine(value) : '';
+  }
   return values;
+}
+
+/** The lines to show: a line that is only an optional placeholder with no value is dropped (no blank line is left in its place). */
+function visibleLines(template: TemplateDefinition, lines: readonly string[], values: Record<string, string>): string[] {
+  const optional = new Set<string>(template.optionalVariables ?? []);
+  if (optional.size === 0) return [...lines];
+  return lines.filter((line) => {
+    const only = /^\s*\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}\s*$/.exec(line);
+    return !(only && optional.has(only[1]!) && (values[only[1]!] ?? '') === '');
+  });
 }
 
 function fillText(text: string, values: Record<string, string>, oneLine: boolean): string {
@@ -822,14 +850,16 @@ export function renderTemplate(name: TemplateName, vars: TemplateVars, options: 
 
   const subject = fillText(template.subject, values, true).slice(0, 200);
   const footer = (options.footer ?? '').trim();
-  const baseText = [...template.en.map((line) => fillText(line, values, false)), '', '---', '', ...template.ur.map((line) => fillText(line, values, false))].join('\n');
+  const en = visibleLines(template, template.en, values);
+  const ur = visibleLines(template, template.ur, values);
+  const baseText = [...en.map((line) => fillText(line, values, false)), '', '---', '', ...ur.map((line) => fillText(line, values, false))].join('\n');
   const text = footer ? baseText + '\n\n---\n' + footer : baseText;
   const footerHtml = footer ? '<div dir="auto" style="margin-top:16px;color:#555">' + escapeHtml(footer).replace(/\r?\n/g, '<br>') + '</div>' : '';
   const html =
     '<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111">' +
-    htmlBlock(template.en, values, false) +
+    htmlBlock(en, values, false) +
     '<hr style="border:none;border-top:1px solid #ddd;margin:16px 0">' +
-    htmlBlock(template.ur, values, true) +
+    htmlBlock(ur, values, true) +
     footerHtml +
     '</body></html>';
   const whatsapp = fillText(template.whatsapp, values, false);

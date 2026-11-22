@@ -8,6 +8,7 @@ import {
   refundRoom,
   returnWindow,
   returnableQuantities,
+  returnTaxShare,
   returnedBase,
 } from '../src/return-money';
 
@@ -175,4 +176,98 @@ test('commissionReversal: completesOrder keeps back the share of earlier returns
   assert.equal(commissionReversal({ ...base, reservedForEarlier: 0, previousBase: 1387, previousAmount: 55 }), 19, 'refunded last: nothing held back');
   assert.equal(commissionReversal({ ...base, reservedForEarlier: 0 }), 74, 'a single full return');
   assert.equal(commissionReversal({ ...base, reservedForEarlier: 200 }), 0, 'never below zero');
+});
+
+// ------------------------------------------------------------------------------------------------- Sprint 8 (S8-B1): the tax share of a return
+
+const taxOrder = (taxAmount: number, taxMode: string | null, orderBase: number) => ({ taxAmount, taxMode, orderBase });
+
+test('returnTaxShare: an exclusive tax comes back in proportion to the base that comes back', () => {
+  assert.equal(returnTaxShare({ ...taxOrder(510, 'exclusive', 3000), previousBase: 0, returnedBase: 1000 }), 170);
+  assert.equal(returnTaxShare({ ...taxOrder(510, 'exclusive', 3000), previousBase: 0, returnedBase: 3000 }), 510, 'the whole base brings the whole tax');
+  assert.equal(returnTaxShare({ ...taxOrder(510, 'exclusive', 3000), previousBase: 0, returnedBase: 0 }), 0);
+});
+
+test('returnTaxShare: an inclusive tax adds nothing (the returned base already contains it: no double counting)', () => {
+  assert.equal(returnTaxShare({ ...taxOrder(436, 'inclusive', 3000), previousBase: 0, returnedBase: 1000 }), 0);
+  assert.equal(returnTaxShare({ ...taxOrder(436, 'inclusive', 3000), previousBase: 0, returnedBase: 3000 }), 0);
+});
+
+test('returnTaxShare: no tax, an old order, a tax with no mode, and nothing taxable add nothing', () => {
+  assert.equal(returnTaxShare({ ...taxOrder(0, 'exclusive', 3000), previousBase: 0, returnedBase: 1000 }), 0);
+  assert.equal(returnTaxShare({ taxAmount: undefined, taxMode: undefined, orderBase: 3000, previousBase: 0, returnedBase: 1000 }), 0);
+  assert.equal(returnTaxShare({ ...taxOrder(510, null, 3000), previousBase: 0, returnedBase: 1000 }), 0);
+  assert.equal(returnTaxShare({ ...taxOrder(510, 'exclusive', 0), previousBase: 0, returnedBase: 1000 }), 0);
+  assert.equal(returnTaxShare({ ...taxOrder(-5, 'exclusive', 3000), previousBase: 0, returnedBase: 1000 }), 0);
+});
+
+test('returnTaxShare: three partial returns add up to exactly the tax paid and to exactly the order total (no rupee lost or created)', () => {
+  // Items 333 + 333 + 334 = 1000, tax 17.5% = 175, no delivery: the order total is 1175.
+  const order = taxOrder(175, 'exclusive', 1000);
+  const bases = [333, 333, 334];
+  let previous = 0;
+  const caps: number[] = [];
+  const shares: number[] = [];
+  for (const base of bases) {
+    const share = returnTaxShare({ ...order, previousBase: previous, returnedBase: base });
+    shares.push(share);
+    caps.push(base + share);
+    previous += base;
+  }
+  assert.deepEqual(shares, [58, 59, 58], 'a rounding per return would give 58 + 58 + 58 = 174: the last one takes the remainder');
+  assert.equal(shares.reduce((sum, value) => sum + value, 0), 175);
+  assert.deepEqual(caps, [391, 392, 392]);
+  assert.equal(caps.reduce((sum, value) => sum + value, 0), 1175, 'the caps add up to the order total');
+});
+
+test('returnTaxShare: three partial returns of an order with a discount add up exactly (the completing return takes the base that is left)', () => {
+  // Items 2 x 500 + 400 + 600 = 2000, discount 150: base 1850; tax 17% on 1850 = 315 (314.5 rounds up). Order total (no delivery) 2165.
+  const order = taxOrder(315, 'exclusive', 1850);
+  const first = returnedBase([{ unitPrice: 500, quantity: 1 }], { subtotal: 2000, discountAmount: 150 });
+  const second = returnedBase([{ unitPrice: 500, quantity: 1 }], { subtotal: 2000, discountAmount: 150 });
+  assert.equal(first, 462);
+  const third = 1850 - first - second; // the completing return: the order base minus what the earlier ones took
+  assert.equal(third, 926);
+  const s1 = returnTaxShare({ ...order, previousBase: 0, returnedBase: first });
+  const s2 = returnTaxShare({ ...order, previousBase: first, returnedBase: second });
+  const s3 = returnTaxShare({ ...order, previousBase: first + second, returnedBase: third });
+  assert.deepEqual([s1, s2, s3], [79, 78, 158]);
+  assert.equal(s1 + s2 + s3, 315);
+  assert.equal(first + s1 + second + s2 + third + s3, 2165);
+});
+
+test('returnTaxShare: however an order is split, the shares are never negative and add up to the tax (a sweep)', () => {
+  const splits = [[1], [1, 1, 1], [7, 13, 80], [999, 1], [1, 999], [250, 250, 250, 250], [333, 333, 334], [1, 2, 3, 4, 990]];
+  for (const [tax, base] of [[175, 1000], [315, 1850], [1, 3], [17, 100], [3, 9], [12345, 987654]] as const) {
+    for (const split of splits) {
+      const total = split.reduce((sum, part) => sum + part, 0);
+      // Scale the split onto this order's base; the last part takes what is left of the base.
+      let previous = 0;
+      let sum = 0;
+      split.forEach((part, index) => {
+        const returned = index === split.length - 1 ? base - previous : Math.round((part * base) / total);
+        const share = returnTaxShare({ taxAmount: tax, taxMode: 'exclusive', orderBase: base, previousBase: previous, returnedBase: Math.max(0, returned) });
+        assert.ok(share >= 0, 'share of part ' + index + ' of ' + JSON.stringify(split) + ' on ' + tax + '/' + base);
+        sum += share;
+        previous += Math.max(0, returned);
+      });
+      assert.equal(sum, tax, JSON.stringify(split) + ' on tax ' + tax + ' base ' + base);
+    }
+  }
+});
+
+test('returnTaxShare: more than the order base is clipped to the tax paid, and a later return of nothing adds nothing', () => {
+  assert.equal(returnTaxShare({ ...taxOrder(510, 'exclusive', 3000), previousBase: 0, returnedBase: 9000 }), 510);
+  assert.equal(returnTaxShare({ ...taxOrder(510, 'exclusive', 3000), previousBase: 3000, returnedBase: 500 }), 0, 'the whole tax was already given back');
+  assert.equal(returnTaxShare({ ...taxOrder(510, 'exclusive', 3000), previousBase: 1000, returnedBase: 0 }), 0);
+});
+
+test('the commission reversal never reads the tax: its inputs are the tax-free bases (D-089)', () => {
+  // The same order with and without tax gives the same reversal: commission and bases do not carry the tax share.
+  const base = { commission: 74, orderBase: 1850, previousBase: 0, previousAmount: 0, returnedBase: 925 };
+  const reversal = commissionReversal(base);
+  assert.equal(reversal, 37);
+  const tax = returnTaxShare({ ...taxOrder(315, 'exclusive', 1850), previousBase: 0, returnedBase: 925 });
+  assert.equal(tax, 158);
+  assert.equal(commissionReversal(base), reversal, 'adding a tax share to the refund cap does not move the reversal');
 });

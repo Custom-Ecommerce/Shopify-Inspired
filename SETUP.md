@@ -578,3 +578,33 @@ A store has a **blog** and **static pages**. Sellers write both in the dashboard
   store that is not live, and any preview, is closed.
 - **Indexes**: run `ensure-indexes` after deploying Sprint 7. New: a unique `{store, slug}` on `storepages` (and `storearticles` already had one), plus
   `{store, mediaRefs}` on both, so a media file used by an article or a page can never be deleted.
+
+## 10. Store tax (Sprint 8, S8-B1, D-118)
+
+A store can charge **one** tax on its orders. It is deliberately simple. Markazify only calculates what the seller enters; it does not know the seller's tax
+rules, and the settings screen says so ("Check your own tax rules; Markazify only calculates what you enter").
+
+- **PKR only, whole rupees.** There is no other currency and no paisa.
+- **Off by default.** A store that never saved tax, and every store that existed before Sprint 8, charges none. The settings group is `tax` of
+  `PATCH /api/stores/:id` (Store settings, Tax tab), kept in `store.storefront.tax`: `enabled` (default false), `ratePercent` (0 to 100, at most 2 decimals),
+  `mode` (`exclusive` or `inclusive`) and `label` (plain text, 1 to 20 characters, no `<` or `>`, default `Tax`). The group is strict: a rate with 3 decimals,
+  a negative rate, a rate over 100, an unknown key, or turning tax on with no rate is a 400 that names the field and writes nothing. The owner and a manager may
+  change it (it is not an owner-only setting); a save is a compare-and-set on the store revision, is audited, and purges the storefront cache once.
+- **One rate for the whole store.** No per-product or per-city rates, no tax classes, no tax ID on the invoice.
+- **Exclusive** (default): the prices are before tax and the tax is **added**: `total = subtotal - discount + tax + delivery`.
+  **Inclusive**: the prices already contain the tax, so it is **extracted and shown** and the total is unchanged: `tax = round(taxable x rate / (100 + rate))`.
+  Exclusive is `tax = round(taxable x rate / 100)`.
+- **What is taxed.** `taxable = subtotal - discount` (the discount comes off first; a discount equal to the subtotal leaves no tax). **Delivery is never taxed.**
+- **The one rounding rule.** Round half up, applied **once** to the whole tax amount of the order, never per line (`packages/contracts/src/tax.ts`, integer
+  arithmetic on hundredths of a percent). The server calculation (`lib/storefront/pricing.ts`, shared by the cart quote and the order) is the only source:
+  a total or a tax sent by the browser is ignored, and a card payment is charged the order total, which holds an exclusive tax.
+- **Commission.** The commission base is `subtotal - discount` and **never includes tax** (D-089). The CommissionEntry code is not touched: a refund or a
+  return changes nothing about that.
+- **Old orders keep tax 0.** An order stores its own snapshot (`taxAmount`, `taxMode`, `taxRatePercent`, `taxLabel`); an order from before Sprint 8 has none of
+  these fields and reads as tax 0 everywhere. Changing the store's tax later never rewrites an order. No data migration and no new index.
+- **Where it shows.** Cart drawer and checkout (the line is the store's label, "Tax (included)" for an inclusive tax, hidden at 0), the order confirmation
+  and the customer order lookup, the seller's order detail and slips, and the order emails (the line is left out when the tax is 0). The customer tracking
+  answer shows no money by design and is unchanged.
+- **Returns.** The refund cap of a return is its tax-free base plus its **proportional share of an exclusive tax** (an inclusive price already contains
+  it, so nothing is added). Shares are the difference of two running amounts, so the shares of all the returns of an order add up to exactly the tax paid. The
+  commission reversal keeps reading the tax-free base.

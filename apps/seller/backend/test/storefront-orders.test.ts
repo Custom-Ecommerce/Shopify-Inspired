@@ -1057,3 +1057,123 @@ test('a separate WhatsApp number is stored in the one form, and a blank one is n
   assert.equal(res.status, 400);
   assert.equal(((await res.json()) as { field: string }).field, 'customer.whatsapp');
 });
+
+/* ------------------------------ Sprint 8 (S8-B1, D-118): store tax on the order ------------------------------ */
+
+const withTax = (rule: Record<string, unknown>): void => {
+  storeRow = activeStore({ tax: rule });
+};
+const GST17 = { enabled: true, ratePercent: 17, mode: 'exclusive', label: 'GST' };
+
+test('S8-B1 tax off: the order keeps no tax fields, the answer says tax 0 and the total is what it always was', async () => {
+  const res = await order();
+  assert.equal(res.status, 201);
+  const { data } = await res.json();
+  assert.equal(data.taxAmount, 0);
+  assert.equal(data.taxMode, null);
+  assert.equal(data.taxLabel, null);
+  assert.equal(data.total, 3250);
+  for (const field of ['taxAmount', 'taxMode', 'taxRatePercent', 'taxLabel']) assert.equal(field in orders[0], false, field + ' is not stored for a store with tax off');
+});
+
+test('S8-B1 tax on and a stored rate that is off reads as no tax: an order of a store that switched tax off is not taxed', async () => {
+  withTax({ enabled: false, ratePercent: 17, mode: 'exclusive', label: 'GST' });
+  const { data } = await (await order()).json();
+  assert.equal(data.taxAmount, 0);
+  assert.equal(data.total, 3250);
+  assert.equal('taxMode' in orders[0], false);
+});
+
+test('S8-B1 exclusive tax is added to the total and snapshotted on the order; delivery is not taxed and the commission base is untouched', async () => {
+  withTax(GST17);
+  const res = await order();
+  assert.equal(res.status, 201);
+  const { data } = await res.json();
+  assert.equal(storefrontOrderCreatedResponseSchema.safeParse({ data }).success, true);
+  // 2 x 1500 = 3000, 17% = 510, delivery 250 (below the threshold) is not taxed.
+  assert.equal(data.subtotal, 3000);
+  assert.equal(data.deliveryCharges, 250);
+  assert.equal(data.taxAmount, 510);
+  assert.equal(data.taxMode, 'exclusive');
+  assert.equal(data.taxLabel, 'GST');
+  assert.equal(data.total, 3000 + 510 + 250);
+  const saved = orders[0];
+  assert.equal(saved.taxAmount, 510);
+  assert.equal(saved.taxMode, 'exclusive');
+  assert.equal(saved.taxRatePercent, 17);
+  assert.equal(saved.taxLabel, 'GST');
+  assert.equal(saved.total, 3760);
+  const { commissionBase } = await import('../src/lib/commission');
+  assert.equal(commissionBase(saved as any), 3000, 'the commission base is subtotal minus discount: it never includes the tax (D-089)');
+});
+
+test('S8-B1 inclusive tax is extracted from the prices and the total does not change', async () => {
+  withTax({ enabled: true, ratePercent: 17, mode: 'inclusive', label: 'Tax' });
+  const { data } = await (await order()).json();
+  assert.equal(data.taxAmount, 436, '3000 x 17 / 117 = 435.9');
+  assert.equal(data.taxMode, 'inclusive');
+  assert.equal(data.total, 3250, 'items plus delivery, as without tax');
+  assert.equal(orders[0].total, 3250);
+  assert.equal(orders[0].taxAmount, 436);
+  assert.equal(orders[0].taxMode, 'inclusive');
+});
+
+test('S8-B1 delivery is never taxed: a free-delivery order is taxed on its items only', async () => {
+  withTax({ enabled: true, ratePercent: 10, mode: 'exclusive', label: 'Tax' });
+  const { data } = await (await order({ lines: [{ productId: SHIRT, qty: 4 }] })).json();
+  assert.equal(data.deliveryCharges, 0);
+  assert.equal(data.taxAmount, 600);
+  assert.equal(data.total, 6600);
+  const mug = await (await order({ lines: [{ productId: MUG, qty: 1 }] })).json();
+  assert.equal(mug.data.deliveryCharges, 100);
+  assert.equal(mug.data.taxAmount, 40, '10% of 400, not of 500');
+  assert.equal(mug.data.total, 400 + 40 + 100);
+});
+
+test('S8-B1 a total, tax or rate sent by the client is ignored: the server calculation is the only source', async () => {
+  withTax(GST17);
+  const res = await order({ subtotal: 1, deliveryCharges: 0, total: 1, taxAmount: 0, taxMode: 'inclusive', taxRatePercent: 0, taxLabel: 'Nothing', tax: { enabled: false } });
+  assert.equal(res.status, 201);
+  const { data } = await res.json();
+  assert.equal(data.total, 3760);
+  assert.equal(data.taxAmount, 510);
+  assert.equal(orders[0].total, 3760);
+  assert.equal(orders[0].taxAmount, 510);
+  assert.equal(orders[0].taxMode, 'exclusive');
+  assert.equal(orders[0].taxRatePercent, 17);
+  assert.equal(orders[0].taxLabel, 'GST');
+});
+
+test('S8-B1 the order keeps the tax it was placed with: a later change of the store tax does not rewrite it, and lookup shows the snapshot', async () => {
+  withTax(GST17);
+  const { data } = await (await order()).json();
+  withTax({ enabled: true, ratePercent: 5, mode: 'inclusive', label: 'VAT' });
+  const found = await (await lookup({ orderId: data.orderId, phone: CUSTOMER.phone })).json();
+  assert.equal(storefrontOrderLookupResponseSchema.safeParse(found).success, true);
+  assert.equal(found.data.taxAmount, 510);
+  assert.equal(found.data.taxMode, 'exclusive');
+  assert.equal(found.data.taxLabel, 'GST', 'the plain label the shopper saw; the theme adds "(included)" for an inclusive order');
+  assert.equal(found.data.total, 3760);
+  assert.equal(orders[0].taxAmount, 510);
+});
+
+test('S8-B1 an order from before tax (no tax fields) reads as tax 0 on lookup', async () => {
+  const { data } = await (await order()).json();
+  const found = await (await lookup({ orderId: data.orderId, phone: CUSTOMER.phone })).json();
+  assert.equal(found.data.taxAmount, 0);
+  assert.equal(found.data.taxMode, null);
+  assert.equal(found.data.taxLabel, null);
+  assert.equal(found.data.total, 3250);
+});
+
+test('S8-B1 a replay of the same key returns the same taxed order and does not tax it twice', async () => {
+  withTax(GST17);
+  const key = newKey();
+  const first = await (await order({}, { 'idempotency-key': key })).json();
+  const again = await order({}, { 'idempotency-key': key });
+  assert.equal(again.headers.get('idempotent-replayed'), 'true');
+  const second = await again.json();
+  assert.equal(second.data.total, first.data.total);
+  assert.equal(second.data.taxAmount, 510);
+  assert.equal(orders.length, 1);
+});

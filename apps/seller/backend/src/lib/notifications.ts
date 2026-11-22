@@ -4,7 +4,7 @@ import * as notificationsNs from '@markaz/notifications';
 import type { EnqueueInput, EnqueueResult, NotificationOutboxModel, TemplateName } from '@markaz/notifications';
 import type { SellerAlertKind } from '@markaz/contracts';
 import { unwrapCjs } from '@/lib/cjs';
-import { readConfirmationStatus, readNotificationPrefs } from '@/lib/contracts';
+import { readConfirmationStatus, readNotificationPrefs, readOrderTax, taxLineLabel } from '@/lib/contracts';
 import { NotificationOutbox, SellerAlert, Store, User } from '@/lib/services';
 import { readMessages } from '@/lib/store-settings';
 
@@ -175,10 +175,19 @@ interface OrderFields {
   trackingNumber: string;
   /** Sprint 5 EP-11: an order waiting for the seller's phone confirmation. */
   unconfirmed: boolean;
+  /** Sprint 8 (S8-B1): "Tax (included): Rs. 170" when the order carries tax, else an empty string (the templates then leave the line out). */
+  taxLine: string;
   items: Array<{ title: string; variantTitle: string | null; quantity: number; unitPrice: number }>;
 }
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+/** The tax line of an order message: the store's name for the tax and its amount, "(included)" for an inclusive tax; empty when the order has no tax (tax > 0 only). */
+export function taxLineOf(row: Record<string, unknown>): string {
+  const tax = readOrderTax(row);
+  if (tax.taxAmount <= 0 || tax.taxMode === null) return '';
+  return taxLineLabel(typeof row.taxLabel === 'string' ? row.taxLabel : null, tax.taxMode) + ': ' + notifications.formatRupees(tax.taxAmount);
+}
 
 function orderFields(order: unknown): OrderFields {
   const row = (order ?? {}) as Record<string, unknown>;
@@ -194,6 +203,7 @@ function orderFields(order: unknown): OrderFields {
     courier: str(row.courier),
     trackingNumber: str(row.trackingNumber),
     unconfirmed: readConfirmationStatus(row.confirmationStatus) === 'unconfirmed',
+    taxLine: taxLineOf(row),
     items: items.map((item) => ({
       title: str(item.productTitle) || 'Item',
       variantTitle: str(item.variantTitle) || null,
@@ -224,6 +234,7 @@ export async function sendOrderPlaced(storeId: string, order: unknown): Promise<
       customerName: o.customerName,
       orderNumber: o.orderNumber,
       items,
+      taxLine: o.taxLine,
       total,
       paymentMethod: o.paymentMethod,
       trackingLink: storefrontTrackLink(store.slug, o.orderNumber) ?? TRACKING_FALLBACK,
@@ -243,6 +254,7 @@ export async function sendOrderPlaced(storeId: string, order: unknown): Promise<
         orderNumber: o.orderNumber,
         customerName: o.customerName,
         items,
+        taxLine: o.taxLine,
         total,
         paymentMethod: o.paymentMethod,
         city: o.city,

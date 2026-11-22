@@ -139,6 +139,15 @@ export interface IOrder extends Document {
   subtotal: number;
   deliveryCharges: number;
   total: number;
+  /**
+   * Sprint 8 (S8-B1, D-118): the tax the order was placed with, a snapshot (a later change of the store's tax never rewrites it). Whole rupees.
+   * Exclusive: taxAmount is inside `total`. Inclusive: it is already inside the prices and `total` is unchanged. An order from before tax has none of
+   * these fields and reads as tax 0. The commission base is (subtotal - discountAmount) and never includes tax (D-089).
+   */
+  taxAmount?: number;
+  taxMode?: 'exclusive' | 'inclusive' | null;
+  taxRatePercent?: number;
+  taxLabel?: string | null;
   /** The code used, and what it took off the subtotal (D-080). One code per order. */
   discountCode?: string | null;
   discountAmount?: number;
@@ -256,6 +265,11 @@ const OrderSchema = new Schema<IOrder>(
     subtotal: { type: Number, min: 0, default: 0 },
     deliveryCharges: { type: Number, min: 0, default: 0 },
     total: { type: Number, min: 0, default: 0 },
+    // Sprint 8 (S8-B1): the tax snapshot. No defaults: an order from before tax simply lacks the fields and reads as tax 0.
+    taxAmount: { type: Number, min: 0 },
+    taxMode: { type: String, enum: ['exclusive', 'inclusive'] },
+    taxRatePercent: { type: Number, min: 0, max: 100 },
+    taxLabel: { type: String, maxlength: 40 },
     discountCode: { type: String, default: null },
     discountAmount: { type: Number, min: 0, default: 0 },
     discountSnapshot: {

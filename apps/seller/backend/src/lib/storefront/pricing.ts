@@ -1,5 +1,5 @@
-import type { StorefrontDiscountError, StorefrontDiscountRefusal, StorefrontQuoteTotals } from '@markaz/contracts';
-import { deliveryRateFor, discountRefusalMessage, quoteDelivery, toWholeRupees } from '@/lib/contracts';
+import type { StorefrontDiscountError, StorefrontDiscountRefusal, StorefrontQuoteTotals, TaxSettings } from '@markaz/contracts';
+import { deliveryRateFor, discountRefusalMessage, quoteDelivery, taxAmountOf, toWholeRupees } from '@/lib/contracts';
 
 /**
  * Server-side cart and order pricing. Pure: no database, and the time is passed in. Prices come from the catalog rows the
@@ -14,6 +14,11 @@ import { deliveryRateFor, discountRefusalMessage, quoteDelivery, toWholeRupees }
  *     (D-094; before Sprint 4 it was judged before the discount). A threshold of null or 0 means no free-delivery offer.
  *
  * Discount policy (D-080): percent or whole rupees off the item subtotal only, never delivery. The total never goes below zero.
+ *
+ * Tax policy (Sprint 8, D-118): off unless the store turned it on. It applies to (item subtotal - discount) and never to delivery, as ONE amount
+ * rounded half up once (contracts taxAmountOf). Exclusive: the amount is added to the total. Inclusive: the prices already contain it, so it is
+ * extracted and shown and the total is unchanged. The commission base is (subtotal - discount) and never includes tax (D-089): it is computed from
+ * the order's subtotal and discountAmount, which this does not touch.
  */
 
 export interface PricingLine {
@@ -32,6 +37,8 @@ export interface PricingStore {
   cityRates?: Readonly<Record<string, number>>;
   /** The shipping city of this quote or order; an unlisted or missing city pays the default rate. */
   city?: string | null;
+  /** Sprint 8 (S8-B1): the store's tax. Absent (or off) means no tax. */
+  tax?: TaxSettings;
 }
 
 /** The store's rate for this parcel: the city's override when there is one, else the default rate. */
@@ -96,7 +103,18 @@ export function computeTotals(lines: PricingLine[], store: PricingStore, discoun
   const deliveryCharges = toWholeRupees(quote.charge) ?? 0;
 
   const afterDiscount = Math.max(0, subtotal - discount);
-  return { subtotal, deliveryCharges, discount, total: roundMoney(afterDiscount + deliveryCharges) };
+  // Tax is on the items after the discount, never on delivery. The total grows by it only when the prices do not already contain it.
+  const tax = store.tax && store.tax.enabled ? store.tax : null;
+  const taxAmount = taxAmountOf(afterDiscount, tax);
+  const added = tax !== null && tax.mode === 'exclusive' ? taxAmount : 0;
+  return {
+    subtotal,
+    deliveryCharges,
+    discount,
+    taxAmount,
+    ...(tax === null ? {} : { taxMode: tax.mode, taxLabel: tax.label }),
+    total: roundMoney(afterDiscount + deliveryCharges + added),
+  };
 }
 
 const timeOf = (value: Date | string | null | undefined): number | null => (value ? new Date(value).getTime() : null);

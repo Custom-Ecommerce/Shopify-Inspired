@@ -277,6 +277,14 @@ export const dashboardOrderDetailSchema = z.object({
   confirmationLog: z.array(z.object({ at: z.string().min(1), by: z.string().nullable(), result: z.enum(CONFIRMATION_LOG_RESULTS), note: z.string().nullable() })).optional(),
   /** The customer this order belongs to (the key of /customers/:key): the normalized phone, else the lower-case email. */
   customerKey: z.string().nullable().optional(),
+  /**
+   * Sprint 8 (S8-B1, D-118): the tax the order was placed with. Present only on an order that carries tax (an older order, and an order of a store with
+   * tax off, have none and read as tax 0). Exclusive: taxAmount is part of `total`. Inclusive: it is already inside the prices and `total` is unchanged.
+   */
+  taxAmount: z.number().min(0).optional(),
+  taxMode: z.enum(['exclusive', 'inclusive']).optional(),
+  taxRatePercent: z.number().min(0).max(100).optional(),
+  taxLabel: z.string().optional(),
 });
 
 // EP-02 OB-2: POST /api/orders/:id/transition.
@@ -509,6 +517,10 @@ export const orderPrintSheetSchema = z
     codAmount: z.number().min(0),
     courier: z.string().nullable(),
     trackingNumber: z.string().nullable(),
+    /** Sprint 8 (S8-B1): present only when the order carries tax; codAmount already includes an exclusive tax. */
+    taxAmount: z.number().min(0).optional(),
+    taxMode: z.enum(['exclusive', 'inclusive']).optional(),
+    taxLabel: z.string().optional(),
   })
   .strict();
 

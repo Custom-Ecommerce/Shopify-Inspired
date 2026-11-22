@@ -75,6 +75,8 @@ export function useStilettoCheckout(shippingCity = "") {
   const deliveryCharges = priced ? priced.deliveryCharges.amount : 0;
   const subtotal = priced ? priced.subtotal.amount : checkout.subtotal.amount;
   const discount = priced ? priced.discount.amount : 0;
+  // Sprint 8 (S8-B1): the store's tax as the server worked it out (never calculated here). Null when there is none to show.
+  const tax = priced ? priced.tax : null;
   const grandTotal = priced ? priced.total.amount : checkout.subtotal.amount;
 
   /** The server's total for a line, or null when it has none: not answered yet, or the line cannot be bought. */
@@ -154,6 +156,8 @@ export function useStilettoCheckout(shippingCity = "") {
     /** True while the delivery charge is for a city the shopper has not given yet (the store's default rate). */
     deliveryCityKnown: quotedCity !== "",
     discount,
+    /** The tax line: "Tax" (added to the total) or "Tax (included)" (already in the prices); null when the store has no tax. */
+    tax,
     /** What the shopper entered, accepted or not. */
     storedCode: discountCode,
     /** The code the server has accepted. */

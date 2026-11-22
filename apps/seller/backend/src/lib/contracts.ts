@@ -191,6 +191,18 @@ export const {
   storeThemeConfigUpdateSchema,
 } = contracts;
 
+// Sprint 8 (S8-B1, D-118): store tax.
+export const {
+  TAX_KEYS,
+  TAX_RATE_REQUIRED_MESSAGE,
+  DEFAULT_TAX_SETTINGS,
+  resolveTaxSettings,
+  taxAmountOf,
+  taxLineLabel,
+  readOrderTax,
+  isValidTaxRate,
+} = contracts;
+
 // Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
 export const {
   EARNINGS_PAGE_DEFAULT_LIMIT,
@@ -279,6 +291,7 @@ export const {
   returnWindow,
   returnableQuantities,
   returnedBase,
+  returnTaxShare,
 } = contracts;
 
 // Sprint 5 EP-21 (D-107, D-108): reviews of delivered orders, the seller's reply and the admin's hide.

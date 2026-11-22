@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { normalizePhoneE164 } from './checkout';
+import { storeTaxReadSchema, storeTaxUpdateSchema } from './tax';
 import { storeThemeConfigUpdateSchema } from './theme-config';
 
 /*
@@ -400,6 +401,8 @@ export const storeSettingsUpdateSchema = z
     domain: storeDomainUpdateSchema,
     // Sprint 7 (S7-B7): the Stiletto theme config. null resets it to the defaults. Strict (theme-config.ts).
     themeConfig: storeThemeConfigUpdateSchema.nullable(),
+    // Sprint 8 (S8-B1, D-118): the store's tax (off by default, one rate, exclusive or inclusive). Owner and manager may change it. Strict (tax.ts).
+    tax: storeTaxUpdateSchema,
   })
   .partial()
   .strict()
@@ -486,6 +489,8 @@ export const storeSettingsSchema = z.object({
   domain: storeDomainSettingsSchema.optional(),
   /** Sprint 7 (S7-B7): the theme config with the defaults filled in; the hero image is the media (id and url) or null. Optional so an older backend still parses. */
   themeConfig: storeThemeConfigReadSchema.optional(),
+  /** Sprint 8 (S8-B1): the tax settings with the defaults filled in (off, 0%, exclusive, "Tax"). Optional so an older backend still parses. */
+  tax: storeTaxReadSchema.optional(),
   updatedAt: z.string().nullable(),
 });
 export type StoreSettings = z.output<typeof storeSettingsSchema>;
