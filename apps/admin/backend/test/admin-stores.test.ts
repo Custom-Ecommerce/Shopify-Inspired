@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { AuditLog, Store, User, signSession } from '@/lib/workspace';
 import { ADMIN_AUDIENCE } from '@/lib/admin-auth';
-import { buildStoreFilter, escapeRegex, listEnvelope, parseStoreListQuery } from '@/lib/admin-stores';
+import { buildStoreFilter, escapeRegex, listEnvelope, parseStoreListQuery, toListItem } from '@/lib/admin-stores';
 
 const SECRET = 'x'.repeat(40);
 const ADMIN_ID = '65a000000000000000000001';
@@ -101,7 +101,7 @@ const storeDoc = {
 
 test('parseStoreListQuery applies defaults and refuses malformed values', () => {
   const ok = parseStoreListQuery(new URLSearchParams());
-  assert.deepEqual(ok, { ok: true, query: { page: 1, limit: 20, q: null, status: null } });
+  assert.deepEqual(ok, { ok: true, query: { page: 1, limit: 20, q: null, status: null, domain: null } });
   for (const bad of ['page=0', 'page=abc', 'limit=101', 'limit=-1', 'status=deleted', 'q=' + 'a'.repeat(101)]) {
     assert.equal(parseStoreListQuery(new URLSearchParams(bad)).ok, false, bad);
   }
@@ -196,4 +196,39 @@ test('the detail answers 404 for a malformed id and for a store that does not ex
   } finally {
     restore();
   }
+});
+
+// S7-B5: the custom domain of a store is shown read only in the list, with a filter.
+
+test('S7-B5: the domain filter is read from the query, an unknown value is a 422 issue, and none means no filter', () => {
+  const ok = parseStoreListQuery(new URLSearchParams('domain=verified'));
+  assert.equal(ok.ok && ok.query.domain, 'verified');
+  const none = parseStoreListQuery(new URLSearchParams(''));
+  assert.equal(none.ok && none.query.domain, null);
+  const bad = parseStoreListQuery(new URLSearchParams('domain=yes'));
+  assert.equal(bad.ok, false);
+  assert.deepEqual(!bad.ok && bad.issues.map((i) => i.path), ['domain']);
+});
+
+test('S7-B5: the domain filter builds the Mongo filter: any, none, and a status only among stores that have a host; it combines with status and search', () => {
+  const base = { page: 1, limit: 20, q: null, status: null } as const;
+  assert.deepEqual(buildStoreFilter({ ...base, domain: 'any' }), { domain: { $type: 'string' } });
+  assert.deepEqual(buildStoreFilter({ ...base, domain: 'none' }), { domain: { $not: { $type: 'string' } } });
+  assert.deepEqual(buildStoreFilter({ ...base, domain: 'failed' }), { domain: { $type: 'string' }, customDomainStatus: 'failed' });
+  assert.deepEqual(buildStoreFilter({ ...base, domain: null }), {});
+  assert.deepEqual(buildStoreFilter({ page: 1, limit: 20, q: null, status: 'active' }), { status: 'active' });
+  const both = buildStoreFilter({ page: 1, limit: 20, q: 'zara', status: 'active', domain: 'verified' }) as Record<string, unknown>;
+  assert.equal(both.status, 'active');
+  assert.equal(both.customDomainStatus, 'verified');
+  assert.ok(Array.isArray(both.$or));
+});
+
+test('S7-B5: a list item carries the domain and its status (unset when there is none or the value is unknown), and never the token', () => {
+  const people = new Map();
+  const item = toListItem({ _id: STORE_ID, name: 'Zara', slug: 'zara', status: 'active', domain: 'shop.zara.pk', customDomainStatus: 'verified', domainToken: 'mz-secret', createdAt: NOW }, people);
+  assert.equal(item.domain, 'shop.zara.pk');
+  assert.equal(item.customDomainStatus, 'verified');
+  assert.equal(JSON.stringify(item).includes('mz-secret'), false);
+  assert.equal(toListItem({ _id: STORE_ID, name: 'Zara', slug: 'zara', status: 'active', createdAt: NOW }, people).customDomainStatus, 'unset');
+  assert.equal(toListItem({ _id: STORE_ID, name: 'Zara', slug: 'zara', status: 'active', customDomainStatus: 'weird', createdAt: NOW }, people).customDomainStatus, 'unset');
 });

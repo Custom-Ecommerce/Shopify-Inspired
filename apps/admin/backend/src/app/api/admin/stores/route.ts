@@ -7,7 +7,7 @@ import { assertCan, Store } from '@/lib/workspace';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const LIST_FIELDS = 'name slug status domain isThemeDemo commissionRate commissionMode owner statusChangedAt goLiveRequestedAt createdAt';
+const LIST_FIELDS = 'name slug status domain customDomainStatus isThemeDemo commissionRate commissionMode owner statusChangedAt goLiveRequestedAt createdAt';
 
 /**
  * GET /api/admin/stores. The store list for the operator console: search (name, slug, domain, or id), a status

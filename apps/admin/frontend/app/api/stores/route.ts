@@ -3,7 +3,7 @@ import { proxyToBackend } from "@/lib/proxy";
 
 export const dynamic = "force-dynamic";
 
-const FORWARDED = ["page", "limit", "q", "status"];
+const FORWARDED = ["page", "limit", "q", "status", "domain"];
 
 /** GET /api/stores. The store list. Only the known query parameters are forwarded to the backend. */
 export async function GET(request: NextRequest): Promise<Response> {

@@ -14,11 +14,16 @@ export const MAX_SEARCH_LENGTH = 100;
 export type Doc = Record<string, unknown>;
 export type Issue = { path: string; message: string };
 
+/** S7-B5: the custom domain filter. any = has a domain, none = has none, the rest are the domain statuses. */
+export const DOMAIN_FILTERS = ['any', 'none', 'pending', 'verified', 'failed'] as const;
+export type DomainFilter = (typeof DOMAIN_FILTERS)[number];
+
 export interface StoreListQuery {
   page: number;
   limit: number;
   q: string | null;
   status: StoreStatus | null;
+  domain?: DomainFilter | null;
 }
 
 export type ParsedListQuery = { ok: true; query: StoreListQuery } | { ok: false; issues: Issue[] };
@@ -53,8 +58,14 @@ export function parseStoreListQuery(params: URLSearchParams): ParsedListQuery {
     if ((STORE_STATUSES as readonly string[]).includes(rawStatus)) status = rawStatus as StoreStatus;
     else issues.push({ path: 'status', message: 'must be one of ' + STORE_STATUSES.join(', ') });
   }
+  const rawDomain = params.get('domain') ?? '';
+  let domain: DomainFilter | null = null;
+  if (rawDomain !== '') {
+    if ((DOMAIN_FILTERS as readonly string[]).includes(rawDomain)) domain = rawDomain as DomainFilter;
+    else issues.push({ path: 'domain', message: 'must be one of ' + DOMAIN_FILTERS.join(', ') });
+  }
   if (issues.length > 0 || page === null || limit === null) return { ok: false, issues };
-  return { ok: true, query: { page, limit, q: rawQ === '' ? null : rawQ, status } };
+  return { ok: true, query: { page, limit, q: rawQ === '' ? null : rawQ, status, domain } };
 }
 
 export function escapeRegex(text: string): string {
@@ -65,6 +76,13 @@ export function escapeRegex(text: string): string {
 export function buildStoreFilter(query: StoreListQuery): Doc {
   const filter: Doc = {};
   if (query.status !== null) filter.status = query.status;
+  // S7-B5: a store with no host has no domain status that means anything, so the status filters look at stores with a host only.
+  if (query.domain === 'any') filter.domain = { $type: 'string' };
+  else if (query.domain === 'none') filter.domain = { $not: { $type: 'string' } };
+  else if (query.domain === 'pending' || query.domain === 'verified' || query.domain === 'failed') {
+    filter.domain = { $type: 'string' };
+    filter.customDomainStatus = query.domain;
+  }
   if (query.q !== null) {
     const pattern = { $regex: escapeRegex(query.q), $options: 'i' };
     const or: Doc[] = [{ name: pattern }, { slug: pattern }, { domain: pattern }];
@@ -144,6 +162,10 @@ export function toListItem(doc: Doc, people: Map<string, Person>) {
     slug: text(doc.slug) ?? '',
     status: doc.status as StoreStatus,
     domain: text(doc.domain),
+    customDomainStatus: ((): string => {
+      const raw = text(doc.customDomainStatus);
+      return raw !== null && DOMAIN_STATUSES.includes(raw) ? raw : 'unset';
+    })(),
     isThemeDemo: doc.isThemeDemo === true,
     commissionRate: typeof doc.commissionRate === 'number' ? doc.commissionRate : 0,
     commissionMode: mode !== null && COMMISSION_MODES.includes(mode) ? mode : 'inherit',

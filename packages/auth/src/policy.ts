@@ -26,7 +26,8 @@ readonly delete: PolicyRule;
 
 // Blueprint v3 section 1.2, store.operations: what a seller may write.
 // Sprint 4 EP-04.US03 (D-088): payoutDetails too. It is not in SELLER_STORE_READABLE_FIELDS: a seller reads it masked only.
-export const SELLER_STORE_WRITABLE_FIELDS = ['name', 'storefront', 'paymentSettings', 'courierSettings', 'payoutDetails'] as const;
+// S7-B5: 'domain' too, written only by the domain connect, verify and disconnect routes (the settings schema is strict and has no domain).
+export const SELLER_STORE_WRITABLE_FIELDS = ['name', 'storefront', 'paymentSettings', 'courierSettings', 'payoutDetails', 'domain'] as const;
 
 // Payload STORE_STAFF_WRITABLE_FIELDS (apps/admin/src/collections/Stores.ts).
 export const ADMIN_STORE_WRITABLE_FIELDS = [

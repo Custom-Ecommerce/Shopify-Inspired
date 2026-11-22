@@ -14,6 +14,12 @@ const APPS = [
   'apps/admin/frontend',
 ];
 
+// S7-B5: names that are read through an env object passed as a parameter (so the scan above cannot see them) and are OPTIONAL. They must still
+// be listed in the app's .env.example, so a deploy can find them; they are never required to be set.
+export const OPTIONAL_LISTED = {
+  'apps/seller/backend': ['CUSTOM_DOMAIN_CNAME_TARGET', 'CUSTOM_DOMAIN_A_TARGET', 'VERCEL_API_TOKEN', 'VERCEL_PROJECT_ID', 'ROOT_DOMAIN', 'PLATFORM_HOSTNAMES'],
+};
+
 // Names the platform sets itself.
 const PLATFORM_NAMES = new Set(['NODE_ENV', 'NEXT_RUNTIME', 'CI', 'PORT']);
 const PLATFORM_PREFIXES = ['VERCEL'];
@@ -79,6 +85,7 @@ function main() {
         if (!used.has(name)) used.set(name, path.relative(ROOT, file).split(path.sep).join('/'));
       }
     }
+    for (const name of OPTIONAL_LISTED[app] ?? []) if (!used.has(name)) used.set(name, '(optional, listed on purpose)');
     const missing = [...used.keys()].filter((name) => !isPlatform(name) && !listed.has(name)).sort();
     if (missing.length === 0) {
       console.log(app + ': ok (' + used.size + ' names read)');

@@ -2,13 +2,28 @@ import { STORE_STATUS_VALUES, type StoreStatusValue } from "@/lib/status";
 
 export const PAGE_SIZE = 20;
 
+/** S7-B5: the custom domain filter of the list (read only). */
+export const DOMAIN_FILTER_VALUES = ["any", "none", "pending", "verified", "failed"] as const;
+export type DomainFilterValue = (typeof DOMAIN_FILTER_VALUES)[number];
+
+export const DOMAIN_FILTER_LABELS: Record<DomainFilterValue, string> = {
+  any: "Has a domain",
+  none: "No domain",
+  pending: "Domain waiting for DNS",
+  verified: "Domain connected",
+  failed: "Domain not working",
+};
+
+export const DOMAIN_STATUS_LABELS: Record<string, string> = { unset: "No domain", pending: "Waiting for DNS", verified: "Connected", failed: "Not working" };
+
 export interface StoreListState {
   page: number;
   q: string;
   status: StoreStatusValue | "";
+  domain: DomainFilterValue | "";
 }
 
-export const DEFAULT_LIST_STATE: StoreListState = { page: 1, q: "", status: "" };
+export const DEFAULT_LIST_STATE: StoreListState = { page: 1, q: "", status: "", domain: "" };
 
 /** Anything unreadable falls back to the default, so a hand-edited URL never breaks the page. */
 export function parseListState(params: { get(name: string): string | null }): StoreListState {
@@ -17,7 +32,9 @@ export function parseListState(params: { get(name: string): string | null }): St
   const q = (params.get("q") ?? "").trim().slice(0, 100);
   const rawStatus = params.get("status") ?? "";
   const status = (STORE_STATUS_VALUES as readonly string[]).includes(rawStatus) ? (rawStatus as StoreStatusValue) : "";
-  return { page, q, status };
+  const rawDomain = params.get("domain") ?? "";
+  const domain = (DOMAIN_FILTER_VALUES as readonly string[]).includes(rawDomain) ? (rawDomain as DomainFilterValue) : "";
+  return { page, q, status, domain };
 }
 
 /** The query string for a list state. Defaults are left out, so the first page of everything is the bare path. */
@@ -26,6 +43,7 @@ export function listStateToQuery(state: StoreListState, withLimit = false): stri
   if (state.page > 1) params.set("page", String(state.page));
   if (state.q !== "") params.set("q", state.q);
   if (state.status !== "") params.set("status", state.status);
+  if (state.domain) params.set("domain", state.domain);
   if (withLimit) params.set("limit", String(PAGE_SIZE));
   return params.toString();
 }

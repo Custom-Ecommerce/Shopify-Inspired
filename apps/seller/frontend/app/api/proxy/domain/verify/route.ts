@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
-import { apiError, proxyPost, ProxyResponseError, type ProxyAuthResult } from "@/lib/proxy";
+import { proxyPost } from "@/lib/proxy";
 
 /**
- * POST /api/proxy/domain/verify   body: { storeId?, domain? }
+ * POST /api/proxy/domain/verify
  *
- * Forwards to the Seller backend's `POST /api/stores/:id/domain/verify` (ownership + class C7
- * re-checked there). A body `storeId`, if present, must equal the verified active store.
+ * Forwards to the Seller backend's `POST /api/stores/:id/domain/verify`. S7-B5: the backend body is strict and empty, because the DNS
+ * check is made there and a result is never taken from the browser. Whatever the browser sends is dropped; the store is the active one.
  */
 export function POST(req: NextRequest) {
   return proxyPost(req, (_req, auth) => `/api/stores/${encodeURIComponent(auth.storeId ?? "")}/domain/verify`, {
@@ -13,12 +13,6 @@ export function POST(req: NextRequest) {
     storeScope: "required",
     bindStore: false,
     logScope: "[proxy domain/verify]",
-    body: (incoming: unknown, auth: ProxyAuthResult) => {
-      const rec = typeof incoming === "object" && incoming !== null && !Array.isArray(incoming) ? (incoming as Record<string, unknown>) : {};
-      if (rec.storeId !== undefined && String(rec.storeId) !== auth.storeId) {
-        throw new ProxyResponseError(apiError(403, "STORE_FORBIDDEN", "You do not have access to this store."));
-      }
-      return typeof rec.domain === "string" && rec.domain.trim() !== "" ? { domain: rec.domain } : {};
-    },
+    body: () => ({}),
   });
 }

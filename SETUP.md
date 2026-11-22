@@ -144,6 +144,22 @@ Payment is by hand (bank, JazzCash, Easypaisa); no gateway is involved.
 (the same value on the storefront and the seller backend), `TRUSTED_PROXY_HOPS` or `TRUSTED_CLIENT_IP_HEADER` (on both),
 and `REVALIDATE_SECRET` (the same value on the storefront and the seller backend).
 
+### Custom domains (Sprint 7, S7-B5): all optional
+
+Seller backend. A custom domain is a Growth plan feature (D-118). None of these is required to start; with none set, a seller can still
+connect a domain and pass the check with the TXT record alone, and no domain is added to Vercel.
+
+| Name | What it does |
+| --- | --- |
+| `CUSTOM_DOMAIN_CNAME_TARGET` | The host a subdomain's CNAME must point to (for example `cname.markazify.com`). |
+| `CUSTOM_DOMAIN_A_TARGET` | The IPv4 address a bare domain's A record must point to. |
+| `VERCEL_API_TOKEN` and `VERCEL_PROJECT_ID` | Both set: a verified domain is added to the Vercel project, a disconnected one is removed. Either missing: a stub is used. Never log the token. |
+| `ROOT_DOMAIN`, `PLATFORM_HOSTNAMES` | The platform's own hosts, refused as a seller's domain (same values as the storefront). The host of `STOREFRONT_URL` is always refused too. |
+
+Before the first deploy of S7-B5, drop the old non-unique index on `stores.domain` (it is named `domain_1`) and run
+`scripts/ensure-indexes.mjs` (dry run first): the store model now declares a UNIQUE index on `domain` that only applies to stores
+that have one, so two stores can never hold one host. The plan reports a conflict until the old index is dropped; it never drops it itself.
+
 ### Removed in Sprint 4
 
 `SELLER_NEW_STORE_STATUS` is no longer read (CO-26, EP-04.US06): every new store starts `pending` and goes live

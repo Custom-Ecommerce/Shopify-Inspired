@@ -1,47 +1,77 @@
 "use client";
 
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
-import { useState } from "react";
-import { useDashboard } from "@/lib/dashboard-context";
+import { useDashboard, useStoreHref } from "@/lib/dashboard-context";
 import { SectionCard } from "@/components/dashboard/shared/SectionCard";
-import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
+import { PageHeader } from "@/components/dashboard/shared/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { PageHeader } from "@/components/dashboard/shared/PageHeader";
+  canConnect,
+  canVerify,
+  checkedText,
+  dnsSteps,
+  domainFailure,
+  nextStepText,
+  readDomainState,
+  STATUS_LABELS,
+  type DomainState,
+} from "@/lib/domain-view";
 
-interface DnsRecord {
-  type: string;
-  name: string;
-  value: string;
-}
-
-interface ConnectResult {
-  domain?: string;
-  customDomainStatus?: string;
-  vercelConfigured?: boolean;
-  dnsRecords?: DnsRecord[];
-  message?: string;
-  error?: string;
-}
+const TONE: Record<DomainState["status"], string> = {
+  unset: "bg-muted text-muted-foreground",
+  pending: "bg-warning/10 text-warning",
+  verified: "bg-success/10 text-success",
+  failed: "bg-destructive/10 text-destructive",
+};
 
 export default function DashboardDomainPage() {
   const storeFetch = useStoreFetch();
-  const { store, storeId } = useDashboard();
+  const { store } = useDashboard();
+  const href = useStoreHref();
+  const [state, setState] = useState<DomainState | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [domain, setDomain] = useState("");
-  const [result, setResult] = useState<ConnectResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<"connect" | "verify">(
-    store?.domain ? "verify" : "connect"
+  const [busy, setBusy] = useState<"connect" | "verify" | "disconnect" | null>(null);
+  const [error, setError] = useState<{ message: string; upgrade: boolean } | null>(null);
+  const [confirmOff, setConfirmOff] = useState(false);
+
+  const call = useCallback(
+    async (path: string, init: RequestInit): Promise<DomainState | null> => {
+      try {
+        const res = await storeFetch(path, init);
+        const data: unknown = await res.json().catch(() => null);
+        if (!res.ok) {
+          const failure = domainFailure(res.status, data);
+          setError({ message: failure.message, upgrade: failure.upgrade });
+          return null;
+        }
+        const next = readDomainState(data);
+        if (next === null) setError({ message: "We could not read the answer. Please try again.", upgrade: false });
+        return next;
+      } catch {
+        setError({ message: "Could not reach the server. Please try again.", upgrade: false });
+        return null;
+      }
+    },
+    [storeFetch],
   );
+
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const next = await call("/api/proxy/domain", { method: "GET", cache: "no-store" });
+      if (!live) return;
+      setState(next);
+      setLoaded(true);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [call]);
 
   if (!store) {
     return (
@@ -52,172 +82,162 @@ export default function DashboardDomainPage() {
     );
   }
 
-  async function handleConnect() {
+  async function connect() {
     if (!domain.trim()) return;
-    setLoading(true);
-    setResult(null);
-    try {
-      const res = await storeFetch("/api/proxy/domain/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storeId, domain: domain.trim().toLowerCase() }),
-      });
-      const data: ConnectResult = await res.json();
-      setResult(data);
-      if (!data.error) setStep("verify");
-    } catch {
-      setResult({ error: "Could not reach the backend. Please try again." });
-    } finally {
-      setLoading(false);
+    setBusy("connect");
+    setError(null);
+    const next = await call("/api/proxy/domain/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: domain.trim() }),
+    });
+    if (next) {
+      setState(next);
+      setDomain("");
     }
+    setBusy(null);
   }
 
-  async function handleVerify() {
-    setLoading(true);
-    setResult(null);
-    try {
-      const res = await storeFetch("/api/proxy/domain/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storeId, domain: (store?.domain || domain).trim().toLowerCase() }),
-      });
-      const data: ConnectResult = await res.json();
-      setResult(data);
-    } catch {
-      setResult({ error: "Could not reach the backend. Please try again." });
-    } finally {
-      setLoading(false);
-    }
+  async function verify() {
+    setBusy("verify");
+    setError(null);
+    const next = await call("/api/proxy/domain/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    if (next) setState(next);
+    setBusy(null);
   }
+
+  async function disconnect() {
+    setBusy("disconnect");
+    setError(null);
+    const next = await call("/api/proxy/domain/disconnect", { method: "POST" });
+    if (next) {
+      setState(next);
+      setConfirmOff(false);
+    }
+    setBusy(null);
+  }
+
+  const hasDomain = state?.domain != null;
+  const checked = state ? checkedText(state.checkedAt) : null;
+  const steps = state ? dnsSteps(state) : [];
 
   return (
-    <main className="p-6 sm:p-8 max-w-lg flex flex-col gap-6">
-      <PageHeader
-        title="Connect a custom domain"
-        className="mb-0"
-        description={`Point your own domain (e.g. shop.yourbrand.pk) at ${store.name}.`}
-      />
+    <main className="p-4 sm:p-8 max-w-lg flex flex-col gap-6">
+      <PageHeader title="Your own domain" className="mb-0" description={`Show ${store.name} on your own web address, like shop.yourbrand.pk.`} />
 
-      <SectionCard>
-        <div className="flex flex-col gap-4">
-          <div>
-            <Label className="block text-xs font-medium text-muted-foreground mb-1">
-              Your domain (no https://)
-            </Label>
-            <Input
-              type="text"
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder="shop.yourbrand.pk"
-              disabled={step === "verify"}
-              className="font-mono"
-            />
-          </div>
+      {!loaded && <p className="text-sm text-muted-foreground">Loading…</p>}
 
-          <div className="flex gap-3 pt-1">
-            {step === "connect" ? (
-              <Button
-                variant="clay"
-                onClick={handleConnect}
-                disabled={loading || !domain.trim()}
-                className="flex-1"
-              >
-                {loading ? "Connecting…" : "Connect domain"}
-              </Button>
-            ) : (
-              <>
-                <Button
-                  variant="clay"
-                  onClick={handleVerify}
-                  disabled={loading}
-                  className="flex-1"
-                >
-                  {loading ? "Checking…" : "Verify now"}
-                </Button>
-                <Button
-                  variant="clay-soft"
-                  onClick={() => { setStep("connect"); setResult(null); }}
-                >
-                  Change domain
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </SectionCard>
+      {loaded && state === null && !error && <p className="text-sm text-destructive">We could not load your domain. Please refresh the page.</p>}
 
-      {result && (
+      {state && !state.planAllowsCustomDomain && (
         <SectionCard>
-          {result.error ? (
-            <p className="text-sm text-destructive">{result.error}</p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-mono">{result.domain}</span>
-                <StatusBadge status={result.customDomainStatus ?? "unset"} />
+          <div className="flex flex-col gap-3">
+            <p className="text-sm font-medium">A custom domain is part of the Growth plan.</p>
+            <p className="text-sm text-muted-foreground">Upgrade your plan to use your own domain. Your store keeps working on its Markazify address.</p>
+            <Link href={href("/billing")} className="text-sm underline">
+              See plans
+            </Link>
+          </div>
+        </SectionCard>
+      )}
+
+      {state && hasDomain && (
+        <SectionCard>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-sm font-mono break-all">{state.domain}</span>
+              <span className={`text-xs font-medium rounded-full px-2.5 py-1 ${TONE[state.status]}`}>{STATUS_LABELS[state.status]}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">{nextStepText(state)}</p>
+            {state.failureMessage && state.status !== "unset" && <p className="text-sm text-destructive">{state.failureMessage}</p>}
+            {state.vercelConfigured === false && state.status !== "verified" && (
+              <p className="text-xs rounded-xl px-3 py-2 bg-warning/10 text-warning">
+                Automatic domain setup is not switched on for this platform yet, so a check may pass here before the domain is live.
+              </p>
+            )}
+            {checked && <p className="text-xs text-muted-foreground">{checked}</p>}
+
+            {steps.length > 0 && state.status !== "verified" && (
+              <ol className="list-decimal pl-5 text-sm text-muted-foreground flex flex-col gap-1">
+                {steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            )}
+
+            {state.dnsRecords.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Records to add</p>
+                {state.dnsRecords.map((r) => (
+                  <div key={r.type + r.name} className="rounded-xl border p-3 flex flex-col gap-2 text-sm">
+                    <div className="flex gap-2">
+                      <span className="w-14 shrink-0 text-xs text-muted-foreground">Type</span>
+                      <span className="font-mono">{r.type}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="w-14 shrink-0 text-xs text-muted-foreground">Name</span>
+                      <span className="font-mono break-all">{r.name}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="w-14 shrink-0 text-xs text-muted-foreground">Value</span>
+                      <span className="font-mono break-all">{r.value}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
+            )}
 
-              {result.vercelConfigured === false && result.message && (
-                <p className="text-xs rounded-xl px-3 py-2 bg-warning/10 text-warning">
-                  {result.message} — DNS records below are the standard Vercel values for your domain type.
-                </p>
+            <div className="flex flex-col sm:flex-row gap-3 pt-1">
+              {canVerify(state) && (
+                <Button variant="clay" onClick={verify} disabled={busy !== null} className="flex-1">
+                  {busy === "verify" ? "Checking…" : "Check now"}
+                </Button>
               )}
-
-              {result.customDomainStatus === "verified" && (
-                <p className="text-sm text-success">
-                  ✓ Domain verified. Your store is now live at{" "}
-                  <a
-                    href={`https://${result.domain}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    {result.domain}
-                  </a>
-                  .
-                </p>
-              )}
-
-              {result.customDomainStatus === "failed" && (
-                <p className="text-sm text-destructive">
-                  DNS not detected yet. Make sure you&apos;ve added the record below, then try &quot;Verify
-                  now&quot; again. DNS changes can take a few minutes to a few hours to propagate.
-                </p>
-              )}
-
-              {result.customDomainStatus === "pending" && (
-                <p className="text-sm text-muted-foreground">
-                  Add the DNS record below at your domain registrar, then click &quot;Verify now&quot;. This
-                  can take a few minutes to a few hours.
-                </p>
-              )}
-
-              {result.dnsRecords && result.dnsRecords.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
-                    DNS record to add
-                  </p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Value</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {result.dnsRecords.map((r, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-mono text-muted-foreground">{r.type}</TableCell>
-                          <TableCell className="font-mono">{r.name}</TableCell>
-                          <TableCell className="font-mono break-all">{r.value}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+              {!confirmOff ? (
+                <Button variant="clay-soft" onClick={() => setConfirmOff(true)} disabled={busy !== null}>
+                  Disconnect
+                </Button>
+              ) : (
+                <Button variant="clay-soft" onClick={disconnect} disabled={busy !== null}>
+                  {busy === "disconnect" ? "Disconnecting…" : "Yes, disconnect"}
+                </Button>
               )}
             </div>
+            {confirmOff && <p className="text-xs text-muted-foreground">Your store will go back to its Markazify address only.</p>}
+          </div>
+        </SectionCard>
+      )}
+
+      {state && canConnect(state) && (
+        <SectionCard>
+          <div className="flex flex-col gap-4">
+            <div>
+              <Label className="block text-xs font-medium text-muted-foreground mb-1">{hasDomain ? "Use a different domain" : "Your domain (no https://)"}</Label>
+              <Input
+                type="text"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder="shop.yourbrand.pk"
+                className="font-mono"
+              />
+            </div>
+            <Button variant="clay" onClick={connect} disabled={busy !== null || !domain.trim()}>
+              {busy === "connect" ? "Saving…" : hasDomain ? "Change domain" : "Connect domain"}
+            </Button>
+          </div>
+        </SectionCard>
+      )}
+
+      {error && (
+        <SectionCard>
+          <p className="text-sm text-destructive">{error.message}</p>
+          {error.upgrade && (
+            <Link href={href("/billing")} className="text-sm underline">
+              See plans
+            </Link>
           )}
         </SectionCard>
       )}

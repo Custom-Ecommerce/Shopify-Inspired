@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AbandonedCart, CommissionEntry, Review, Return, BlockedContact, Subscription, SubscriptionPayment, SubscriptionPlanModel } from '@/lib/services';
+import { AbandonedCart, Store, CommissionEntry, Review, Return, BlockedContact, Subscription, SubscriptionPayment, SubscriptionPlanModel } from '@/lib/services';
 import * as dbSchemas from '@markaz/db-schemas';
 // @ts-expect-error plain .mjs script module without types; tests are not type-checked (tsconfig excludes test)
 import * as planNs from '../../../../scripts/lib/ensure-indexes-plan.mjs';
@@ -305,4 +305,28 @@ test('Sprint 7 (S7-B4, CO-115): the ticket model declares {seller, createdAt} an
   const ID = { name: '_id_', key: { _id: 1 } };
   const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
   assert.equal(plan.planAll([{ model: 'SupportTicket', collection: 'supporttickets', declared }], { supporttickets: [ID, ...have] }).totals.missing, 0);
+});
+
+test('Sprint 7 (S7-B5): the store model declares a UNIQUE PARTIAL index on domain (only a string), a fresh database misses it, and a plain or sparse one does not stand in for it', () => {
+  const declared = (Store as unknown as { schema: { indexes: () => Array<[Record<string, number>, Record<string, any> | undefined]> } }).schema.indexes();
+  const domain = declared.filter(([key]) => Object.keys(key).length === 1 && key.domain === 1);
+  assert.equal(domain.length, 1, 'one index on domain: the old non-unique sparse one is replaced');
+  assert.equal(domain[0]![1]!.unique, true);
+  assert.deepEqual(domain[0]![1]!.partialFilterExpression, { domain: { $type: 'string' } });
+  assert.equal(domain[0]![1]!.sparse, undefined);
+
+  const typed = declared as unknown as Declared;
+  const fresh = plan.planAll([{ model: 'Store', collection: 'stores', declared: typed }], {});
+  assert.ok(fresh.toCreate.includes('Store'));
+  assert.equal(fresh.totals.conflicts, 0);
+  const missingDomain = fresh.models[0]!.missing as Array<{ name: string; unique: boolean; partial: boolean }>;
+  assert.ok(missingDomain.some((m) => m.name === 'domain_1' && m.unique && m.partial));
+
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = typed.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  assert.equal(plan.planAll([{ model: 'Store', collection: 'stores', declared: typed }], { stores: [ID, ...have] }).totals.missing, 0);
+
+  // The old index (non-unique, sparse, same name) is reported as a conflict to resolve by hand, never dropped by the plan.
+  const old = plan.planAll([{ model: 'Store', collection: 'stores', declared: typed }], { stores: [ID, ...have.filter((h) => h.key.domain === undefined), { name: 'domain_1', key: { domain: 1 }, sparse: true }] });
+  assert.equal(old.totals.conflicts, 1);
 });

@@ -13,7 +13,7 @@ import { listStores } from "@/lib/api/client";
 import type { AdminStoreListItem } from "@/lib/contracts";
 import { formatPercent, formatRelative } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
-import { listStateToQuery, parseListState, type StoreListState } from "@/lib/stores";
+import { DOMAIN_FILTER_LABELS, DOMAIN_FILTER_VALUES, DOMAIN_STATUS_LABELS, listStateToQuery, parseListState, type StoreListState } from "@/lib/stores";
 import { STORE_STATUS_VALUES, statusLabel } from "@/lib/status";
 
 const SEARCH_DELAY_MS = 300;
@@ -30,6 +30,20 @@ const COLUMNS: Array<Column<AdminStoreListItem>> = [
         <span className="truncate text-xs text-muted-foreground">{store.domain ?? store.slug}</span>
       </div>
     ),
+  },
+  {
+    key: "domain",
+    header: "Domain",
+    className: "hidden lg:table-cell",
+    cell: (store) =>
+      store.domain ? (
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate font-mono text-xs">{store.domain}</span>
+          <span className="text-xs text-muted-foreground">{DOMAIN_STATUS_LABELS[store.customDomainStatus ?? "pending"] ?? "Waiting for DNS"}</span>
+        </div>
+      ) : (
+        <span className="text-muted-foreground">-</span>
+      ),
   },
   { key: "status", header: "Status", cell: (store) => <StatusBadge status={store.status} label={store.status === "pending" && store.goLiveRequestedAt ? "Waiting for approval" : undefined} /> },
   {
@@ -81,14 +95,14 @@ export function StoresView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const { data, error, loading, refetch } = useAdminFetch((signal) => listStores(state, signal), [state.page, state.q, state.status]);
+  const { data, error, loading, refetch } = useAdminFetch((signal) => listStores(state, signal), [state.page, state.q, state.status, state.domain]);
 
   useEffect(() => {
     if (data && data.totalPages > 0 && state.page > data.totalPages) go({ ...state, page: data.totalPages });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  const filtered = state.q !== "" || state.status !== "";
+  const filtered = state.q !== "" || state.status !== "" || state.domain !== "";
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -123,6 +137,19 @@ export function StoresView() {
             </option>
           ))}
         </Select>
+        <Select
+          aria-label="Filter by custom domain"
+          className="sm:w-52"
+          value={state.domain}
+          onChange={(event) => go({ ...state, domain: event.target.value as StoreListState["domain"], page: 1 })}
+        >
+          <option value="">Any domain</option>
+          {DOMAIN_FILTER_VALUES.map((value) => (
+            <option key={value} value={value}>
+              {DOMAIN_FILTER_LABELS[value]}
+            </option>
+          ))}
+        </Select>
       </div>
 
       {error && data ? (
@@ -142,7 +169,7 @@ export function StoresView() {
         error={error ? error.message : null}
         onRetry={refetch}
         emptyTitle={filtered ? "No stores match" : "No stores yet"}
-        emptyHint={filtered ? "Try a different search or clear the status filter." : "Stores appear here as sellers create them."}
+        emptyHint={filtered ? "Try a different search or clear the filters." : "Stores appear here as sellers create them."}
       />
 
       {data ? (

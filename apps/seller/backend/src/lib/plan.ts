@@ -340,6 +340,27 @@ export async function assertWithinPlan(input: AssertWithinPlanInput): Promise<vo
   );
 }
 
+/** S7-B5 (D-118): whether the seller's effective plan includes a custom domain. True where plans cannot be checked (a unit test with no connection). */
+export async function planAllowsCustomDomain(ownerId: string, now: Date = new Date()): Promise<boolean> {
+  if (!canCheckPlans()) return true;
+  return (await loadEffectivePlan(ownerId, now)).limits.customDomain === true;
+}
+
+/**
+ * Refuses a custom domain on a plan without it: 403 PLAN_LIMIT_REACHED with limitKind customDomain (limit 0). Same order rule as
+ * assertWithinPlan: it runs after the ownership checks. Disconnecting never calls it: a seller who lost the feature can always leave.
+ */
+export async function assertCustomDomainAllowed(ownerId: string, now: Date = new Date()): Promise<void> {
+  if (!canCheckPlans()) return;
+  const plan = await loadEffectivePlan(ownerId, now);
+  if (plan.limits.customDomain === true) return;
+  const upgradeHint = 'A custom domain is part of the Growth plan. Upgrade to connect your own domain.';
+  throw new PlanLimitError(
+    { code: 'PLAN_LIMIT_REACHED', limitKind: 'customDomain', limit: 0, used: 0, plan: plan.key, upgradeHint },
+    'Your ' + plan.name + ' plan does not include a custom domain. ' + upgradeHint,
+  );
+}
+
 /** The store's owner, then assertWithinPlan for products. A store with no owner is not limited here (it cannot be a seller's). */
 export async function assertProductSlot(storeId: string, adding: number = 1): Promise<void> {
   if (!canCheckPlans() || adding <= 0) return;
