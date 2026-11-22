@@ -303,7 +303,11 @@ Every other script points to a file that exists.
 | Sync drain (admin) | `GET https://<admin backend>/api/internal/sync/drain` | `CRON_SECRET` as a bearer token (`apps/admin/backend/vercel.json`) | every minute |
 | Plan expiry (Sprint 6) | `POST https://<seller backend>/api/internal/subscriptions/expire` with `{"apply": true}` (without it: dry run) | `OUTBOX_CRON_SECRET` (`x-cron-secret` or bearer) | daily |
 | **Retention run** (Sprint 6) | `POST https://<seller backend>/api/internal/retention/run` with `{"apply": true}` (without it: dry run) | `RETENTION_CRON_SECRET` in `x-retention-secret` | daily, after the trash retention |
+| **Media orphan sweep** (Sprint 7, CO-10), **called by hand, not scheduled** | `POST https://<seller backend>/api/internal/media/orphans` with `{"olderThanDays": 30}` (without `apply` it is a dry run that only lists); then with `{"apply": true}` to remove. At most 500 records per call: when the answer says `more`, call again with `{"after": "<nextAfter>"}` | `OUTBOX_CRON_SECRET` (`x-cron-secret` or bearer) | by hand, for example monthly. Removes media records that no product, store setting or other feature uses, older than N days (default 30, 1 to 365), and their Cloudinary files |
 | Email outbox flush (admin) | `POST` or `GET https://<admin backend>/api/internal/notifications/flush` | `OUTBOX_CRON_SECRET` | every 5 minutes |
+
+The media orphan sweep is in the table for completeness: it is a job somebody calls by hand (dry run first, read the list, then apply). It is not
+on any schedule in the repository.
 
 That is every route in the repository protected by a cron secret (`OUTBOX_CRON_SECRET`, `CRON_SECRET`, `RETENTION_CRON_SECRET`). By hand, from the admin console:
 **Sync** (retry dead events, retry failed emails), **Retention** (dry run, then apply, owner only) and **Subscription payments**. The signed internal

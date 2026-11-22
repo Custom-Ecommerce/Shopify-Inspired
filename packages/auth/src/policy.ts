@@ -458,7 +458,9 @@ Object.assign(POLICY_MATRIX, {
   media: {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
     create: { actors: ['system', 'seller'], fields: { system: '*', seller: ['alt'] } },
-    update: { actors: ['system'], fields: { system: '*' } },
+    // Sprint 7 (S7-B1): a seller renames a file of their own store (PATCH /api/media/:id). The name is the only field: never the url, the
+    // alt text, the store or the Cloudinary id. The admin has no media update.
+    update: { actors: ['system', 'seller'], fields: { system: '*', seller: ['name'] } },
     // Sprint 4 CO-09: a seller deletes their own store's media (DELETE /api/media/:id, 409 while in use).
     delete: { actors: ['admin', 'system', 'seller'], fields: '*' },
   },

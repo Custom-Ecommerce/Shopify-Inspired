@@ -6,6 +6,8 @@ import {
   CARD_CHECKOUT_UNSUPPORTED_MESSAGE,
   CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
   NO_USABLE_PAYMENT_METHOD,
+  THEME_NOT_AVAILABLE,
+  THEME_NOT_AVAILABLE_MESSAGE,
   RETURN_WINDOW_DAYS_DEFAULT,
   NO_USABLE_PAYMENT_METHOD_MESSAGE,
   cityKey,
@@ -174,8 +176,9 @@ export function readReturnWindowDays(storefront: unknown): number {
 
 // ------------------------------------------------------------------------------------------------------------- theme
 
-export function installedThemeSlugs(): string[] {
-  return themes.listInstalledThemes().map((entry) => entry.slug);
+/** Sprint 7 (D-115): the themes a seller may choose (installed, available, not hidden): Stiletto only. */
+export function sellerThemeSlugs(): string[] {
+  return themes.listSellerThemes().map((entry) => entry.slug);
 }
 
 /** Whether a theme's checkout can take a card payment (the manifest flag; false when the theme has none). */
@@ -183,10 +186,14 @@ export function themeSupportsCardCheckout(slug: string): boolean {
   return themes.themeSupportsCardCheckout(slug);
 }
 
-/** The theme a store renders with: its own if it is installed, else the platform default (as the storefront does). */
+/** The theme a store renders with: its own if a seller can choose it, else the platform default, Stiletto (as the storefront does, D-115). */
 export function effectiveTheme(storefront: unknown): string {
-  const chosen = text(record(storefront).activeTheme);
-  return chosen !== null && themes.isInstalledThemeSlug(chosen) ? chosen : themes.DEFAULT_THEME_SLUG;
+  return themes.resolveRenderTheme(text(record(storefront).activeTheme)).slug;
+}
+
+/** The theme the store chose that it cannot render (mola, gani, mustafa ...), or null: the Theme tab shows a notice for it. */
+export function unavailableTheme(storefront: unknown): string | null {
+  return themes.resolveRenderTheme(text(record(storefront).activeTheme)).unavailableTheme;
 }
 
 // -------------------------------------------------------------------------------------------------- the settings DTO
@@ -224,7 +231,7 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     delivery: readDelivery(sf),
     payments: { ...readPayments(doc.paymentSettings), cardAvailable: cardPaymentsAvailable() },
     payout: maskPayout(doc.payoutDetails),
-    theme: { activeTheme: effectiveTheme(sf), supportsCardCheckout: themeSupportsCardCheckout(effectiveTheme(sf)) },
+    theme: { activeTheme: effectiveTheme(sf), supportsCardCheckout: themeSupportsCardCheckout(effectiveTheme(sf)), unavailableTheme: unavailableTheme(sf) },
     messages: { ...readMessages(sf), abandonedCartEmail: readAbandonedCartEmail(doc.paymentSettings) },
     // Sprint 5 EP-11: kept in paymentSettings (never in storefront, which the public storefront reads).
     fraud: readFraud(doc.paymentSettings),
@@ -318,7 +325,11 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
     if (d.estimate !== undefined) put('deliveryEstimate', d.estimate);
   }
   if (update.theme) {
-    if (!installedThemeSlugs().includes(update.theme.activeTheme)) throw invalid('theme.activeTheme', 'Choose a theme from the list.');
+    if (!sellerThemeSlugs().includes(update.theme.activeTheme)) {
+      // A theme the platform knows but a seller cannot choose (hidden, coming soon, archived) is a 422; a slug nobody has heard of is a 400.
+      if (themes.isThemeSlug(update.theme.activeTheme)) throw new HttpError(422, THEME_NOT_AVAILABLE_MESSAGE, THEME_NOT_AVAILABLE, 'theme.activeTheme');
+      throw invalid('theme.activeTheme', 'Choose a theme from the list.');
+    }
     put('activeTheme', update.theme.activeTheme);
   }
   if (update.messages) {

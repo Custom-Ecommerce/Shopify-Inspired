@@ -7,6 +7,7 @@ import { FormAlert } from "@/components/auth/AccountCard";
 import { PreviewStoreButton } from "@/components/dashboard/PreviewStoreButton";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { cn } from "@/lib/utils";
+import { unavailableThemeNotice } from "@/lib/theme-notice";
 import { SaveBar, useTabSave, type TabProps } from "./shared";
 
 interface ThemeOption {
@@ -18,7 +19,17 @@ interface ThemeOption {
   supportsCardCheckout?: boolean;
 }
 
-/** Theme: the installed themes from GET /api/themes, a link to the existing store preview, and a save. */
+/** Sprint 7 (CO-81): a theme's static preview image. A file that does not load is left out, so a broken picture never shows. */
+function ThemePreviewImage({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} data-testid="theme-preview-image" className="aspect-[4/3] w-full rounded-lg border bg-muted/30 object-cover" />
+  );
+}
+
+/** Theme: the themes a seller can choose from GET /api/themes (today Stiletto), a link to the existing store preview, and a save. */
 export function ThemeTab({ settings, save, onDirty }: TabProps) {
   const storeFetch = useStoreFetch();
   const [themes, setThemes] = useState<ThemeOption[] | null>(null);
@@ -53,9 +64,16 @@ export function ThemeTab({ settings, save, onDirty }: TabProps) {
     await form.run({ theme: { activeTheme: active } }, "Theme saved. Open the preview to see it.");
   }
 
+  const notice = unavailableThemeNotice(settings.theme.unavailableTheme, themes?.find((theme) => theme.slug === settings.theme.activeTheme)?.name ?? "Stiletto");
+
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
       <SectionCard title="Theme" description="The look of your storefront. Your products and settings stay the same.">
+        {notice ? (
+          <div className="mb-4">
+            <FormAlert tone="info">{notice}</FormAlert>
+          </div>
+        ) : null}
         {loadError ? (
           <FormAlert tone="error">The themes could not be loaded. Reload the page.</FormAlert>
         ) : themes === null ? (
@@ -70,10 +88,7 @@ export function ThemeTab({ settings, save, onDirty }: TabProps) {
               return (
                 <label key={theme.slug} className={cn("flex min-h-11 cursor-pointer flex-col gap-2 rounded-xl border p-3", selected ? "border-primary bg-primary/5" : "hover:bg-muted/40")}>
                   <input type="radio" name="theme" className="sr-only" checked={selected} onChange={() => setActive(theme.slug)} />
-                  {theme.previewImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={theme.previewImage} alt="" className="aspect-[4/3] w-full rounded-lg object-cover" />
-                  ) : null}
+                  {theme.previewImage ? <ThemePreviewImage src={theme.previewImage} /> : null}
                   <span className="flex items-center justify-between gap-2">
                     <span className="font-medium">{theme.name}</span>
                     {selected ? <Check className="size-4 text-primary" aria-label="Selected" /> : null}

@@ -328,6 +328,13 @@ export const storeFraudSchema = z.object({
 /** 422 on PATCH /api/stores/:id: the store would be card only on a theme whose checkout cannot take a card payment (SB-11, V-06). */
 export const CARD_CHECKOUT_UNSUPPORTED_BY_THEME = 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME';
 
+/**
+ * 422 on PATCH /api/stores/:id (Sprint 7, D-115): the theme exists but a seller cannot choose it (hidden, coming soon or archived). A slug the
+ * platform has never heard of stays a 400. Field: theme.activeTheme.
+ */
+export const THEME_NOT_AVAILABLE = 'THEME_NOT_AVAILABLE';
+export const THEME_NOT_AVAILABLE_MESSAGE = 'This theme is not available yet. Choose Stiletto.';
+
 /** The sentences the seller sees for it; the server, the Payments tab and the Theme tab use these. */
 export const CARD_CHECKOUT_UNSUPPORTED_MESSAGE = 'This theme cannot take card payments yet, so cash on delivery has to stay on. Choose the Stiletto theme to accept card only.';
 export const CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE = 'This theme cannot take card payments yet. Turn cash on delivery on first, or choose the Stiletto theme.';
@@ -433,7 +440,12 @@ export const storeSettingsSchema = z.object({
     cardAvailable: z.boolean(),
   }),
   payout: maskedPayoutSchema.nullable(),
-  theme: z.object({ activeTheme: z.string(), supportsCardCheckout: z.boolean() }),
+  theme: z.object({
+    activeTheme: z.string(),
+    supportsCardCheckout: z.boolean(),
+    /** Sprint 7 (D-115): the theme the store chose earlier but that is not available (mola, gani, mustafa). The store renders activeTheme instead; the Theme tab says so. */
+    unavailableTheme: z.string().nullable().optional(),
+  }),
   messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable(), abandonedCartEmail: z.boolean() }),
   fraud: storeFraudSchema,
   returns: storeReturnsSchema,

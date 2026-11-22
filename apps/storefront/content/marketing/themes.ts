@@ -22,17 +22,20 @@ export interface ThemeItem {
   description: string;
   tier: "free" | "premium";
   screenshot: ThemeScreenshot | null;
+  /** Sprint 7 (D-115): not finished. Shown as "Coming soon", with no live demo link. */
+  comingSoon: boolean;
 }
 
 /** Builds the marketing view of one manifest entry. Copy is limited to what the manifest states. */
-export function toThemeItem(entry: { slug: string; label: string; tier: string }): ThemeItem {
+export function toThemeItem(entry: { slug: string; label: string; tier: string; status?: string }): ThemeItem {
   const tier = entry.tier === "free" ? "free" : "premium";
   return {
     id: entry.slug,
     name: entry.label,
-    description: tier === "free" ? "Free default theme for every store." : "Premium theme.",
+    description: entry.status === "coming_soon" ? "Coming soon." : tier === "free" ? "Free default theme for every store." : "Premium theme.",
     tier,
     screenshot: SCREENSHOTS[entry.slug] ?? null,
+    comingSoon: entry.status === "coming_soon",
   };
 }
 

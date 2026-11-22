@@ -71,11 +71,12 @@ export function ThemeCard({
               {theme.name}
             </Heading>
             <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-              {tierLabel}
+              {theme.comingSoon ? "Coming soon" : tierLabel}
             </span>
           </div>
           <p className="flex-1 text-sm leading-relaxed text-muted-foreground">{theme.description}</p>
 
+          {theme.comingSoon ? null : (
           <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1">
             <a href={demoUrl} target="_blank" rel="noopener noreferrer" className={`${LINK} group/demo`}>
               Live demo
@@ -90,6 +91,7 @@ export function ThemeCard({
               <span className="sr-only"> for the {theme.name} theme</span>
             </Link>
           </div>
+          )}
         </div>
       </Card>
     </Reveal>

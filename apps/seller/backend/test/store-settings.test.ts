@@ -214,65 +214,103 @@ test('the last payment method cannot be switched off', async () => {
 
 type Body = { code?: string; field?: string; error?: string; errors?: Array<{ message: string }> };
 
-test('SB-11: COD cannot go off while the theme has no card checkout (422 CARD_CHECKOUT_UNSUPPORTED_BY_THEME, payments.codEnabled)', async () => {
-  // STORE_A has no theme set, so it renders with the default, Mustafa.
-  const res = await save({ payments: { codEnabled: false, cardEnabled: true } });
-  assert.equal(res.status, 422);
-  const body = (await res.json()) as Body;
-  assert.equal(body.code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
-  assert.equal(body.field, 'payments.codEnabled');
-  assert.match(body.errors?.[0]?.message ?? '', /cannot take card payments/);
-  assert.deepEqual(stores[STORE_A]!.paymentSettings, {}, 'nothing was written');
+test('Sprint 7 (D-115): a store with no theme, or on Mustafa, renders Stiletto, so COD may go off while card is available (no theme blocks card)', async () => {
+  // STORE_A has no theme set: it renders with the fallback, Stiletto, which takes card.
+  await withCardEnv(CARD_ON, async () => {
+    const res = await save({ payments: { codEnabled: false, cardEnabled: true } });
+    assert.equal(res.status, 200);
+    assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, false);
+  });
+  // A store still holding the hidden Mustafa renders Stiletto as well.
+  stores[STORE_A]!.paymentSettings = {};
   stores[STORE_A]!.storefront.activeTheme = 'mustafa';
-  assert.equal((await save({ payments: { codEnabled: false, cardEnabled: true } })).status, 422);
-  // Switching the theme in the same request makes it fine (Sprint 5: while card is available on the platform).
-  await withCardEnv(CARD_ON, async () =>
-    assert.equal((await save({ theme: { activeTheme: 'stiletto' }, payments: { codEnabled: false, cardEnabled: true } })).status, 200),
-  );
-  assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, false);
-  assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto');
+  await withCardEnv(CARD_ON, async () => assert.equal((await save({ payments: { codEnabled: false, cardEnabled: true } })).status, 200));
 });
 
-test('SB-11: COD stays switchable and card can be added on a theme without card checkout', async () => {
+test('SB-11: COD stays switchable and card can be added on any theme', async () => {
   assert.equal((await save({ payments: { codEnabled: true, cardEnabled: false } })).status, 200);
   assert.equal((await save({ payments: { codEnabled: true, cardEnabled: true } })).status, 200);
 });
 
-test('SB-11: a switch to a theme without card checkout is refused 422 while COD is off (theme.activeTheme)', async () => {
+test('Sprint 7 (D-115): a switch to a hidden or coming soon theme is refused 422 THEME_NOT_AVAILABLE (theme.activeTheme), and nothing is written', async () => {
   stores[STORE_A]!.storefront.activeTheme = 'stiletto';
-  stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
-  const res = await save({ theme: { activeTheme: 'mustafa' } });
-  assert.equal(res.status, 422);
-  const body = (await res.json()) as Body;
-  assert.equal(body.code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
-  assert.equal(body.field, 'theme.activeTheme');
-  assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto', 'the theme is unchanged');
-  // With COD on again the same switch works.
-  assert.equal((await save({ payments: { codEnabled: true } })).status, 200);
-  assert.equal((await save({ theme: { activeTheme: 'mustafa' } })).status, 200);
+  for (const slug of ['mustafa', 'mola', 'gani', 'perfecto']) {
+    const res = await save({ theme: { activeTheme: slug } });
+    assert.equal(res.status, 422, slug);
+    const body = (await res.json()) as Body;
+    assert.equal(body.code, 'THEME_NOT_AVAILABLE', slug);
+    assert.equal(body.field, 'theme.activeTheme', slug);
+    assert.match(body.errors?.[0]?.message ?? '', /not available yet/, slug);
+    assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto', 'the theme is unchanged');
+  }
+  assert.equal(audits.length, 0);
+  // A slug nobody has heard of is still a 400 (the form is wrong, not the theme).
+  const unknown = await save({ theme: { activeTheme: 'no-such-theme' } });
+  assert.equal(unknown.status, 400);
+  assert.equal(await fieldOf(unknown), 'theme.activeTheme');
+  // The one available theme is accepted.
+  assert.equal((await save({ theme: { activeTheme: 'stiletto' } })).status, 200);
 });
 
-test('SB-11: a store already card only on Mustafa can still save the same theme (the rule stops new switches only)', async () => {
+test('Sprint 7 (D-115): a store already on Mustafa can still save its other settings, and its settings say it renders Stiletto', async () => {
+  stores[STORE_A]!.storefront.activeTheme = 'mustafa';
   stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
-  assert.equal((await save({ theme: { activeTheme: 'mustafa' } })).status, 200);
   assert.equal((await save({ delivery: { defaultRate: 100 } })).status, 200);
+  assert.equal(stores[STORE_A]!.storefront.activeTheme, 'mustafa', 'saving something else never rewrites the theme');
+  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  const { settings } = (await read.json()) as { settings: any };
+  assert.equal(settings.theme.activeTheme, 'stiletto');
+  assert.equal(settings.theme.unavailableTheme, 'mustafa');
+  assert.equal(settings.theme.supportsCardCheckout, true);
 });
 
-test('SB-11: the settings and the theme list carry the flag; a theme without it counts as no card checkout', async () => {
-  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
-  assert.equal(((await read.json()) as { settings: any }).settings.theme.supportsCardCheckout, false);
+test('Sprint 7 (D-115): mola and gani read as not available too; a store with no theme or a working one has no notice', async () => {
+  for (const slug of ['mola', 'gani']) {
+    stores[STORE_A]!.storefront.activeTheme = slug;
+    const { settings } = (await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any };
+    assert.equal(settings.theme.activeTheme, 'stiletto', slug);
+    assert.equal(settings.theme.unavailableTheme, slug, slug);
+  }
+  delete stores[STORE_A]!.storefront.activeTheme;
+  const none = (await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any };
+  assert.equal(none.settings.theme.activeTheme, 'stiletto');
+  assert.equal(none.settings.theme.unavailableTheme, null);
   stores[STORE_A]!.storefront.activeTheme = 'stiletto';
-  const again = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
-  assert.equal(((await again.json()) as { settings: any }).settings.theme.supportsCardCheckout, true);
+  const ok = (await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any };
+  assert.equal(ok.settings.theme.unavailableTheme, null);
+});
 
+test('Sprint 7 (D-115, CO-81): GET /api/themes lists only Stiletto, with its preview image and the card flag; Mustafa is hidden', async () => {
   const list = await (await import('../src/app/api/themes/route')).GET(
     new NextRequest('http://seller.test/api/themes', { headers: { authorization: 'Bearer ' + tokenA } }),
   );
   assert.equal(list.status, 200);
-  const { themes } = (await list.json()) as { themes: Array<{ slug: string; supportsCardCheckout: boolean }> };
-  assert.equal(themes.find((t) => t.slug === 'stiletto')?.supportsCardCheckout, true);
-  assert.equal(themes.find((t) => t.slug === 'mustafa')?.supportsCardCheckout, false);
-  assert.ok(themes.every((t) => typeof t.supportsCardCheckout === 'boolean'));
+  const { themes } = (await list.json()) as { themes: Array<{ slug: string; name: string; previewImage: string | null; supportsCardCheckout: boolean; isDefaultForNewStores: boolean }> };
+  assert.deepEqual(themes.map((t) => t.slug), ['stiletto']);
+  assert.equal(themes[0]!.name, 'Stiletto');
+  assert.equal(themes[0]!.supportsCardCheckout, true);
+  assert.equal(themes[0]!.isDefaultForNewStores, true);
+  assert.equal(themes[0]!.previewImage, 'https://markazify.com/theme-previews/stiletto.svg');
+  for (const hidden of ['mustafa', 'mola', 'gani', 'farooq', 'perfecto', 'minimal']) assert.ok(!themes.some((t) => t.slug === hidden), hidden);
+});
+
+test('Sprint 7 (CO-81): the preview image falls back to its plain path without a usable STOREFRONT_URL, and a theme without one has null', async () => {
+  const { previewImageUrl } = await import('../src/lib/theme-preview');
+  assert.equal(previewImageUrl('/theme-previews/stiletto.svg', 'https://markazify.com'), 'https://markazify.com/theme-previews/stiletto.svg');
+  assert.equal(previewImageUrl('/theme-previews/stiletto.svg', 'http://localhost:3000'), 'http://localhost:3000/theme-previews/stiletto.svg');
+  assert.equal(previewImageUrl('/theme-previews/stiletto.svg', undefined), '/theme-previews/stiletto.svg');
+  assert.equal(previewImageUrl('/theme-previews/stiletto.svg', 'not a url'), '/theme-previews/stiletto.svg');
+  assert.equal(previewImageUrl(undefined, 'https://markazify.com'), null);
+  assert.equal(previewImageUrl('', 'https://markazify.com'), null);
+});
+
+test('Sprint 7 (CO-81): the Stiletto preview file exists in the storefront public folder and is a plain SVG (no script, no outside link)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const file = fileURLToPath(new URL('../../../storefront/public/theme-previews/stiletto.svg', import.meta.url));
+  const svg = readFileSync(file, 'utf8');
+  assert.match(svg, /^<svg\b/);
+  assert.doesNotMatch(svg, /<script|href=|xlink:|on[a-z]+=/i);
 });
 
 test('payout details are shown masked and audited without the account number', async () => {
@@ -296,8 +334,10 @@ test('a wallet payout can be sent without a bank name (found by the Sprint 4 ver
   assert.equal(settings.payout.accountNumberMasked, '••••4567');
 });
 
-test('only an installed theme can be chosen; media must belong to the store', async () => {
-  assert.equal(await fieldOf(await save({ theme: { activeTheme: 'mola' } })), 'theme.activeTheme');
+test('only an available theme can be chosen; media must belong to the store', async () => {
+  const coming = await save({ theme: { activeTheme: 'mola' } });
+  assert.equal(coming.status, 422);
+  assert.equal(await fieldOf(coming), 'theme.activeTheme');
   assert.equal((await save({ theme: { activeTheme: 'stiletto' } })).status, 200);
   assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto');
   assert.equal(await fieldOf(await save({ branding: { banner: FOREIGN_MEDIA } })), 'branding.banner');
@@ -675,15 +715,14 @@ test('Sprint 5: COD may go off when card is available, and COD only is always fi
   });
 });
 
-test('Sprint 5: the old "keep one method on" 400 stays first, and the theme rule keeps its own 422 on a theme without card checkout', async () => {
+test('Sprint 5: the old "keep one method on" 400 stays first, then the card-not-available 422 (Sprint 7: the fallback theme, Stiletto, takes card, so no theme rule applies)', async () => {
   await withCardEnv({}, async () => {
     const both = await save({ payments: { codEnabled: false, cardEnabled: false } });
     assert.equal(both.status, 400);
     assert.equal(await fieldOf(both), 'payments.codEnabled');
-    // The default theme cannot take card, so the more specific SB-11 answer wins.
-    const theme = await save({ payments: { codEnabled: false, cardEnabled: true } });
-    assert.equal(theme.status, 422);
-    assert.equal(((await theme.json()) as Body).code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
+    const noCard = await save({ payments: { codEnabled: false, cardEnabled: true } });
+    assert.equal(noCard.status, 422);
+    assert.equal(((await noCard.json()) as Body).code, 'NO_USABLE_PAYMENT_METHOD');
   });
 });
 

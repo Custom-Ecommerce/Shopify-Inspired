@@ -7,7 +7,7 @@ import {
   isReservedLabel,
   listReservationViolations,
 } from "./index";
-import { THEME_SLUGS } from "../themes/manifest";
+import { THEME_SLUGS, getThemeEntry } from "../themes/manifest";
 
 /** The hard-coded list both backends shipped before M1, minus the theme names (derived now). */
 const LEGACY_RESERVED_LABELS = [
@@ -42,6 +42,16 @@ describe("reserved registry invariants", () => {
   it("reserves every theme slug from the manifest", () => {
     for (const slug of THEME_SLUGS) {
       assert.deepEqual(getReservedDisposition(slug), { kind: "theme-name", themeSlug: slug });
+    }
+  });
+
+  it("keeps mola and gani (coming soon, D-115) and the hidden mustafa reserved: a status change never frees a slug", () => {
+    assert.equal(getThemeEntry("mola")?.status, "coming_soon");
+    assert.equal(getThemeEntry("gani")?.status, "coming_soon");
+    for (const slug of ["mola", "gani", "mustafa", "stiletto"]) {
+      assert.deepEqual(getReservedDisposition(slug), { kind: "theme-name", themeSlug: slug }, slug);
+      assert.equal(checkStoreSlug(slug).ok, false, slug);
+      assert.deepEqual(checkStoreSlug(slug, { allowReserved: true }), { ok: true }, slug);
     }
   });
 });

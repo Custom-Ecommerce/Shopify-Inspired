@@ -25,8 +25,11 @@ export const { discountDatesProblem, discountRefusalMessage, discountValueProble
 // B10.2 contracts: returns.
 export const { returnStatusUpdateSchema, RETURN_TRANSITIONS } = contracts;
 
-// B10.3 contracts: media.
-export const { mediaUploadFieldsSchema } = contracts;
+// B10.3 contracts: media. Sprint 7 (S7-B1): the rename body and the usage answer.
+export const { mediaUploadFieldsSchema, mediaRenameRequestSchema, MEDIA_NAME_MAX } = contracts;
+
+// Sprint 7 (D-115): a theme a seller cannot choose.
+export const { THEME_NOT_AVAILABLE, THEME_NOT_AVAILABLE_MESSAGE } = contracts;
 
 // PB-7: admin moderation.
 export const {

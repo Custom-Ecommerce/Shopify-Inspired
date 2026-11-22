@@ -17,7 +17,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const entry = getThemeEntry(slug);
-  if (!entry || entry.status === "archived") return { title: "Theme not found" };
+  if (!entry || entry.status === "archived" || entry.hiddenFromSellers === true) return { title: "Theme not found" };
 
   const theme = toThemeItem(entry);
   return buildPageMetadata({
@@ -30,10 +30,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function ThemeDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const entry = getThemeEntry(slug);
-  if (!entry || entry.status === "archived") notFound();
+  if (!entry || entry.status === "archived" || entry.hiddenFromSellers === true) notFound();
 
   const theme = toThemeItem(entry);
-  const tierLabel = theme.tier === "free" ? "Free" : "Premium";
+  const tierLabel = theme.comingSoon ? "Coming soon" : theme.tier === "free" ? "Free" : "Premium";
 
   return (
     <Container className="grid items-center gap-12 pb-(--section-y) pt-12 md:pt-16 lg:grid-cols-2 lg:gap-16">
@@ -46,6 +46,7 @@ export default async function ThemeDetailPage({ params }: { params: Promise<{ sl
         </h1>
         <p className="mt-5 text-lead leading-relaxed text-muted-foreground text-pretty">{theme.description}</p>
 
+        {theme.comingSoon ? null : (
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <Button asChild size="xl" className="rounded-full shadow-none">
             <a href={getSellerPortalUrl("signup")}>Use this theme</a>
@@ -57,6 +58,7 @@ export default async function ThemeDetailPage({ params }: { params: Promise<{ sl
             </a>
           </Button>
         </div>
+        )}
 
         <div className="mt-8">
           <ViewAllLink href="/themes">Back to all themes</ViewAllLink>

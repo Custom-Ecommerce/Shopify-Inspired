@@ -38,3 +38,29 @@ test('a PATCH body may still send the theme and the payments switches together',
   const parsed = storeSettingsUpdateSchema.safeParse({ theme: { activeTheme: 'stiletto' }, payments: { codEnabled: false, cardEnabled: true } });
   assert.equal(parsed.success, true);
 });
+
+// Sprint 7 (D-115, S7-B1): a theme a seller cannot choose, and the notice field of the settings answer.
+test('THEME_NOT_AVAILABLE is the code of a refused hidden or coming soon theme', async () => {
+  const { THEME_NOT_AVAILABLE, THEME_NOT_AVAILABLE_MESSAGE } = await import('../src/store-settings');
+  assert.equal(THEME_NOT_AVAILABLE, 'THEME_NOT_AVAILABLE');
+  assert.match(THEME_NOT_AVAILABLE_MESSAGE, /not available yet/);
+});
+
+test('the settings answer may carry the theme the store chose but cannot render (unavailableTheme), and stays valid without it', () => {
+  const shape = storeSettingsSchema.shape.theme;
+  assert.equal(shape.safeParse({ activeTheme: 'stiletto', supportsCardCheckout: true, unavailableTheme: 'mustafa' }).success, true);
+  assert.equal(shape.safeParse({ activeTheme: 'stiletto', supportsCardCheckout: true, unavailableTheme: null }).success, true);
+  assert.equal(shape.safeParse({ activeTheme: 'stiletto', supportsCardCheckout: true }).success, true);
+  assert.equal(shape.safeParse({ activeTheme: 'stiletto', supportsCardCheckout: true, unavailableTheme: 5 }).success, false);
+});
+
+test('the theme list answer keeps a preview image address or null', () => {
+  const withImage = themeListResponseSchema.safeParse({
+    themes: [{ slug: 'stiletto', name: 'Stiletto', tier: 'free', previewImage: 'https://markazify.com/theme-previews/stiletto.svg', isDefaultForNewStores: true, supportsCardCheckout: true }],
+  });
+  assert.equal(withImage.success, true);
+  const noImage = themeListResponseSchema.safeParse({
+    themes: [{ slug: 'stiletto', name: 'Stiletto', tier: 'free', previewImage: null, isDefaultForNewStores: true, supportsCardCheckout: true }],
+  });
+  assert.equal(noImage.success, true);
+});

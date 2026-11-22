@@ -172,7 +172,9 @@ async function normalizeUpstreamError(
       : undefined;
   // Sprint 6 EP-14 (S6-B4): a refused downgrade (DOWNGRADE_EXCEEDS_LIMITS) keeps what exceeds, per limit.
   const exceeds = code === "DOWNGRADE_EXCEEDS_LIMITS" && Array.isArray(rec.exceeds) ? rec.exceeds : undefined;
-  const details = planLimit ?? exceeds ?? rec.details ?? errors ?? rec.issues;
+  // Sprint 7 (S7-B1): a refused media delete (MEDIA_IN_USE) keeps where the file is used (the same list as GET /api/media/:id/usage), so the dashboard can name the places.
+  const mediaInUse = code === "MEDIA_IN_USE" ? { mediaId: rec.mediaId, total: rec.total, features: rec.features, products: rec.products, branding: rec.branding } : undefined;
+  const details = planLimit ?? exceeds ?? mediaInUse ?? rec.details ?? errors ?? rec.issues;
 
   return apiError(res.status, code, message, {
     details,

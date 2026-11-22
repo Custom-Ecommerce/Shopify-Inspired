@@ -2,7 +2,7 @@ import "server-only";
 
 import { notFound } from "next/navigation";
 import type { ThemeModule } from "@markaz/storefront-theme-kit";
-import { DEFAULT_THEME_SLUG, getThemeEntry } from "@markaz/platform-kit/themes";
+import { DEFAULT_THEME_SLUG, getThemeEntry, resolveRenderTheme } from "@markaz/platform-kit/themes";
 import { resolveStore } from "@/lib/tenancy/resolve-store";
 
 type Loader = () => Promise<{ default: ThemeModule }>;
@@ -27,16 +27,17 @@ export interface EffectiveTheme {
   slug: string;
   source: "store" | "default";
   fallbackReason?: string;
+  /** The theme the store chose but cannot render (mola, gani, mustafa, unknown ...), so a notice can say it is not available yet. */
+  unavailableTheme: string | null;
 }
 
-/** What a store actually renders with: its chosen theme if it is available and installed, otherwise the default. */
+/**
+ * What a store actually renders with (Sprint 7, D-115): its chosen theme if it is available, visible to sellers and bundled here,
+ * otherwise the fallback, Stiletto. The rule lives in the platform manifest (resolveRenderTheme, tested there); this file only
+ * says which packages are bundled.
+ */
 export function resolveEffectiveTheme(activeTheme: string | null | undefined): EffectiveTheme {
-  if (!activeTheme) return { slug: DEFAULT_THEME_SLUG, source: "default", fallbackReason: "no theme chosen" };
-  const entry = getThemeEntry(activeTheme);
-  if (!entry) return { slug: DEFAULT_THEME_SLUG, source: "default", fallbackReason: "unknown theme " + activeTheme };
-  if (entry.status === "archived") return { slug: DEFAULT_THEME_SLUG, source: "default", fallbackReason: "theme archived: " + activeTheme };
-  if (!isInstalledTheme(activeTheme)) return { slug: DEFAULT_THEME_SLUG, source: "default", fallbackReason: "theme package not installed: " + activeTheme };
-  return { slug: activeTheme, source: "store" };
+  return resolveRenderTheme(activeTheme, isInstalledTheme);
 }
 
 /** The theme for a live store, read from the store the tenant layout already resolved (React's per-request cache). */
