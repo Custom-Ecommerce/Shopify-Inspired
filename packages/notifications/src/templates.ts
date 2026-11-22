@@ -48,6 +48,12 @@ export const TEMPLATE_NAMES = [
   'subscription_expired',
   // Sprint 6 (S6-B6): an admin invitation (7 day link).
   'admin_invite',
+  // Sprint 7 (S7-B4): a shopper wrote to a store (to the seller), a visitor wrote to the platform (to its support address), the store answered a shopper,
+  // and the platform answered a seller's support ticket (to the seller).
+  'contact_message_store',
+  'contact_message_platform',
+  'contact_reply',
+  'ticket_admin_reply',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -94,12 +100,19 @@ export const TEMPLATE_VARIABLES = [
   'periodEnd',
   'paymentReason',
   'sellerEmail',
+  // Sprint 7 (S7-B4): the sender's name, email and phone, the message, a reply, and a ticket's subject.
+  'contactName',
+  'contactEmail',
+  'contactPhone',
+  'contactMessage',
+  'replyText',
+  'ticketSubject',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
 
 /** Variables whose value is several lines (one order line each); HTML keeps the line breaks. */
-const MULTILINE: ReadonlySet<string> = new Set(['items', 'broadcastMessage', 'emailFooter', 'reviewText']);
+const MULTILINE: ReadonlySet<string> = new Set(['items', 'broadcastMessage', 'emailFooter', 'reviewText', 'contactMessage', 'replyText']);
 /** Variables that are links: in HTML they become a link, and only http(s) is accepted. */
 const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink', 'actionLink', 'storefrontLink', 'unsubscribeLink']);
 
@@ -596,6 +609,78 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'یہ لنک ایک بار کام کرتا ہے اور {{validFor}} تک درست ہے۔',
     ],
     whatsapp: 'You are invited to {{appName}}. Set your password: {{actionLink}} (valid {{validFor}})\nآپ کو دعوت دی گئی ہے۔',
+  },
+  contact_message_store: {
+    variables: ['storeName', 'contactName', 'contactEmail', 'contactPhone', 'contactMessage', 'dashboardLink'],
+    subject: '{{storeName}}: a new message from {{contactName}}',
+    en: [
+      '{{contactName}} wrote to {{storeName}} from the contact form.',
+      '',
+      'Email: {{contactEmail}}',
+      'Phone: {{contactPhone}}',
+      '',
+      '{{contactMessage}}',
+      '',
+      'Read it and answer from your inbox: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{contactName}} نے {{storeName}} کو رابطہ فارم سے پیغام بھیجا ہے۔',
+      'ای میل: {{contactEmail}}',
+      'فون: {{contactPhone}}',
+      'اپنے ان باکس میں پیغام پڑھیں اور جواب دیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'New message from {{contactName}} for {{storeName}}. Open your inbox: {{dashboardLink}}\nنیا پیغام موصول ہوا ہے۔',
+  },
+  contact_message_platform: {
+    variables: ['contactName', 'contactEmail', 'contactMessage'],
+    subject: 'Markazify contact form: {{contactName}}',
+    en: [
+      '{{contactName}} ({{contactEmail}}) wrote through the contact form.',
+      '',
+      '{{contactMessage}}',
+      '',
+      'The message is also in the admin console under Contact messages.',
+    ],
+    ur: [
+      '{{contactName}} ({{contactEmail}}) نے رابطہ فارم سے پیغام بھیجا ہے۔',
+      'پیغام ایڈمن کنسول میں رابطہ پیغامات کے تحت بھی موجود ہے۔',
+    ],
+    whatsapp: 'Contact form: {{contactName}} ({{contactEmail}}) wrote to Markazify.\nنیا رابطہ پیغام۔',
+  },
+  contact_reply: {
+    variables: ['storeName', 'contactName', 'replyText'],
+    subject: '{{storeName}} answered your message',
+    en: [
+      'Hi {{contactName}},',
+      '',
+      '{{storeName}} answered your message:',
+      '',
+      '{{replyText}}',
+    ],
+    ur: [
+      '{{contactName}}، السلام علیکم،',
+      '{{storeName}} نے آپ کے پیغام کا جواب دیا ہے۔',
+    ],
+    whatsapp: '{{storeName}}: {{replyText}}\nآپ کے پیغام کا جواب۔',
+  },
+  ticket_admin_reply: {
+    variables: ['customerName', 'ticketSubject', 'replyText', 'dashboardLink'],
+    subject: 'Markazify support answered: {{ticketSubject}}',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Markazify support answered your ticket "{{ticketSubject}}":',
+      '',
+      '{{replyText}}',
+      '',
+      'Open the ticket: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'مارکازیفائی سپورٹ نے آپ کے ٹکٹ "{{ticketSubject}}" کا جواب دیا ہے۔',
+      'ٹکٹ کھولیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Support answered "{{ticketSubject}}": {{replyText}}\nسپورٹ کا جواب۔',
   },
   broadcast: {
     variables: ['storeName', 'broadcastSubject', 'broadcastMessage', 'emailFooter', 'unsubscribeLink'],

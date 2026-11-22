@@ -274,3 +274,35 @@ test('Sprint 7 (S7-B3, CO-115): the page model declares the unique {store, slug}
   const plain = plan.planAll([{ model: 'StorePage', collection: 'storepages', declared }], { storepages: [ID, { name: 'store_1_slug_1', key: { store: 1, slug: 1 } }] });
   assert.ok(plain.totals.missing + plain.totals.conflicts >= 1, 'a plain index on the same key is not the unique one');
 });
+
+test('Sprint 7 (S7-B4, CO-115): the contact message model declares {store, status, createdAt} and {scope, status, createdAt}, a fresh database misses both, and once they exist nothing is missing', () => {
+  const model = (dbSchemas as any).ContactMessage ?? (dbSchemas as any).default?.ContactMessage;
+  const declared = model.schema.indexes() as Declared;
+  const keys = declared.map(([key]) => Object.entries(key).map(([k, d]) => k + ':' + d).join('+'));
+  assert.ok(keys.includes('store:1+status:1+createdAt:-1'), 'the seller inbox');
+  assert.ok(keys.includes('scope:1+status:1+createdAt:-1'), 'the admin inbox');
+  assert.equal(declared.filter(([, options]) => (options as { unique?: boolean } | undefined)?.unique === true).length, 0, 'nothing here is unique');
+  const fresh = plan.planAll([{ model: 'ContactMessage', collection: 'contactmessages', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['ContactMessage']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string }> }).missing.map((m) => m.name);
+  assert.ok(missing.includes('store_1_status_1_createdAt_-1'));
+  assert.ok(missing.includes('scope_1_status_1_createdAt_-1'));
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  assert.equal(plan.planAll([{ model: 'ContactMessage', collection: 'contactmessages', declared }], { contactmessages: [ID, ...have] }).totals.missing, 0);
+});
+
+test('Sprint 7 (S7-B4, CO-115): the ticket model declares {seller, createdAt} and {status, updatedAt}, a fresh database misses both, and once they exist nothing is missing', () => {
+  const model = (dbSchemas as any).SupportTicket ?? (dbSchemas as any).default?.SupportTicket;
+  const declared = model.schema.indexes() as Declared;
+  const keys = declared.map(([key]) => Object.entries(key).map(([k, d]) => k + ':' + d).join('+'));
+  assert.ok(keys.includes('seller:1+createdAt:-1'), 'a seller own tickets');
+  assert.ok(keys.includes('status:1+updatedAt:-1'), 'the admin inbox and the retention purge');
+  const fresh = plan.planAll([{ model: 'SupportTicket', collection: 'supporttickets', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['SupportTicket']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  assert.equal(plan.planAll([{ model: 'SupportTicket', collection: 'supporttickets', declared }], { supporttickets: [ID, ...have] }).totals.missing, 0);
+});

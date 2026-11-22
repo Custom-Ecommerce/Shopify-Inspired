@@ -79,6 +79,8 @@ export interface ContentPageProps {
   body: string;
   /** Sprint 7 (S7-B3): the store's own page as the SAFE TREE. Render it with renderContentTree; when it is absent the page is default copy, shown as `body`. */
   content?: ContentTree;
+  /** Sprint 7 (S7-B4): the address of the page (about, contact ...). The contact page shows the store's contact form. */
+  slug?: string;
 }
 /** Sprint 7 (S7-B3): the blog list, published articles newest first. */
 export interface BlogPageProps {

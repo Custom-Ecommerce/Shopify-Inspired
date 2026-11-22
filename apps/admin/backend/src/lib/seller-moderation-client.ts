@@ -212,3 +212,22 @@ export const readKpi = (adminId: string): Promise<AdminKpi> => send('POST', '/ap
 
 /** Sprint 6 (S6-B7): the retention run, a signed call to the seller backend. A dry run (the default) only counts; apply purges, capped per target. */
 export const runRetention = (adminId: string, input: { apply?: boolean }): Promise<RetentionRunResponse> => send('POST', '/api/internal/retention/admin', adminId, input, 'Retention');
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 7 (S7-B4): support tickets and the platform contact messages. They live in the seller database, so each is one signed call (the same signature
+// as moderation). The seller backend answers with the sellers names and the messages as plain text; the console shows them as text.
+
+const SUPPORT_LABEL = 'Support';
+export type SupportListFilters = { status?: string | undefined; page?: number | undefined; limit?: number | undefined };
+const clean = (filters: SupportListFilters): Record<string, unknown> => Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== ''));
+
+export const listSupportTickets = (adminId: string, filters: SupportListFilters): Promise<Record<string, unknown>> =>
+  send('POST', '/api/internal/support/tickets/list', adminId, clean(filters), SUPPORT_LABEL);
+export const readSupportTicket = (adminId: string, id: string): Promise<Record<string, unknown>> => send('POST', '/api/internal/support/tickets/detail', adminId, { id }, SUPPORT_LABEL);
+export const replySupportTicket = (adminId: string, input: { id: string; revision: number; text: string }): Promise<Record<string, unknown>> =>
+  send('POST', '/api/internal/support/tickets/reply', adminId, input, SUPPORT_LABEL);
+export const setSupportTicketStatus = (adminId: string, input: { id: string; revision: number; status: string }): Promise<Record<string, unknown>> =>
+  send('POST', '/api/internal/support/tickets/status', adminId, input, SUPPORT_LABEL);
+export const listPlatformContact = (adminId: string, filters: SupportListFilters): Promise<Record<string, unknown>> =>
+  send('POST', '/api/internal/support/contact/list', adminId, clean(filters), SUPPORT_LABEL);
+export const readPlatformContact = (adminId: string, id: string): Promise<Record<string, unknown>> => send('POST', '/api/internal/support/contact/detail', adminId, { id }, SUPPORT_LABEL);

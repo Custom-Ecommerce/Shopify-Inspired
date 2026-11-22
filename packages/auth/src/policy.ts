@@ -642,3 +642,23 @@ Object.assign(POLICY_MATRIX, {
     delete: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
   },
 });
+
+// Sprint 7 (S7-B4): the contact inbox and the support tickets. A contact message is written by the public form (the system actor), read and answered by the
+// store's seller (store scope) or by the admin (platform scope; the admin only reads, replies go through the signed seller call). A ticket is the seller's
+// own request to the platform: the seller creates, reads and answers their own, the admin reads and answers by capability (tickets.read, tickets.reply).
+export const SELLER_CONTACT_FIELDS = ['status', 'replies'] as const;
+export const SELLER_TICKET_FIELDS = ['subject', 'messages', 'store', 'orderRef', 'status'] as const;
+Object.assign(POLICY_MATRIX, {
+  contactMessages: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_CONTACT_FIELDS] } },
+    delete: { actors: ['system'], fields: '*' },
+  },
+  tickets: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_TICKET_FIELDS] } },
+    update: { actors: ['admin', 'system', 'seller'], fields: { admin: ['messages', 'status'], system: '*', seller: ['messages', 'status'] } },
+    delete: { actors: ['system'], fields: '*' },
+  },
+});

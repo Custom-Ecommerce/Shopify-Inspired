@@ -221,3 +221,12 @@ test('the seller who switched new-order emails off still gets the bell alert, an
   assert.equal(alerts.length, 1);
   assert.equal(outbox.filter((row) => row.template === 'review_received_seller').length, 0);
 });
+
+test('Sprint 7 (S7-B4): contact_message is in the model, the contracts and the bell wire, and NewSellerAlert accepts it', () => {
+  assert.ok(MODEL_KINDS.includes('contact_message'), 'model');
+  assert.ok(CONTRACT_KINDS.includes('contact_message'), 'contracts');
+  assert.equal(toAlertWire({ _id: 'x', kind: 'contact_message', title: 't', body: 'b', createdAt: new Date() }).kind, 'contact_message');
+  const alert: NewSellerAlert = { store: '65a000000000000000000011', kind: 'contact_message', title: 'T', body: 'B', link: '/inbox', dedupeKey: 'contact:1' };
+  assert.equal(alert.kind, 'contact_message');
+  assert.equal(new (SellerAlert as any)({ store: '65a000000000000000000011', kind: 'contact_message', title: 'T', body: '', open: true }).validateSync(), undefined);
+});

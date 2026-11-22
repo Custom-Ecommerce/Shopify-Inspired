@@ -43,13 +43,13 @@ export default async function TenantContentPage({ params }: Params) {
   const outcome = await loadPage(tenantKey, slug);
 
   if (outcome.status === "ok") {
-    return <Content title={outcome.page.title} body={contentToPlainText(outcome.page.content)} content={outcome.page.content} />;
+    return <Content title={outcome.page.title} body={contentToPlainText(outcome.page.content)} content={outcome.page.content} slug={slug} />;
   }
   if (outcome.status === "draft") notFound();
 
   const fallback = defaultCopy(slug);
   if (outcome.status === "none" || outcome.status === "unavailable") {
-    if (fallback) return <Content title={fallback.title} body={fallback.body} />;
+    if (fallback) return <Content title={fallback.title} body={fallback.body} slug={slug} />;
     if (outcome.status === "unavailable") {
       return <Unavailable message="We could not load this page just now. Please try again in a moment." retryHref={storePaths.page(slug)} />;
     }

@@ -19,6 +19,7 @@ import type {
   StorefrontReturnCreated,
   StorefrontReturnEligibility,
   SubmitReturnInput,
+  SubmitContactInput,
   SaveAbandonedCartInput,
   StorefrontProductReviews,
   StorefrontReviewCreated,
@@ -38,6 +39,7 @@ import {
   WireReturnCreatedEnvelope,
   WireReturnEligibilityEnvelope,
   WireAbandonedCartSavedEnvelope,
+  WireContactReceivedEnvelope,
   WireProductReviewsEnvelope,
   WireReviewCreatedEnvelope,
   WireReviewEligibilityEnvelope,
@@ -396,6 +398,15 @@ function makeOrderTransport(
       unwrap(result, WireAbandonedCartSavedEnvelope, "abandoned cart");
     },
 
+    async submitContact(input: SubmitContactInput): Promise<void> {
+      requireHttp();
+      // Sprint 7 (S7-B4): same path on the backend (under a store) and on the BFF. A write: never retried. Success is only a stored message.
+      const body = { name: input.name, ...(input.email ? { email: input.email } : {}), ...(input.phone ? { phone: input.phone } : {}), message: input.message, consent: true, ...(input.website ? { website: input.website } : {}) };
+      const result = await exchange("POST", "/contact", { body, retry: false });
+      throwIfRefused(result);
+      unwrap(result, WireContactReceivedEnvelope, "contact message");
+    },
+
     async quoteCart(input: CartQuoteInput): Promise<CartQuote> {
       requireHttp();
       // Sprint 4 EP-04.US02: the shipping city, so the quote uses the same rate the order will.
@@ -531,6 +542,7 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     submitReview: orders.submitReview,
     getProductReviews: orders.getProductReviews,
     saveAbandonedCart: orders.saveAbandonedCart,
+    submitContact: orders.submitContact,
     getProductsByIds: orders.getProductsByIds,
 
     async getProducts(): Promise<StorefrontProductSummary[]> {

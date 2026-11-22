@@ -39,6 +39,12 @@ export const ABANDONED_CART_LIMIT: RateLimitRule = { name: 'abandoned-cart', lim
 export const CART_QUOTE_LIMIT: RateLimitRule = { name: 'cart-quote', limit: 60, windowMs: 60_000 };
 export const FAVOURITES_LIMIT: RateLimitRule = { name: 'favourites', limit: 30, windowMs: 60_000 };
 /** Quotes that carry a code, on top of the quote's own limit. A cart with a code is quoted again on every change, so this leaves room for that. */
+/**
+ * Sprint 7 (S7-B4): the public contact forms. 5 messages per client address per store (or per the platform) every 10 minutes: enough for a person who
+ * mistyped, far too few for a flood. A seller's support tickets are limited per seller, on top of that.
+ */
+export const CONTACT_LIMIT: RateLimitRule = { name: 'contact', limit: 5, windowMs: 600_000 };
+export const TICKET_LIMIT: RateLimitRule = { name: 'ticket', limit: 10, windowMs: 600_000 };
 export const DISCOUNT_CHECK_LIMIT: RateLimitRule = { name: 'discount-check', limit: 20, windowMs: 60_000 };
 
 export interface RateLimitStore {

@@ -329,3 +329,26 @@ export const {
   pageFromTemplateSchema,
   pageUpdateSchema,
 } = contracts;
+
+// Sprint 7 (S7-B4): contact messages and support tickets.
+export const {
+  CONTACT_INVALID,
+  CONTACT_REVISION_CONFLICT,
+  TICKET_INVALID,
+  TICKET_REVISION_CONFLICT,
+  TICKET_CLOSED,
+  storeContactRequestSchema,
+  platformContactRequestSchema,
+  contactListQuerySchema,
+  contactStatusUpdateSchema,
+  contactReplySchema,
+  ticketCreateSchema,
+  ticketReplySchema,
+  ticketCloseSchema,
+  ticketStatusUpdateSchema,
+  ticketListQuerySchema,
+  internalSupportIdSchema,
+  internalTicketReplySchema,
+  internalTicketStatusSchema,
+  internalSupportListSchema,
+} = contracts;

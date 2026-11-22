@@ -10,12 +10,12 @@ export const RETENTION_DAYS = {
   syncOutboxSent: 30,
   stockMovements: 365,
   productTrash: 365,
-  // Sprint 7: the models arrive with the tickets and the contact inbox. Only the periods are fixed here.
+  // Sprint 7 (S7-B4): closed tickets and closed contact messages, counted from their last change. Open and answered ones are never purged.
   closedTickets: 730,
   contactMessages: 365,
 } as const;
 
-export const PURGEABLE_TARGETS = ['notification_outbox', 'sync_outbox', 'stock_movements', 'product_trash'] as const;
+export const PURGEABLE_TARGETS = ['notification_outbox', 'sync_outbox', 'stock_movements', 'product_trash', 'contact_messages', 'closed_tickets'] as const;
 export type PurgeableTarget = (typeof PURGEABLE_TARGETS)[number];
 
 /** The most rows one run removes per target; `more: true` in the answer says the next run has more to do. */

@@ -322,6 +322,20 @@ import type { StorefrontArticle, StorefrontArticleList, StorefrontPageLink, Stor
 /** Which adapter produced the data. Lets callers and logs say which source they got. */
 export type TransportKind = "mock" | "remote";
 
+/**
+ * Sprint 7 (S7-B4): a shopper's message to the store (the contact form). `website` is the HONEYPOT: a hidden field no person fills. The server answers success and keeps
+ * nothing when it is filled, so a bot learns nothing. Either an email or a phone is needed so the store can answer.
+ */
+export interface SubmitContactInput {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  message: string;
+  /** The shopper agreed to be answered at the address and number given. Always true when sent. */
+  consent: true;
+  website?: string | null;
+}
+
 export interface OrderConfirmationInput {
   orderNumber: string;
   token: string;
@@ -376,6 +390,8 @@ export interface OrderTransport {
   getProductReviews(slug: string, page?: number): Promise<StorefrontProductReviews>;
   /** Sprint 5 EP-28: keeps the shopper's cart for the seller to follow up (WhatsApp first). Resolves when saved; callers ignore failures. */
   saveAbandonedCart(input: SaveAbandonedCartInput): Promise<void>;
+  /** Sprint 7 (S7-B4): sends the shopper's message to the store. Resolves ONLY once the store has kept it; refusals reject with OrderRejectedError (invalid_request with its field, rate_limited, store_inactive). Optional so existing transports keep working. */
+  submitContact?(input: SubmitContactInput): Promise<void>;
   /** The Live products among these ids, at most 48 per call. An id with no Live product is simply absent from the answer. */
   getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]>;
 }

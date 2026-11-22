@@ -26,6 +26,7 @@ export function ContactForm() {
     // Capture the form and its data before any await: event.currentTarget is cleared after dispatch.
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
+    // The checkbox sends "on" when ticked; the route reads it as consent.
     setStatus({ kind: "submitting" });
 
     try {
@@ -39,7 +40,9 @@ export function ContactForm() {
         form.reset();
         setStatus({ kind: "success", message: "Thanks. We have received your message." });
       } else {
-        setStatus({ kind: "error", message: "We could not send your message. Please try again." });
+        // Sprint 7 (S7-B4): the route answers an error when the message was NOT kept; say so in the words it gives.
+        const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+        setStatus({ kind: "error", message: typeof body?.error === "string" ? body.error : "We could not send your message. Please try again." });
       }
     } catch {
       setStatus({ kind: "error", message: "Something went wrong. Check your connection and try again." });
@@ -98,6 +101,11 @@ export function ContactForm() {
         <label htmlFor="contact-bot">Leave this field empty</label>
         <input id="contact-bot" name="bot-field" type="text" tabIndex={-1} autoComplete="off" />
       </div>
+
+      <label className="flex min-h-11 items-start gap-3 text-sm text-foreground">
+        <input type="checkbox" name="consent" required disabled={submitting} className="mt-1 size-5" />
+        <span>I agree to be contacted by email about this message.</span>
+      </label>
 
       <Button type="submit" size="xl" className="w-full rounded-full shadow-none" disabled={submitting}>
         {submitting ? "Sending..." : "Send message"}

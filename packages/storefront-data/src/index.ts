@@ -14,6 +14,11 @@ export { toCartVM } from "./view-models/cart";
 export type { CartVM, CartLineVM } from "./view-models/cart";
 export type { CatalogPageData } from "./view-models/catalog";
 export { storePaths } from "./view-models/paths";
+export { CONTACT_LIMITS, contactFailure, emptyContactForm, toContactInput, validateContactForm } from "./domain/contact";
+export type { ContactFailure, ContactFieldErrors, ContactFormValues } from "./domain/contact";
+export { PLATFORM_CONTACT_SCOPE, buildPlatformContactBody, platformContactAnswer } from "./domain/platform-contact";
+export type { PlatformContactAnswer, PlatformContactBody, PlatformContactBuild } from "./domain/platform-contact";
+export type { SubmitContactInput } from "./transport/types";
 export { renderContentTree } from "./view-models/content-nodes";
 export type { ContentClasses } from "./view-models/content-nodes";
 export {

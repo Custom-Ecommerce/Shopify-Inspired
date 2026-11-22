@@ -271,3 +271,6 @@ export const WireProductReviewsEnvelope = z.object({
 
 /** Sprint 5 EP-28: the answer of the abandoned cart save. */
 export const WireAbandonedCartSavedEnvelope = z.object({ data: z.object({ saved: z.literal(true) }) });
+
+/** Sprint 7 (S7-B4): the answer of the contact form. Only a stored message is answered like this. */
+export const WireContactReceivedEnvelope = z.object({ data: z.object({ received: z.literal(true) }) });

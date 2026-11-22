@@ -29,6 +29,8 @@ const LABELS: Record<string, string> = {
   broadcast: "Broadcast",
   blog: "Blog & Lookbook",
   pages: "Pages",
+  inbox: "Inbox",
+  support: "Support",
   store: "Store Settings",
   analytics: "Analytics",
   domain: "Domain",

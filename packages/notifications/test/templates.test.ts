@@ -17,6 +17,13 @@ import {
 
 const FULL: TemplateVars = {
   storeName: 'Zara Lawn',
+  contactName: 'Sara Khan',
+  contactEmail: 'sara@example.com',
+  contactPhone: '0300 1234567',
+  contactMessage: 'Do you deliver to Quetta?
+Please tell me the charge.',
+  replyText: 'Yes, we deliver to Quetta for Rs. 300.',
+  ticketSubject: 'My payout is late',
   customerName: 'Ayesha',
   orderNumber: 'ORD-ABCD2345',
   items: 'Lawn suit (Blue) x 2 - Rs. 7,000\nDupatta x 1 - Rs. 1,200',
@@ -295,4 +302,17 @@ test('a subscription email refuses to render with a variable missing', () => {
       assert.throws(() => renderTemplate(name, broken as TemplateVars), TemplateError, name + ' without ' + variable);
     }
   }
+});
+
+test('Sprint 7 (S7-B4): the four support templates exist, keep a message on separate lines, and escape what a sender typed', () => {
+  for (const name of ['contact_message_store', 'contact_message_platform', 'contact_reply', 'ticket_admin_reply'] as const) assert.ok((TEMPLATE_NAMES as readonly string[]).includes(name), name);
+  const out = renderTemplate('contact_message_store', { ...FULL, contactMessage: '<img src=x onerror=alert(1)>
+second line' });
+  assert.equal(out.html.includes('<img'), false);
+  assert.ok(out.html.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  assert.ok(out.text.includes('second line'));
+  const reply = renderTemplate('contact_reply', { ...FULL, replyText: '<b>hi</b>' });
+  assert.equal(reply.html.includes('<b>hi</b>'), false);
+  assert.equal(renderTemplate('ticket_admin_reply', FULL).subject, 'Markazify support answered: My payout is late');
+  assert.deepEqual(templateProblems(), []);
 });

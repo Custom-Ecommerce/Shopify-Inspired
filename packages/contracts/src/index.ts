@@ -10,6 +10,7 @@ export * from './order-flow';
 export * from './order-timeline';
 export * from './store-article';
 export * from './store-page';
+export * from './support';
 export * from './workspace';
 export * from './sync-envelope';
 export * from './auth';

@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarGroup,
@@ -21,6 +23,8 @@ import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { useDashboard, useStoreHref } from "@/lib/dashboard-context";
 import { storeBasePath } from "@/lib/store-routes";
+import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
+import { fetchUnreadCount, unreadBadge } from "@/lib/support";
 import {
   LayoutDashboard,
   Package,
@@ -44,6 +48,8 @@ import {
   Contact,
   Ban,
   ShoppingBasket,
+  MessageSquare,
+  LifeBuoy,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -65,6 +71,8 @@ export const NAV_GROUPS = [
       // Sprint 7 (S7-B2): the store's pictures and videos, with where each is used.
       { href: "/media", label: "Media", icon: Images },
       { href: "/orders", label: "Orders", icon: ShoppingCart },
+      // Sprint 7 (S7-B4): messages shoppers sent through the store's contact form, with the unread count.
+      { href: "/inbox", label: "Inbox", icon: MessageSquare },
       // Sprint 5 EP-10.US02: the customers who ordered, with private notes.
       { href: "/customers", label: "Customers", icon: Contact },
       // Sprint 5 EP-11.US02: the phones and emails the store refuses orders from.
@@ -102,6 +110,8 @@ export const NAV_GROUPS = [
       { href: "/domain", label: "Domain", icon: Globe },
       // Sprint 4 EP-08.US04.T02: the seller's own account (profile, password, email, devices).
       { href: "/account", label: "Account", icon: UserCog },
+      // Sprint 7 (S7-B4): the seller's tickets to the Markazify team.
+      { href: "/support", label: "Support", icon: LifeBuoy },
     ],
   },
 ] as const;
@@ -111,6 +121,20 @@ export function DashboardSidebar() {
   const href = useStoreHref();
   const pathname = usePathname();
   const basePath = storeBasePath(storeId);
+  const storeFetch = useStoreFetch();
+  const [unread, setUnread] = useState<number | null>(null);
+
+  // The unread count beside Inbox: read once, then every 60 seconds; a failed read shows no badge.
+  useEffect(() => {
+    let alive = true;
+    const read = () => void fetchUnreadCount(storeFetch).then((count) => alive && setUnread(count));
+    read();
+    const timer = setInterval(read, 60000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [storeFetch, pathname]);
   const rootDomainUrl = process.env.NEXT_PUBLIC_ROOT_DOMAIN_URL || "localhost:3000";
   const protocol = rootDomainUrl.includes("localhost") ? "http" : "https";
 
@@ -179,6 +203,7 @@ export function DashboardSidebar() {
                         </span>
                         <span>{link.label}</span>
                       </SidebarMenuButton>
+                      {link.href === "/inbox" && unreadBadge(unread) !== "" ? <SidebarMenuBadge aria-label={unreadBadge(unread) + " unread messages"}>{unreadBadge(unread)}</SidebarMenuBadge> : null}
                     </SidebarMenuItem>
                   );
                 })}

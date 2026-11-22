@@ -1,4 +1,4 @@
-import { NotificationOutbox, Product, StockMovement, SyncOutbox, writeAuditLog } from '@/lib/services';
+import { ContactMessage, NotificationOutbox, Product, StockMovement, SupportTicket, SyncOutbox, writeAuditLog } from '@/lib/services';
 import { RETENTION_BATCH, RETENTION_DAYS, cutoffFor, type PurgeableTarget } from '@/lib/retention-policy';
 import { purgeExpiredProducts, retentionFilter } from '@/lib/trash';
 
@@ -35,6 +35,12 @@ const specs = (): Spec[] => [
   { key: 'stock_movements', days: RETENTION_DAYS.stockMovements, model: StockMovement as never, filter: (c) => ({ changedAt: { $lt: c } }) },
 ];
 
+/** Sprint 7 (S7-B4): only CLOSED rows, counted from their last change: 365 days for contact messages, 730 for tickets. An open or answered one is never selected. */
+const supportSpecs = (): Spec[] => [
+  { key: 'contact_messages', days: RETENTION_DAYS.contactMessages, model: ContactMessage as never, filter: (c) => ({ status: 'closed', updatedAt: { $lt: c } }) },
+  { key: 'closed_tickets', days: RETENTION_DAYS.closedTickets, model: SupportTicket as never, filter: (c) => ({ status: 'closed', updatedAt: { $lt: c } }) },
+];
+
 export const retentionSteps = {
   audit: writeAuditLog as unknown as (action: string, entity: string, entityId: string, actorId: string, details: Record<string, unknown>) => Promise<unknown>,
 };
@@ -42,7 +48,8 @@ export const retentionSteps = {
 export async function runRetention(options: { apply: boolean; now: Date; actorId: string }): Promise<RetentionRun> {
   const { apply, now } = options;
   const targets: TargetResult[] = [];
-  for (const spec of specs()) {
+  const runSpecs = async (list: Spec[]): Promise<void> => {
+    for (const spec of list) {
     const filter = spec.filter(cutoffFor(now, spec.days));
     const eligible = await spec.model.countDocuments(filter as never);
     let purged = 0;
@@ -51,7 +58,9 @@ export async function runRetention(options: { apply: boolean; now: Date; actorId
       if (rows.length > 0) purged = (await spec.model.deleteMany({ _id: { $in: rows.map((r) => r._id) }, ...filter } as never)).deletedCount ?? 0;
     }
     targets.push({ key: spec.key, days: spec.days, eligible, purged, more: apply ? eligible > purged : eligible > RETENTION_BATCH });
-  }
+    }
+  };
+  await runSpecs(specs());
   // The product trash keeps its own rules (365 days, never a product an admin took down or deleted).
   const trashEligible = await Product.countDocuments(retentionFilter(now) as never);
   let trashPurged = 0;
@@ -62,6 +71,8 @@ export async function runRetention(options: { apply: boolean; now: Date; actorId
     trashMore = result.more;
   }
   targets.push({ key: 'product_trash', days: RETENTION_DAYS.productTrash, eligible: trashEligible, purged: trashPurged, more: trashMore });
+
+  await runSpecs(supportSpecs());
 
   const run: RetentionRun = { dryRun: !apply, targets, at: now.toISOString() };
   try {

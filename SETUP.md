@@ -331,8 +331,8 @@ sync routes `receive`, `digest` and `repair` on the admin backend are called by 
 | Sent sync events (sync outbox) | 30 days | `retention/run` |
 | Stock history | 365 days | `retention/run` |
 | Products in seller trash | 365 days (never one an admin took down or deleted) | `retention` and `retention/run` |
-| Closed tickets (Sprint 7) | 730 days | not built yet (period fixed in `retention-policy.ts`) |
-| Contact messages (Sprint 7) | 365 days | not built yet |
+| Closed tickets (Sprint 7) | 730 days after they were closed | `retention/run` |
+| Closed contact messages (Sprint 7) | 365 days after they were closed (open, new and read messages are kept) | `retention/run` |
 
 Every period lives in `apps/seller/backend/src/lib/retention-policy.ts`. A run is a dry run unless it is told to apply, removes at most 500 rows per kind,
 and writes one audit line (`retention.run`) with the counts.

@@ -25,7 +25,7 @@ import type {
   SubmitOrderResult,
   SubmitReturnInput,
 } from "./types";
-import { OrderRejectedError } from "./errors";
+import { OrderRejectedError, TransportUnavailableError } from "./errors";
 import type { ProductListPage, ProductQuery } from "./types";
 import type { StorefrontArticle, StorefrontArticleList, StorefrontPage, StorefrontPageLink, StorefrontPageLookup } from "./content-types";
 import { discountRefusalMessage, normalizePhoneE164 } from "@markaz/contracts/checkout";
@@ -522,6 +522,10 @@ export function createMockTransport(fixtures: MockFixtures): StorefrontTransport
     submitReview,
     getProductReviews,
     saveAbandonedCart,
+    // Sprint 7 (S7-B4): a demo store has nobody to read a message, so the demo keeps nothing and says nothing was sent.
+    submitContact: async () => {
+      throw new TransportUnavailableError("not_implemented", "A demo store does not take messages.");
+    },
     listArticles,
     getArticle,
     listPages,
