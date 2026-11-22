@@ -5,6 +5,7 @@ import type { CategoryVM } from "./chrome";
 import type { StorefrontProductReviews } from "../transport/types";
 import type { ContentTree } from "@markaz/platform-kit/content-markdown";
 import type { ArticleCardVM, ArticleVM } from "../domain/content";
+import type { StorefrontThemeConfig } from "@markaz/contracts";
 
 /** Shell-level view-models consumed by a theme's Layout (ThemeModule contract v1). */
 export interface StoreVM {
@@ -20,6 +21,8 @@ export interface StoreVM {
   social?: { facebook: string | null; instagram: string | null; tiktok: string | null; whatsapp: string | null } | null;
   /** The seller's delivery time text, for example "2 to 4 days". */
   deliveryEstimate?: string | null;
+  /** Sprint 7 (S7-B7): the validated theme config of the store (defaults filled in server-side). Absent for a theme demo and for a theme that has no config: the defaults then apply. */
+  themeConfig?: StorefrontThemeConfig | null;
 }
 
 export interface NavLinkVM {

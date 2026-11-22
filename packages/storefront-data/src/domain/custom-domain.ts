@@ -11,3 +11,11 @@ export function canonicalStoreOrigin(input: { requestOrigin: string | null | und
   if (host !== null) return cleanOrigin("https://" + host);
   return cleanOrigin(input.requestOrigin);
 }
+
+/**
+ * S7-B7: the origin of a sitemap.xml and a robots.txt. Each host lists ONLY its own addresses (a sitemap may not list another host), so this is the host the
+ * request came in on, never the canonical custom domain. The canonical TAG of a page (alternates.canonical with metadataBase) still uses canonicalStoreOrigin.
+ */
+export function feedOrigin(requestOrigin: string | null | undefined): string | null {
+  return cleanOrigin(requestOrigin);
+}

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { normalizePhoneE164 } from './checkout';
+import { storeThemeConfigUpdateSchema } from './theme-config';
 
 /*
  * Sprint 4 EP-04 (D-094, D-088): the store settings a seller saves with ONE PATCH /api/stores/:id, the shape the
@@ -397,6 +398,8 @@ export const storeSettingsUpdateSchema = z
     returns: storeReturnsUpdateSchema,
     // Sprint 7 (S7-B6): redirect the platform address to the verified custom domain.
     domain: storeDomainUpdateSchema,
+    // Sprint 7 (S7-B7): the Stiletto theme config. null resets it to the defaults. Strict (theme-config.ts).
+    themeConfig: storeThemeConfigUpdateSchema.nullable(),
   })
   .partial()
   .strict()
@@ -412,6 +415,25 @@ export function maskAccountNumber(value: string): string {
 }
 
 const mediaSchema = z.object({ id: z.string(), url: z.string().nullable() }).nullable();
+
+/** The theme config as the editor reads it (S7-B7). */
+export const storeThemeConfigReadSchema = z.object({
+  primaryColor: z.string(),
+  accentColor: z.string(),
+  fontFamily: z.string(),
+  heroTitle: z.string().nullable(),
+  heroSubtitle: z.string().nullable(),
+  heroImage: mediaSchema,
+  heroCtaLabel: z.string().nullable(),
+  heroCtaLink: z.string().nullable(),
+  announcementText: z.string().nullable(),
+  announcementEnabled: z.boolean(),
+  showFeatured: z.boolean(),
+  showCategories: z.boolean(),
+  showReviews: z.boolean(),
+  showBlog: z.boolean(),
+});
+export type StoreThemeConfigRead = z.output<typeof storeThemeConfigReadSchema>;
 
 export const maskedPayoutSchema = z.object({
   method: z.enum(PAYOUT_METHODS),
@@ -462,6 +484,8 @@ export const storeSettingsSchema = z.object({
   returns: storeReturnsSchema,
   /** Sprint 7 (S7-B6). Optional so an older backend still parses. */
   domain: storeDomainSettingsSchema.optional(),
+  /** Sprint 7 (S7-B7): the theme config with the defaults filled in; the hero image is the media (id and url) or null. Optional so an older backend still parses. */
+  themeConfig: storeThemeConfigReadSchema.optional(),
   updatedAt: z.string().nullable(),
 });
 export type StoreSettings = z.output<typeof storeSettingsSchema>;

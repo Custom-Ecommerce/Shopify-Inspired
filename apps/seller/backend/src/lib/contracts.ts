@@ -181,6 +181,16 @@ export const {
   CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
 } = contracts;
 
+// Sprint 7 (S7-B7): the Stiletto theme config.
+export const {
+  THEME_CONFIG_DEFAULTS,
+  THEME_CONFIG_KEYS,
+  resolveThemeConfig,
+  toStorefrontThemeConfig,
+  STOREFRONT_THEME_CONFIG_DEFAULTS,
+  storeThemeConfigUpdateSchema,
+} = contracts;
+
 // Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
 export const {
   EARNINGS_PAGE_DEFAULT_LIMIT,

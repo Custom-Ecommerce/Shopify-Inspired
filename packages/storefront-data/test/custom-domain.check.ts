@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { domainResolveTag, storeResolveTag } from "@markaz/platform-kit/cache-tags";
 import { PREVIEW_COOKIE_NAME } from "@markaz/platform-kit/preview";
 import { classifyHost, hostAllowsPreview } from "@markaz/platform-kit/tenancy-host";
-import { canonicalStoreOrigin } from "../src/domain/custom-domain";
+import { canonicalStoreOrigin, feedOrigin } from "../src/domain/custom-domain";
 import { buildStoreRobotsTxt, buildStoreSitemapXml, canonicalUrl } from "../src/domain/content";
 import { clearedPreviewCookie, previewCookie } from "../src/preview";
 
@@ -26,15 +26,25 @@ assert.equal(canonicalStoreOrigin({ requestOrigin: "https://zara.markazify.com",
 assert.equal(canonicalStoreOrigin({ requestOrigin: "javascript:alert(1)", customDomain: null }), null, "a bad request origin prints no address");
 assert.equal(canonicalStoreOrigin({ requestOrigin: null, customDomain: "Shop.Zara.PK:8443" }), "https://shop.zara.pk", "the domain is cleaned: lower case, no port");
 
-// ---- the builders use the origin they are given, so the canonical host reaches articles, pages, the sitemap and robots.txt
+// ---- S7-B7: sitemap.xml and robots.txt of EACH host list only that host's own addresses (a sitemap may not list another host)
+assert.equal(feedOrigin("https://zara.markazify.com"), "https://zara.markazify.com", "the platform subdomain feed is on the subdomain");
+assert.equal(feedOrigin("https://shop.zara.pk"), "https://shop.zara.pk", "the custom host feed is on the custom host");
+assert.equal(feedOrigin("javascript:alert(1)"), null, "a bad origin prints no address");
+assert.equal(feedOrigin(null), null);
+for (const [host, other] of [["https://zara.markazify.com", "shop.zara.pk"], ["https://shop.zara.pk", "zara.markazify.com"]] as const) {
+  const own = feedOrigin(host);
+  const sitemap = buildStoreSitemapXml({ origin: own, articles: [{ slug: "hello", publishedAt: null }], pages: [{ slug: "about", updatedAt: null }] });
+  assert.ok(sitemap !== null && sitemap.includes("<loc>" + host + "/blog/hello</loc>") && sitemap.includes("<loc>" + host + "/pages/about</loc>"), host + ": its own addresses");
+  assert.ok(sitemap !== null && !sitemap.includes(other), host + ": never the other host");
+  const robots = buildStoreRobotsTxt({ origin: own, live: true });
+  assert.ok(robots.includes("Sitemap: " + host + "/sitemap.xml"), host + ": robots.txt points to its own sitemap");
+  assert.ok(!robots.includes(other));
+}
+assert.ok(buildStoreRobotsTxt({ origin: feedOrigin("https://shop.zara.pk"), live: false }).includes("Disallow: /"), "a store that is not live stays closed (noindex, CO-21)");
+assert.ok(!buildStoreRobotsTxt({ origin: feedOrigin("https://shop.zara.pk"), live: false }).includes("Sitemap:"), "and lists no sitemap");
+// the canonical TAG of a page still points to the verified custom domain, from either host
 const origin = canonicalStoreOrigin({ requestOrigin: "https://zara.markazify.com", customDomain: "shop.zara.pk" });
 assert.equal(canonicalUrl(origin, "/blog/hello"), "https://shop.zara.pk/blog/hello");
-const sitemap = buildStoreSitemapXml({ origin, articles: [{ slug: "hello", publishedAt: null }], pages: [{ slug: "about", updatedAt: null }] });
-assert.ok(sitemap !== null && sitemap.includes("<loc>https://shop.zara.pk/blog/hello</loc>") && sitemap.includes("<loc>https://shop.zara.pk/pages/about</loc>"), "the sitemap lists canonical addresses");
-assert.ok(sitemap !== null && !sitemap.includes("markazify.com"), "and never the platform host of a store with a verified domain");
-assert.ok(buildStoreRobotsTxt({ origin, live: true }).includes("Sitemap: https://shop.zara.pk/sitemap.xml"), "robots.txt points to the sitemap of the canonical host");
-assert.ok(buildStoreRobotsTxt({ origin, live: false }).includes("Disallow: /"), "a store that is not live stays closed (noindex, CO-21)");
-assert.ok(!buildStoreRobotsTxt({ origin, live: false }).includes("Sitemap:"), "and lists no sitemap");
 
 // ---- two stores on two hosts never share a cache entry or an address
 const a = domainResolveTag("shop.zara.pk");

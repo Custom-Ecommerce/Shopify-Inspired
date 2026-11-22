@@ -40,6 +40,7 @@ export function StoreShell({
     },
     social: snapshot.social ?? null,
     deliveryEstimate: snapshot.commerce.deliveryEstimate ?? null,
+    themeConfig: snapshot.themeConfig ?? null,
   };
   const nav: NavVM = {
     links: [

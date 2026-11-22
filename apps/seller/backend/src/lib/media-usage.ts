@@ -112,6 +112,19 @@ registerMediaFeature({
 });
 
 /**
+ * Sprint 7 (S7-B7): the Stiletto theme config. The hero picture is kept in store.storefront.themeConfig.heroImage, so a file used as the hero can never be deleted.
+ * (A file the seller removed from the config is free again at once: the config holds the only reference.)
+ */
+registerMediaFeature({
+  key: 'themeConfig',
+  label: 'Theme (hero picture)',
+  async find(storeId, mediaId) {
+    const store = (await Store.findOne({ _id: storeId, 'storefront.themeConfig.heroImage': mediaId }).select('_id').lean()) as { _id?: unknown } | null;
+    return store ? { count: 1, items: [{ id: 'heroImage', title: 'Home page hero picture' }] } : { count: 0, items: [] };
+  },
+});
+
+/**
  * Sprint 7 (S7-B2): blog articles. An article uses a file as its cover and through the images in its text; the server keeps both in the article's
  * `mediaRefs` every time the cover or the text is written, so one indexed question answers it. A used image can never be deleted.
  */

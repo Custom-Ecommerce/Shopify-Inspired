@@ -1,7 +1,7 @@
-import { storefrontStoreSchema } from '@/lib/contracts';
+import { storefrontStoreSchema, toStorefrontThemeConfig } from '@/lib/contracts';
 import { Media } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
-import { readPayments } from '@/lib/store-settings';
+import { readPayments, readThemeConfig } from '@/lib/store-settings';
 
 /** A Mongo document as .lean() returns it. Mixed fields stay unknown until read defensively. */
 export interface StoreRow {
@@ -56,6 +56,9 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
   const pay = record(store.paymentSettings);
   const [logoUrl, bannerUrl, seoImageUrl] = await Promise.all([mediaUrl(sf.logo, store._id), mediaUrl(sf.banner, store._id), mediaUrl(sf.seoImage, store._id)]);
   const social = record(sf.social);
+  // S7-B7: the validated theme config, defaults filled in (a stored value that fails its rule reads as the default). The hero picture is the store's own media.
+  const themeConfig = readThemeConfig(sf);
+  const heroImageUrl = await mediaUrl(themeConfig.heroImage, store._id);
 
   return storefrontStoreSchema.parse({
     id: String(store._id),
@@ -95,5 +98,6 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
     social: { facebook: text(social.facebook), instagram: text(social.instagram), tiktok: text(social.tiktok), whatsapp: text(social.whatsapp) },
     features: { socialProofEnabled: false },
     theme: { activeTheme: text(sf.activeTheme) },
+    themeConfig: toStorefrontThemeConfig(themeConfig, heroImageUrl),
   });
 }

@@ -35,7 +35,9 @@ export {
   toContentPageVM,
 } from "./domain/content";
 export type { ArticleCardVM, ArticleVM, ContentPageVM, FooterLink } from "./domain/content";
-export { canonicalStoreOrigin } from "./domain/custom-domain";
+export { canonicalStoreOrigin, feedOrigin } from "./domain/custom-domain";
+export { STOREFRONT_THEME_CONFIG_DEFAULTS, THEME_FONT_STACKS, storefrontThemeConfigOf, themeStyleVars } from "./domain/theme-config";
+export type { StorefrontThemeConfig } from "./domain/theme-config";
 export type { StorefrontArticle, StorefrontArticleList, StorefrontArticleSummary, StorefrontPage, StorefrontPageLink, StorefrontPageLookup } from "./transport/content-types";
 export { toCategoryVMs } from "./view-models/chrome";
 export type { CategoryVM, StoreChromeVM } from "./view-models/chrome";

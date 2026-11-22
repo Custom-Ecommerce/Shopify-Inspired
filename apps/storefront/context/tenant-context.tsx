@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useMemo } from 'react';
 
+import type { StoreVM } from '@markaz/storefront-data';
+
 export interface TenantSnapshot {
   tenantKind: 'tenant' | 'demo' | 'custom';
   storeId: string;
@@ -42,6 +44,8 @@ export interface TenantSnapshot {
     announcementText?: string | null;
     socialProofEnabled: boolean;
   };
+  /** Sprint 7 (S7-B7): the validated theme config (defaults filled in), or null for a demo. */
+  themeConfig?: StoreVM['themeConfig'];
 }
 
 const TenantContext = createContext<TenantSnapshot | undefined>(undefined);

@@ -943,3 +943,131 @@ test('S7-B6 another seller cannot change the redirect of this store', async () =
   assert.equal(res.status, 403);
   assert.equal(stores[STORE_A]!.storefront.redirectToCustomDomain, undefined);
 });
+
+// ------------------------------------------------------------------------------------------- Sprint 7 (S7-B7): the Stiletto theme config
+
+const readSettings = async () => ((await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any }).settings;
+
+test('S7-B7 a store that never saved a theme config reads the defaults: Stiletto itself, every section on', async () => {
+  const config = (await readSettings()).themeConfig;
+  assert.deepEqual(config, {
+    primaryColor: '#111111', accentColor: '#633e2b', fontFamily: 'theme', heroTitle: null, heroSubtitle: null, heroImage: null, heroCtaLabel: null, heroCtaLink: null,
+    announcementText: null, announcementEnabled: true, showFeatured: true, showCategories: true, showReviews: true, showBlog: true,
+  });
+});
+
+test('S7-B7 a theme config save is normalised, stored under storefront.themeConfig, read back with the defaults, audited and purges the storefront once', async () => {
+  const res = await save({ themeConfig: { primaryColor: '#ABC', accentColor: ' #00FF7F ', fontFamily: 'serif', heroTitle: '  New   season ', heroCtaLink: '/collections/new', showBlog: false } });
+  assert.equal(res.status, 200);
+  const { settings } = (await res.json()) as { settings: any };
+  assert.equal(settings.themeConfig.primaryColor, '#aabbcc');
+  assert.equal(settings.themeConfig.accentColor, '#00ff7f');
+  assert.equal(settings.themeConfig.heroTitle, 'New season');
+  assert.equal(settings.themeConfig.showBlog, false);
+  assert.equal(settings.themeConfig.showFeatured, true, 'defaults filled in');
+  assert.deepEqual(stores[STORE_A]!.storefront.themeConfig, { primaryColor: '#aabbcc', accentColor: '#00ff7f', fontFamily: 'serif', heroTitle: 'New season', heroCtaLink: '/collections/new', showBlog: false });
+  assert.equal(stores[STORE_A]!.slug, 'zara');
+  await settleRevalidations();
+  assert.equal(purges.filter((url) => url.includes('/api/revalidate')).length, 1);
+  assert.equal(audits.at(-1)!.action, 'store.settings');
+  assert.deepEqual(audits.at(-1)!.details.groups, ['themeConfig']);
+});
+
+test('S7-B7 a second save changes only the fields it names; null resets the whole config to the defaults', async () => {
+  await save({ themeConfig: { primaryColor: '#aabbcc', heroTitle: 'One' } });
+  await save({ themeConfig: { heroTitle: null, fontFamily: 'mono' } });
+  assert.deepEqual(stores[STORE_A]!.storefront.themeConfig, { primaryColor: '#aabbcc', heroTitle: null, fontFamily: 'mono' });
+  const reset = await save({ themeConfig: null });
+  assert.equal(reset.status, 200);
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, null);
+  assert.equal(((await reset.json()) as { settings: any }).settings.themeConfig.primaryColor, '#111111');
+  assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the rest of the storefront is untouched');
+});
+
+test('S7-B7 an invalid value is a 400 naming the field and NEVER reaches the database (injection attempts included)', async () => {
+  const attempts: Array<[Record<string, unknown>, string]> = [
+    [{ primaryColor: 'url(https://evil.test/x.png)' }, 'themeConfig.primaryColor'],
+    [{ primaryColor: '#fff;background:url(x)' }, 'themeConfig.primaryColor'],
+    [{ accentColor: 'expression(alert(1))' }, 'themeConfig.accentColor'],
+    [{ accentColor: '#fff}body{display:none' }, 'themeConfig.accentColor'],
+    [{ fontFamily: 'Arial, sans-serif' }, 'themeConfig.fontFamily'],
+    [{ fontFamily: 'serif;color:red' }, 'themeConfig.fontFamily'],
+    [{ heroTitle: '<script>alert(1)</script>' }, 'themeConfig.heroTitle'],
+    [{ heroTitle: 'x'.repeat(81) }, 'themeConfig.heroTitle'],
+    [{ heroSubtitle: 'x'.repeat(161) }, 'themeConfig.heroSubtitle'],
+    [{ heroCtaLabel: '<b>x</b>' }, 'themeConfig.heroCtaLabel'],
+    [{ heroCtaLink: 'javascript:alert(1)' }, 'themeConfig.heroCtaLink'],
+    [{ heroCtaLink: '//evil.test' }, 'themeConfig.heroCtaLink'],
+    [{ heroCtaLink: 'http://example.com' }, 'themeConfig.heroCtaLink'],
+    [{ announcementText: 'a'.repeat(121) }, 'themeConfig.announcementText'],
+    [{ showBlog: 'false' }, 'themeConfig.showBlog'],
+    [{ heroImage: 'https://evil.test/a.png' }, 'themeConfig.heroImage'],
+  ];
+  let writes = 0;
+  const original = StoreModel.findOneAndUpdate;
+  StoreModel.findOneAndUpdate = (...args: unknown[]) => {
+    writes += 1;
+    return original(...args);
+  };
+  for (const [themeConfig, field] of attempts) {
+    const res = await save({ themeConfig });
+    assert.equal(res.status, 400, JSON.stringify(themeConfig));
+    assert.equal(await fieldOf(res), field, JSON.stringify(themeConfig));
+  }
+  assert.equal(writes, 0, 'not one of them reached the database');
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, undefined);
+});
+
+test('S7-B7 an unknown key of the group (a style, a class, a script) is a 400 that names it', async () => {
+  for (const key of ['style', 'css', 'customCss', 'className', 'html', 'fontUrl']) {
+    const res = await save({ themeConfig: { primaryColor: '#fff', [key]: 'x' } });
+    assert.equal(res.status, 400, key);
+    assert.equal(await fieldOf(res), key);
+  }
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, undefined);
+});
+
+test('S7-B7 the hero image must be one of the seller own images: another store file or an unknown id is a 422 THEME_CONFIG_IMAGE_INVALID and nothing is written', async () => {
+  const own = await save({ themeConfig: { heroImage: LOGO } });
+  assert.equal(own.status, 200);
+  assert.deepEqual(((await own.json()) as { settings: any }).settings.themeConfig.heroImage, { id: LOGO, url: 'https://res.cloudinary.com/x/logo.png' });
+  assert.equal(stores[STORE_A]!.storefront.themeConfig.heroImage, LOGO);
+  const before = structuredClone(stores[STORE_A]!.storefront.themeConfig);
+  const foreign = await save({ themeConfig: { heroImage: FOREIGN_MEDIA, heroTitle: 'Nope' } });
+  assert.equal(foreign.status, 422);
+  const body = (await foreign.json()) as { code?: string; field?: string };
+  assert.equal(body.code, 'THEME_CONFIG_IMAGE_INVALID');
+  assert.equal(body.field, 'themeConfig.heroImage');
+  assert.deepEqual(stores[STORE_A]!.storefront.themeConfig, before, 'the title was not written either');
+  const filters: any[] = [];
+  const exists = MediaModel.exists;
+  MediaModel.exists = async (filter: any) => {
+    filters.push(filter);
+    return exists(filter);
+  };
+  await save({ themeConfig: { heroImage: LOGO } });
+  assert.deepEqual(filters.at(-1).resourceType, { $ne: 'video' }, 'a video cannot be the hero picture');
+  assert.equal(String(filters.at(-1).store), STORE_A, 'and the picture is looked up in THIS store only');
+});
+
+test('S7-B7 isolation: another seller cannot write this store theme config, and an admin cannot either', async () => {
+  const other = await save({ themeConfig: { primaryColor: '#ff0000' } }, tokenB, STORE_A);
+  assert.equal(other.status, 403);
+  const admin = await save({ themeConfig: { primaryColor: '#ff0000' } }, tokenAdmin, STORE_A);
+  assert.equal(admin.status, 403);
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, undefined);
+  const own = await save({ themeConfig: { primaryColor: '#00ff00' } }, tokenB, STORE_B);
+  assert.equal(own.status, 200);
+  assert.equal(stores[STORE_B]!.storefront.themeConfig.primaryColor, '#00ff00');
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, undefined, 'one store config never lands in another');
+});
+
+test('S7-B7 a stored value that is no longer valid (a hand-edited document) reads as the default for that field, never as the stored text', async () => {
+  stores[STORE_A]!.storefront = { deliveryRate: 250, themeConfig: { primaryColor: 'url(x)', heroTitle: '<b>x</b>', fontFamily: 'Comic Sans', showBlog: false, heroCtaLink: 'javascript:alert(1)' } };
+  const config = (await readSettings()).themeConfig;
+  assert.equal(config.primaryColor, '#111111');
+  assert.equal(config.heroTitle, null);
+  assert.equal(config.fontFamily, 'theme');
+  assert.equal(config.heroCtaLink, null);
+  assert.equal(config.showBlog, false, 'a valid stored value is kept');
+});

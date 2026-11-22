@@ -10,6 +10,8 @@ export function Hero({
   videoSrc,
   posterImage,
   title,
+  titleText,
+  imageSrc,
   subHeading,
   buttonText,
   buttonLink,
@@ -20,17 +22,22 @@ export function Hero({
     <section data-source="static" data-source-note="Hero headline, imagery and buttons are theme content; sellers cannot edit them yet." data-section="hero" className="relative w-full h-screen min-h-[700px] flex items-center overflow-hidden">
       {/* Background Video */}
       <div className="absolute inset-0 z-0 bg-[var(--hero-video-bg)]">
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="auto"
-          poster={posterImage}
-          className="w-full h-full object-cover opacity-90"
-        >
-          <source src={videoSrc} type="video/mp4" />
-        </video>
+        {imageSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageSrc} alt="" className="w-full h-full object-cover opacity-90" />
+        ) : (
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            poster={posterImage}
+            className="w-full h-full object-cover opacity-90"
+          >
+            <source src={videoSrc} type="video/mp4" />
+          </video>
+        )}
         <div className="absolute inset-0 bg-(--surface-inverse)/20" />
       </div>
 
@@ -43,10 +50,15 @@ export function Hero({
           viewport={{ once: true }}
           className="flex-1 flex flex-col justify-center items-center text-center md:items-start md:text-left w-full h-full"
         >
-          <h1
-            className="font-heading text-[48px] md:text-[80px] leading-[1.05] tracking-[-0.01em] text-[var(--text-inverse)] mb-4 uppercase"
-            dangerouslySetInnerHTML={{ __html: title }}
-          />
+          {titleText ? (
+            // A seller's title is plain text (S7-B7): a React text node, never markup.
+            <h1 className="font-heading text-[48px] md:text-[80px] leading-[1.05] tracking-[-0.01em] text-[var(--text-inverse)] mb-4 uppercase">{titleText}</h1>
+          ) : (
+            <h1
+              className="font-heading text-[48px] md:text-[80px] leading-[1.05] tracking-[-0.01em] text-[var(--text-inverse)] mb-4 uppercase"
+              dangerouslySetInnerHTML={{ __html: title }}
+            />
+          )}
 
           <p className="font-sans text-[16px] md:text-[18px] text-(--text-inverse)/90 mb-8 font-normal tracking-wide">
             {subHeading}

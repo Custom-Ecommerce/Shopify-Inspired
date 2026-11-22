@@ -19,7 +19,7 @@ export class HttpError extends Error {
 /** Sprint 6 EP-14 (D-118): the body of a refused add. See lib/plan.ts (assertWithinPlan). */
 export interface PlanLimitBody {
   code: 'PLAN_LIMIT_REACHED';
-  limitKind: 'products' | 'stores' | 'customDomain';
+  limitKind: 'products' | 'stores' | 'customDomain' | 'premiumThemes';
   limit: number;
   used: number;
   plan: string;

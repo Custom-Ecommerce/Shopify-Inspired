@@ -197,6 +197,41 @@ domain that is already verified (a live shop is never switched off silently); th
 - `*.localhost` names (for example `zara.localhost:3000`) are store subdomains, not custom domains. The preview cookie works there only; a custom host never takes a preview.
 - The redirect (308) is meant for production: it keeps no port, so in local development leave "send visitors to my own domain" off.
 
+### Themes (Sprint 7, S7-B7)
+
+**What a seller sees.** Only Stiletto (D-115). The Theme tab lists the themes in `listSellerThemes()` (installed, available, not hidden), a preview button for the saved
+look, and a "Customise the look" editor for Stiletto. Mustafa stays in the repository but is hidden; mola, gani and farooq are "coming soon".
+
+**What a seller may change in Stiletto** (store settings group `themeConfig`, stored in `store.storefront.themeConfig`, one live version, saved with one PATCH):
+
+| Field | Rule |
+| --- | --- |
+| `primaryColor`, `accentColor` | A hex colour, `#rgb` or `#rrggbb` in any case, stored as lower-case `#rrggbb`. Nothing else (no names, `rgb()`, `url()`). |
+| `fontFamily` | A NAME from the whitelist `theme` (Stiletto's own fonts), `system`, `serif`, `rounded`, `mono`. The theme maps it to a fixed font stack (`THEME_FONT_STACKS` in `packages/contracts/src/theme-config.ts`). The seller never sends a CSS string. |
+| `heroTitle` (80), `heroSubtitle` (160), `heroCtaLabel` (30), `announcementText` (120) | Plain text, no `<` or `>`. Rendered as React text nodes. |
+| `heroCtaLink` | A path on the store (starts with `/`, never `//`) or an `https://` address. Never `javascript:`, `data:`, `http:`. |
+| `heroImage` | A media id of the SELLER'S OWN store (an image, not a video). Another store's file or an unknown id is a 422 `THEME_CONFIG_IMAGE_INVALID`. A picture in use cannot be deleted (media registry feature `themeConfig`). |
+| `announcementEnabled`, `showFeatured`, `showCategories`, `showReviews`, `showBlog` | Switches (all on by default). `showBlog` hides the footer Blog link. |
+
+The group is strict: an unknown key is a 400 naming it. `themeConfig: null` resets everything to the defaults. The storefront validates the config AGAIN and fills the
+defaults, and colours and the font reach the page only as CSS custom properties built from validated values (`themeStyleVars`), never as a style string.
+
+**Draft and preview.** The store settings have one live version of the config (there is no saved draft), so the editor has a small "preview before saving" drawing of the
+Stiletto header and hero that updates as you type, and after saving the existing preview button shows the real store through the preview token (D-019).
+
+**Plans.** Stiletto is free. A theme on the paid tier is PREMIUM and needs a plan with `limits.premiumThemes` (Growth): choosing it on Free is a 403 `PLAN_LIMIT_REACHED`
+with `limitKind: "premiumThemes"`, and `GET /api/themes` reports `premium` and `locked` for each theme. No installed theme is premium today (mola and gani are paid but not finished).
+
+**Adding a theme later: checklist.**
+1. Manifest entry in `packages/platform-kit/src/themes/manifest.ts` (slug, label, `tier`: `free` or `paid`, `status`, `installed: true`, `supportsCardCheckout`, `previewImage`). Paid tier makes it premium.
+2. The theme package `themes/<slug>` (contract `@markaz/storefront-theme-kit`), listed in `apps/storefront/package.json` and the loader map in `apps/storefront/lib/themes.ts`. Give the package a
+   `test` script (see `themes/stiletto/test/run-checks.mjs`) so its checks run in `pnpm test` (CO-101).
+3. Its config schema: add the fields it lets sellers change to `packages/contracts/src/theme-config.ts` (or a sibling file) with the same rules: hex colours, font NAMES from a whitelist,
+   plain text, safe links, media ids of the store; keep the update schema strict; add the group to `SETTINGS_GROUPS` (`apps/seller/frontend/lib/settings-groups.ts`) and the writer
+   in `apps/seller/backend/src/lib/store-settings.ts`. Register any image the config holds in `lib/media-usage.ts`.
+4. A preview image `public/theme-previews/<slug>.svg` and the gallery data; check `/demo/<slug>` renders with the DEFAULT config (a demo has no config).
+5. Tests: contracts (valid, invalid, injection), the theme's `*.check.ts`, the seller route test, and the plan gate if the theme is premium.
+
 ### Removed in Sprint 4
 
 `SELLER_NEW_STORE_STATUS` is no longer read (CO-26, EP-04.US06): every new store starts `pending` and goes live

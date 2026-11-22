@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { storefrontThemeConfigSchema } from './theme-config';
 import { STOCK_STATUSES } from './stock-status';
 import { STOREFRONT_ORDER_MAX_LINES, storefrontCheckoutCustomerSchema, storefrontDiscountCodeSchema, storefrontOrderLineRequestSchema } from './checkout';
 
@@ -136,6 +137,8 @@ export const storefrontStoreSchema = z.object({
   customDomain: z.string().nullable().optional(),
   /** S7-B6: the seller asked the platform subdomain to redirect to the custom domain. Only means something with a customDomain. */
   redirectToCustomDomain: z.boolean().optional(),
+  /** S7-B7: the Stiletto theme config, defaults filled in. Optional so an older backend still parses (the storefront then uses the defaults). */
+  themeConfig: storefrontThemeConfigSchema.optional(),
   features: z.object({ socialProofEnabled: z.boolean() }),
   theme: z.object({ activeTheme: nullableText }),
 });

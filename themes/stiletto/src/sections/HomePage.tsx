@@ -64,6 +64,8 @@ export interface HomePageProps {
   productShowcase: {
     banner: ProductShowcaseBanner;
   };
+  /** Sprint 7 (S7-B7): the sections the seller switched on. Absent means all on (the theme demo and older callers). */
+  sections?: { featured: boolean; categories: boolean; reviews: boolean; blog: boolean };
 }
 
 export function HomePage({
@@ -76,8 +78,10 @@ export function HomePage({
   footerConfig,
   promoBanner,
   productShowcase,
+  sections,
 }: HomePageProps) {
   const { hero, marquee, philosophy, videoStory } = homeConfig;
+  const show = { featured: true, categories: true, reviews: true, ...sections };
 
   return (
     <div className="min-h-screen bg-[var(--brand-background)]">
@@ -98,7 +102,7 @@ export function HomePage({
 
         <div className="w-full h-4 md:h-5 bg-[var(--separator-bg)] border-t border-[var(--separator-border)]" />
 
-        <CategoryCarousel title="Shop by Category" items={categories} />
+        {show.categories && <CategoryCarousel title="Shop by Category" items={categories} />}
 
         {/* <div className="w-full h-4 md:h-5 bg-[var(--separator-bg)] border-t border-[var(--separator-border)]" />
         <PromoBanner {...promoBanner} />
@@ -108,19 +112,23 @@ export function HomePage({
 
         <div className="w-full h-4 md:h-5 bg-[var(--separator-bg)] border-t border-[var(--separator-border)]" />
 
-        <FeaturedEdit
-          title="Featured Products"
-          buttonText="View All"
-          buttonLink={paths.catalog}
-          tabs={categories.map((cat) => ({
-            label: cat.title,
-            products: products.filter((p) => productMatchesCategory(p, cat)),
-          }))}
-        />
+        {show.featured && (
+          <>
+          <FeaturedEdit
+            title="Featured Products"
+            buttonText="View All"
+            buttonLink={paths.catalog}
+            tabs={categories.map((cat) => ({
+              label: cat.title,
+              products: products.filter((p) => productMatchesCategory(p, cat)),
+            }))}
+          />
 
-        <div className="w-full h-4 md:h-5 bg-[var(--separator-bg)] border-t border-[var(--separator-border)]" />
+          <div className="w-full h-4 md:h-5 bg-[var(--separator-bg)] border-t border-[var(--separator-border)]" />
+          </>
+        )}
 
-        <Testimonials {...testimonials} />
+        {show.reviews && <Testimonials {...testimonials} />}
         <VideoStory {...videoStory} />
         <Features data={featuresConfig} />
         <Footer config={footerConfig} />

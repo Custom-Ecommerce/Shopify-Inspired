@@ -7,7 +7,9 @@ import {
   THEME_OPTIONS,
   THEME_SLUGS,
   getThemeEntry,
+  isPremiumTheme,
   isSellerThemeSlug,
+  themePlanGate,
   isThemeSlug,
   listGalleryThemes,
   listInstalledThemes,
@@ -148,5 +150,27 @@ describe("theme manifest", () => {
         assert.equal(themeSupportsCardCheckout(entry.slug), false, entry.slug);
       }
     }
+  });
+});
+
+describe("the premium theme gate (S7-B7, D-118)", () => {
+  const FAKE = [
+    { slug: "stiletto", tier: "free" },
+    { slug: "lux", tier: "paid" },
+  ] as const;
+  it("a theme on the paid tier is premium, a free one is not, and an unknown slug is not", () => {
+    assert.equal(isPremiumTheme("lux", FAKE), true);
+    assert.equal(isPremiumTheme("stiletto", FAKE), false);
+    assert.equal(isPremiumTheme("nope", FAKE), false);
+    assert.equal(isPremiumTheme(undefined, FAKE), false);
+  });
+  it("a premium theme is locked on a plan without premium themes and open on one with them; a free theme is never locked", () => {
+    assert.deepEqual(themePlanGate("lux", false, FAKE), { premium: true, locked: true });
+    assert.deepEqual(themePlanGate("lux", true, FAKE), { premium: true, locked: false });
+    assert.deepEqual(themePlanGate("stiletto", false, FAKE), { premium: false, locked: false });
+  });
+  it("Stiletto, the theme sellers can choose today, is free: nothing is locked on the Free plan", () => {
+    assert.equal(isPremiumTheme("stiletto"), false);
+    for (const entry of listSellerThemes()) assert.equal(themePlanGate(entry.slug, false).locked, false, entry.slug);
   });
 });

@@ -1,4 +1,4 @@
-import { buildStoreSitemapXml, canonicalStoreOrigin } from "@markaz/storefront-data";
+import { buildStoreSitemapXml, feedOrigin } from "@markaz/storefront-data";
 import { loadSitemapData } from "@markaz/storefront-data/server";
 import { resolveStore } from "@/lib/tenancy/resolve-store";
 import { resolveTransport } from "@/lib/sources";
@@ -16,7 +16,7 @@ export async function GET(_request: Request, context: { params: Promise<{ tenant
   if (result.outcome !== "ok" || result.store.status !== "active" || result.previewToken !== null) return new Response("Not found", { status: 404 });
   const transport = await resolveTransport({ kind: "tenant", key: tenantKey });
   if (!transport) return new Response("Not found", { status: 404 });
-  const xml = buildStoreSitemapXml({ origin: canonicalStoreOrigin({ requestOrigin: await requestOrigin(), customDomain: result.store.customDomain }), ...(await loadSitemapData(transport)) });
+  const xml = buildStoreSitemapXml({ origin: feedOrigin(await requestOrigin()), ...(await loadSitemapData(transport)) });
   if (xml === null) return new Response("Not found", { status: 404 });
   return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, s-maxage=300, stale-while-revalidate=600" } });
 }

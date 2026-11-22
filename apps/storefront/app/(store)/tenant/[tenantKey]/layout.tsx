@@ -95,6 +95,7 @@ export default async function TenantLayout({
     checkoutEnabled: store.status === 'active',
     noindex: store.status !== 'active' || result.previewToken !== null,
     effectiveTheme,
+    themeConfig: store.themeConfig ?? null,
     commerce: {
       currency: store.commerce.currency,
       locale: 'en-PK',

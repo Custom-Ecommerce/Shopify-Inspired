@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./checkout": "./src/checkout.ts",
-    "./store-settings": "./src/store-settings.ts"
+    "./store-settings": "./src/store-settings.ts",
+    "./theme-config": "./src/theme-config.ts"
   },
   "scripts": {
     "build": "tsc",

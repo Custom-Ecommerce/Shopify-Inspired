@@ -181,6 +181,26 @@ export function isSellerThemeSlug(value: unknown): boolean {
 }
 
 /**
+ * Sprint 7 (S7-B7, D-118): a PREMIUM theme is one on the paid tier. Choosing it needs a plan with limits.premiumThemes (Growth). Stiletto is free. Today no
+ * installed theme is premium (mola and gani are paid but coming soon), so the rule is built and tested against a fake entry. `entries` defaults to the manifest.
+ */
+export function isPremiumTheme(slug: unknown, entries: readonly Pick<ThemeManifestEntry, "slug" | "tier">[] = THEME_MANIFEST): boolean {
+  return typeof slug === "string" && entries.some((entry) => entry.slug === slug && entry.tier === "paid");
+}
+
+/**
+ * The plan gate for a theme: allowed unless the theme is premium and the plan has no premium themes. `locked` is what the theme list reports.
+ */
+export function themePlanGate(
+  slug: unknown,
+  premiumThemesAllowed: boolean,
+  entries: readonly Pick<ThemeManifestEntry, "slug" | "tier">[] = THEME_MANIFEST,
+): { premium: boolean; locked: boolean } {
+  const premium = isPremiumTheme(slug, entries);
+  return { premium, locked: premium && !premiumThemesAllowed };
+}
+
+/**
  * Entries shown in the public `/themes` gallery: every theme that is not archived and not hidden. A theme that is not finished is
  * listed with status `coming_soon` and nothing else (no demo, no purchase path).
  */

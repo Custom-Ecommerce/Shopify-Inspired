@@ -11,6 +11,7 @@ import { shippingDetails } from "./product.config";
 import { promoBanner } from "./promo-banner.config";
 import { productShowcase } from "./product-showcase.config";
 import { feedbackImages } from "./reviews";
+import { applyAnnouncementConfig, applyHeroConfig, applyStoreLinks, stilettoThemeView, type StilettoSections } from "./theme-config";
 
 export interface StilettoContent {
   brandName: string;
@@ -30,6 +31,8 @@ export interface StilettoContent {
   productShowcase: { banner: ProductShowcaseBanner };
   shippingDetails: string[];
   feedbackImages: string[];
+  /** Sprint 7 (S7-B7): which home sections the seller switched on (all on by default). */
+  sections: StilettoSections;
 }
 
 /**
@@ -39,6 +42,8 @@ export interface StilettoContent {
  */
 export function buildStilettoContent(store: StoreData, categories: NormalizedCategory[], storeLinks: Array<{ label: string; href: string }> = []): StilettoContent {
   const demo = store.mode === "demo";
+  // Sprint 7 (S7-B7): the seller's theme config, validated again here and defaulted (a demo has none, so its own content is unchanged).
+  const { config, sections } = stilettoThemeView(store);
   const logo = store.logoUrl ?? STILETTO_LOGO;
   const menuLogo = store.logoUrl ?? STILETTO_LOGO_LIGHT;
   const announcement: AnnouncementData = demo && !store.announcement
@@ -49,7 +54,7 @@ export function buildStilettoContent(store: StoreData, categories: NormalizedCat
   return {
     brandName: store.name,
     navConfig: {
-      announcement,
+      announcement: applyAnnouncementConfig(announcement, config),
       brand: { name: store.name, href: paths.home, logo },
       menuLogo,
       navLinks: categories.map((c) => ({ label: c.title, href: c.href, hasMegaMenu: true, image: c.image })),
@@ -58,14 +63,15 @@ export function buildStilettoContent(store: StoreData, categories: NormalizedCat
     },
     homeConfig: {
       ...homeConfig,
-      hero: { ...homeConfig.hero, secondaryButtonLink: categories[0]?.href ?? paths.collections, ...(store.bannerUrl ? { posterImage: store.bannerUrl } : {}) },
+      hero: applyHeroConfig({ ...homeConfig.hero, secondaryButtonLink: categories[0]?.href ?? paths.collections, ...(store.bannerUrl ? { posterImage: store.bannerUrl } : {}) }, config),
     },
     testimonials,
     featuresConfig,
-    footerConfig: { ...footerConfig, brand: footerBrand, contact: demo ? undefined : store.contact, social: demo ? undefined : store.social, storeLinks: demo ? undefined : storeLinks },
+    footerConfig: { ...footerConfig, brand: footerBrand, contact: demo ? undefined : store.contact, social: demo ? undefined : store.social, storeLinks: demo ? undefined : applyStoreLinks(storeLinks, config) },
     promoBanner,
     productShowcase: { banner: productShowcase.banner },
     shippingDetails,
     feedbackImages,
+    sections,
   };
 }

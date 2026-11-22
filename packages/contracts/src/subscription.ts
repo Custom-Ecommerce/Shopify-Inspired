@@ -68,7 +68,7 @@ export const PLAN_LIMIT_CODE = 'PLAN_LIMIT_REACHED';
 export const planLimitRefusalSchema = z.object({
   code: z.literal(PLAN_LIMIT_CODE),
   /** Which limit: products or stores. */
-  limitKind: z.enum(['products', 'stores', 'customDomain']).optional(),
+  limitKind: z.enum(['products', 'stores', 'customDomain', 'premiumThemes']).optional(),
   limit: z.number().int().min(0),
   used: z.number().int().min(0),
   plan: z.string(),

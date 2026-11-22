@@ -11,7 +11,8 @@ import { readAccountBody } from '@/lib/account-support';
 import { storeSettingsUpdateSchema } from '@/lib/contracts';
 import { loadOwnedStore, requireSellerActor, SETTINGS_SELECT } from '@/lib/owned-store';
 import { revalidateStore } from '@/lib/revalidate';
-import { buildSettingsWrite, referencedMedia, settingsFieldsOf, SETTINGS_ERROR_CODE, toStoreSettings } from '@/lib/store-settings';
+import { assertThemeAllowedByPlan } from '@/lib/theme-plan';
+import { buildSettingsWrite, effectiveTheme, referencedMedia, settingsFieldsOf, SETTINGS_ERROR_CODE, toStoreSettings } from '@/lib/store-settings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -69,11 +70,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const current = await loadOwnedStore(request, ctx, id, SETTINGS_SELECT);
     const storeId = String(current._id);
 
+    // S7-B7 (D-118): a premium theme needs a plan with premium themes (after the ownership checks, only when the theme CHANGES).
+    if (update.theme && update.theme.activeTheme !== effectiveTheme(current.storefront)) await assertThemeAllowedByPlan(ctx.userId, update.theme.activeTheme);
+
     const write = buildSettingsWrite(current, update);
     if (write.fields.length === 0) throw new HttpError(400, 'Change at least one setting.', SETTINGS_ERROR_CODE, 'body');
 
     for (const ref of referencedMedia(update)) {
-      if (!(await Media.exists({ _id: ref.id, store: storeId }))) throw new HttpError(400, 'Upload the image to this store first.', SETTINGS_ERROR_CODE, ref.field);
+      const filter = ref.imageOnly ? { _id: ref.id, store: storeId, resourceType: { $ne: 'video' } } : { _id: ref.id, store: storeId };
+      if (!(await Media.exists(filter as never))) throw new HttpError(ref.status ?? 400, ref.message ?? 'Upload the image to this store first.', ref.code ?? SETTINGS_ERROR_CODE, ref.field);
     }
 
     const updated = await Store.findOneAndUpdate(

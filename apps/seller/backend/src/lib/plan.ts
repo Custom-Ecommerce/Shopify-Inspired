@@ -361,6 +361,12 @@ export async function assertCustomDomainAllowed(ownerId: string, now: Date = new
   );
 }
 
+/** S7-B7 (D-118): whether the seller's effective plan includes premium themes. True where plans cannot be checked (a unit test with no connection). */
+export async function planAllowsPremiumThemes(ownerId: string, now: Date = new Date()): Promise<boolean> {
+  if (!canCheckPlans()) return true;
+  return (await loadEffectivePlan(ownerId, now)).limits.premiumThemes === true;
+}
+
 /** The store's owner, then assertWithinPlan for products. A store with no owner is not limited here (it cannot be a seller's). */
 export async function assertProductSlot(storeId: string, adding: number = 1): Promise<void> {
   if (!canCheckPlans() || adding <= 0) return;

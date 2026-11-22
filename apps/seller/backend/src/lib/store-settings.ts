@@ -10,6 +10,8 @@ import {
   THEME_NOT_AVAILABLE_MESSAGE,
   RETURN_WINDOW_DAYS_DEFAULT,
   NO_USABLE_PAYMENT_METHOD_MESSAGE,
+  THEME_CONFIG_KEYS,
+  resolveThemeConfig,
   cityKey,
   maskAccountNumber,
   matchPakistanCity,
@@ -184,6 +186,17 @@ export function readRedirectToCustomDomain(storefront: unknown): boolean {
   return record(storefront).redirectToCustomDomain === true;
 }
 
+// ------------------------------------------------------------------------------------------------------------- theme config
+
+/** Sprint 7 (S7-B7): the Stiletto theme config of a store, the defaults filled in. A stored value that does not pass its rule reads as the default for that field. */
+export function readThemeConfig(storefront: unknown) {
+  return resolveThemeConfig(record(storefront).themeConfig);
+}
+
+/** The code and message of a hero image that is not one of the seller's own pictures (422). */
+export const THEME_CONFIG_IMAGE_INVALID = 'THEME_CONFIG_IMAGE_INVALID';
+export const THEME_CONFIG_IMAGE_MESSAGE = 'Choose a picture from your own media library for the hero.';
+
 // ------------------------------------------------------------------------------------------------------------- theme
 
 /** Sprint 7 (D-115): the themes a seller may choose (installed, available, not hidden): Stiletto only. */
@@ -221,7 +234,8 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
   const storeId = String(doc._id);
   const sf = record(doc.storefront);
   const social = record(sf.social);
-  const [logo, banner, seoImage] = await Promise.all([mediaOf(sf.logo, storeId), mediaOf(sf.banner, storeId), mediaOf(sf.seoImage, storeId)]);
+  const themeConfig = readThemeConfig(sf);
+  const [logo, banner, seoImage, heroImage] = await Promise.all([mediaOf(sf.logo, storeId), mediaOf(sf.banner, storeId), mediaOf(sf.seoImage, storeId), mediaOf(themeConfig.heroImage, storeId)]);
   return {
     id: storeId,
     slug: String(doc.slug ?? ''),
@@ -247,6 +261,7 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     fraud: readFraud(doc.paymentSettings),
     returns: { returnWindowDays: readReturnWindowDays(sf) },
     domain: { redirectToCustomDomain: readRedirectToCustomDomain(sf) },
+    themeConfig: { ...themeConfig, heroImage },
     updatedAt: iso(doc.updatedAt),
   };
 }
@@ -270,15 +285,19 @@ export function settingsFieldsOf(update: StoreSettingsUpdate): string[] {
   const fields = new Set<string>();
   if (update.profile?.name !== undefined) fields.add('name');
   const profileRest = update.profile ? Object.keys(update.profile).filter((key) => key !== 'name') : [];
-  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns || update.domain) fields.add('storefront');
+  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns || update.domain || update.themeConfig !== undefined) fields.add('storefront');
   if (update.payments || update.fraud || update.messages?.abandonedCartEmail !== undefined) fields.add('paymentSettings');
   if (update.payout !== undefined) fields.add('payoutDetails');
   return [...fields];
 }
 
 /** The media ids the update names, with the field each is for (the route checks they are this store's). */
-export function referencedMedia(update: StoreSettingsUpdate): Array<{ field: string; id: string }> {
-  const refs: Array<{ field: string; id: string }> = [];
+export function referencedMedia(update: StoreSettingsUpdate): Array<{ field: string; id: string; /** The answer for a picture that is not the store's own (default 400). */ status?: number; code?: string; message?: string; imageOnly?: boolean }> {
+  const refs: Array<{ field: string; id: string; status?: number; code?: string; message?: string; imageOnly?: boolean }> = [];
+  // S7-B7: the hero picture of the theme config must be one of the seller's own IMAGES: a different store's file, or a video, is a 422.
+  if (update.themeConfig?.heroImage) {
+    refs.push({ field: 'themeConfig.heroImage', id: update.themeConfig.heroImage, status: 422, code: THEME_CONFIG_IMAGE_INVALID, message: THEME_CONFIG_IMAGE_MESSAGE, imageOnly: true });
+  }
   if (update.branding?.logo) refs.push({ field: 'branding.logo', id: update.branding.logo });
   if (update.branding?.banner) refs.push({ field: 'branding.banner', id: update.branding.banner });
   if (update.seo?.image) refs.push({ field: 'seo.image', id: update.seo.image });
@@ -361,6 +380,18 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
   }
   if (update.domain) {
     if (update.domain.redirectToCustomDomain !== undefined) put('redirectToCustomDomain', update.domain.redirectToCustomDomain);
+  }
+  // Sprint 7 (S7-B7): null resets the theme config to the defaults; an object changes only the fields it names, onto what is stored. Every value
+  // was validated and normalised by the schema before it got here, so nothing else can be stored.
+  if (update.themeConfig === null) {
+    put('themeConfig', null);
+  } else if (update.themeConfig) {
+    const stored = { ...record(record(sf).themeConfig) };
+    for (const key of THEME_CONFIG_KEYS) {
+      const value = (update.themeConfig as Record<string, unknown>)[key];
+      if (value !== undefined) stored[key] = value;
+    }
+    put('themeConfig', stored);
   }
   if (storefrontChanged) {
     set.storefront = sf;
