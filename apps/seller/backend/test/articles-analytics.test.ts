@@ -208,10 +208,12 @@ test('analytics ranks products by revenue and cities by orders, from the store o
   }
 });
 
-test('the policy: sellers read articles and orders, and cannot write them', () => {
+test('the policy: sellers read articles and orders, cannot write orders, and write articles only through the listed fields (Sprint 7, CO-116)', () => {
   assert.doesNotThrow(() => assertCan('seller', 'read', 'storeArticles'));
   assert.doesNotThrow(() => assertCan('seller', 'read', 'orders'));
-  assert.throws(() => assertCan('seller', 'create', 'storeArticles'));
+  assert.throws(() => assertCan('seller', 'create', 'storeArticles'), 'no field list is denied');
+  assert.doesNotThrow(() => assertCan('seller', 'create', 'storeArticles', ['title', 'content']));
+  assert.throws(() => assertCan('seller', 'create', 'storeArticles', ['title', 'publishedAt']));
   assert.throws(() => assertCan('seller', 'update', 'orders', ['status']));
 });
 

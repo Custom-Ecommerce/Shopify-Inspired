@@ -33,6 +33,7 @@ import {
   Users,
   Megaphone,
   BookOpen,
+  Images,
   BarChart,
   DollarSign,
   CreditCard,
@@ -60,6 +61,8 @@ export const NAV_GROUPS = [
       { href: "/", label: "Overview", icon: LayoutDashboard, exact: true },
       { href: "/products", label: "Products", icon: Package },
       { href: "/categories", label: "Categories", icon: FolderTree },
+      // Sprint 7 (S7-B2): the store's pictures and videos, with where each is used.
+      { href: "/media", label: "Media", icon: Images },
       { href: "/orders", label: "Orders", icon: ShoppingCart },
       // Sprint 5 EP-10.US02: the customers who ordered, with private notes.
       { href: "/customers", label: "Customers", icon: Contact },

@@ -1,4 +1,4 @@
-import { Product, Store } from '@/lib/services';
+import { Product, Store, StoreArticle } from '@/lib/services';
 
 /**
  * Sprint 7 (S7-B1, CO-10): the ONE place that knows where a media file is used. Every feature that can hold a Media id registers here, so the
@@ -108,5 +108,22 @@ registerMediaFeature({
       .filter((key) => sf[key] !== undefined && sf[key] !== null && String(sf[key]) === mediaId)
       .map((key) => ({ id: key, title: BRANDING_LABELS[key] }));
     return { count: items.length, items };
+  },
+});
+
+/**
+ * Sprint 7 (S7-B2): blog articles. An article uses a file as its cover and through the images in its text; the server keeps both in the article's
+ * `mediaRefs` every time the cover or the text is written, so one indexed question answers it. A used image can never be deleted.
+ */
+registerMediaFeature({
+  key: 'articles',
+  label: 'Blog articles',
+  async find(storeId, mediaId) {
+    const filter = { store: storeId, mediaRefs: mediaId };
+    const [count, rows] = await Promise.all([
+      StoreArticle.countDocuments(filter),
+      StoreArticle.find(filter).select('title').limit(MEDIA_USAGE_ITEM_CAP).lean() as unknown as Promise<Array<{ _id: unknown; title?: unknown }>>,
+    ]);
+    return { count, items: rows.map((row) => ({ id: String(row._id), title: typeof row.title === 'string' ? row.title : '' })) };
   },
 });

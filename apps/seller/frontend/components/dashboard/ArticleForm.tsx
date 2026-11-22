@@ -1,109 +1,101 @@
 "use client";
 
-import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
-import { useStoreHref } from "@/lib/dashboard-context";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Surface } from "@/components/shared/Surface";
+import { ContentPreview } from "@/components/dashboard/ContentPreview";
+import { MediaPickerDialog } from "@/components/dashboard/media/MediaPickerDialog";
+import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
+import { useStoreHref } from "@/lib/dashboard-context";
+import {
+  ARTICLE_LIMITS,
+  articleFormProblems,
+  articleFormToPayload,
+  articleSlugify,
+  articleToForm,
+  effectiveSlug,
+  emptyArticleForm,
+  insertImageMarkdown,
+  readArticleFailure,
+  type ArticleDetail,
+  type ArticleFormValues,
+} from "@/lib/articles";
 
-function slugify(input: string): string {
-  return input.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+type Article = ArticleDetail & { coverImageUrl?: string | null };
+
+function FieldError({ message }: { message?: string }) {
+  return message ? (
+    <p role="alert" className="mt-1 text-xs text-destructive">
+      {message}
+    </p>
+  ) : null;
 }
 
-function paragraphsToLexical(text: string) {
-  const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-  return {
-    root: {
-      type: "root",
-      children: paragraphs.map((text) => ({
-        type: "paragraph",
-        children: [{ type: "text", text, version: 1 }],
-        version: 1,
-      })),
-      direction: "ltr" as const,
-      format: "" as const,
-      indent: 0,
-      version: 1,
-    },
-  };
-}
-
-function lexicalToParagraphs(content: unknown): string {
-  const root = (content as { root?: { children?: { children?: { text?: string }[] }[] } })?.root;
-  if (!root?.children) return "";
-  return root.children
-    .map((node) => (node.children ?? []).map((c) => c.text ?? "").join(""))
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-interface ArticleData {
-  id: string;
-  title: string;
-  slug: string;
-  excerpt?: string | null;
-  content?: unknown;
-  type: string;
-  status: string;
-}
-
-export function ArticleForm({ article }: { article?: ArticleData }) {
+/**
+ * Sprint 7 (S7-B2, CO-116): write or edit a blog article. The text is plain text with a small Markdown subset (headings, bold, italics, lists, links and
+ * pictures from the media library); the preview shows exactly what the safe renderer will output. Saving sends the `revision` the form read: if the article
+ * was changed elsewhere in the meantime the seller is told and nothing is overwritten.
+ */
+export function ArticleForm({ article }: { article?: Article }) {
   const storeFetch = useStoreFetch();
   const href = useStoreHref();
   const router = useRouter();
   const isEdit = Boolean(article);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
-  const [title, setTitle] = useState(article?.title ?? "");
-  const [slug, setSlug] = useState(article?.slug ?? "");
-  const [slugEdited, setSlugEdited] = useState(isEdit);
-  const [excerpt, setExcerpt] = useState(article?.excerpt ?? "");
-  const [body, setBody] = useState(() => (article?.content ? lexicalToParagraphs(article.content) : ""));
-  const [type, setType] = useState(article?.type ?? "blog");
-  const [status, setStatus] = useState(article?.status ?? "draft");
+  const [values, setValues] = useState<ArticleFormValues>(() => (article ? articleToForm(article) : emptyArticleForm()));
+  const [coverUrl, setCoverUrl] = useState<string | null>(article?.coverImageUrl ?? null);
+  const [revision, setRevision] = useState<number>(article?.revision ?? 0);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [picker, setPicker] = useState<null | "cover" | "inline">(null);
+  const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
+  const [conflict, setConflict] = useState(false);
+  const [touched, setTouched] = useState(false);
 
-  const titleError = title.length > 0 && title.trim().length < 3 ? "Title must be at least 3 characters." : null;
-  const slugError = slugEdited && slug.includes(" ") ? "Slug cannot contain spaces." : null;
-  const isInvalid = !!titleError || !!slugError || !title.trim();
+  const problems = articleFormProblems(values);
+  const errors = { ...(touched ? problems : {}), ...serverErrors };
+  const set = <K extends keyof ArticleFormValues>(key: K, value: ArticleFormValues[K]) => {
+    setValues((current) => ({ ...current, [key]: value }));
+    setServerErrors((current) => {
+      if (!(key in current)) return current;
+      const { [key as string]: _gone, ...rest } = current;
+      void _gone;
+      return rest;
+    });
+  };
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setTouched(true);
+    setConflict(false);
+    if (Object.keys(problems).length > 0) return;
     setSaving(true);
-
-    const data = {
-      title: title.trim(),
-      slug: slugEdited ? slug : slugify(title),
-      excerpt: excerpt.trim() || undefined,
-      content: paragraphsToLexical(body),
-      type,
-      status,
-      publishedAt: status === "published" ? new Date().toISOString() : undefined,
-    };
-
     try {
       const url = isEdit ? `/api/dashboard/storeArticles/${article!.id}` : "/api/dashboard/storeArticles";
       const res = await storeFetch(url, {
         method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(articleFormToPayload(values, isEdit ? revision : undefined)),
       });
-      const resData = await res.json();
+      const body: unknown = await res.json().catch(() => null);
       if (!res.ok) {
-        toast.error(resData?.errors?.[0]?.message ?? resData?.error ?? "Could not save this article.");
+        const failure = readArticleFailure(res.status, body);
+        if (failure.revisionConflict) setConflict(true);
+        else if (failure.field) setServerErrors({ [failure.field]: failure.message });
+        else toast.error(failure.message);
+        if (failure.revisionConflict || failure.field) toast.error(failure.message);
         return;
       }
+      toast.success(isEdit ? "Article saved." : "Article created.");
       router.push(href("/blog"));
       router.refresh();
     } catch {
@@ -113,84 +105,183 @@ export function ArticleForm({ article }: { article?: ArticleData }) {
     }
   }
 
+  async function handleDelete() {
+    if (!article || !window.confirm("Delete this article? This cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      const res = await storeFetch(`/api/dashboard/storeArticles/${article.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        toast.error(readArticleFailure(res.status, await res.json().catch(() => null), "Could not delete this article.").message);
+        return;
+      }
+      toast.success("Article deleted.");
+      router.push(href("/blog"));
+      router.refresh();
+    } catch {
+      toast.error("Could not reach the backend. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function insertImage(item: { alt: string; url: string; name?: string | null }) {
+    const cursor = bodyRef.current?.selectionStart ?? values.content.length;
+    const next = insertImageMarkdown(values.content, cursor, item.name || item.alt, item.url);
+    set("content", next.content);
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6 max-w-3xl">
-      <Surface variant="clay" level={2} className="p-6 flex flex-col gap-5 rounded-2xl">
-        <h2 className="font-heading text-lg font-semibold">Article Details</h2>
+    <form onSubmit={handleSubmit} className="flex max-w-3xl flex-col gap-6" noValidate>
+      {conflict ? (
+        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm">
+          <p className="font-medium text-destructive">This article was changed somewhere else.</p>
+          <p className="mt-1">Your changes were not saved, so nothing was overwritten. Reload the article, then make your change again.</p>
+          <Button type="button" variant="outline" className="mt-3 min-h-11" onClick={() => window.location.reload()}>
+            Reload the article
+          </Button>
+        </div>
+      ) : null}
+
+      <Surface variant="clay" level={2} className="flex flex-col gap-5 rounded-2xl p-4 sm:p-6">
+        <h2 className="font-heading text-lg font-semibold">Article details</h2>
         <div>
           <Label htmlFor="title" className="mb-1">Title*</Label>
-          <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-          {titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
+          <Input id="title" value={values.title} onChange={(e) => set("title", e.target.value)} maxLength={ARTICLE_LIMITS.title.max + 20} className="min-h-11" aria-invalid={Boolean(errors.title)} />
+          <FieldError message={errors.title} />
         </div>
 
         <div>
-          <Label htmlFor="slug" className="mb-1">Slug</Label>
+          <Label htmlFor="slug" className="mb-1">Web address</Label>
           <Input
             id="slug"
-            value={slugEdited ? slug : slugify(title)}
+            value={effectiveSlug(values)}
             onChange={(e) => {
-              setSlugEdited(true);
-              setSlug(slugify(e.target.value));
+              setValues((current) => ({ ...current, slugEdited: true, slug: articleSlugify(e.target.value) }));
+              setServerErrors(({ slug: _slug, ...rest }) => (void _slug, rest));
             }}
-            className="font-mono"
+            className="min-h-11 font-mono"
+            aria-invalid={Boolean(errors.slug)}
           />
-          {slugError && <p className="text-xs text-destructive mt-1">{slugError}</p>}
+          <FieldError message={errors.slug} />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label className="mb-1">Type</Label>
-            <Select value={type} onValueChange={(v) => { if (v) setType(v); }}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="blog">Blog</SelectItem>
-                <SelectItem value="lookbook">Lookbook</SelectItem>
-                <SelectItem value="size_guide">Size Guide</SelectItem>
-                <SelectItem value="care_instructions">Care Instructions</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="mb-1">Status</Label>
-            <Select value={status} onValueChange={(v) => { if (v) setStatus(v); }}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="published">Published</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div>
+          <Label className="mb-1">Status</Label>
+          <Select value={values.status} onValueChange={(v) => { if (v === "draft" || v === "published") set("status", v); }}>
+            <SelectTrigger className="min-h-11 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="draft">Draft (only you can see it)</SelectItem>
+              <SelectItem value="published">Published (shoppers can read it)</SelectItem>
+            </SelectContent>
+          </Select>
+          <FieldError message={errors.status} />
         </div>
       </Surface>
 
-      <Surface variant="clay" level={2} className="p-6 flex flex-col gap-5 rounded-2xl">
+      <Surface variant="clay" level={2} className="flex flex-col gap-5 rounded-2xl p-4 sm:p-6">
         <h2 className="font-heading text-lg font-semibold">Content</h2>
+
         <div>
-          <Label htmlFor="excerpt" className="mb-1">Excerpt</Label>
-          <Textarea
-            id="excerpt"
-            value={excerpt}
-            onChange={(e) => setExcerpt(e.target.value.slice(0, 160))}
-            maxLength={160}
-            rows={2}
-          />
+          <Label className="mb-1">Cover picture</Label>
+          {values.coverImage ? (
+            <div className="flex items-center gap-3">
+              {coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={coverUrl} alt="" className="size-20 rounded-lg border object-cover" />
+              ) : (
+                <span className="text-sm text-muted-foreground">A picture is selected.</span>
+              )}
+              <Button type="button" variant="outline" className="min-h-11" onClick={() => { set("coverImage", null); setCoverUrl(null); }}>
+                <X className="size-4" aria-hidden="true" /> Remove
+              </Button>
+            </div>
+          ) : null}
+          <Button type="button" variant="outline" className="mt-2 min-h-11" onClick={() => setPicker("cover")}>
+            <ImagePlus className="size-4" aria-hidden="true" /> {values.coverImage ? "Change cover" : "Choose cover"}
+          </Button>
+          <FieldError message={errors.coverImage} />
         </div>
 
         <div>
-          <Label htmlFor="body" className="mb-1">Content — separate paragraphs with a blank line</Label>
-          <Textarea id="body" value={body} onChange={(e) => setBody(e.target.value)} rows={12} className="font-mono" />
-          <p className="text-xs text-muted-foreground mt-1">Plain text only — no formatting editor yet, see delivery report.</p>
+          <Label htmlFor="excerpt" className="mb-1">Summary</Label>
+          <Textarea id="excerpt" value={values.excerpt} onChange={(e) => set("excerpt", e.target.value)} rows={2} aria-invalid={Boolean(errors.excerpt)} />
+          <p className="mt-1 text-xs text-muted-foreground">{values.excerpt.trim().length} / {ARTICLE_LIMITS.excerpt}</p>
+          <FieldError message={errors.excerpt} />
+        </div>
+
+        <div>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <Label htmlFor="body">Text</Label>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => setPicker("inline")}>
+                <ImagePlus className="size-4" aria-hidden="true" /> Add picture
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="min-h-11" aria-pressed={showPreview} onClick={() => setShowPreview((on) => !on)}>
+                {showPreview ? "Edit" : "Preview"}
+              </Button>
+            </div>
+          </div>
+          {showPreview ? (
+            <div className="min-h-40 rounded-lg border bg-background p-3">
+              <ContentPreview content={values.content} />
+            </div>
+          ) : (
+            <Textarea id="body" ref={bodyRef} value={values.content} onChange={(e) => set("content", e.target.value)} rows={14} className="font-mono" aria-invalid={Boolean(errors.content)} />
+          )}
+          <p className="mt-1 text-xs text-muted-foreground">
+            Plain text. Use # for a heading, **bold**, *italic*, - for a list and [text](https://link) for a link. Pictures come from your media library. {values.content.length.toLocaleString()} / 50,000
+          </p>
+          <FieldError message={errors.content} />
+        </div>
+
+        <div>
+          <Label htmlFor="tags" className="mb-1">Tags</Label>
+          <Input id="tags" value={values.tagsText} onChange={(e) => set("tagsText", e.target.value)} placeholder="eid, lawn, care" className="min-h-11" aria-invalid={Boolean(errors.tags)} />
+          <p className="mt-1 text-xs text-muted-foreground">Separate with commas. At most {ARTICLE_LIMITS.tags}.</p>
+          <FieldError message={errors.tags} />
         </div>
       </Surface>
 
-      <Button type="submit" variant="clay" disabled={saving || isInvalid} className="self-start">
-        {saving ? "Saving…" : isEdit ? "Save changes" : "Create article"}
-      </Button>
+      <Surface variant="clay" level={2} className="flex flex-col gap-5 rounded-2xl p-4 sm:p-6">
+        <h2 className="font-heading text-lg font-semibold">Search engines</h2>
+        <div>
+          <Label htmlFor="seoTitle" className="mb-1">Search title</Label>
+          <Input id="seoTitle" value={values.seoTitle} onChange={(e) => set("seoTitle", e.target.value)} className="min-h-11" aria-invalid={Boolean(errors.seoTitle)} />
+          <FieldError message={errors.seoTitle} />
+        </div>
+        <div>
+          <Label htmlFor="seoDescription" className="mb-1">Search description</Label>
+          <Textarea id="seoDescription" value={values.seoDescription} onChange={(e) => set("seoDescription", e.target.value)} rows={2} aria-invalid={Boolean(errors.seoDescription)} />
+          <FieldError message={errors.seoDescription} />
+        </div>
+      </Surface>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" variant="clay" className="min-h-11" disabled={saving || deleting}>
+          {saving ? "Saving…" : isEdit ? "Save changes" : "Create article"}
+        </Button>
+        {isEdit ? (
+          <Button type="button" variant="destructive" className="min-h-11" disabled={saving || deleting} onClick={() => void handleDelete()}>
+            {deleting ? "Deleting…" : "Delete"}
+          </Button>
+        ) : null}
+      </div>
+
+      <MediaPickerDialog
+        open={picker !== null}
+        onOpenChange={(open) => { if (!open) setPicker(null); }}
+        title={picker === "cover" ? "Choose the cover picture" : "Add a picture to the text"}
+        onPick={(item) => {
+          if (picker === "cover") {
+            set("coverImage", item.id);
+            setCoverUrl(item.url);
+          } else {
+            insertImage(item);
+          }
+        }}
+      />
     </form>
   );
 }

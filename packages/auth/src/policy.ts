@@ -467,14 +467,17 @@ Object.assign(POLICY_MATRIX, {
 });
 
 // B10.4 declarations, added only where the matrix does not already declare the collection. Sellers read their
-// store's articles and orders; writes are system and admin only, as in Payload.
+// store's orders (writes: system and admin only, as in Payload); since Sprint 7 they also write their store's articles.
+export const SELLER_ARTICLE_FIELDS = ['type', 'title', 'slug', 'excerpt', 'content', 'coverImage', 'status', 'tags', 'seoTitle', 'seoDescription'] as const;
 {
   const declarations: Record<string, unknown> = {
+    // Sprint 7 (S7-B2, CO-116): a seller writes the articles of their own store, through an explicit field list. The store, the publish date, the
+    // revision and the media references are set by the server, never by the body. The admin and the system keep what they had.
     storeArticles: {
       read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
-      create: { actors: ['system'], fields: { system: '*' } },
-      update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
-      delete: { actors: ['admin', 'system'], fields: '*' },
+      create: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_ARTICLE_FIELDS] } },
+      update: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: [...SELLER_ARTICLE_FIELDS] } },
+      delete: { actors: ['admin', 'system', 'seller'], fields: '*' },
     },
     orders: {
       read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },

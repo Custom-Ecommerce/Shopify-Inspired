@@ -303,3 +303,15 @@ export const {
   abandonedCartListQuerySchema,
   abandonedCartRequestSchema,
 } = contracts;
+
+// Sprint 7 (S7-B2): writing articles.
+export const {
+  ARTICLE_CONTENT_MAX,
+  ARTICLE_INVALID,
+  ARTICLE_REVISION_CONFLICT,
+  ARTICLE_SLUG_MAX,
+  ARTICLE_SLUG_TAKEN,
+  ARTICLE_WRITE_FIELDS,
+  articleCreateSchema,
+  articleUpdateSchema,
+} = contracts;

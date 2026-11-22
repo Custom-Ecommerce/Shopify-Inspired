@@ -2,7 +2,7 @@ import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { AuditLog, Media, Product, signSession, Store } from '@/lib/services';
+import { AuditLog, Media, Product, signSession, Store, StoreArticle } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { MEDIA_USAGE_ITEM_CAP, findMediaUsage, listMediaFeatures, registerMediaFeature, unregisterMediaFeature, type MediaFeature } from '../src/lib/media-usage';
 import { mediaUsage, removeMediaIfUnused } from '../src/lib/media-cleanup';
@@ -33,6 +33,7 @@ const MediaModel = Media as any;
 const ProductModel = Product as any;
 const StoreModel = Store as any;
 const AuditModel = AuditLog as any;
+const ArticleModel = StoreArticle as any;
 
 let media: Array<Record<string, any>> = [];
 let products: Array<Record<string, any>> = [];
@@ -121,6 +122,7 @@ beforeEach(() => {
     product: Object.fromEntries(['countDocuments', 'find'].map((m) => [m, ProductModel[m]])),
     store: Object.fromEntries(['findOne', 'exists'].map((m) => [m, StoreModel[m]])),
     audit: AuditModel.create,
+    article: Object.fromEntries(['countDocuments', 'find'].map((m) => [m, ArticleModel[m]])),
   };
   (mongoose as any).connect = async () => mongoose;
   // The Cloudinary destroy call: recorded, always answered ok.
@@ -155,6 +157,9 @@ beforeEach(() => {
     return products.filter((row) => productMatches(row, filter)).length;
   };
   ProductModel.find = (filter: any) => chain(() => structuredClone(products.filter((row) => productMatches(row, filter))));
+  // Sprint 7 (S7-B2): the registry also asks the articles feature; no article uses any file in this test.
+  ArticleModel.countDocuments = async () => 0;
+  ArticleModel.find = () => chain(() => []);
   StoreModel.findOne = (filter: any) => chain(() => (stores[String(filter._id)] ? structuredClone(stores[String(filter._id)]) : null));
   StoreModel.exists = async (filter: any) => (stores[String(filter._id)] && String(stores[String(filter._id)]!.owner) === String(filter.owner) ? { _id: filter._id } : null);
   AuditModel.create = async (doc: Record<string, any>) => {
@@ -168,6 +173,7 @@ beforeEach(() => {
     for (const [m, fn] of Object.entries(saved.product)) ProductModel[m] = fn;
     for (const [m, fn] of Object.entries(saved.store)) StoreModel[m] = fn;
     AuditModel.create = saved.audit;
+    for (const [m, fn] of Object.entries(saved.article)) ArticleModel[m] = fn;
     delete process.env.OUTBOX_CRON_SECRET;
     unregisterMediaFeature('fake-articles');
   };
@@ -201,10 +207,11 @@ function fakeFeature(usedIds: () => string[]): MediaFeature {
 
 // ------------------------------------------------------------------------------------------------------ the registry
 
-test('the registry has the built-in features: products and store settings', () => {
+test('the registry has the built-in features: products, store settings and (Sprint 7) articles', () => {
   const keys = listMediaFeatures().map((f) => f.key);
   assert.ok(keys.includes('products'));
   assert.ok(keys.includes('branding'));
+  assert.ok(keys.includes('articles'));
 });
 
 test('findMediaUsage asks every registered feature, in one answer with counts and titles', async () => {
