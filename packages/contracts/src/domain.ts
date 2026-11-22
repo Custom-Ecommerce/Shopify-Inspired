@@ -28,6 +28,8 @@ export const domainStateResponseSchema = z.object({
   checkedAt: z.string().nullable(),
   vercelConfigured: z.boolean(),
   planAllowsCustomDomain: z.boolean(),
+  /** S7-B6: redirect the platform address to the verified domain (OFF by default). Optional so an older backend still parses. */
+  redirectToCustomDomain: z.boolean().optional(),
 });
 
 export type DomainConnectRequest = z.infer<typeof domainConnectRequestSchema>;

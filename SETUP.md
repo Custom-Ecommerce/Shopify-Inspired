@@ -160,6 +160,43 @@ Before the first deploy of S7-B5, drop the old non-unique index on `stores.domai
 `scripts/ensure-indexes.mjs` (dry run first): the store model now declares a UNIQUE index on `domain` that only applies to stores
 that have one, so two stores can never hold one host. The plan reports a conflict until the old index is dropped; it never drops it itself.
 
+### Custom domain runbook (Sprint 7, S7-B6)
+
+How a seller's own domain (for example `shop.zara.pk`) reaches the storefront, and what the platform owner does.
+
+**How it works.** The seller connects a domain on the Domain page and sets two DNS records: a CNAME (or an A record for a bare domain) that points to us, and a
+TXT record `_markazify-verify.<domain>` that proves they own it. "Check now" reads the live DNS; when both are right the backend adds the domain to the Vercel
+project (S7-B5) and the domain is `verified`. From then on the storefront serves the domain EXACTLY like `<slug>.<root>`: the middleware sends the host to the
+same `/tenant/<key>` routes (home, product, cart, checkout, track, pages, blog, `sitemap.xml`, `robots.txt`) and the store is looked up by the host through the
+seller backend (`GET /api/storefront/v1/stores/by-key/<host>?by=domain`). Only a VERIFIED domain resolves: an unknown, pending, failed or disconnected host gets the
+same "store unavailable" page. The platform subdomain keeps working; the verified domain is the canonical address (canonical links, sitemap, robots.txt), and the
+seller can switch on "send visitors to my own domain" to redirect the platform address to it with a 308.
+
+**What the owner does, once.**
+1. Set `CUSTOM_DOMAIN_CNAME_TARGET` (for example `cname.vercel-dns.com`, the value Vercel shows for the project) and, for bare domains, `CUSTOM_DOMAIN_A_TARGET`
+   (Vercel's A record address) on the seller backend. Set `VERCEL_API_TOKEN` and `VERCEL_PROJECT_ID` (the STOREFRONT project) so verified domains are added to Vercel
+   by the backend. Without them a stub is used: the check passes on the TXT record alone and nothing is added to Vercel, so the domain would not serve.
+2. On the storefront set `ROOT_DOMAIN` and `PLATFORM_HOSTNAMES` as before. Behind Vercel nothing else is needed. Behind your own proxy set `TRUSTED_PROXY_HOPS` or
+   `TRUSTED_CLIENT_IP_HEADER` too: without them `x-forwarded-host` is ignored and the `Host` header is the host (a forged forwarded header cannot pick a store).
+3. Make sure the storefront project accepts any host (Vercel: the domains the backend adds are attached to the project; no wildcard is needed for custom domains).
+4. SSL: the host issues the certificate (Vercel does it automatically once the domain's DNS points at it). Nothing to do here; a domain whose DNS is wrong has no
+   certificate and the browser warns, which the Domain page's "Check now" explains in plain words.
+
+**What the seller does.** Buys the domain, opens the DNS settings of the company they bought it from, adds the two records the Domain page shows, waits a few
+minutes (sometimes hours), presses "Check now". A plan without a custom domain (Free) is refused with an upgrade message. A seller whose plan LAPSES keeps a
+domain that is already verified (a live shop is never switched off silently); they lose only the ability to connect another, and can disconnect any time.
+
+**Testing without a real domain.**
+- Hosts-file names: add `127.0.0.1 shop1.localtest.me` (and `shop2.localtest.me` for a second store) to your hosts file (`C:\Windows\System32\drivers\etc\hosts`,
+  `/etc/hosts`). `*.localtest.me` already resolves to 127.0.0.1 without a hosts entry. Open `http://shop1.localtest.me:3000`.
+- The storefront treats any host that is not `ROOT_DOMAIN` or one of its subdomains as a custom domain candidate. With `ROOT_DOMAIN=localhost:3000`, `shop1.localtest.me`
+  is one. A store resolves only after its domain is `verified`: in a development database connect `shop1.localtest.me` on the Domain page (the DNS check needs
+  a real resolver, so for local work set the store's `customDomainStatus` to `verified` in the database by hand, or run the seller backend with a test resolver).
+- Two stores on two hosts must show their own data, carts and orders: open both in one browser and check. Cookies are host-only (no `Domain` attribute) and the cart is
+  stored per origin.
+- `*.localhost` names (for example `zara.localhost:3000`) are store subdomains, not custom domains. The preview cookie works there only; a custom host never takes a preview.
+- The redirect (308) is meant for production: it keeps no port, so in local development leave "send visitors to my own domain" off.
+
 ### Removed in Sprint 4
 
 `SELLER_NEW_STORE_STATUS` is no longer read (CO-26, EP-04.US06): every new store starts `pending` and goes live

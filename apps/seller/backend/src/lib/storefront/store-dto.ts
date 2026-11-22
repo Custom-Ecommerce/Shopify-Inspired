@@ -9,6 +9,9 @@ export interface StoreRow {
   slug: string;
   name: string;
   internalHandle?: string | null;
+  /** S7-B6: the custom domain and its status. The public record carries the domain only when it is verified. */
+  domain?: string | null;
+  customDomainStatus?: string | null;
   isThemeDemo?: boolean;
   storefront?: unknown;
   paymentSettings?: unknown;
@@ -25,6 +28,11 @@ function text(value: unknown): string | null {
 /** Whole rupees (D-004): a store's settings are not validated yet, so a decimal is rounded where it is read. */
 function amount(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+}
+
+/** S7-B6: the store's custom domain, only when it is verified (a pending or failed one is never public). */
+export function verifiedDomainOf(store: Pick<StoreRow, 'domain' | 'customDomainStatus'>): string | null {
+  return store.customDomainStatus === 'verified' && typeof store.domain === 'string' && store.domain !== '' ? store.domain : null;
 }
 
 const HEX_ID = /^[0-9a-fA-F]{24}$/;
@@ -53,6 +61,8 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
     id: String(store._id),
     slug: store.slug,
     internalHandle: store.internalHandle ?? null,
+    customDomain: verifiedDomainOf(store),
+    redirectToCustomDomain: verifiedDomainOf(store) !== null && sf.redirectToCustomDomain === true,
     name: store.name,
     status,
     isThemeDemo: store.isThemeDemo === true,

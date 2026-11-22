@@ -870,3 +870,76 @@ test("returns: a stored value that is not a whole number from 0 to 30 reads as t
   assert.equal((await save({ returns: { returnWindowDays: 3 } }, tokenAdmin)).status, 403);
   assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
 });
+
+// ------------------------------------------------------------------------------------------- Sprint 7 (S7-B6): custom domain
+
+const readinessFull = async () =>
+  (await (await readinessGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { ready: boolean; missing: string[]; items: Array<{ key: string; ok: boolean; label: string; tab: string; optional?: boolean }> };
+
+test('S7-B6 readiness: a store with no domain has exactly the six items and no domain step', async () => {
+  complete();
+  const result = await readinessFull();
+  assert.deepEqual(result.items.map((item) => item.key), ['profile', 'delivery', 'payment', 'payout', 'product', 'email']);
+  assert.equal(result.ready, true);
+});
+
+test('S7-B6 readiness: a connected domain (pending, failed or verified) adds an OPTIONAL domain step that never blocks go-live and is never missing', async () => {
+  complete();
+  for (const status of ['pending', 'failed']) {
+    stores[STORE_A]!.domain = 'shop.zara.pk';
+    stores[STORE_A]!.customDomainStatus = status;
+    const result = await readinessFull();
+    const step = result.items.find((item) => item.key === 'domain');
+    assert.ok(step, status);
+    assert.equal(step!.ok, false);
+    assert.equal(step!.optional, true);
+    assert.equal(step!.tab, 'domain');
+    assert.equal(result.ready, true, status + ': an unfinished domain does not block go-live');
+    assert.equal(result.missing.includes('domain'), false);
+    assert.equal(result.items.at(-1)!.key, 'domain', 'after the six');
+  }
+  stores[STORE_A]!.customDomainStatus = 'verified';
+  const done = (await readinessFull()).items.find((item) => item.key === 'domain');
+  assert.equal(done!.ok, true);
+  assert.match(done!.label, /connected/);
+  // and the go-live itself is not blocked by it
+  stores[STORE_A]!.customDomainStatus = 'pending';
+  assert.equal((await goLive()).status, 200);
+});
+
+test('S7-B6 the settings group "domain" saves the redirect switch (OFF by default), reads it back, and only an exact boolean is accepted', async () => {
+  const before = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  assert.equal(((await before.json()) as { settings: any }).settings.domain.redirectToCustomDomain, false);
+  const res = await save({ domain: { redirectToCustomDomain: true } });
+  assert.equal(res.status, 200);
+  assert.deepEqual(((await res.json()) as { settings: any }).settings.domain, { redirectToCustomDomain: true });
+  assert.equal(stores[STORE_A]!.storefront.redirectToCustomDomain, true);
+  assert.equal(stores[STORE_A]!.slug, 'zara');
+  await settleRevalidations();
+  assert.equal(purges.filter((url) => url.includes('/api/revalidate')).length, 1, 'the storefront is purged once');
+  const off = await save({ domain: { redirectToCustomDomain: false } });
+  assert.deepEqual(((await off.json()) as { settings: any }).settings.domain, { redirectToCustomDomain: false });
+  for (const bad of ['true', 1, null, 'on']) {
+    const refused = await save({ domain: { redirectToCustomDomain: bad } });
+    assert.equal(refused.status, 400, String(bad));
+    assert.equal(await fieldOf(refused), 'domain.redirectToCustomDomain');
+  }
+});
+
+test('S7-B6 the domain group is strict: the host, the status and the token cannot be written through the settings save', async () => {
+  for (const field of ['domain', 'customDomainStatus', 'domainToken']) {
+    const res = await save({ domain: { [field]: field === 'domain' ? 'shop.zara.pk' : 'verified' } });
+    assert.equal(res.status, 400, field);
+    assert.equal(await fieldOf(res), field);
+  }
+  assert.equal(stores[STORE_A]!.domain, undefined);
+  assert.equal(stores[STORE_A]!.customDomainStatus, undefined);
+  const top = await save({ customDomainStatus: 'verified' });
+  assert.equal(top.status, 400);
+});
+
+test('S7-B6 another seller cannot change the redirect of this store', async () => {
+  const res = await save({ domain: { redirectToCustomDomain: true } }, tokenB, STORE_A);
+  assert.equal(res.status, 403);
+  assert.equal(stores[STORE_A]!.storefront.redirectToCustomDomain, undefined);
+});

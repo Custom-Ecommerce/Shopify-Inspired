@@ -96,6 +96,8 @@ export interface DomainStoreFields {
   domainToken?: unknown;
   domainCheckedAt?: unknown;
   domainFailureReason?: unknown;
+  /** S7-B6: read for the redirect setting only. */
+  storefront?: unknown;
 }
 
 export interface DomainStateWire {
@@ -107,6 +109,8 @@ export interface DomainStateWire {
   checkedAt: string | null;
   vercelConfigured: boolean;
   planAllowsCustomDomain: boolean;
+  /** S7-B6: the seller's "redirect the platform address to this domain" setting (OFF by default). It acts only while the domain is verified. */
+  redirectToCustomDomain: boolean;
 }
 
 const STATUSES: readonly string[] = ['unset', 'pending', 'verified', 'failed'];
@@ -133,5 +137,6 @@ export function toDomainState(doc: DomainStoreFields | null, extra: { vercelConf
     checkedAt: live ? iso(doc?.domainCheckedAt) : null,
     vercelConfigured: extra.vercelConfigured,
     planAllowsCustomDomain: extra.planAllowsCustomDomain,
+    redirectToCustomDomain: live && typeof doc?.storefront === 'object' && doc.storefront !== null && (doc.storefront as { redirectToCustomDomain?: unknown }).redirectToCustomDomain === true,
   };
 }

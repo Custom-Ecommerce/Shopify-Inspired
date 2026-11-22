@@ -46,7 +46,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       .lean();
     if (!updated) throw new HttpError(409, 'The domain changed meanwhile. Reload and try again.');
 
-    revalidateStore(storeId);
+    // The store no longer holds the host, so it is named here: the cached record of the disconnected domain is dropped and the host stops resolving.
+    revalidateStore(storeId, { domains: [host] });
     await auditDomain('store.domain_disconnect', storeId, ctx, { domain: host });
     return NextResponse.json(await domainStateOf(updated as DomainStoreDoc, ctx), { headers: NO_STORE });
   } catch (err) {

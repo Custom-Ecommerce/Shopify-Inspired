@@ -74,7 +74,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       .lean();
     if (!updated) throw new HttpError(409, 'The domain changed meanwhile. Reload and check again.');
 
-    if (failure === null && !wasVerified) revalidateStore(storeId);
+    // A host that has just been verified was answered 404 (and cached) while it was pending: purge its tag so it resolves at once.
+    if (failure === null && !wasVerified) revalidateStore(storeId, { domains: [host] });
     await auditDomain(failure === null ? 'store.domain_verified' : 'store.domain_check_failed', storeId, ctx, { domain: host, reason: failure });
     return NextResponse.json(await domainStateOf(updated as DomainStoreDoc, ctx), { headers: NO_STORE });
   } catch (err) {

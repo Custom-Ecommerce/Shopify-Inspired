@@ -111,3 +111,25 @@ test("the BFF routes exist for the state, connect, verify and disconnect, and re
   for (const res of results) assert.equal(res.status, 401);
   assert.equal(seen.length, 0);
 });
+
+// ------------------------------------------------------------------------------------------------ S7-B6: the redirect switch
+
+import { canSetRedirect, redirectSettingBody, redirectText } from "../lib/domain-view";
+
+test("S7-B6 the redirect switch is read, shown only for a verified domain, and saved as the domain settings group", () => {
+  const base = readDomainState({ ...body, customDomainStatus: "verified", redirectToCustomDomain: true })!;
+  assert.equal(base.redirectToCustomDomain, true);
+  assert.equal(readDomainState(body)!.redirectToCustomDomain, false, "OFF unless exactly true");
+  assert.equal(canSetRedirect(base), true);
+  for (const status of ["pending", "failed", "unset"] as const) assert.equal(canSetRedirect({ ...base, status }), false, status);
+  assert.equal(canSetRedirect({ ...base, domain: null }), false);
+  assert.deepEqual(redirectSettingBody(true), { domain: { redirectToCustomDomain: true } });
+  assert.deepEqual(redirectSettingBody(false), { domain: { redirectToCustomDomain: false } });
+  assert.match(redirectText(true, "shop.zara.pk"), /sent to shop\.zara\.pk/);
+  assert.match(redirectText(false, "shop.zara.pk"), /keeps working/);
+});
+
+test("S7-B6 the portal lets the domain settings group through to the backend", async () => {
+  const { SETTINGS_GROUPS } = await import("../lib/settings-groups");
+  assert.ok(SETTINGS_GROUPS.includes("domain"));
+});

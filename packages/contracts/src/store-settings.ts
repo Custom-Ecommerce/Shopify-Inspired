@@ -364,6 +364,15 @@ export const storeReturnsUpdateSchema = z
   .strict();
 export const storeReturnsSchema = z.object({ returnWindowDays: z.number().int().min(0).max(RETURN_WINDOW_DAYS_MAX) });
 
+// ---------------------------------------------------------------------------------------------------- custom domain (Sprint 7, S7-B6)
+
+/**
+ * The settings group 'domain': redirect the store's platform address (<slug>.<root>) to its verified custom domain. OFF by default. It only has an effect while
+ * the domain is verified and the store is live; saving it earlier is allowed and does nothing until then.
+ */
+export const storeDomainUpdateSchema = z.object({ redirectToCustomDomain: z.boolean({ error: 'redirectToCustomDomain must be true or false' }) }).partial().strict();
+export const storeDomainSettingsSchema = z.object({ redirectToCustomDomain: z.boolean() });
+
 export const storeThemeUpdateSchema = z.object({ activeTheme: z.string().regex(/^[a-z0-9-]{2,40}$/, 'choose a theme from the list') }).strict();
 
 /**
@@ -386,6 +395,8 @@ export const storeSettingsUpdateSchema = z
     fraud: storeFraudUpdateSchema,
     // Sprint 5 EP-13: the return window.
     returns: storeReturnsUpdateSchema,
+    // Sprint 7 (S7-B6): redirect the platform address to the verified custom domain.
+    domain: storeDomainUpdateSchema,
   })
   .partial()
   .strict()
@@ -449,6 +460,8 @@ export const storeSettingsSchema = z.object({
   messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable(), abandonedCartEmail: z.boolean() }),
   fraud: storeFraudSchema,
   returns: storeReturnsSchema,
+  /** Sprint 7 (S7-B6). Optional so an older backend still parses. */
+  domain: storeDomainSettingsSchema.optional(),
   updatedAt: z.string().nullable(),
 });
 export type StoreSettings = z.output<typeof storeSettingsSchema>;
@@ -456,7 +469,8 @@ export type StoreSettings = z.output<typeof storeSettingsSchema>;
 // -------------------------------------------------------------------------------------------- readiness and go-live
 
 /** The go-live checklist (D-094), in the order the dashboard shows it. tab names the settings tab that fixes it. */
-export const STORE_READINESS_ITEMS = ['profile', 'delivery', 'payment', 'payout', 'product', 'email'] as const;
+/** Sprint 7 (S7-B6): 'domain' is listed only while a custom domain is connected, and is optional: it never blocks go-live and is never in `missing`. */
+export const STORE_READINESS_ITEMS = ['profile', 'delivery', 'payment', 'payout', 'product', 'email', 'domain'] as const;
 export type StoreReadinessItem = (typeof STORE_READINESS_ITEMS)[number];
 
 /** Sprint 5 EP-11.US04.T03: a warning does not block go-live. Only 'stock' exists: every published product is out of stock. */
@@ -466,7 +480,7 @@ export type StoreReadinessWarningKey = (typeof STORE_READINESS_WARNINGS)[number]
 export const storeReadinessSchema = z.object({
   ready: z.boolean(),
   status: z.string(),
-  items: z.array(z.object({ key: z.enum(STORE_READINESS_ITEMS), ok: z.boolean(), label: z.string(), tab: z.string() })),
+  items: z.array(z.object({ key: z.enum(STORE_READINESS_ITEMS), ok: z.boolean(), label: z.string(), tab: z.string(), optional: z.boolean().optional() })),
   missing: z.array(z.enum(STORE_READINESS_ITEMS)),
   /** Absent when there is nothing to warn about. Never part of `missing`, never blocks go-live. */
   warnings: z.array(z.object({ key: z.enum(STORE_READINESS_WARNINGS), label: z.string(), tab: z.string() })).optional(),

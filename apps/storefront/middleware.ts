@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { PREVIEW_COOKIE_NAME, PREVIEW_CREDENTIAL_HEADER, PREVIEW_QUERY_PARAM, isPreviewTokenShape } from '@markaz/platform-kit/preview';
 import { RESERVED_SUBDOMAINS, STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from '@markaz/platform-kit/reservation';
 import { THEME_MANIFEST } from '@markaz/platform-kit/themes';
+import { classifyHost, hostAllowsPreview, requestHostWithPort } from '@markaz/platform-kit/tenancy-host';
 import { PREVIEW_CACHE_CONTROL, confirmPreviewToken, previewCookie, previewSecondsLeft, withoutPreviewParam } from '@markaz/storefront-data/preview';
 
 export const config = {
@@ -47,22 +48,23 @@ async function enterPreview(request: NextRequest, storeKey: string, host: string
 
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl;
-  const rawHost = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
-  
-  let host = rawHost.toLowerCase();
+  // S7-B6: x-forwarded-host is believed only where a trusted proxy writes it (the D-081 settings, or Vercel); otherwise the Host header is the host.
+  // A client that reaches the app directly cannot pick a store, or a custom domain, with a forged forwarded header.
+  const rawHost = requestHostWithPort(request.headers, process.env) ?? '';
+  let host = rawHost;
   if (host.endsWith('.')) host = host.slice(0, -1);
-  
+
   if (
     url.pathname.startsWith('/tenant') ||
     url.pathname.startsWith('/demo') ||
-    url.pathname.startsWith('/custom') ||
     url.pathname.startsWith('/_internal')
   ) {
     return new NextResponse(null, { status: 404 });
   }
 
   const rootDomain = process.env.ROOT_DOMAIN || 'localhost:3000';
-  const platformHostnames = (process.env.PLATFORM_HOSTNAMES || '127.0.0.1,[::1]').split(',');
+  const platformHostnames = process.env.PLATFORM_HOSTNAMES || '127.0.0.1,[::1]';
+  const classified = classifyHost(host, { rootDomain, platformHostnames });
 
   if (url.pathname === '/store-not-found' || url.pathname === '/store-unavailable') {
     return NextResponse.next();
@@ -74,26 +76,39 @@ export async function middleware(request: NextRequest) {
   requestHeaders.delete('x-markaz-tenant');
   requestHeaders.delete('x-markaz-theme');
   requestHeaders.delete('x-markaz-noindex');
+  // S7-B6: the path of the request, for the tenant layout's redirect to a custom domain. Only this middleware writes it.
+  requestHeaders.delete('x-markaz-path');
   // Only the cookie below may set this. A browser that sends the header itself is not believed.
   requestHeaders.delete(PREVIEW_CREDENTIAL_HEADER);
 
   // T1: Marketing / Platform Hosts
-  if (host === rootDomain || platformHostnames.includes(host)) {
+  if (classified.kind === 'platform') {
     requestHeaders.set('x-markaz-tier', 'T1');
     requestHeaders.set('x-markaz-kind', 'marketing');
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  // T4: Custom Domain Candidate
-  const isSubdomain = host.endsWith('.' + rootDomain);
-  if (!isSubdomain) {
+  // An address that is not a host name at all is served nothing.
+  if (classified.kind === 'invalid') return new NextResponse(null, { status: 404 });
+
+  // T4: Custom domain candidate (S7-B6). It is served EXACTLY like the store's subdomain: the host becomes the tenant key and the request is
+  // rewritten to the same /tenant/<key> routes (home, product, cart, checkout, track, pages, blog, sitemap.xml, robots.txt), and the storefront API
+  // passes through. There is no /custom route. The store is resolved from the host, through the seller backend, only for a VERIFIED domain; any other
+  // host reaches the store-unavailable page. A custom host never takes a preview: the preview cookie is host-only (set on the store subdomain) and
+  // is not read here, and a preview token in a custom host URL is not acted on.
+  if (classified.kind === 'custom') {
     requestHeaders.set('x-markaz-tier', 'T4');
-    requestHeaders.set('x-markaz-kind', 'custom');
-    requestHeaders.set('x-markaz-tenant', host);
-    return NextResponse.rewrite(new URL('/custom/' + host + url.pathname + url.search, request.url), { request: { headers: requestHeaders } });
+    requestHeaders.set('x-markaz-kind', 'tenant');
+    requestHeaders.set('x-markaz-tenant', classified.host);
+    requestHeaders.set('x-markaz-path', url.pathname + url.search);
+    if (url.pathname.startsWith('/api/storefront/')) {
+      return NextResponse.next({ request: { headers: requestHeaders } });
+    }
+    return NextResponse.rewrite(new URL('/tenant/' + classified.host + url.pathname + url.search, request.url), { request: { headers: requestHeaders } });
   }
 
-  const labelsString = host.replace('.' + rootDomain, '');
+  const rootHost = rootDomain.trim().toLowerCase().replace(/:\d{1,5}$/, '');
+  const labelsString = classified.host.slice(0, classified.host.length - rootHost.length - 1);
   const labels = labelsString.split('.');
 
   // T3 (Tenant) & Reserved
@@ -143,9 +158,12 @@ export async function middleware(request: NextRequest) {
     requestHeaders.set('x-markaz-tier', 'T3');
     requestHeaders.set('x-markaz-kind', 'tenant');
     requestHeaders.set('x-markaz-tenant', label);
+    requestHeaders.set('x-markaz-path', url.pathname + url.search);
+    // Preview is host-only (S7-B6): only a store subdomain takes it. hostAllowsPreview is false for any other host kind.
+    const previewAllowed = hostAllowsPreview(classified.kind);
     // Later requests read the cookie and never the query. The token rides on to the server as a request header; the seller
     // backend checks it for this exact store on every call, so a stale or foreign cookie simply gets the live store.
-    const previewToken = request.cookies.get(PREVIEW_COOKIE_NAME)?.value;
+    const previewToken = previewAllowed ? request.cookies.get(PREVIEW_COOKIE_NAME)?.value : undefined;
     const hasPreviewCookie = isPreviewTokenShape(previewToken);
     if (hasPreviewCookie) requestHeaders.set(PREVIEW_CREDENTIAL_HEADER, previewToken);
     // The storefront API lives under /api/storefront on the store's own host. Pass it through with the tenant
@@ -153,7 +171,7 @@ export async function middleware(request: NextRequest) {
     if (url.pathname.startsWith('/api/storefront/')) {
       return NextResponse.next({ request: { headers: requestHeaders } });
     }
-    if (url.searchParams.has(PREVIEW_QUERY_PARAM)) return enterPreview(request, label, host);
+    if (previewAllowed && url.searchParams.has(PREVIEW_QUERY_PARAM)) return enterPreview(request, label, host);
     const res = NextResponse.rewrite(new URL('/tenant/' + label + url.pathname + url.search, request.url), { request: { headers: requestHeaders } });
     // D-078: only a preview is noindex here. A store that is not serving redirects to a page that is noindex itself, and a
     // live store is indexable (the tenant layout also sets robots from the store's status).

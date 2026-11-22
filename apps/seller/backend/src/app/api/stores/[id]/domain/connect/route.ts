@@ -79,7 +79,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
     if (!updated) throw new HttpError(409, 'The store changed meanwhile. Reload and try again.');
 
-    revalidateStore(storeId);
+    // The new host (a pending one is a cached 404 until verified) and the old one stop resolving to this store.
+    revalidateStore(storeId, { domains: [host, previous] });
     await auditDomain('store.domain_connect', storeId, ctx, { domain: host, previous });
     return NextResponse.json(await domainStateOf(updated as DomainStoreDoc, ctx), { headers: NO_STORE });
   } catch (err) {

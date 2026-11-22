@@ -4,7 +4,7 @@ import { Product, Store } from '@/lib/services';
 import * as revalidateNs from '@markaz/platform-kit/revalidate';
 
 // The kit re-exports through CommonJS. Read it through the default object, as lib/contracts.ts does.
-const { buildRevalidateRequest, isAllowedRevalidateTag, storeResolveTag, storeTags } = unwrapCjs(revalidateNs) as typeof revalidateNs;
+const { buildRevalidateRequest, domainResolveTag, isAllowedRevalidateTag, storeResolveTag, storeTags } = unwrapCjs(revalidateNs) as typeof revalidateNs;
 
 const REVALIDATE_TIMEOUT_MS = 3000;
 
@@ -93,18 +93,28 @@ export function revalidateStoreCategories(storeId: string): void {
   inBackground((settings) => notifyStorefront(settings, [storeTags.categories(storeId), storeTags.products(storeId)]));
 }
 
-/** After a change to the store itself: settings, branding, delivery rate, theme or status. Its record is cached by key. */
-export function revalidateStore(storeId: string): void {
+/**
+ * After a change to the store itself: settings, branding, delivery rate, theme or status. Its record is cached by key.
+ *
+ * S7-B6: the record is also cached by the store's custom domain (`domain-resolve:<host>`), so that tag is purged too: the store's CURRENT domain
+ * (whatever its status: a negative answer for a host that has just been verified is cached as well), and every host in `options.domains` (the old
+ * domain when it changed, the domain that was just disconnected, which the store no longer holds).
+ */
+export function revalidateStore(storeId: string, options: { domains?: ReadonlyArray<string | null | undefined> } = {}): void {
   inBackground(async (settings) => {
     const tags = [storeTags.settings(storeId), storeTags.static(storeId)];
+    const hosts = new Set<string>();
+    for (const host of options.domains ?? []) if (typeof host === 'string' && host !== '') hosts.add(host.toLowerCase());
     try {
-      const row = (await Store.findById(storeId).select('slug internalHandle').lean()) as unknown as { slug?: unknown; internalHandle?: unknown } | null;
+      const row = (await Store.findById(storeId).select('slug internalHandle domain').lean()) as unknown as { slug?: unknown; internalHandle?: unknown; domain?: unknown } | null;
       for (const key of [row?.slug, row?.internalHandle]) {
         if (typeof key === 'string' && isAllowedRevalidateTag(storeResolveTag(key.toLowerCase()))) tags.push(storeResolveTag(key.toLowerCase()));
       }
+      if (typeof row?.domain === 'string' && row.domain !== '') hosts.add(row.domain.toLowerCase());
     } catch (err) {
       console.error('[seller-backend] could not read a store for revalidation', { storeId, message: messageOf(err) });
     }
+    for (const host of hosts) if (isAllowedRevalidateTag(domainResolveTag(host))) tags.push(domainResolveTag(host));
     await notifyStorefront(settings, tags);
   });
 }

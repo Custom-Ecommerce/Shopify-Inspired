@@ -20,6 +20,8 @@ export interface DomainState {
   checkedAt: string | null;
   vercelConfigured: boolean;
   planAllowsCustomDomain: boolean;
+  /** S7-B6: the "redirect the platform address to my domain" setting. */
+  redirectToCustomDomain: boolean;
 }
 
 const STATUSES: readonly string[] = ["unset", "pending", "verified", "failed"];
@@ -45,6 +47,7 @@ export function readDomainState(body: unknown): DomainState | null {
     checkedAt: typeof body.checkedAt === "string" ? body.checkedAt : null,
     vercelConfigured: body.vercelConfigured === true,
     planAllowsCustomDomain: body.planAllowsCustomDomain !== false,
+    redirectToCustomDomain: body.redirectToCustomDomain === true,
   };
 }
 
@@ -122,4 +125,17 @@ export function checkedText(iso: string | null, now: Date = new Date()): string 
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `Checked ${hours} hour${hours === 1 ? "" : "s"} ago`;
   return `Checked ${Math.round(hours / 24)} days ago`;
+}
+
+/** The redirect switch is shown only for a VERIFIED domain (it does nothing before that). */
+export const canSetRedirect = (state: DomainState): boolean => state.domain !== null && state.status === "verified";
+
+/** The body of the settings save for the switch: the `domain` group of PATCH /api/proxy/stores/:id. */
+export const redirectSettingBody = (on: boolean): { domain: { redirectToCustomDomain: boolean } } => ({ domain: { redirectToCustomDomain: on } });
+
+/** What the switch says, in plain words. */
+export function redirectText(on: boolean, domain: string): string {
+  return on
+    ? `Visitors who open your Markazify address are sent to ${domain}.`
+    : `Your Markazify address keeps working next to ${domain}. Turn this on to send visitors to ${domain} instead.`;
 }

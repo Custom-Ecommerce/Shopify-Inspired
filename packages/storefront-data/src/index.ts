@@ -35,6 +35,7 @@ export {
   toContentPageVM,
 } from "./domain/content";
 export type { ArticleCardVM, ArticleVM, ContentPageVM, FooterLink } from "./domain/content";
+export { canonicalStoreOrigin } from "./domain/custom-domain";
 export type { StorefrontArticle, StorefrontArticleList, StorefrontArticleSummary, StorefrontPage, StorefrontPageLink, StorefrontPageLookup } from "./transport/content-types";
 export { toCategoryVMs } from "./view-models/chrome";
 export type { CategoryVM, StoreChromeVM } from "./view-models/chrome";

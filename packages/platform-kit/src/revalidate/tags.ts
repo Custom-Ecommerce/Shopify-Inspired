@@ -27,6 +27,8 @@ const ALLOWED_TAG_PATTERNS: readonly RegExp[] = [
   new RegExp(`^store:${OBJECT_ID}:(static|settings|categories|products)$`),
   new RegExp(`^store:${OBJECT_ID}:product:${PRODUCT_SLUG}$`),
   new RegExp(`^store-resolve:${STORE_KEY}$`),
+  // S7-B6: the store record fetched by its verified custom domain (a host name: letters, digits, dots and hyphens).
+  /^domain-resolve:[a-z0-9]([a-z0-9.-]{2,230})[a-z0-9]$/,
   // Legacy tags still emitted by the Admin and Seller hooks. Remove once
   // those call sites move to the canonical names above.
   new RegExp(`^stores-${STORE_SLUG}$`),
@@ -95,3 +97,6 @@ export const storeTags = {
 
 /** The store record, which is fetched by its slug or handle before its id is known. */
 export const storeResolveTag = (key: string): string => `store-resolve:${key}`;
+
+/** S7-B6: the store record fetched by its custom domain (a lower-case host, no port). Purged when the domain is verified, changed or disconnected. */
+export const domainResolveTag = (host: string): string => `domain-resolve:${host}`;

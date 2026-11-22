@@ -11,12 +11,15 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
   canConnect,
+  canSetRedirect,
   canVerify,
   checkedText,
   dnsSteps,
   domainFailure,
   nextStepText,
   readDomainState,
+  redirectSettingBody,
+  redirectText,
   STATUS_LABELS,
   type DomainState,
 } from "@/lib/domain-view";
@@ -30,12 +33,12 @@ const TONE: Record<DomainState["status"], string> = {
 
 export default function DashboardDomainPage() {
   const storeFetch = useStoreFetch();
-  const { store } = useDashboard();
+  const { store, storeId } = useDashboard();
   const href = useStoreHref();
   const [state, setState] = useState<DomainState | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [domain, setDomain] = useState("");
-  const [busy, setBusy] = useState<"connect" | "verify" | "disconnect" | null>(null);
+  const [busy, setBusy] = useState<"connect" | "verify" | "disconnect" | "redirect" | null>(null);
   const [error, setError] = useState<{ message: string; upgrade: boolean } | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
 
@@ -117,6 +120,19 @@ export default function DashboardDomainPage() {
     setBusy(null);
   }
 
+  async function setRedirect(on: boolean) {
+    setBusy("redirect");
+    setError(null);
+    const res = await storeFetch(`/api/proxy/stores/${encodeURIComponent(storeId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(redirectSettingBody(on)),
+    }).catch(() => null);
+    if (res && res.ok) setState((current) => (current ? { ...current, redirectToCustomDomain: on } : current));
+    else setError({ message: "We could not save this. Please try again.", upgrade: false });
+    setBusy(null);
+  }
+
   const hasDomain = state?.domain != null;
   const checked = state ? checkedText(state.checkedAt) : null;
   const steps = state ? dnsSteps(state) : [];
@@ -185,6 +201,22 @@ export default function DashboardDomainPage() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {canSetRedirect(state) && state.domain && (
+              <label className="flex items-start gap-3 rounded-xl border p-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4"
+                  checked={state.redirectToCustomDomain}
+                  disabled={busy !== null}
+                  onChange={(e) => void setRedirect(e.target.checked)}
+                />
+                <span>
+                  <span className="block font-medium">Send visitors to my own domain</span>
+                  <span className="block text-muted-foreground">{redirectText(state.redirectToCustomDomain, state.domain)}</span>
+                </span>
+              </label>
             )}
 
             <div className="flex flex-col sm:flex-row gap-3 pt-1">

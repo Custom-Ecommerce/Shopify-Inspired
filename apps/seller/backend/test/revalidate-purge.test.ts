@@ -500,3 +500,30 @@ test('an unreachable storefront does not fail the sync', async () => {
     undo();
   }
 });
+
+/* ---------------------------------- S7-B6: the store record cached by its custom domain ---------------------------------- */
+
+test('S7-B6 a store change purges the domain-keyed resolve tag of the domain the store holds, next to the slug and handle tags', async () => {
+  storeRow = { slug: 'alpha-store', internalHandle: 'alpha-1', domain: 'Shop.Alpha.pk' };
+  revalidateStore(STORE);
+  const tags = (await purged())[0]!;
+  assert.ok(tags.includes('domain-resolve:shop.alpha.pk'), 'lower-case host');
+  assert.ok(tags.includes('store-resolve:alpha-store') && tags.includes('store-resolve:alpha-1'));
+  assert.ok(tags.includes('store:' + STORE + ':settings') && tags.includes('store:' + STORE + ':static'));
+});
+
+test('S7-B6 the hosts named by the caller are purged too: the old domain after a change, a domain the store just gave up, with no duplicates', async () => {
+  storeRow = { slug: 'alpha-store', internalHandle: 'alpha-1', domain: 'new.alpha.pk' };
+  revalidateStore(STORE, { domains: ['old.alpha.pk', 'new.alpha.pk', null, undefined, ''] });
+  const tags = (await purged())[0]!;
+  assert.deepEqual(tags.filter((tag) => tag.startsWith('domain-resolve:')).sort(), ['domain-resolve:new.alpha.pk', 'domain-resolve:old.alpha.pk']);
+});
+
+test('S7-B6 a store with no domain purges no domain tag, and a host that is not a valid tag is skipped without failing the purge', async () => {
+  revalidateStore(STORE);
+  assert.equal((await purged())[0]!.some((tag) => tag.startsWith('domain-resolve:')), false);
+  sent = [];
+  revalidateStore(STORE, { domains: ['not a host', 'ok.alpha.pk'] });
+  const tags = (await purged())[0]!;
+  assert.deepEqual(tags.filter((tag) => tag.startsWith('domain-resolve:')), ['domain-resolve:ok.alpha.pk']);
+});

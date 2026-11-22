@@ -67,7 +67,7 @@ test('the real resolver can be built with a timeout (no lookup is made here)', (
 
 test('state: no domain is the empty state; the token shows only inside the TXT record; a stored reason has a message; junk is ignored', () => {
   const extra = { vercelConfigured: false, planAllowsCustomDomain: true, targets: TARGETS };
-  assert.deepEqual(toDomainState(null, extra), { domain: null, customDomainStatus: 'unset', dnsRecords: [], failureReason: null, failureMessage: null, checkedAt: null, vercelConfigured: false, planAllowsCustomDomain: true });
+  assert.deepEqual(toDomainState(null, extra), { domain: null, customDomainStatus: 'unset', dnsRecords: [], failureReason: null, failureMessage: null, checkedAt: null, vercelConfigured: false, planAllowsCustomDomain: true, redirectToCustomDomain: false });
   const state = toDomainState({ domain: HOST, customDomainStatus: 'failed', domainToken: 'tok', domainFailureReason: 'target_wrong', domainCheckedAt: new Date('2026-11-14T10:00:00Z') }, extra);
   assert.equal(state.customDomainStatus, 'failed');
   assert.equal(state.failureReason, 'target_wrong');

@@ -16,6 +16,7 @@ export function readinessHref(tab: string, href: (path?: string) => string): str
   if (tab === "products") return href("/products/new");
   if (tab === "account") return href("/account");
   if (tab === "inventory") return href("/inventory");
+  if (tab === "domain") return href("/domain");
   return href("/store?tab=" + encodeURIComponent(tab));
 }
 
@@ -66,7 +67,9 @@ export function OnboardingChecklist() {
   if (readiness === null || readiness.status === "active") return null;
 
   const items = readiness.items;
-  const done = items.filter((item) => item.ok).length;
+  // S7-B6: the custom domain step is optional and never blocks go-live, so it is shown but not counted in the progress.
+  const required = items.filter((item) => !(item as { optional?: boolean }).optional);
+  const done = required.filter((item) => item.ok).length;
   const chip = statusChip(readiness.status, waiting);
 
   async function goLive() {
@@ -106,13 +109,13 @@ export function OnboardingChecklist() {
         <div className="min-w-0">
           <h2 className="font-heading text-base font-semibold text-foreground sm:text-lg">Get your store ready</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {done} of {items.length} done. Finish the steps, then go live.
+            {done} of {required.length} done. Finish the steps, then go live.
           </p>
         </div>
         <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", CHIP_TONE[chip.tone])}>{chip.label}</span>
       </div>
 
-      <Progress value={items.length === 0 ? 0 : (done / items.length) * 100} className="mb-5 h-2" />
+      <Progress value={required.length === 0 ? 0 : (done / required.length) * 100} className="mb-5 h-2" />
 
       <ul className="flex flex-col gap-3">
         {items.map((item, index) => (

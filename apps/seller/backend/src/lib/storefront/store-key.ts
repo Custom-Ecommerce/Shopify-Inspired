@@ -1,8 +1,8 @@
 import {
-  STOREFRONT_DOMAIN_PATTERN,
   STOREFRONT_SLUG_PATTERN,
   STOREFRONT_STORE_LOOKUPS,
 } from '@/lib/contracts';
+import { validateCustomDomain } from '@/lib/domain-validation';
 import { StorefrontHttpError } from '@/lib/storefront/errors';
 
 export type StoreLookupBy = 'slug' | 'handle' | 'domain';
@@ -26,8 +26,8 @@ export function parseLookupBy(raw: string | null): StoreLookupBy | null {
  *
  * - slug:   stores.slug
  * - handle: stores.internalHandle
- * - domain: stores.domain, and only once the domain is verified. A pending or failed domain must
- *           never serve a storefront.
+ * - domain: stores.domain, and only once the domain is verified. A pending, failed or disconnected domain must
+ *           never serve a storefront, and is answered exactly like an unknown store (404, no reason).
  * Without ?by=, a key containing a dot is a domain and anything else is a slug.
  */
 export function buildStoreLookup(rawKey: string, by: StoreLookupBy | null): StoreLookup | null {
@@ -35,8 +35,11 @@ export function buildStoreLookup(rawKey: string, by: StoreLookupBy | null): Stor
   const mode: StoreLookupBy = by ?? (key.includes('.') ? 'domain' : 'slug');
 
   if (mode === 'domain') {
-    if (!STOREFRONT_DOMAIN_PATTERN.test(key)) return null;
-    return { by: mode, key, filter: { domain: key, customDomainStatus: 'verified' } };
+    // S7-B6: the host is normalised with the same helper the seller connected it with (lower-case punycode). A host that helper refuses (an IP,
+    // a platform host, a reserved name, a bad shape) cannot be a stored domain, so it never reaches the database.
+    const checked = validateCustomDomain(key);
+    if (!checked.ok) return null;
+    return { by: mode, key: checked.host, filter: { domain: checked.host, customDomainStatus: 'verified' } };
   }
   if (!STOREFRONT_SLUG_PATTERN.test(key)) return null;
   return { by: mode, key, filter: mode === 'slug' ? { slug: key } : { internalHandle: key } };

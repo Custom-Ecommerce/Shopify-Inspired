@@ -2,7 +2,9 @@ import "../../../globals.css";
 import React from 'react';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
-import { redirect } from 'next/navigation';
+import { permanentRedirect, redirect } from 'next/navigation';
+import { classifyHost, customDomainRedirect, requestHostWithPort } from '@markaz/platform-kit/tenancy-host';
+import { canonicalStoreOrigin } from '@markaz/storefront-data';
 import { StorefrontProvider } from '@markaz/storefront-data/client';
 import { loadContentFooterLinks, loadStoreChrome } from '@markaz/storefront-data/server';
 import { resolveStore } from '@/lib/tenancy/resolve-store';
@@ -12,22 +14,10 @@ import { ThemeScope } from '@/components/theme-scope';
 import { TenantProvider, type TenantSnapshot } from '@/context/tenant-context';
 import { StoreShell } from '@/containers/shell';
 import { PreviewBanner } from '@/components/preview-banner';
+import { requestOrigin } from '@/lib/request-origin';
 
 /** Fallback when a store has no free-delivery threshold configured. */
 const DEFAULT_FREE_DELIVERY_THRESHOLD = 5000;
-
-/** The address this request came in on (the store's own host), for absolute links in the head tags. Null when it cannot be read. */
-async function requestOrigin(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const host = h.get('x-forwarded-host') ?? h.get('host');
-    if (!host) return null;
-    const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
-    return proto + '://' + host;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * The head tags of every page of a store (GAP 13, Sprint 4 SB-5): the title and description from the store's SEO fields
@@ -43,7 +33,8 @@ export async function generateMetadata({ params }: { params: Promise<{ tenantKey
   const title = store.seo.title ?? store.name;
   const description = store.seo.description ?? store.profile?.description ?? undefined;
   const image = store.seo.imageUrl ?? store.branding.bannerUrl ?? store.branding.logoUrl ?? null;
-  const origin = await requestOrigin();
+  // S7-B6: a store with a verified custom domain is canonical on it, whichever host this request came in on (the platform subdomain keeps working).
+  const origin = canonicalStoreOrigin({ requestOrigin: await requestOrigin(), customDomain: store.customDomain });
   const live = store.status === 'active' && result.previewToken === null;
   return {
     title: { absolute: title },
@@ -73,6 +64,24 @@ export default async function TenantLayout({
   if (result.outcome !== 'ok') redirect(result.outcome === 'unavailable' && result.status === 'pending' ? '/store-unavailable?state=opening' : '/store-unavailable');
 
   const store = result.store;
+
+  // S7-B6: the seller asked the platform address to send visitors to the custom domain. A permanent redirect (308) to the same path, only for a live store
+  // with a VERIFIED domain, never for a preview, and never from the custom host itself (so no loop). Decided by customDomainRedirect (platform-kit, tested).
+  if (tenantKey.includes('.') === false) {
+    const h = await headers();
+    const requestHost = requestHostWithPort(h, process.env) ?? '';
+    const kind = classifyHost(requestHost, { rootDomain: process.env.ROOT_DOMAIN || 'localhost:3000', platformHostnames: process.env.PLATFORM_HOSTNAMES || '127.0.0.1,[::1]' });
+    const target = customDomainRedirect({
+      requestHost: kind.host,
+      requestKind: kind.kind,
+      store: { status: store.status, domain: store.customDomain ?? null, redirectToCustomDomain: store.redirectToCustomDomain === true },
+      preview: result.previewToken !== null,
+      pathAndSearch: h.get('x-markaz-path') ?? '/',
+      scheme: requestHost.includes('localhost') ? 'http' : 'https',
+    });
+    if (target !== null) permanentRedirect(target);
+  }
+
   const effectiveTheme = resolveEffectiveTheme(store.theme.activeTheme);
   const theme = await getTheme(effectiveTheme.slug);
 

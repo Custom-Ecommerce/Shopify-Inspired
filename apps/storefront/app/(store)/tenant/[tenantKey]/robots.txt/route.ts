@@ -1,4 +1,4 @@
-import { buildStoreRobotsTxt } from "@markaz/storefront-data";
+import { buildStoreRobotsTxt, canonicalStoreOrigin } from "@markaz/storefront-data";
 import { resolveStore } from "@/lib/tenancy/resolve-store";
 import { requestOrigin } from "@/lib/request-origin";
 
@@ -10,7 +10,7 @@ export async function GET(_request: Request, context: { params: Promise<{ tenant
   const { tenantKey } = await context.params;
   const result = await resolveStore(tenantKey, "slug");
   const live = result.outcome === "ok" && result.store.status === "active" && result.previewToken === null;
-  return new Response(buildStoreRobotsTxt({ origin: await requestOrigin(), live }), {
+  return new Response(buildStoreRobotsTxt({ origin: canonicalStoreOrigin({ requestOrigin: await requestOrigin(), customDomain: result.outcome === "ok" ? result.store.customDomain : null }), live }), {
     headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, s-maxage=300, stale-while-revalidate=600" },
   });
 }

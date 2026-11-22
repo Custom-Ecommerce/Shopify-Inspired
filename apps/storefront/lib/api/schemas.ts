@@ -74,6 +74,9 @@ export const StorefrontStore = z.object({
     })
     .optional(),
   social: z.object({ facebook: nullableText, instagram: nullableText, tiktok: nullableText, whatsapp: nullableText }).optional(),
+  /** S7-B6: the VERIFIED custom domain (a host), else null; and the "redirect the platform address to it" setting. */
+  customDomain: z.string().nullable().optional(),
+  redirectToCustomDomain: z.boolean().optional(),
   features: z.object({
     socialProofEnabled: z.boolean(),
   }),

@@ -132,6 +132,10 @@ export const storefrontStoreSchema = z.object({
     })
     .optional(),
   social: z.object({ facebook: nullableText, instagram: nullableText, tiktok: nullableText, whatsapp: nullableText }).optional(),
+  /** S7-B6: the store's VERIFIED custom domain (a host), else null. Never a pending or failed one. Optional so an older backend still parses. */
+  customDomain: z.string().nullable().optional(),
+  /** S7-B6: the seller asked the platform subdomain to redirect to the custom domain. Only means something with a customDomain. */
+  redirectToCustomDomain: z.boolean().optional(),
   features: z.object({ socialProofEnabled: z.boolean() }),
   theme: z.object({ activeTheme: nullableText }),
 });

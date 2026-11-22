@@ -1,6 +1,7 @@
 import "server-only";
 
 import { headers } from "next/headers";
+import { forwardedHostTrusted, requestHostWithPort } from "@markaz/platform-kit/tenancy-host";
 import { cleanOrigin } from "@markaz/storefront-data";
 
 /**
@@ -10,9 +11,11 @@ import { cleanOrigin } from "@markaz/storefront-data";
 export async function requestOrigin(): Promise<string | null> {
   try {
     const h = await headers();
-    const host = h.get("x-forwarded-host") ?? h.get("host");
+    // S7-B6: the forwarded host and protocol are believed only where a trusted proxy writes them (the same rule as the middleware).
+    const host = requestHostWithPort(h, process.env);
     if (!host) return null;
-    const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+    const forwardedProto = forwardedHostTrusted(process.env) ? h.get("x-forwarded-proto") : null;
+    const proto = forwardedProto ?? (host.startsWith("localhost") || host.includes(".localhost") ? "http" : "https");
     return cleanOrigin(proto + "://" + host);
   } catch {
     return null;

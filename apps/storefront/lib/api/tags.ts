@@ -1,6 +1,6 @@
 import "server-only";
 
-import { storeResolveTag as kitStoreResolveTag, storeTags } from "@markaz/platform-kit/revalidate";
+import { domainResolveTag as kitDomainResolveTag, storeResolveTag as kitStoreResolveTag, storeTags } from "@markaz/platform-kit/revalidate";
 
 /**
  * Next.js fetch-cache tags used by the storefront data layer (report §4.7).
@@ -15,6 +15,7 @@ import { storeResolveTag as kitStoreResolveTag, storeTags } from "@markaz/platfo
  *   store:${id}:products
  *   store:${id}:product:${slug}
  *   store-resolve:${key}
+ *   domain-resolve:${host}
  *
  * `server-only` because the platform-kit `/revalidate` subpath also exports a
  * `node:crypto` helper, so importing it from a client bundle must fail loudly.
@@ -27,3 +28,6 @@ export const storeSettingsTag = (storeId: string): string => storeTags.settings(
 export const storeProductTag = (storeId: string, productSlug: string): string =>
   storeTags.product(storeId, productSlug);
 export const storeResolveTag = (key: string): string => kitStoreResolveTag(key);
+
+/** S7-B6: the store record fetched by its verified custom domain. */
+export const domainResolveTag = (host: string): string => kitDomainResolveTag(host);

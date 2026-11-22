@@ -41,6 +41,9 @@ export interface StoreDoc {
   storefront?: unknown;
   paymentSettings?: unknown;
   payoutDetails?: unknown;
+  /** Sprint 7 (S7-B6): read by the go-live checklist. */
+  domain?: unknown;
+  customDomainStatus?: unknown;
   updatedAt?: unknown;
 }
 
@@ -174,6 +177,13 @@ export function readReturnWindowDays(storefront: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 30 ? value : (RETURN_WINDOW_DAYS_DEFAULT as number);
 }
 
+// ------------------------------------------------------------------------------------------------------------- custom domain
+
+/** Sprint 7 (S7-B6): whether the platform address redirects to the verified custom domain. Kept in storefront (the public record reads it). OFF unless exactly true. */
+export function readRedirectToCustomDomain(storefront: unknown): boolean {
+  return record(storefront).redirectToCustomDomain === true;
+}
+
 // ------------------------------------------------------------------------------------------------------------- theme
 
 /** Sprint 7 (D-115): the themes a seller may choose (installed, available, not hidden): Stiletto only. */
@@ -236,6 +246,7 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     // Sprint 5 EP-11: kept in paymentSettings (never in storefront, which the public storefront reads).
     fraud: readFraud(doc.paymentSettings),
     returns: { returnWindowDays: readReturnWindowDays(sf) },
+    domain: { redirectToCustomDomain: readRedirectToCustomDomain(sf) },
     updatedAt: iso(doc.updatedAt),
   };
 }
@@ -259,7 +270,7 @@ export function settingsFieldsOf(update: StoreSettingsUpdate): string[] {
   const fields = new Set<string>();
   if (update.profile?.name !== undefined) fields.add('name');
   const profileRest = update.profile ? Object.keys(update.profile).filter((key) => key !== 'name') : [];
-  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns) fields.add('storefront');
+  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns || update.domain) fields.add('storefront');
   if (update.payments || update.fraud || update.messages?.abandonedCartEmail !== undefined) fields.add('paymentSettings');
   if (update.payout !== undefined) fields.add('payoutDetails');
   return [...fields];
@@ -347,6 +358,9 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
   }
   if (update.returns) {
     if (update.returns.returnWindowDays !== undefined) put('returnWindowDays', update.returns.returnWindowDays);
+  }
+  if (update.domain) {
+    if (update.domain.redirectToCustomDomain !== undefined) put('redirectToCustomDomain', update.domain.redirectToCustomDomain);
   }
   if (storefrontChanged) {
     set.storefront = sf;

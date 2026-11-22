@@ -6,6 +6,7 @@ import { AuditLog, signSession, Store, User } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { useMemoryAuthLimits } from '@/lib/account-support';
 import { setPlanLoader, type EffectivePlan } from '../src/lib/plan';
+import { settleRevalidations } from '../src/lib/revalidate';
 import { createFakeDnsResolver, setDnsResolver, type DnsResolverPort } from '../src/lib/domain-dns';
 import { createStubVercelDomains, createVercelDomains, setVercelDomains, type VercelDomainsPort } from '../src/lib/domain-vercel';
 
@@ -31,6 +32,7 @@ let tokenA = '';
 let tokenB = '';
 let tokenAdmin = '';
 let growth = true;
+let purged: string[][] = [];
 let restore: () => void = () => {};
 let connect: (r: NextRequest, c: Ctx) => Promise<Response>;
 let verify: (r: NextRequest, c: Ctx) => Promise<Response>;
@@ -81,8 +83,10 @@ beforeEach(() => {
     [STORE_B]: { _id: STORE_B, owner: USER_B, slug: 'bilal', name: 'Bilal Shoes', status: 'active', customDomainStatus: 'unset', updatedAt: T0 },
   };
   audits = [];
+  purged = [];
   growth = true;
   process.env.STOREFRONT_URL = 'https://markazify.com';
+  process.env.REVALIDATE_SECRET = 'r'.repeat(40);
   process.env.CUSTOM_DOMAIN_CNAME_TARGET = 'cname.markazify.com';
   delete process.env.CUSTOM_DOMAIN_A_TARGET;
   const saved = {
@@ -93,7 +97,10 @@ beforeEach(() => {
     user: UserModel.findById,
   };
   (mongoose as any).connect = async () => mongoose;
-  globalThis.fetch = (async () => new Response('{}', { status: 200 })) as typeof fetch;
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    purged.push(JSON.parse(String(init?.body ?? '{}')).tags ?? []);
+    return new Response('{}', { status: 200 });
+  }) as unknown as typeof fetch;
   StoreModel.findOne = (filter: any) =>
     chain(() => {
       const row = stores[String(filter._id)];
@@ -134,6 +141,7 @@ beforeEach(() => {
     setVercelDomains(null);
     setDnsResolver(null);
     delete process.env.STOREFRONT_URL;
+    delete process.env.REVALIDATE_SECRET;
     delete process.env.CUSTOM_DOMAIN_CNAME_TARGET;
   };
 });
@@ -435,4 +443,42 @@ test('the real Vercel port is only used with both settings: without them the stu
   assert.equal(getVercelDomains({ VERCEL_API_TOKEN: 't' }).configured, false);
   assert.equal(getVercelDomains({ VERCEL_API_TOKEN: 't', VERCEL_PROJECT_ID: 'p' }).configured, true);
   assert.ok(createVercelDomains);
+});
+
+// ------------------------------------------------------------------------------------------------------- S7-B6: the purge by domain
+
+const domainTags = () => purged.flat().filter((tag) => tag.startsWith('domain-resolve:'));
+
+test('S7-B6 connect purges the domain-keyed resolve tag of the new host (a pending host is a cached 404), and of the old host when it changes', async () => {
+  await doConnect(HOST);
+  await settleRevalidations();
+  assert.deepEqual(domainTags(), ['domain-resolve:' + HOST]);
+  purged = [];
+  await doConnect('www.zara.pk');
+  await settleRevalidations();
+  assert.deepEqual([...domainTags()].sort(), ['domain-resolve:' + HOST, 'domain-resolve:www.zara.pk'].sort());
+});
+
+test('S7-B6 verify purges the domain tag when the host becomes verified, so it resolves at once; a failed check purges nothing', async () => {
+  const token = await connected();
+  await settleRevalidations();
+  purged = [];
+  setDnsResolver(createFakeDnsResolver());
+  await doVerify();
+  await settleRevalidations();
+  assert.equal(purged.length, 0, 'a failed check changes nothing a shopper can see');
+  setDnsResolver(dnsRight(token));
+  await doVerify();
+  await settleRevalidations();
+  assert.deepEqual(domainTags(), ['domain-resolve:' + HOST]);
+  assert.ok(purged.flat().includes('store-resolve:zara'), 'the slug tag goes with it');
+});
+
+test('S7-B6 disconnect purges the tag of the host the store just gave up (the store no longer holds it, so it is named by the route)', async () => {
+  await connected();
+  await settleRevalidations();
+  purged = [];
+  await doDisconnect();
+  await settleRevalidations();
+  assert.deepEqual(domainTags(), ['domain-resolve:' + HOST]);
 });

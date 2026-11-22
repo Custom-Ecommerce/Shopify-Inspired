@@ -5,9 +5,9 @@ import { planAllowsCustomDomain } from '@/lib/plan';
 import { writeAuditLog } from '@/lib/services';
 
 /** What the domain routes read of a store. The token is not selected by default, so it is asked for here. */
-export const DOMAIN_SELECT = 'name slug status owner domain customDomainStatus +domainToken domainCheckedAt domainFailureReason updatedAt';
+export const DOMAIN_SELECT = 'name slug status owner domain customDomainStatus +domainToken domainCheckedAt domainFailureReason storefront updatedAt';
 
-export type DomainStoreDoc = DomainStoreFields & { _id: unknown; owner?: unknown; updatedAt?: unknown };
+export type DomainStoreDoc = DomainStoreFields & { _id: unknown; owner?: unknown; storefront?: unknown; updatedAt?: unknown };
 
 /** The answer every domain route gives, for the store as it is now. */
 export async function domainStateOf(doc: DomainStoreDoc | null, ctx: AuthContext): Promise<DomainStateWire> {
