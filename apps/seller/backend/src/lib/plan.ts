@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import type { EffectivePlanLimits, EffectivePlanStatus } from '@markaz/contracts';
 import { PlanLimitError, type PlanLimitBody } from '@/lib/http';
 import { readPlanSettings, DEFAULT_GRACE_DAYS } from '@/lib/platform-settings';
-import { Product, Store, Subscription, SubscriptionPlanModel } from '@/lib/services';
+import { Product, Store, StoreMember, Subscription, SubscriptionPlanModel } from '@/lib/services';
 
 /**
  * Sprint 6 EP-14.US02 (D-118): the plan a seller is EFFECTIVELY on, and what is in use against its limits.
@@ -231,7 +231,8 @@ export async function ownerOfStore(storeId: string): Promise<string | null> {
 // ---------------------------------------------------------------------------------------------------------------------
 // Usage
 
-export type PlanLimitKind = 'products' | 'stores';
+/** staffSeats (S8-B2): the members of ONE store in status invited or active (a disabled member holds no seat). */
+export type PlanLimitKind = 'products' | 'stores' | 'staffSeats';
 
 /** The products that count against a plan: the store's own, not in trash, and not the sample (demo) product. */
 export function productCountFilter(storeId: string): Record<string, unknown> {
@@ -240,6 +241,11 @@ export function productCountFilter(storeId: string): Record<string, unknown> {
 
 export async function countProducts(storeId: string): Promise<number> {
   return Product.countDocuments(productCountFilter(storeId) as never);
+}
+
+/** The seats of a store's team in use: members that are invited or active. A disabled member holds no seat. */
+export async function countStaffSeats(storeId: string): Promise<number> {
+  return StoreMember.countDocuments({ store: storeId, status: { $in: ['invited', 'active'] } } as never);
 }
 
 /** All the stores a seller owns, whatever their status: the store limit counts them as provisionStore always has. */
@@ -261,7 +267,7 @@ export interface UpgradeCandidate {
 
 /** The words of the upgrade hint: the cheapest plan that allows more, or a plain line when there is none. */
 export function upgradeHintFor(kind: PlanLimitKind, plan: string, used: number, candidates: readonly UpgradeCandidate[]): string {
-  const noun = kind === 'products' ? 'products' : 'stores';
+  const noun = kind === 'products' ? 'products' : kind === 'staffSeats' ? 'staff seats' : 'stores';
   const better = candidates
     .filter((candidate) => candidate.key !== plan && (candidate.limit === null || candidate.limit > used))
     .sort((a, b) => (a.priceRs ?? Number.MAX_SAFE_INTEGER) - (b.priceRs ?? Number.MAX_SAFE_INTEGER))[0];
@@ -306,7 +312,7 @@ export interface AssertWithinPlanInput {
   kind: PlanLimitKind;
   /** The seller who owns the store (the plan is the seller's). */
   ownerId: string;
-  /** For products: the store whose products are counted. */
+  /** For products and staffSeats: the store whose products or team are counted. */
   storeId?: string;
   adding?: number;
   /** Override of the store limit that already won over the plan (the seller's storeLimitOverride): the number to use instead of the plan's. */
@@ -330,10 +336,10 @@ export async function assertWithinPlan(input: AssertWithinPlanInput): Promise<vo
   const plan = await loadEffectivePlan(input.ownerId, input.now ?? new Date());
   const limit = input.kind === 'stores' && input.limitOverride !== undefined && input.limitOverride !== null ? input.limitOverride : plan.limits[input.kind];
   if (limit === null) return;
-  const used = input.kind === 'products' ? await countProducts(input.storeId ?? '') : await countStores(input.ownerId);
+  const used = input.kind === 'products' ? await countProducts(input.storeId ?? '') : input.kind === 'staffSeats' ? await countStaffSeats(input.storeId ?? '') : await countStores(input.ownerId);
   if (!planLimitExceeded({ kind: input.kind, limit, used, adding })) return;
   const upgradeHint = upgradeHintFor(input.kind, plan.key, used, await upgradeCandidates(input.kind));
-  const noun = input.kind;
+  const noun = input.kind === 'staffSeats' ? 'staff seats' : input.kind;
   throw new PlanLimitError(
     { code: 'PLAN_LIMIT_REACHED', limitKind: input.kind, limit, used, plan: plan.key, upgradeHint },
     'Your ' + plan.name + ' plan allows ' + limit + ' ' + noun + ' and you have ' + used + '. ' + upgradeHint,

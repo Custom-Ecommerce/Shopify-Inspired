@@ -1,5 +1,6 @@
 /* patch_session_fix: shared workspace helpers (kept out of route files; Next only allows route exports there) */
 import { STORE_SLUG_MAX_LENGTH, STORE_SLUG_MIN_LENGTH } from '@markaz/platform-kit/reservation';
+import { listActiveMemberships } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
 import type { AuthContext } from '@/lib/auth';
 import { seedStoreDemoData } from '@/lib/demo-data';
@@ -99,11 +100,13 @@ function str(value: unknown): string | null {
 }
 
 /** The WorkspaceStore wire shape the dashboard expects (id, not _id; nulls for absent optionals). */
-export function toWorkspaceStore(doc: Record<string, unknown>) {
+export function toWorkspaceStore(doc: Record<string, unknown>, role: 'owner' | 'manager' | 'staff' | 'support' = 'owner') {
   const billing = (doc.billing ?? null) as { stripeOnboardingStatus?: unknown; stripeChargesEnabled?: unknown } | null;
   const status = typeof doc.status === 'string' && KNOWN_STATUSES.includes(doc.status) ? doc.status : 'pending';
   return {
     id: String(doc._id),
+    // Sprint 8 (S8-B2): the signed-in user's role in this store.
+    role,
     name: String(doc.name ?? ''),
     slug: String(doc.slug ?? ''),
     internalHandle: str(doc.internalHandle),
@@ -157,19 +160,34 @@ async function loadStores(ctx: AuthContext) {
     .select(STORE_SUMMARY_SELECT)
     .sort({ createdAt: 1 })
     .lean()) as unknown as Record<string, unknown>[];
-  return docs.map(toWorkspaceStore);
+  const owned = docs.map((doc) => toWorkspaceStore(doc));
+  // Sprint 8 (S8-B2): the stores where the user is an ACTIVE member, after their own, each with the role they hold. An invited, disabled or removed member sees none.
+  const memberships = await listActiveMemberships(ctx);
+  if (memberships.length === 0) return { owned, all: owned };
+  const ownedIds = new Set(owned.map((store) => store.id));
+  const wanted = memberships.filter((entry) => !ownedIds.has(entry.storeId));
+  if (wanted.length === 0) return { owned, all: owned };
+  const memberDocs = (await Store.find({ _id: { $in: wanted.map((entry) => entry.storeId) } })
+    .select(STORE_SUMMARY_SELECT)
+    .sort({ createdAt: 1 })
+    .lean()) as unknown as Record<string, unknown>[];
+  const roleOf = new Map(wanted.map((entry) => [entry.storeId, entry.role]));
+  const member = memberDocs.map((doc) => toWorkspaceStore(doc, roleOf.get(String(doc._id)) ?? 'staff'));
+  return { owned, all: [...owned, ...member] };
 }
 
 /** GET /api/workspace payload: the user, a summary of every owned store, and limits. */
 export async function loadWorkspace(ctx: AuthContext) {
   await connect();
-  const [account, stores] = await Promise.all([loadAccount(ctx), loadStores(ctx)]);
+  const [account, loaded] = await Promise.all([loadAccount(ctx), loadStores(ctx)]);
+  const stores = loaded.all;
   const { limitOverride, ...user } = account;
   const { limit: max, source } = await storeLimitWithPlan(ctx.userId, limitOverride);
   return {
     user,
     stores,
-    limits: { used: stores.length, max, canCreate: user.accountStatus !== 'suspended' && stores.length < max, source },
+    // The store limit counts the stores the user OWNS; a store they only work in is not theirs.
+    limits: { used: loaded.owned.length, max, canCreate: user.accountStatus !== 'suspended' && loaded.owned.length < max, source },
   };
 }
 

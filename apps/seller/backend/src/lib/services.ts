@@ -74,6 +74,8 @@ export const NotificationOutbox = db.NotificationOutbox;
 // Sprint 6 (S6-B7): the retention purge reads the sent sync events.
 export const SyncOutbox = db.SyncOutbox;
 export const SellerAlert = db.SellerAlert;
+// Sprint 8 (S8-B2, D-118): the team of a store (staff roles and invites).
+export const StoreMember = db.StoreMember;
 // Sprint 4 EP-05 (D-088): the new commission ledger. The old commissionLedger is never used from the seller backend.
 export const CommissionEntry = db.CommissionEntry;
 // Sprint 4 EP-05.US03 (D-090): payouts to stores, settled against the ledger above.
@@ -112,6 +114,15 @@ export const {
   sendEmailVerification,
   requestEmailChange,
   confirmEmailToken,
+  // Sprint 8 (S8-B2, D-118): invite tokens (the hash is stored, the raw value is in the link) and the seller capability matrix.
+  generateRawToken,
+  hashAuthToken,
+  isRawTokenShape,
+  sellerCan,
+  sellerCapabilities,
+  isStaffRole,
+  isSellerRole,
+  settingsGroupCapabilities,
 } = auth;
 
 // Sprint 4 EP-07.US04 (D-092): broadcasts and unsubscribes (seller database).

@@ -5,11 +5,11 @@ import mongoose from 'mongoose';
 import { authenticate } from '@/lib/auth';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
-import { assertCan, Media, SELLER_STORE_READABLE_FIELDS, Store, writeAuditLog } from '@/lib/services';
+import { assertCan, Media, SELLER_STORE_READABLE_FIELDS, settingsGroupCapabilities, Store, writeAuditLog } from '@/lib/services';
 import { plainDoc, toWire } from '@/lib/seller-scope';
 import { readAccountBody } from '@/lib/account-support';
 import { storeSettingsUpdateSchema } from '@/lib/contracts';
-import { loadOwnedStore, requireSellerActor, SETTINGS_SELECT } from '@/lib/owned-store';
+import { loadStoreFor, requireSellerActor, SETTINGS_SELECT } from '@/lib/owned-store';
 import { revalidateStore } from '@/lib/revalidate';
 import { assertThemeAllowedByPlan } from '@/lib/theme-plan';
 import { buildSettingsWrite, effectiveTheme, referencedMedia, settingsFieldsOf, SETTINGS_ERROR_CODE, toStoreSettings } from '@/lib/store-settings';
@@ -67,11 +67,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const update = await readAccountBody(request, storeSettingsUpdateSchema);
     assertCan(ctx.actor, 'update', 'stores', settingsFieldsOf(update));
     const { id } = await context.params;
-    const current = await loadOwnedStore(request, ctx, id, SETTINGS_SELECT);
+    // S8-B2 (D-118): the OWNER, or an active member whose role has the capability of EVERY group sent (tax: owner and manager; payments, fraud, domain, payout: the owner only;
+    // the other groups: owner and manager). Staff and support have none. Anyone else is 403.
+    const { doc: current, role } = await loadStoreFor(request, ctx, id, SETTINGS_SELECT, settingsGroupCapabilities(Object.keys(update)));
     const storeId = String(current._id);
+    // The plan is the OWNER's, whoever saves.
+    const ownerId = current.owner ? String(current.owner) : ctx.userId;
 
     // S7-B7 (D-118): a premium theme needs a plan with premium themes (after the ownership checks, only when the theme CHANGES).
-    if (update.theme && update.theme.activeTheme !== effectiveTheme(current.storefront)) await assertThemeAllowedByPlan(ctx.userId, update.theme.activeTheme);
+    if (update.theme && update.theme.activeTheme !== effectiveTheme(current.storefront)) await assertThemeAllowedByPlan(ownerId, update.theme.activeTheme);
 
     const write = buildSettingsWrite(current, update);
     if (write.fields.length === 0) throw new HttpError(400, 'Change at least one setting.', SETTINGS_ERROR_CODE, 'body');
@@ -82,7 +86,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     const updated = await Store.findOneAndUpdate(
-      { _id: storeId, owner: ctx.userObjectId, updatedAt: current.updatedAt ?? null },
+      { _id: storeId, owner: current.owner ?? ctx.userObjectId, updatedAt: current.updatedAt ?? null },
       { $set: write.set },
       { new: true },
     )
@@ -94,6 +98,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     try {
       await writeAuditLog('store.settings', 'store', storeId, 'seller:' + ctx.userId, {
         groups: write.groups,
+        // S8-B2: who saved and in what role (the owner or a manager).
+        actorRole: role,
         fields: write.fields,
         // Never the account number: the method and its last 4 characters only.
         ...(write.payoutChanged ? { payout: write.payoutSummary ?? { removed: true } } : {}),
@@ -102,7 +108,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     } catch (err) {
       console.error('[seller-backend] could not write the store settings audit entry', err instanceof Error ? err.message : 'unknown');
     }
-    return NextResponse.json({ settings: await toStoreSettings(updated as never) }, { headers: { 'Cache-Control': 'no-store' } });
+    const settings = await toStoreSettings(updated as never);
+    // The payout account is owner-only (payouts): a manager who saved another group never reads it back, not even masked.
+    return NextResponse.json({ settings: role === 'owner' ? settings : { ...settings, payout: null } }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
   }

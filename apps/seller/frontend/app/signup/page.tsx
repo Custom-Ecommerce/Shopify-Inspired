@@ -9,6 +9,7 @@ import { Surface } from "@/components/shared/Surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { nextAfterAuth } from "@/lib/invite-view";
 
 /** Simple advisory strength: 0 = weak, 1 = fair, 2 = strong. */
 function passwordStrength(pw: string): 0 | 1 | 2 {
@@ -54,7 +55,8 @@ export default function SignupPage() {
         return;
       }
 
-      router.push("/");
+      // S8-B2: an invitee who came from the accept-invite page returns to it; anything else goes to the dashboard.
+      router.push(nextAfterAuth(window.location.search));
       router.refresh();
     } catch {
       setErrorMessage("Could not reach the backend. Please try again.");

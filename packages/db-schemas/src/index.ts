@@ -58,3 +58,5 @@ export * from './models/blocked-contact';
 export * from './models/abandoned-cart';
 // Sprint 6 (S6-B7): the acknowledged revision per (store, group).
 export * from './models/store-sync-revision';
+// Sprint 8 (S8-B2, D-118): the people invited to a store's team.
+export * from './models/store-member';

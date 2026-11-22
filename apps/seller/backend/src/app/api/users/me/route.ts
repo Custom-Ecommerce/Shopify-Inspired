@@ -5,6 +5,7 @@ import { authenticate } from '@/lib/auth';
 import { accountProfileUpdateSchema } from '@/lib/contracts';
 import { assertCan, Store, User } from '@/lib/services';
 import { HttpError, handleRouteError } from '@/lib/http';
+import { listActiveMemberships } from '@/lib/data-plane';
 import { connectSellerDb } from '@/lib/mongo';
 
 export const runtime = 'nodejs';
@@ -35,6 +36,11 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     /* patch_session_fix: the dashboard reads user.stores (owned store ids) and user.accountStatus */
     const ownedStores = (await Store.find({ owner: ctx.userObjectId }).select("_id").sort({ createdAt: 1 }).lean()) as unknown as Array<{ _id: unknown }>;
+    // Sprint 8 (S8-B2): every store the user can work in with the role they hold: the stores they own (owner) and those where they are an ACTIVE member. `stores` above stays
+    // the OWNED ids, as every caller has always read it.
+    const ownedIds = ownedStores.map((s) => String(s._id));
+    const memberships = (await listActiveMemberships(ctx)).filter((entry) => !ownedIds.includes(entry.storeId));
+    const storeAccess = [...ownedIds.map((id) => ({ id, role: 'owner' as const })), ...memberships.map((entry) => ({ id: entry.storeId, role: entry.role }))];
     const stored = (user as { accountStatus?: string | null }).accountStatus;
     const accountStatus = stored === 'suspended' || stored === 'blocked' ? stored : 'active';
     const extra = user as { phone?: string | null; pendingEmail?: string | null; emailVerifiedAt?: Date | null };
@@ -48,6 +54,7 @@ export async function GET(request: NextRequest): Promise<Response> {
           role: user.role,
           store: user.store ? String(user.store) : null,
           stores: ownedStores.map((s) => String(s._id)),
+          storeAccess,
           accountStatus,
           // Sprint 4 EP-08: the dashboard shows the verify banner and the account page from these.
           emailVerified: Boolean(extra.emailVerifiedAt),

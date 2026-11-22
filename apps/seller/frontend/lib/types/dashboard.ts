@@ -30,6 +30,8 @@ export type CustomDomainStatus = "unset" | "pending" | "verified" | "failed";
 /** One owned store, summarised for the switcher / picker / suspension banner. */
 export interface WorkspaceStore {
   id: string;
+  /** Sprint 8 (S8-B2): the signed-in user's role in this store. Absent from an older backend (the owner). */
+  role?: "owner" | "manager" | "staff" | "support";
   name: string;
   slug: string;
   internalHandle?: string | null;

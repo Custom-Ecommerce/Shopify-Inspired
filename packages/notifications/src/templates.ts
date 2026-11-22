@@ -54,6 +54,10 @@ export const TEMPLATE_NAMES = [
   'contact_message_platform',
   'contact_reply',
   'ticket_admin_reply',
+  // Sprint 8 (S8-B2, D-118): a store's team: the invite (to the invitee), the invite accepted (to the owner), access removed (to the member).
+  'staff_invite',
+  'staff_invite_accepted',
+  'staff_access_removed',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -109,6 +113,10 @@ export const TEMPLATE_VARIABLES = [
   'ticketSubject',
   // Sprint 8 (S8-B1, D-118): the tax line of an order ("Tax (included): Rs. 170"), only when the order carries tax. Optional in the templates that use it.
   'taxLine',
+  // Sprint 8 (S8-B2): the role ("Manager", "Staff", "Support"), the person's name or email, and who invited them.
+  'memberRole',
+  'memberName',
+  'invitedBy',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
@@ -622,6 +630,60 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'یہ لنک ایک بار کام کرتا ہے اور {{validFor}} تک درست ہے۔',
     ],
     whatsapp: 'You are invited to {{appName}}. Set your password: {{actionLink}} (valid {{validFor}})\nآپ کو دعوت دی گئی ہے۔',
+  },
+  staff_invite: {
+    variables: ['storeName', 'memberRole', 'invitedBy', 'actionLink', 'validFor'],
+    subject: '{{invitedBy}} invited you to {{storeName}} on Markazify',
+    en: [
+      'Hi,',
+      '',
+      '{{invitedBy}} invited you to join the team of {{storeName}} on Markazify as {{memberRole}}.',
+      '',
+      'Accept the invitation: {{actionLink}}',
+      '',
+      'The link is valid for {{validFor}}. Sign in with, or create an account for, the email address this message was sent to. If you did not expect this, ignore it.',
+    ],
+    ur: [
+      'السلام علیکم،',
+      '{{invitedBy}} نے آپ کو {{storeName}} کی ٹیم میں {{memberRole}} کے طور پر شامل ہونے کی دعوت دی ہے۔',
+      'دعوت قبول کریں: {{actionLink}}',
+      'یہ لنک {{validFor}} تک درست ہے۔',
+    ],
+    whatsapp: '{{invitedBy}} invited you to {{storeName}} as {{memberRole}}: {{actionLink}} (valid {{validFor}})\nآپ کو ٹیم میں شامل ہونے کی دعوت دی گئی ہے۔',
+  },
+  staff_invite_accepted: {
+    variables: ['storeName', 'memberName', 'memberRole', 'dashboardLink'],
+    subject: '{{memberName}} joined {{storeName}}',
+    en: [
+      'Hi,',
+      '',
+      '{{memberName}} accepted your invitation and now works in {{storeName}} as {{memberRole}}.',
+      '',
+      'Manage your team: {{dashboardLink}}',
+    ],
+    ur: [
+      'السلام علیکم،',
+      '{{memberName}} نے آپ کی دعوت قبول کر لی ہے اور اب {{storeName}} میں {{memberRole}} کے طور پر کام کرتے ہیں۔',
+      'ٹیم دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: '{{memberName}} joined {{storeName}} as {{memberRole}}. {{dashboardLink}}\nنیا ٹیم ممبر شامل ہو گیا ہے۔',
+  },
+  staff_access_removed: {
+    variables: ['storeName', 'memberName'],
+    subject: 'Your access to {{storeName}} was removed',
+    en: [
+      'Hi {{memberName}},',
+      '',
+      'The owner of {{storeName}} removed your access to the store on Markazify. You can no longer sign in to it.',
+      '',
+      'If you think this is a mistake, ask the store owner.',
+    ],
+    ur: [
+      '{{memberName}}، السلام علیکم،',
+      '{{storeName}} کے مالک نے مارکزیفائی پر اس اسٹور تک آپ کی رسائی ختم کر دی ہے۔',
+      'اگر یہ غلطی لگے تو اسٹور کے مالک سے پوچھیں۔',
+    ],
+    whatsapp: 'Your access to {{storeName}} was removed.\nآپ کی رسائی ختم کر دی گئی ہے۔',
   },
   contact_message_store: {
     variables: ['storeName', 'contactName', 'contactEmail', 'contactPhone', 'contactMessage', 'dashboardLink'],

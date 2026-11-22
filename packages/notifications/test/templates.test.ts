@@ -63,6 +63,10 @@ const FULL: TemplateVars = {
   periodEnd: '20 December 2026',
   paymentReason: 'The amount did not match',
   sellerEmail: 'ayesha@example.com',
+  // Sprint 8 (S8-B2): the team templates.
+  memberRole: 'Manager',
+  memberName: 'sara@example.com',
+  invitedBy: 'Ayesha Khan',
 };
 
 test('every template uses only variables it declares, and every declared variable is known', () => {
@@ -339,16 +343,55 @@ test('Sprint 8 (S8-B1): the order placed emails show the tax line only when it h
 });
 
 test('Sprint 8 (S8-B1): the tax line is escaped in HTML and cannot add lines; the other templates do not take it', () => {
-  const out = renderTemplate('order_placed_customer', { ...FULL, taxLine: '<b>GST</b>: Rs. 5
-Bcc: x@y.z' });
+  const out = renderTemplate('order_placed_customer', { ...FULL, taxLine: '<b>GST</b>: Rs. 5\nBcc: x@y.z' });
   assert.equal(out.html.includes('<b>GST</b>'), false);
   assert.ok(out.html.includes('&lt;b&gt;GST&lt;/b&gt;'));
-  assert.equal(out.text.includes('
-Bcc: x@y.z'), false, 'a control character in the value becomes a space');
+  assert.equal(out.text.includes('\nBcc: x@y.z'), false, 'a control character in the value becomes a space');
   for (const name of TEMPLATE_NAMES) {
     if (name === 'order_placed_customer' || name === 'order_placed_seller') continue;
     assert.equal(TEMPLATES[name].optionalVariables, undefined, name);
   }
   const plain = renderTemplate('order_confirmed', { ...FULL, taxLine: 'Tax: Rs. 1' });
   assert.equal(plain.text.includes('Tax: Rs. 1'), false, 'a template that does not use the variable ignores it');
+});
+
+test('Sprint 8 (S8-B2): the three team templates exist, carry the store, the role and the link, and are valid', () => {
+  for (const name of ['staff_invite', 'staff_invite_accepted', 'staff_access_removed'] as const) assert.ok((TEMPLATE_NAMES as readonly string[]).includes(name), name);
+  const invite = renderTemplate('staff_invite', { ...FULL, storeName: 'Zara Lawn', invitedBy: 'Ayesha Khan', memberRole: 'Support', actionLink: 'https://seller.markazify.com/accept-invite?token=abc', validFor: '7 days' });
+  assert.equal(invite.subject, 'Ayesha Khan invited you to Zara Lawn on Markazify');
+  assert.ok(invite.text.includes('as Support'));
+  assert.ok(invite.text.includes('https://seller.markazify.com/accept-invite?token=abc'));
+  assert.ok(invite.text.includes('7 days'));
+  assert.ok(invite.html.includes('<a href="https://seller.markazify.com/accept-invite?token=abc">'), 'the link is a link');
+  const accepted = renderTemplate('staff_invite_accepted', { ...FULL, memberName: 'sara@example.com', memberRole: 'Staff', storeName: 'Zara Lawn', dashboardLink: 'https://seller.markazify.com/s/1/team' });
+  assert.equal(accepted.subject, 'sara@example.com joined Zara Lawn');
+  assert.ok(accepted.text.includes('as Staff'));
+  assert.ok(accepted.html.includes('https://seller.markazify.com/s/1/team'));
+  const removed = renderTemplate('staff_access_removed', { ...FULL, memberName: 'Sara', storeName: 'Zara Lawn' });
+  assert.equal(removed.subject, 'Your access to Zara Lawn was removed');
+  assert.ok(removed.text.includes('Hi Sara'));
+  assert.deepEqual(templateProblems(), []);
+});
+
+test('Sprint 8 (S8-B2): what a person typed is escaped in the team emails and cannot add lines to a subject', () => {
+  const invite = renderTemplate('staff_invite', { ...FULL, storeName: '<script>alert(1)</script> Shop', invitedBy: '<b>Ayesha</b>\nBcc: x@y.z', memberRole: 'Manager' });
+  assert.equal(invite.html.includes('<script>'), false);
+  assert.equal(invite.html.includes('<b>Ayesha</b>'), false);
+  assert.ok(invite.html.includes('&lt;script&gt;alert(1)&lt;/script&gt; Shop'));
+  assert.equal(/[\r\n]/.test(invite.subject), false, 'a control character in a name never reaches the subject');
+  const accepted = renderTemplate('staff_invite_accepted', { ...FULL, memberName: '"><img src=x>' });
+  assert.equal(accepted.html.includes('<img'), false);
+  const removed = renderTemplate('staff_access_removed', { ...FULL, memberName: '<i>x</i>' });
+  assert.equal(removed.html.includes('<i>'), false);
+});
+
+test('Sprint 8 (S8-B2): every team template needs its values (a missing one is an error, never a half-empty email)', () => {
+  const { storeName: _s, ...withoutStore } = FULL;
+  void _s;
+  for (const name of ['staff_invite', 'staff_invite_accepted', 'staff_access_removed'] as const) {
+    assert.throws(() => renderTemplate(name, withoutStore), TemplateError, name);
+  }
+  const { actionLink: _a, ...withoutLink } = FULL;
+  void _a;
+  assert.throws(() => renderTemplate('staff_invite', withoutLink), TemplateError);
 });

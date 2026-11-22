@@ -608,3 +608,19 @@ rules, and the settings screen says so ("Check your own tax rules; Markazify onl
 - **Returns.** The refund cap of a return is its tax-free base plus its **proportional share of an exclusive tax** (an inclusive price already contains
   it, so nothing is added). Shares are the difference of two running amounts, so the shares of all the returns of an order add up to exactly the tax paid. The
   commission reversal keeps reading the tax-free base.
+
+## 11. Store team: staff roles and invites (Sprint 8, S8-B2, D-118)
+
+- **Roles.** `owner` (the account that owns the store) and three staff roles: `manager` (everything except the owner-only list), `staff` (orders, products with their
+  categories and media, inventory) and `support` (orders view and customer notes, returns, customers, review replies, contact inbox and tickets). **Owner-only:** the
+  settings groups payments, fraud, domain and payout, go-live, billing and plan, API keys, team, earnings, payouts and commission data. The tax group is writable by the
+  owner and a manager. The one matrix is `packages/auth/src/seller-capabilities.ts` (`sellerCan(role, capability)`): a missing or unknown role, and an unknown capability, are denied.
+- **Membership** is the `storemembers` collection (`packages/db-schemas/src/models/store-member.ts`). Run `ensure-indexes` after deploying: three unique PARTIAL indexes
+  ({store,user} for rows with a user, {store,email} for status invited, {tokenHash} for rows with a hash) and {user,status}.
+- **Every request reads the member row from the database** (no cache), so disabling or removing a member takes effect on their very next request.
+  `resolveStoreAccess` (lib/data-plane.ts) answers `{ storeId, role, isOwner }`; `resolveOwnedStoreId` keeps answering the store id. **Until S8-B3 sweeps a route, an active member is
+  refused 403 `NOT_OWNER_YET` by it** (only the team routes and PATCH /api/stores/:id name a capability so far).
+- **Invites.** Owner-only, 7 days, one open invite per email per store, the owner's own email is refused, seats come from the plan (`limits.staffSeats`: Free 0, Growth 3; invited and
+  active members count, a disabled one does not; 403 `PLAN_LIMIT_REACHED`). The token is 32 random bytes: only its SHA-256 hash is stored, the raw value is in the emailed
+  link `<APP_BASE_URL_SELLER>/accept-invite?token=...` alone. An unknown, expired, used or other-account token is one neutral 400 `INVITE_INVALID`.
+- **Routes:** `GET|POST /api/stores/:id/team[/invite]`, `PATCH .../team/:memberId`, `POST .../team/:memberId/{resend,disable,enable,remove}`, `GET /api/team/invite?token=`, `POST /api/team/accept`.

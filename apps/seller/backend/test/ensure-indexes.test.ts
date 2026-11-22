@@ -330,3 +330,23 @@ test('Sprint 7 (S7-B5): the store model declares a UNIQUE PARTIAL index on domai
   const old = plan.planAll([{ model: 'Store', collection: 'stores', declared: typed }], { stores: [ID, ...have.filter((h) => h.key.domain === undefined), { name: 'domain_1', key: { domain: 1 }, sparse: true }] });
   assert.equal(old.totals.conflicts, 1);
 });
+
+test('Sprint 8 (S8-B2, CO-115): the member model declares its three partial unique indexes and the user lookup, a fresh database misses all four, and once they exist nothing is missing', () => {
+  const model = (dbSchemas as any).StoreMember ?? (dbSchemas as any).default?.StoreMember;
+  const declared = model.schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'StoreMember', collection: 'storemembers', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['StoreMember']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string; unique: boolean; partial: boolean }> }).missing;
+  assert.equal(missing.length, 4);
+  for (const name of ['store_user_unique', 'store_email_invited_unique', 'tokenHash_unique']) {
+    assert.ok(missing.some((m) => m.name === name && m.unique && m.partial), name + ' is planned as a unique PARTIAL index');
+  }
+  assert.ok(missing.some((m) => m.name === 'user_status' && !m.unique));
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  assert.equal(plan.planAll([{ model: 'StoreMember', collection: 'storemembers', declared }], { storemembers: [ID, ...have] }).totals.missing, 0);
+  // A plain index on {store, email} is not the unique partial one: it is reported (missing or conflicting), never accepted.
+  const plain = plan.planAll([{ model: 'StoreMember', collection: 'storemembers', declared }], { storemembers: [ID, { name: 'store_email_invited_unique', key: { store: 1, email: 1 } }] });
+  assert.ok(plain.totals.missing + plain.totals.conflicts >= 1);
+});

@@ -203,6 +203,24 @@ export const {
   isValidTaxRate,
 } = contracts;
 
+// Sprint 8 (S8-B2, D-118): a store's team.
+export const {
+  TEAM_ROLES,
+  TEAM_ERROR_CODES,
+  TEAM_INVITE_TTL_DAYS,
+  INVITE_INVALID_MESSAGE,
+  teamInviteRequestSchema,
+  teamRoleChangeRequestSchema,
+  teamMemberActionRequestSchema,
+  teamAcceptRequestSchema,
+  teamInviteInfoQuerySchema,
+  teamListResponseSchema,
+  teamMemberResponseSchema,
+  teamInviteInfoSchema,
+  teamAcceptResponseSchema,
+  storeAccessSchema,
+} = contracts;
+
 // Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
 export const {
   EARNINGS_PAGE_DEFAULT_LIMIT,

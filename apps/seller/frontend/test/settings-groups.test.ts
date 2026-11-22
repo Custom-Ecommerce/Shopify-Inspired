@@ -29,6 +29,8 @@ const STRICT_BACKEND_WRITES = [
   "app/api/dashboard/discounts/route.ts",
   "app/api/dashboard/discounts/[id]/route.ts",
   "app/api/dashboard/returns/[id]/route.ts",
+  // S8-B2: { token } only, and no store at all (the invite names it).
+  "app/api/team/accept/route.ts",
 ];
 
 test("the seller writes whose backend schema is strict do not bind body.store", () => {

@@ -63,6 +63,8 @@ export * from './store-settings';
 export * from './theme-config';
 // Sprint 8 (S8-B1, D-118): store tax (settings group, the one rounding rule, the order snapshot).
 export * from './tax';
+// Sprint 8 (S8-B2, D-118): a store's team: staff roles, invites and the team routes.
+export * from './team';
 // Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
 export * from './payouts';
 // Sprint 4 EP-07.US04: customers and email broadcasts.
