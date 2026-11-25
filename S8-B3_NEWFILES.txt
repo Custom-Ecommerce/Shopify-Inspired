@@ -1,6 +1,0 @@
-﻿S8-B3_NEWFILES.txt
-apps/seller/backend/src/lib/route-capabilities.ts
-apps/seller/backend/test/route-capabilities.test.ts
-apps/seller/backend/test/route-roles.test.ts
-apps/seller/frontend/lib/role-menu.ts
-apps/seller/frontend/test/role-menu.test.ts
