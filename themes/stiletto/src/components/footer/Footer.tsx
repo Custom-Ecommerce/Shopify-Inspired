@@ -45,11 +45,11 @@ export function Footer({ config }: FooterProps) {
             </div>
 
             {config.brand.description ? (
-              <p className="font-sans text-[14px] leading-relaxed opacity-80 max-w-[420px] whitespace-pre-line">{config.brand.description}</p>
+              <p className="font-sans text-[14px] leading-relaxed opacity-80 max-w-[420px] whitespace-pre-line [overflow-wrap:anywhere]">{config.brand.description}</p>
             ) : null}
 
             {hasContact && contact ? (
-              <ul data-section="contact" className="flex flex-col gap-2 font-sans text-[13px] opacity-90">
+              <ul data-section="contact" className="flex flex-col gap-2 font-sans text-[13px] opacity-90 [overflow-wrap:anywhere]">
                 {contact.phone ? (
                   <li>
                     <a href={"tel:" + contact.phone} className="hover:underline">Call {contact.phone}</a>
@@ -70,7 +70,7 @@ export function Footer({ config }: FooterProps) {
             ) : null}
 
             {config.storeLinks && config.storeLinks.length > 0 ? (
-              <ul data-section="store-links" aria-label="Store pages" className="flex flex-wrap gap-x-6 gap-y-1 font-sans text-[13px]">
+              <ul data-section="store-links" aria-label="Store pages" className="flex flex-wrap gap-x-6 gap-y-1 font-sans text-[13px] [overflow-wrap:anywhere]">
                 {config.storeLinks.map((link) => (
                   <li key={link.href}>
                     <Link href={link.href} className="inline-flex min-h-11 items-center opacity-90 hover:opacity-100 hover:underline">{link.label}</Link>

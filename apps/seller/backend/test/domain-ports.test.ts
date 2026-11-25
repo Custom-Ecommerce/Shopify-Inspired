@@ -148,3 +148,8 @@ test('vercel: the stub records and succeeds, and it is what the environment give
   assert.equal(getVercelDomains({ VERCEL_API_TOKEN: ' ', VERCEL_PROJECT_ID: 'p' }).configured, false);
   assert.equal(getVercelDomains({ VERCEL_API_TOKEN: 't', VERCEL_PROJECT_ID: 'p' }).configured, true);
 });
+
+test('a yourshop.com.pk name is the top of its zone: it is told to add an A record, a name under it a CNAME', () => {
+  for (const apex of ['zara.com.pk', 'zara.net.pk', 'zara.org.pk', 'zara.co.uk']) assert.equal(dnsRecordsFor(apex, 'tok', TARGETS)[0]!.type, 'A', apex);
+  for (const sub of ['shop.zara.com.pk', 'shop.zara.pk', 'www.zara.net']) assert.equal(dnsRecordsFor(sub, 'tok', TARGETS)[0]!.type, 'CNAME', sub);
+});

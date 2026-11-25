@@ -14,10 +14,12 @@ export function CollectionHeader({
         <div className="grid grid-cols-1 md:grid-cols-12 items-center gap-8 md:gap-0">
           
           {/* Left Text Content: 5 Columns */}
-          <div className="md:col-span-6 flex flex-col items-center md:items-start text-center md:text-left">
-            <span className="font-sans text-[12px] uppercase tracking-[0.2em] text-[var(--featured-card-muted)] mb-4 font-medium">
-              {itemCount} {itemCount === 1 ? "Item" : "Items"} Available
-            </span>
+          <div className="md:col-span-6 min-w-0 flex flex-col items-center md:items-start text-center md:text-left [overflow-wrap:anywhere]">
+            {itemCount === undefined ? null : (
+              <span className="font-sans text-[12px] uppercase tracking-[0.2em] text-[var(--featured-card-muted)] mb-4 font-medium">
+                {itemCount} {itemCount === 1 ? "Item" : "Items"} Available
+              </span>
+            )}
             <h1 className="font-heading text-[36px] md:text-[56px] uppercase text-[var(--featured-text)] leading-none mb-4">
               {title}
             </h1>

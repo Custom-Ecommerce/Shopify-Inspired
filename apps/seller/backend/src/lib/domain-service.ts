@@ -50,8 +50,17 @@ export function newDomainToken(): string {
   return 'mz-' + randomBytes(18).toString('hex');
 }
 
-/** A name with two parts (shop.pk style apex) cannot hold a CNAME: it gets the A record when there is one. */
-const looksLikeApex = (host: string): boolean => host.split('.').length === 2;
+/** Endings under which names are registered, so yourshop.com.pk is the top of its zone just as yourshop.pk is. Pakistan's and the common ones. */
+const SECOND_LEVEL_ENDINGS: ReadonlySet<string> = new Set([
+  'com.pk', 'net.pk', 'org.pk', 'edu.pk', 'web.pk', 'biz.pk', 'fam.pk', 'gov.pk', 'gob.pk', 'gok.pk', 'gop.pk', 'gos.pk', 'gkp.pk', 'gog.pk',
+  'co.uk', 'org.uk', 'com.au', 'co.in', 'co.nz', 'co.za', 'com.bd', 'com.sa', 'com.tr', 'com.my', 'com.sg',
+]);
+
+/** A top-of-zone name (yourshop.pk, yourshop.com.pk) cannot hold a CNAME: it gets the A record when there is one. */
+const looksLikeApex = (host: string): boolean => {
+  const parts = host.split('.');
+  return parts.length === 2 || (parts.length === 3 && SECOND_LEVEL_ENDINGS.has(parts.slice(1).join('.')));
+};
 
 /** The records to set: the routing record (CNAME or A, as the host and the settings allow), then the TXT ownership record. */
 export function dnsRecordsFor(host: string, token: string, targets: DomainTargets): DomainRecord[] {

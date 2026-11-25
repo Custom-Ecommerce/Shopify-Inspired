@@ -37,7 +37,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     } catch (err) {
       console.error('[seller-backend] could not write the ticket audit entry', err instanceof Error ? err.message : 'unknown');
     }
-    return NextResponse.json(ticketToWire(result), { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(ticketToWire(result, { forSeller: true }), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
   }

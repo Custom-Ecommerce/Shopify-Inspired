@@ -83,4 +83,10 @@ for (const file of sources) {
   assert.ok(!/cookies\(\)\.set\([^)]*domain/i.test(text), file + " sets a cookie with a domain option");
 }
 
+// ---- every indexable store page names its canonical address (the layout puts it on the verified domain)
+for (const [page, canonical] of [["page.tsx", 'canonical: "/"'], ["products/[slug]/page.tsx", "canonical: storePaths.product(slug)"], ["blog/[slug]/page.tsx", "canonical: storePaths.article(slug)"], ["pages/[slug]/page.tsx", "canonical: storePaths.page(slug)"]] as const) {
+  const source = readFileSync(join(storefront, "app", "(store)", "tenant", "[tenantKey]", page), "utf8");
+  assert.ok(source.includes(canonical), page + " has no canonical address");
+}
+
 console.log("custom-domain checks passed");

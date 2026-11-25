@@ -182,3 +182,22 @@ test("messages are shown as text, never as markup", () => {
     assert.equal(readFileSync(resolve(process.cwd(), rel), "utf8").includes("dangerouslySetInnerHTML"), false, rel);
   }
 });
+
+test("at 375 px a long unbroken ticket subject wraps in the page header instead of widening the screen", () => {
+  const header = readFileSync(resolve(process.cwd(), "components/dashboard/shared/PageHeader.tsx"), "utf8");
+  assert.equal(header.match(/\[overflow-wrap:anywhere\]/g)?.length, 2, "the title and the description");
+});
+
+test("a long unbroken file name or title wraps inside every dialog instead of pushing its buttons off a phone screen", () => {
+  const dialog = readFileSync(resolve(process.cwd(), "components/ui/dialog.tsx"), "utf8");
+  const content = /data-slot="dialog-content"\s+className=\{cn\(\s+"([^"]*)"/.exec(dialog)?.[1] ?? "";
+  assert.ok(content.includes("[overflow-wrap:anywhere]"), content.slice(0, 80));
+});
+
+test("nothing in the media dialogs asks for break-word, which would undo the dialog's wrapping and widen it", () => {
+  // `break-words` (overflow-wrap: break-word) overrides the inherited `anywhere` and does not let a grid track shrink.
+  const media = readFileSync(resolve(process.cwd(), "components/dashboard/media/MediaLibrary.tsx"), "utf8");
+  const dialogText = media.match(/<(DialogDescription|li key=\{entry\.id\}) ?[^>]*>/g) ?? [];
+  assert.ok(dialogText.length >= 3, "the descriptions and the usage rows");
+  for (const tag of dialogText) assert.equal(tag.includes("break-words"), false, tag);
+});

@@ -90,11 +90,15 @@ export interface TicketMessageWire {
   byId: string;
 }
 
-/** A ticket as the seller and the admin read it. withMessages false is the list form: the count and the last message time only. */
-export function ticketToWire(doc: unknown, options: { withMessages?: boolean } = {}): Record<string, unknown> {
+/**
+ * A ticket as the seller and the admin read it. withMessages false is the list form: the count and the last message time only. forSeller true (every
+ * seller route) blanks the account id on the platform's messages: who in the team answered is the platform's business, not the seller's.
+ */
+export function ticketToWire(doc: unknown, options: { withMessages?: boolean; forSeller?: boolean } = {}): Record<string, unknown> {
   const wire = toWire(plainDoc(doc));
   const messages = Array.isArray(wire.messages) ? (wire.messages as Array<Record<string, unknown>>) : [];
-  const mapped = messages.map((m): TicketMessageWire => ({ from: String(m.from ?? ''), text: String(m.text ?? ''), at: iso(m.at), byId: String(m.byId ?? '') }));
+  const hidden = (m: Record<string, unknown>): boolean => options.forSeller === true && m.from === 'admin';
+  const mapped = messages.map((m): TicketMessageWire => ({ from: String(m.from ?? ''), text: String(m.text ?? ''), at: iso(m.at), byId: hidden(m) ? '' : String(m.byId ?? '') }));
   const out: Record<string, unknown> = {
     id: wire.id,
     seller: wire.seller === undefined ? null : String(wire.seller),

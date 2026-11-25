@@ -23,6 +23,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return {
     title: { absolute: title },
     description,
+    // S7-B6: the layout's metadataBase makes it absolute, on the verified custom domain when the store has one.
+    alternates: { canonical: storePaths.product(slug) },
     openGraph: { title, description: description ?? undefined, images: imageUrl ? [imageUrl] : undefined },
   };
 }

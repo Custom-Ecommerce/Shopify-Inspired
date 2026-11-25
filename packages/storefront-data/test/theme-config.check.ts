@@ -6,6 +6,9 @@
  *   npx tsx test/theme-config.check.ts        (or: pnpm test, which runs every *.check.ts)
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { STOREFRONT_THEME_CONFIG_DEFAULTS, THEME_FONT_STACKS, storefrontThemeConfigOf, themeStyleVars } from "../src/domain/theme-config";
 import { storefrontThemeConfigSchema } from "@markaz/contracts/theme-config";
 
@@ -36,5 +39,13 @@ for (const bad of [{ primaryColor: "red" }, { heroTitle: "<b>x</b>" }, { heroSub
   assert.deepEqual(storefrontThemeConfigOf({ themeConfig: { ...valid, ...bad } }), STOREFRONT_THEME_CONFIG_DEFAULTS, JSON.stringify(bad));
   assert.equal(storefrontThemeConfigSchema.safeParse({ ...valid, ...bad }).success, false, JSON.stringify(bad));
 }
+
+// ---- a store 404 is rendered in the browser, where an inline script never runs: the theme scope must also be applied from React
+const components = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "apps", "storefront", "components");
+const scope = readFileSync(join(components, "theme-scope.tsx"), "utf8");
+assert.match(scope, /<ThemeScopeApply slug=\{slug\} classes=\{classes\} \/>/, "ThemeScope also applies the scope from React");
+const apply = readFileSync(join(components, "theme-scope-apply.tsx"), "utf8");
+assert.match(apply, /^"use client";/, "the fallback runs in the browser");
+assert.match(apply, /setAttribute\("data-theme", slug\)/, "it sets the attribute the theme styles are scoped to");
 
 console.log("theme-config checks passed");

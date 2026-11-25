@@ -51,7 +51,7 @@ export function UsageList({ usage }: { usage: MediaUsage }) {
               const path = usageItemPath(feature.key, entry.id);
               const label = entry.title || "Untitled";
               return (
-                <li key={entry.id} className="break-words">
+                <li key={entry.id} className="[overflow-wrap:anywhere]">
                   {path ? (
                     <Link href={href(path)} className="underline underline-offset-2">
                       {label}
@@ -322,7 +322,7 @@ function MediaDialogs({
           <div className="grid gap-4">
             <DialogHeader>
               <DialogTitle>Where it is used</DialogTitle>
-              <DialogDescription className="break-words">{mediaDisplayName(item)}</DialogDescription>
+              <DialogDescription className="[overflow-wrap:anywhere]">{mediaDisplayName(item)}</DialogDescription>
             </DialogHeader>
             {usageLoading ? <p className="text-sm text-muted-foreground">Checking…</p> : null}
             {problem ? (
@@ -343,7 +343,7 @@ function MediaDialogs({
           <div className="grid gap-4">
             <DialogHeader>
               <DialogTitle>Delete this file?</DialogTitle>
-              <DialogDescription className="break-words">
+              <DialogDescription className="[overflow-wrap:anywhere]">
                 {mediaDisplayName(item)} will be removed from your library for good. A file that is still used somewhere cannot be deleted.
               </DialogDescription>
             </DialogHeader>

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Ticket not found');
     const doc = await findTicket({ seller: ctx.userId }, id);
     if (!doc) throw new HttpError(404, 'Ticket not found');
-    return NextResponse.json(ticketToWire(doc), { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(ticketToWire(doc, { forSeller: true }), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
   }

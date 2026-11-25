@@ -57,11 +57,11 @@ export function Dialog({ open, onClose, title, description, busy = false, classN
       <div className="flex flex-col gap-5 p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1.5">
-            <h2 id={titleId} className="font-heading text-lg font-semibold tracking-tight text-foreground">
+            <h2 id={titleId} className="font-heading text-lg font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">
               {title}
             </h2>
             {description ? (
-              <p id={descriptionId} className="text-sm text-muted-foreground">
+              <p id={descriptionId} className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
                 {description}
               </p>
             ) : null}

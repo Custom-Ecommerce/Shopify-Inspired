@@ -432,3 +432,13 @@ test('the admin contact inbox lists PLATFORM messages only and never a store\'s'
   assert.equal((await call('contact/detail', { id: MSG_STORE })).status, 404, 'a store\'s message is the seller\'s, not the admin\'s');
   assert.equal((await call('contact/detail', { id: oid(999) })).status, 404);
 });
+
+test('what the seller reads back never carries the account id of the platform member who answered; the admin still has it', async () => {
+  const answered = (await (await call('tickets/reply', { id: TK_A, revision: 0, text: 'We paid it on Friday.' })).json()) as Body;
+  assert.equal(answered.ticket.messages.at(-1).byId, ADMIN_ID, 'the admin view');
+  const mine = await read(TK_A);
+  const text = await mine.text();
+  assert.equal(mine.status, 200);
+  assert.equal(text.includes(ADMIN_ID), false);
+  assert.deepEqual(JSON.parse(text).messages.map((m: Body) => [m.from, m.byId]), [['seller', USER_A], ['admin', '']]);
+});

@@ -145,3 +145,9 @@ test("messages are shown as text, never as markup", () => {
     assert.equal(source.includes("dangerouslySetInnerHTML"), false, file);
   }
 });
+
+test("a long unbroken subject, name or email wraps inside a dialog instead of making it scroll sideways", () => {
+  const dialog = fs.readFileSync(path.join(process.cwd(), "components", "ui", "dialog.tsx"), "utf8");
+  assert.match(dialog, /<h2 id=\{titleId\} className="[^"]*\[overflow-wrap:anywhere\]/);
+  assert.match(dialog, /<p id=\{descriptionId\} className="[^"]*\[overflow-wrap:anywhere\]/);
+});

@@ -41,7 +41,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         .lean(),
       SupportTicket.countDocuments(filter),
     ]);
-    const docs = (rows as unknown as Record<string, unknown>[]).map((row) => ticketToWire(row, { withMessages: false }));
+    const docs = (rows as unknown as Record<string, unknown>[]).map((row) => ticketToWire(row, { withMessages: false, forSeller: true }));
     return NextResponse.json(listEnvelope(docs, { page, limit, totalDocs }), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       orderRef: body.orderRef ? body.orderRef : null,
       revision: 0,
     })) as unknown;
-    const wire = ticketToWire(created);
+    const wire = ticketToWire(created, { forSeller: true });
     try {
       await writeAuditLog('ticket.create', 'ticket', String(wire.id), auditActorOf(ctx), { at: now.toISOString() });
     } catch (err) {

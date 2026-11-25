@@ -17,7 +17,7 @@ export function ContentPage({ title, body, content, slug }: ContentPageProps) {
       <StilettoHeader />
 
       <main className="relative">
-        <CollectionHeader title={title} itemCount={0} />
+        <CollectionHeader title={title} />
         <div className="py-12 md:py-16 px-4 md:px-12 max-w-3xl mx-auto w-full" data-source={content ? "live" : "static"} data-source-note="The store's own page when it has one; otherwise default text.">
           {content ? <ContentBody tree={content} /> : <p className="py-12 text-center font-sans text-[15px] text-[var(--featured-card-muted)] break-words">{body}</p>}
           {slug === "contact" ? (<div className="mt-10"><ContactForm /></div>) : null}

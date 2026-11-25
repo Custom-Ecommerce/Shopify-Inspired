@@ -1,4 +1,5 @@
 import { themeFonts, themeHtmlClasses } from "@/lib/theme-fonts";
+import { ThemeScopeApply } from "@/components/theme-scope-apply";
 
 /** Themes whose stylesheet is scoped to html[data-theme="<slug>"]. Mustafa scopes itself with a wrapper element. */
 export const SCOPED_THEMES: ReadonlySet<string> = new Set(Object.keys(themeFonts));
@@ -16,5 +17,10 @@ export function ThemeScope({ slug }: { slug: string }) {
     ");d.classList.add.apply(d.classList," +
     JSON.stringify(classes) +
     ");})();";
-  return <script dangerouslySetInnerHTML={{ __html: code }} />;
+  return (
+    <>
+      <script dangerouslySetInnerHTML={{ __html: code }} />
+      <ThemeScopeApply slug={slug} classes={classes} />
+    </>
+  );
 }
