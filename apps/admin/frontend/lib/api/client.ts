@@ -1,3 +1,5 @@
+import { adminReferralListSchema, type AdminReferralList } from "@markaz/contracts/admin-referrals";
+import { referralStateToQuery, type ReferralListState } from "@/lib/referrals";
 import type { ModerationReview, ModerationReviewList } from "@markaz/contracts";
 import { reviewStateToQuery, type ReviewAction, type ReviewListState } from "@/lib/reviews";
 import { paymentApiQuery, type PaymentAction, type PaymentListState } from "@/lib/subscription-payments";
@@ -404,4 +406,9 @@ export function retryFailedEmails(ids: string[]): Promise<RetryResult> {
 /** The retention run: a dry run unless apply is true. */
 export function runRetentionNow(apply: boolean): Promise<RetentionRunResponse> {
   return call("/api/retention", retentionRunResponseSchema as Parser<RetentionRunResponse>, { method: "POST", body: JSON.stringify(apply ? { apply: true } : {}) });
+}
+
+// Sprint 8 (S8-B6): the read-only referrals view.
+export function listReferrals(state: ReferralListState, signal?: AbortSignal): Promise<AdminReferralList> {
+  return call("/api/referrals?" + referralStateToQuery(state), adminReferralListSchema as Parser<AdminReferralList>, { signal });
 }

@@ -624,3 +624,29 @@ rules, and the settings screen says so ("Check your own tax rules; Markazify onl
   active members count, a disabled one does not; 403 `PLAN_LIMIT_REACHED`). The token is 32 random bytes: only its SHA-256 hash is stored, the raw value is in the emailed
   link `<APP_BASE_URL_SELLER>/accept-invite?token=...` alone. An unknown, expired, used or other-account token is one neutral 400 `INVITE_INVALID`.
 - **Routes:** `GET|POST /api/stores/:id/team[/invite]`, `PATCH .../team/:memberId`, `POST .../team/:memberId/{resend,disable,enable,remove}`, `GET /api/team/invite?token=`, `POST /api/team/accept`.
+
+## 12. Referrals and storefront counters (Sprint 8, S8-B5 and S8-B6, D-118)
+
+### Referrals
+- Platform settings (admin console, Settings): `referralRewardMonths` (default 1; **0 turns referrals off**: no new referral rows, and no reward is given) and
+  `referralMonthlyCap` (default 5).
+- **`referralMonthlyCap` is read in two places.** At signup it is the most NEW referral rows one referrer can get in a UTC day. At reward time it is the most REWARDS one
+  referrer can receive in a UTC calendar month. A referral past the monthly cap is `capped` and is never rewarded later.
+- **The reward** is given when the referred seller's FIRST subscription payment with an amount above 0 is confirmed. It is a `subscriptioncredits` row: added at once to the
+  referrer's running paid period, else at the referrer's next confirmed payment. It never grants a plan. Whole calendar months (31 January + 1 month = end of February).
+- A reward-time self-referral (accounts' and stores' emails and phones) or a suspended or blocked referrer makes the row `refused`.
+- **Voiding the payment that earned a reward does not take the reward back.** The audit entry `referral.payment_voided_after_reward` and the note on the admin Referrals page
+  say so; the owner decides by hand. An audit entry `referral.credit_failed` means a row is `rewarded` but no months were stored: add them by hand.
+- A reward that lengthens a referrer's period changes their subscription, so the referrer's own last payment can then no longer be voided in the console (`SUBSCRIPTION_CHANGED`).
+- Admin console: **Referrals** (owner and finance), with a CSV of rewards.
+
+### Storefront counters
+- Anonymous and first-party: no cookie, no visitor id, no IP, no personal data. `dailystats` (store, UTC day: visits, productViews, addToCart, checkoutStarts, orders) and
+  `productdailystats` (store, product slug, day: views; at most 500 slugs per store and day). MongoDB removes rows 400 days after their day (TTL index).
+- **A visit** is one `page_view` per browser session of one store: a `sessionStorage` flag remembers it was sent (a new tab, or a closed and reopened one, is a new visit).
+  With `sessionStorage` blocked, no visit is counted. Nothing is counted on demo hosts, in a seller's preview, or when the browser sends Do Not Track.
+- `orders` is counted by the server when a NEW order is created, whatever the browser allows, so it can exceed what the other counters suggest.
+- Flow: browser -> `POST /api/storefront/events` (storefront) -> `POST /api/storefront/v1/events` (seller backend, 60 a minute per client address and store).
+
+**Deploy:** run `ensure-indexes` (dry run, then `--apply`): without it the TTLs, the one-row-per-day indexes, the referral reward slot and the one-credit-per-referral rule
+do not exist. `users.referralCode_unique` (S8-B5) is built by the same run.

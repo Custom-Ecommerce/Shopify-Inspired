@@ -99,3 +99,9 @@ export * from './admin-retries';
 
 // Sprint 8 (S8-B5, D-118): the frozen response shapes of the read-only public API v1.
 export * from './api-v1';
+
+// Sprint 8 (S8-B6): the admin's read-only view of referrals and the rewards export.
+export * from './admin-referrals';
+
+// Sprint 8 (S8-B6): the anonymous storefront counters.
+export * from './storefront-events';

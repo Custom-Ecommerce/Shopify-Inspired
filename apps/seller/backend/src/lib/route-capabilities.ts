@@ -84,6 +84,8 @@ export const ROUTE_CAPABILITIES: Readonly<Record<string, RouteAccess>> = Object.
   'internal/payouts/finish POST': 'system',
   'internal/payouts/void POST': 'system',
   'internal/plans/sellers POST': 'system',
+  'internal/referrals POST': 'system',
+  'internal/referrals/export POST': 'system',
   'internal/retention POST': 'system',
   'internal/retention/admin POST': 'system',
   'internal/retention/run POST': 'system',
@@ -177,6 +179,8 @@ export const ROUTE_CAPABILITIES: Readonly<Record<string, RouteAccess>> = Object.
 
   // storefront
   'storefront/v1/contact POST': 'public',
+  // S8-B6: the anonymous counters; no session, no cookie.
+  'storefront/v1/events POST': 'public',
   'storefront/v1/stores/[id]/abandoned-cart PUT': 'public',
   'storefront/v1/stores/[id]/articles GET': 'public',
   'storefront/v1/stores/[id]/articles/[slug] GET': 'public',

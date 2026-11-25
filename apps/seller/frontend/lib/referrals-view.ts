@@ -16,9 +16,12 @@ export function howItWorksText(overview: Pick<ReferralOverview, "enabled" | "rew
   return `Share your link with another seller. A referral that qualifies earns you ${months(overview.rewardMonths)}, for at most ${overview.monthlyCap} referrals a month.`;
 }
 
-export const statusText = (row: Pick<ReferralRow, "status">): string => (row.status === "rewarded" ? "Rewarded" : "Pending");
+const STATUS_TEXT: Record<ReferralRow["status"], string> = { pending: "Pending", rewarded: "Rewarded", capped: "Monthly limit reached", refused: "Not eligible" };
 
-export const rewardText = (row: Pick<ReferralRow, "status" | "monthsRewarded">): string => (row.status === "rewarded" ? months(row.monthsRewarded) : "No reward yet");
+export const statusText = (row: Pick<ReferralRow, "status">): string => STATUS_TEXT[row.status] ?? "Pending";
+
+export const rewardText = (row: Pick<ReferralRow, "status" | "monthsRewarded">): string =>
+  row.status === "rewarded" ? months(row.monthsRewarded) : row.status === "pending" ? "No reward yet" : "No reward";
 
 export const joinedText = (row: Pick<ReferralRow, "createdAt">): string =>
   `Joined ${new Date(row.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Karachi" })}`;

@@ -44,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
         ...(phone === null ? {} : { phone }),
       });
       // S8-B5: silent whatever happens; the answer below is the same with or without a code.
-      await captureReferral({ id: String(user._id), email, phone }, body.data.ref ?? new URL(request.url).searchParams.get('ref'));
+      await captureReferral({ id: String(user._id), email, phone, name: body.data.name }, body.data.ref ?? new URL(request.url).searchParams.get('ref'));
       const token = await issueToken(String(user._id), 'seller');
       // Sprint 4 EP-08.US02.T01: the verification email is queued after the response; signup never waits on it.
       const account = { id: String(user._id), email, name: body.data.name };

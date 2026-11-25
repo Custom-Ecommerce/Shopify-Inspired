@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
 import { internalRequestHeaders } from '@markaz/platform-kit/internal-signature';
-import { ApiKey, AuditLog, PlatformSettingsModel, Product, Store, StoreMember, Subscription, SubscriptionPayment, SubscriptionPlanModel, User, signSession } from '@/lib/services';
+import { ApiKey, AuditLog, PlatformSettingsModel, Product, Referral, Store, StoreMember, Subscription, SubscriptionCredit, SubscriptionPayment, SubscriptionPlanModel, User, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { useMemoryAuthLimits } from '@/lib/account-support';
 import { setSessionUserLoader } from '@/lib/session-user';
@@ -198,8 +198,14 @@ beforeEach(() => {
     keyAggregate: ApiKeyModel.aggregate,
     settings: SettingsModel.findOne,
     audit: AuditModel.create,
+    referral: (Referral as any).findOne,
+    credit: { find: (SubscriptionCredit as any).find, updateMany: (SubscriptionCredit as any).updateMany },
   };
   (mongoose as any).connect = async () => mongoose;
+  // S8-B6: nobody here was referred and nobody holds referral months (test/referral-reward.test.ts covers both).
+  (Referral as any).findOne = () => chain(() => null);
+  (SubscriptionCredit as any).find = () => chain(() => []);
+  (SubscriptionCredit as any).updateMany = async () => ({ modifiedCount: 0 });
 
   // lean() gives a copy, as the real driver does: a later write must not change what an earlier read holds.
   const copyOf = (row: Row | undefined): Row | null => (row ? { ...row } : null);
@@ -281,6 +287,8 @@ beforeEach(() => {
     ApiKeyModel.aggregate = saved.keyAggregate;
     SettingsModel.findOne = saved.settings;
     AuditModel.create = saved.audit;
+    (Referral as any).findOne = saved.referral;
+    Object.assign(SubscriptionCredit as any, saved.credit);
     setPlanLoader(null);
     setSessionUserLoader(null);
     delete process.env.MODERATION_API_SECRET;

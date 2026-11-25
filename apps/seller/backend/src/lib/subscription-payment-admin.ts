@@ -1,7 +1,10 @@
 import type { AdminPayment, AdminPaymentList, AdminPaymentListQuery, AdminPaymentWriteResponse, InternalConfirmPaymentRequest, InternalDecidePaymentRequest } from '@markaz/contracts';
 import { HttpError, isDuplicateKeyError } from '@/lib/http';
 import { auditBestEffort, iso, revisionFilter, revisionOf, type PaymentRow, type SubscriptionRow } from '@/lib/subscription-payments';
-import { computePaymentPeriod } from '@/lib/subscription-period';
+import { addMonthsUtc, computePaymentPeriod } from '@/lib/subscription-period';
+import { FREE_PLAN_KEY } from '@/lib/plan';
+import { noteVoidedReferralPayment, rewardReferral } from '@/lib/referral-reward';
+import { claimCredits, NO_CREDITS, releaseCredits, type ClaimedCredits } from '@/lib/subscription-credits';
 import { notifyPaymentConfirmed, notifyPaymentRejected } from '@/lib/subscription-emails';
 import { Subscription, SubscriptionPayment, SubscriptionPlanModel, User, assertCan } from '@/lib/services';
 
@@ -131,6 +134,9 @@ async function undoConfirm(decided: PaymentRow): Promise<void> {
  * POST /api/internal/subscription-payments/confirm { paymentId, amountRs, reason }. Only a CLAIMED payment can be confirmed, and only at the
  * amount the admin saw. Creates or extends the seller's subscription: status active, the plan of the payment, the period from
  * lib/subscription-period.ts, graceUntil cleared, a trial, a pending downgrade and a cancel flag cleared, source manual.
+ *
+ * Sprint 8 (S8-B6): the seller's waiting referral months (SubscriptionCredit) are added to the new period end in the SAME subscription write, only for a
+ * payment of a real amount; then, when this was a referred seller's first paid payment, the referrer is rewarded (lib/referral-reward.ts).
  */
 export async function confirmPayment(input: InternalConfirmPaymentRequest, adminId: string, now: Date = new Date()): Promise<AdminPaymentWriteResponse> {
   assertCan('admin', 'update', 'subscriptionPayments', [...DECISION_FIELDS]);
@@ -172,11 +178,23 @@ export async function confirmPayment(input: InternalConfirmPaymentRequest, admin
   ).lean()) as unknown as PaymentRow | null;
   if (!decided) throw new HttpError(409, 'Someone else already decided this payment. Reload the list.', 'PAYMENT_ALREADY_DECIDED');
 
+  let credits: ClaimedCredits = NO_CREDITS;
+  if (decided.amountRs > 0 && row.planKey !== FREE_PLAN_KEY) {
+    try {
+      credits = await claimCredits(String(row.seller), decided._id, now);
+    } catch (err) {
+      // The payment still counts; the months keep waiting for the next one.
+      await releaseCredits({ paymentId: decided._id });
+      console.error('[seller-backend] could not read the subscription credits', err instanceof Error ? err.name : 'unknown');
+    }
+  }
+  const periodEnd = credits.months > 0 ? addMonthsUtc(period.periodEnd, credits.months) : period.periodEnd;
+
   const paid = {
     planKey: row.planKey,
     status: 'active',
     periodStart: period.periodStart,
-    currentPeriodEnd: period.periodEnd,
+    currentPeriodEnd: periodEnd,
     graceUntil: null,
     trialEndsAt: null,
     source: 'manual',
@@ -193,6 +211,7 @@ export async function confirmPayment(input: InternalConfirmPaymentRequest, admin
       await Subscription.create({ seller: row.seller, ...paid, revision: 1 } as never);
     }
   } catch (err) {
+    await releaseCredits({ ids: credits.ids });
     await undoConfirm(decided);
     if (err instanceof HttpError) throw err;
     if (isDuplicateKeyError(err)) throw new HttpError(409, 'The subscription changed while the payment was being confirmed. Nothing was changed. Try again.', 'SUBSCRIPTION_CHANGED');
@@ -207,10 +226,12 @@ export async function confirmPayment(input: InternalConfirmPaymentRequest, admin
     reference: decided.reference ?? null,
     reason: input.reason,
     periodStart: period.periodStart.toISOString(),
-    periodEnd: period.periodEnd.toISOString(),
+    periodEnd: periodEnd.toISOString(),
     extended: period.extended,
+    ...(credits.months > 0 ? { creditMonths: credits.months, credits: credits.ids, paidPeriodEnd: period.periodEnd.toISOString() } : {}),
   });
-  notifyPaymentConfirmed({ id: String(decided._id), seller: String(row.seller), planKey: row.planKey, amountRs: decided.amountRs, periodEnd: period.periodEnd });
+  notifyPaymentConfirmed({ id: String(decided._id), seller: String(row.seller), planKey: row.planKey, amountRs: decided.amountRs, periodEnd });
+  await rewardReferral({ id: String(decided._id), seller: String(row.seller), amountRs: decided.amountRs }, 'admin:' + adminId, now);
   return { payment: await decorateOne(decided) };
 }
 
@@ -302,6 +323,11 @@ export async function voidPayment(input: InternalDecidePaymentRequest, adminId: 
     reason: input.reason,
     subscriptionRestored: wasConfirmed,
   });
+  if (wasConfirmed) {
+    // S8-B6: months this payment used go back to waiting; a referral reward it earned is only noted, never taken back.
+    await releaseCredits({ paymentId: decided._id });
+    await noteVoidedReferralPayment(String(decided._id), 'admin:' + adminId, input.reason, now);
+  }
   notifyPaymentRejected({ id: String(decided._id), seller: String(row.seller), planKey: row.planKey, amountRs: decided.amountRs, reason: input.reason }, 'voided');
   return { payment: await decorateOne(decided) };
 }

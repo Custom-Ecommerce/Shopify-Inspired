@@ -16,6 +16,9 @@ import {
 // EP-07.US02.T01. Pure functions: no database, no network.
 
 const FULL: TemplateVars = {
+  referredName: 'S*** K.',
+  monthsGained: '2',
+  rewardNote: 'It will be added to your next confirmed plan payment.',
   storeName: 'Zara Lawn',
   contactName: 'Sara Khan',
   contactEmail: 'sara@example.com',
@@ -394,4 +397,21 @@ test('Sprint 8 (S8-B2): every team template needs its values (a missing one is a
   const { actionLink: _a, ...withoutLink } = FULL;
   void _a;
   assert.throws(() => renderTemplate('staff_invite', withoutLink), TemplateError);
+});
+
+test('Sprint 8 (S8-B6): the referral emails exist, render in both languages, carry the months and the note, and escape the masked name', () => {
+  for (const name of ['referral_signed_up', 'referral_rewarded'] as const) {
+    assert.ok(TEMPLATE_NAMES.includes(name), name);
+    const out = renderTemplate(name, FULL);
+    assert.equal(out.text.includes('{{'), false, name);
+    assert.ok(out.text.search(/[\u0600-\u06FF]/) > out.text.indexOf('---'), name + ': Urdu below the English');
+    assert.equal(TEMPLATES[name].variables.includes('sellerEmail' as never), false, name + ' has no place for an email address');
+  }
+  const signedUp = renderTemplate('referral_signed_up', { ...FULL, referredName: '<b>*** K.' });
+  assert.equal(signedUp.html.includes('<b>***'), false);
+  assert.ok(signedUp.html.includes('&lt;b&gt;***'));
+  const rewarded = renderTemplate('referral_rewarded', FULL);
+  assert.ok(rewarded.subject.includes('2 free month(s)'));
+  assert.ok(rewarded.text.includes('It will be added to your next confirmed plan payment.'));
+  assert.deepEqual(templateProblems(), []);
 });

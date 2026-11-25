@@ -402,3 +402,9 @@ export const { API_V1_LIMIT_DEFAULT, API_V1_LIMIT_MAX } = contracts;
 
 // Sprint 8 (S8-B5): referral codes.
 export const { normalizeReferralCode, REFERRAL_CODE_ALPHABET, REFERRAL_CODE_LENGTH } = contracts;
+
+// Sprint 8 (S8-B6): the admin's referrals view.
+export const { adminReferralListQuerySchema, adminReferralExportQuerySchema, ADMIN_REFERRAL_EXPORT_CAP } = contracts;
+
+// Sprint 8 (S8-B6): the anonymous storefront counters.
+export const { storefrontEventRequestSchema, STAT_RETENTION_DAYS, PRODUCT_STAT_SLUGS_PER_DAY } = contracts;

@@ -16,6 +16,10 @@
 // Sprint 8 (S8-B4, D-118): the ApiKey model (apikeys) declares a unique {prefix} and {store, revokedAt}. Both are declared on the model, so the plan picks them up; a
 // test (ensure-indexes.test.ts) pins them.
 //
+// Sprint 8 (S8-B6, D-118): the DailyStat (dailystats) and ProductDailyStat (productdailystats) models declare one unique index per row and a TTL index on
+// expiresAt (400 days); the Referral model declares the unique PARTIAL reward slot {referrer, rewardMonth, rewardSlot}; the SubscriptionCredit model one unique
+// {referral}. All are declared on the models, so the plan picks them up; a test (ensure-indexes.test.ts) pins them.
+//
 // The seller backend connects with bufferCommands false, so Mongoose builds no index by itself at runtime. This plan compares the indexes every
 // model DECLARES (schema.indexes()) with the indexes a collection HAS (collection.indexes()) and says which are missing. The script then calls
 // createIndexes() for the models that miss one: it never calls syncIndexes and never drops anything, so an index nobody declares stays.

@@ -58,6 +58,9 @@ export const TEMPLATE_NAMES = [
   'staff_invite',
   'staff_invite_accepted',
   'staff_access_removed',
+  // Sprint 8 (S8-B6, D-118): both to the REFERRER: a referred seller signed up (a masked name only), and the free months a referral earned.
+  'referral_signed_up',
+  'referral_rewarded',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -117,6 +120,10 @@ export const TEMPLATE_VARIABLES = [
   'memberRole',
   'memberName',
   'invitedBy',
+  // Sprint 8 (S8-B6): the referred seller's MASKED name, the number of free months, and one sentence saying where they apply.
+  'referredName',
+  'monthsGained',
+  'rewardNote',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
@@ -613,6 +620,43 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'دوبارہ شروع کرنے کے لیے: {{dashboardLink}}',
     ],
     whatsapp: 'Your {{planName}} plan has ended; the Free limits now apply. Nothing was deleted. {{dashboardLink}}\nآپ کا پلان ختم ہو گیا ہے۔',
+  },
+  referral_signed_up: {
+    variables: ['customerName', 'referredName', 'dashboardLink'],
+    subject: '{{referredName}} signed up with your referral link',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      '{{referredName}} created a Markazify account with your referral code. If the referral qualifies when they make their first plan payment, you earn free time.',
+      '',
+      'See your referrals: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      '{{referredName}} نے آپ کے ریفرل کوڈ سے اکاؤنٹ بنایا ہے۔ ان کی پہلی پلان ادائیگی پر اہل ہونے کی صورت میں آپ کو مفت مدت ملے گی۔',
+      'اپنے ریفرل دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: '{{referredName}} signed up with your referral code. {{dashboardLink}}\nآپ کے ریفرل کوڈ سے نیا اکاؤنٹ بنا ہے۔',
+  },
+  referral_rewarded: {
+    variables: ['customerName', 'monthsGained', 'rewardNote', 'dashboardLink'],
+    subject: 'Your referral earned you {{monthsGained}} free month(s)',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'A seller you referred paid for their first plan, so you earned {{monthsGained}} free month(s).',
+      '',
+      '{{rewardNote}}',
+      '',
+      'See your plan: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کے ریفر کیے ہوئے سیلر نے اپنی پہلی پلان ادائیگی کر دی ہے، اس لیے آپ کو {{monthsGained}} ماہ مفت ملے ہیں۔',
+      '{{rewardNote}}',
+      'اپنا پلان دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Your referral earned you {{monthsGained}} free month(s). {{rewardNote}} {{dashboardLink}}\nآپ کو مفت مدت ملی ہے۔',
   },
   admin_invite: {
     variables: ['appName', 'customerName', 'actionLink', 'validFor'],

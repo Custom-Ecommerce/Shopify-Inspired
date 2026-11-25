@@ -397,6 +397,8 @@ export interface OrderTransport {
   saveAbandonedCart(input: SaveAbandonedCartInput): Promise<void>;
   /** Sprint 7 (S7-B4): sends the shopper's message to the store. Resolves ONLY once the store has kept it; refusals reject with OrderRejectedError (invalid_request with its field, rate_limited, store_inactive). Optional so existing transports keep working. */
   submitContact?(input: SubmitContactInput): Promise<void>;
+  /** Sprint 8 (S8-B6): counts one anonymous event of this store (server side only; the store is the transport's). Optional so existing transports keep working. */
+  recordEvent?(input: { event: "page_view" | "product_view" | "add_to_cart" | "checkout_start"; productSlug?: string }): Promise<void>;
   /** The Live products among these ids, at most 48 per call. An id with no Live product is simply absent from the answer. */
   getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]>;
 }

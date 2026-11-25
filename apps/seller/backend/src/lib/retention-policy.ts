@@ -26,3 +26,12 @@ export const NEVER_PURGED = ['commissionEntries', 'audit-log', 'subscriptionPaym
 
 export const DAY_MS = 86_400_000;
 export const cutoffFor = (now: Date, days: number): Date => new Date(now.getTime() - days * DAY_MS);
+
+/**
+ * Sprint 8 (S8-B6, D-118): collections MongoDB empties by itself, with a TTL index on a real date field (declared on the model, planned by
+ * scripts/ensure-indexes.mjs). Days. The purge code does not touch them: there is nothing for it to do.
+ */
+export const TTL_RETENTION_DAYS = {
+  dailyStats: 400,
+  productDailyStats: 400,
+} as const;

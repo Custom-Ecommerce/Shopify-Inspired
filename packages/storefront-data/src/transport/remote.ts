@@ -545,6 +545,22 @@ export function createRemoteTransport(options: RemoteTransportOptions): Storefro
     submitContact: orders.submitContact,
     getProductsByIds: orders.getProductsByIds,
 
+    // Sprint 8 (S8-B6): the one backend call that is not under a store's path: the store goes in the body. A write: never retried.
+    async recordEvent(input): Promise<void> {
+      requireHttp();
+      const events = makeExchanger({
+        base: normalizeBaseUrl(options.baseUrl) + STOREFRONT_API_PREFIX,
+        timeoutMs: options.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,
+        fetchImpl: options.fetchImpl ?? defaultFetch,
+        clientIp: options.clientIp,
+        clientAddressHeaders: options.clientAddressHeaders,
+        previewToken: options.previewToken,
+      });
+      const result = await events("POST", "/events", { body: { store: storeId, event: input.event, ...(input.productSlug === undefined ? {} : { productSlug: input.productSlug }) }, retry: false });
+      throwIfRefused(result);
+      if (result.status < 200 || result.status > 299) throw new TransportUnavailableError("http", "The seller backend answered " + result.status + " for an event.", result.status);
+    },
+
     async getProducts(): Promise<StorefrontProductSummary[]> {
       requireHttp();
       const result = await exchange("GET", "/products", catalogRead(productListTags));

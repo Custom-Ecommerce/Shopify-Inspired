@@ -36,6 +36,8 @@ export const REVIEW_ORDER_LIMIT: RateLimitRule = { name: 'review-order', limit: 
 export const REVIEW_READ_LIMIT: RateLimitRule = { name: 'review-read', limit: 120, windowMs: 60_000 };
 /** Sprint 5 EP-28.US01.T02: the checkout saves a cart once its phone is valid, debounced, so this leaves room for a shopper editing the cart. */
 export const ABANDONED_CART_LIMIT: RateLimitRule = { name: 'abandoned-cart', limit: 30, windowMs: 60_000 };
+/** Sprint 8 (S8-B6): the anonymous counters. A shopper makes a handful of events a minute; a script that floods one store is stopped. */
+export const EVENT_LIMIT: RateLimitRule = { name: 'storefront-event', limit: 60, windowMs: 60_000 };
 export const CART_QUOTE_LIMIT: RateLimitRule = { name: 'cart-quote', limit: 60, windowMs: 60_000 };
 export const FAVOURITES_LIMIT: RateLimitRule = { name: 'favourites', limit: 30, windowMs: 60_000 };
 /** Quotes that carry a code, on top of the quote's own limit. A cart with a code is quoted again on every change, so this leaves room for that. */

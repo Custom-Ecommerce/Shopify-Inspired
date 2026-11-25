@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { objectIdSchema } from './object-id';
 
 /** Referral statuses and reward types, as apps/admin/src/collections/Referrals.ts defines them. */
-export const REFERRAL_STATUSES = ['pending', 'rewarded'] as const;
+/** Sprint 8 (S8-B6): capped (the referrer's monthly limit was reached) and refused (not eligible at reward time) are final, like rewarded. */
+export const REFERRAL_STATUSES = ['pending', 'rewarded', 'capped', 'refused'] as const;
 export const REFERRAL_REWARD_TYPES = ['commission_discount', 'platform_credit'] as const;
 
 const isoDate = z.string().datetime({ offset: true });

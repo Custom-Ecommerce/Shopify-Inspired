@@ -23,6 +23,7 @@ import type { AdminPaymentList, AdminPaymentWriteResponse } from '../../../../..
 import type { AdminOrderList, AdminOrderDetail } from '../../../../../packages/contracts/src/admin-orders';
 import type { AdminKpi } from '../../../../../packages/contracts/src/admin-overview';
 import type { RetentionRunResponse } from '../../../../../packages/contracts/src/admin-retries';
+import type { AdminReferralExport, AdminReferralList } from '../../../../../packages/contracts/src/admin-referrals';
 
 const { INTERNAL_SECRET_MIN_LENGTH, internalRequestHeaders } = unwrapCjs(signatureNs) as typeof signatureNs;
 
@@ -231,3 +232,10 @@ export const setSupportTicketStatus = (adminId: string, input: { id: string; rev
 export const listPlatformContact = (adminId: string, filters: SupportListFilters): Promise<Record<string, unknown>> =>
   send('POST', '/api/internal/support/contact/list', adminId, clean(filters), SUPPORT_LABEL);
 export const readPlatformContact = (adminId: string, id: string): Promise<Record<string, unknown>> => send('POST', '/api/internal/support/contact/detail', adminId, { id }, SUPPORT_LABEL);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 8 (S8-B6): referrals, read only. The rows live in the seller database; the seller backend masks the referred seller.
+
+export const listReferrals = (adminId: string, input: Record<string, unknown>): Promise<AdminReferralList> => send('POST', '/api/internal/referrals', adminId, input, 'Referrals');
+
+export const exportReferralRewards = (adminId: string, input: Record<string, unknown>): Promise<AdminReferralExport> => send('POST', '/api/internal/referrals/export', adminId, input, 'Referrals');

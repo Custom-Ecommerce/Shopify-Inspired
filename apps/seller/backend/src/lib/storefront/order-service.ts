@@ -8,6 +8,7 @@ import { revalidateStoreProduct } from '@/lib/revalidate';
 import { Order, Product } from '@/lib/services';
 import { CARD_SESSION_LIFETIME_MS } from '@/lib/storefront/card-config';
 import { claimDiscountUse, findDiscountRule, returnDiscountUse } from '@/lib/storefront/discount-service';
+import { countOrder } from '@/lib/storefront-stats';
 import { StorefrontHttpError, discountRefused, productUnavailable } from '@/lib/storefront/errors';
 import { isLiveProduct, type LiveFlags } from '@/lib/storefront/live-product';
 import { generateOrderId } from '@/lib/storefront/order-id';
@@ -265,6 +266,8 @@ export async function placeOrder(
     });
     // Only once the order is saved: until then a failure would give the units back.
     for (const productId of pageChanged) revalidateStoreProduct(storeId, productId);
+    // S8-B6: the day's order counter, after the response. A replayed request returns above and is not counted twice.
+    countOrder(storeId);
     return { order, replayed: false };
   } catch (err) {
     await releaseAll(storeId, reserved, orderObjectId);

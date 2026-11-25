@@ -7,6 +7,7 @@ import {
   storefrontOrderLineRequestSchema,
 } from "@markaz/contracts/checkout";
 import { MAX_LINE_QTY } from "../domain/cart";
+import { storefrontBrowserEventSchema } from "@markaz/contracts/storefront-events";
 import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError, ReturnRefusedError, ReviewRefusedError } from "../transport/errors";
 import type { OrderRejection, OrderTransport } from "../transport/types";
 import { FAVOURITES_PAGE_SIZE } from "../domain/favourites";
@@ -62,6 +63,8 @@ export interface BffRoutes {
   abandonedCart(request: Request, context: BffRouteContext): Promise<Response>;
   /** Sprint 7 (S7-B4): a shopper's message to the store ({ name, email?, phone?, message, consent: true, website? }). Same gates as lookup; answers 201 { data: { received: true } } only once the store has kept it. */
   contact(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Sprint 8 (S8-B6): one anonymous counter event ({ event, productSlug? }). Same gates; the store is the host's, never the body's. */
+  event(request: Request, context: BffRouteContext): Promise<Response>;
   /** The Live products behind a browser's favourites: GET ?ids=a,b. Public data, so it has no origin gate. */
   products(request: Request, context: BffRouteContext): Promise<Response>;
 }
@@ -417,6 +420,13 @@ async function products(request: Request, context: BffRouteContext, deps: BffDep
 export function createBffRoutes(deps: BffDeps): BffRoutes {
   return {
     products: (request, context) => products(request, context, deps),
+
+    event: (request, context) =>
+      handle(request, context, storefrontBrowserEventSchema, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        if (!transport.recordEvent) return { kind: "error", status: 503, code: "STOREFRONT_UNAVAILABLE", message: "Storefront data is temporarily unavailable." };
+        await transport.recordEvent(input);
+        return { kind: "data", status: 200, data: { received: true } };
+      }),
 
     quote: (request, context) =>
       handle(request, context, quoteBody, deps, { needsIdempotencyKey: false }, async (transport, input) => ({

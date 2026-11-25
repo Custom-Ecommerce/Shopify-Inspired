@@ -389,3 +389,28 @@ test('Sprint 8 (S8-B5, CO-115): the referral indexes: one code per seller (uniqu
   assert.ok(missing.some((m) => m.name === 'referrer_1' && !m.unique));
   assert.equal(plan.planAll([{ model: 'Referral', collection: 'referrals', declared }], { referrals: [ID, ...named(declared)] }).totals.missing, 0);
 });
+
+test('Sprint 8 (S8-B6, CO-115): the counter models, the referral reward slot and the referral credit: unique and TTL indexes are planned, and nothing is missing once they exist', () => {
+  const ns = (dbSchemas as any).DailyStat ? (dbSchemas as any) : (dbSchemas as any).default;
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const named = (declared: Declared) =>
+    declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  type Missing = Array<{ name: string; unique: boolean; ttl: boolean; partial: boolean }>;
+  const check = (model: string, collection: string, expected: Array<[string, Partial<Missing[number]>]>) => {
+    const declared = ns[model].schema.indexes() as Declared;
+    const fresh = plan.planAll([{ model, collection, declared }], {});
+    assert.deepEqual(fresh.toCreate, [model]);
+    assert.equal(fresh.totals.conflicts, 0);
+    const missing = (fresh.models[0] as unknown as { missing: Missing }).missing;
+    for (const [name, traits] of expected) {
+      const found = missing.find((m) => m.name === name);
+      assert.ok(found, model + ' plans ' + name);
+      for (const [trait, value] of Object.entries(traits)) assert.equal((found as any)[trait], value, model + ' ' + name + ' ' + trait);
+    }
+    assert.equal(plan.planAll([{ model, collection, declared }], { [collection]: [ID, ...named(declared)] }).totals.missing, 0);
+  };
+  check('DailyStat', 'dailystats', [['store_day_unique', { unique: true }], ['expires_ttl', { ttl: true }]]);
+  check('ProductDailyStat', 'productdailystats', [['store_slug_day_unique', { unique: true }], ['expires_ttl', { ttl: true }], ['store_day', { unique: false }]]);
+  check('Referral', 'referrals', [['referrer_month_slot_unique', { unique: true, partial: true }], ['status_createdAt', { unique: false }]]);
+  check('SubscriptionCredit', 'subscriptioncredits', [['referral_unique', { unique: true }], ['seller_usedAt', { unique: false }]]);
+});

@@ -3,7 +3,7 @@
  * decides. Where this matrix is silent the answer is deny. The server enforces; the console only follows (it hides what the level cannot use).
  *
  *   owner             everything, including admin users and the audit export
- *   finance           payments (read, confirm, reject), payouts, commission and reports, plans read
+ *   finance           payments (read, confirm, reject), payouts, commission and reports, plans read, referrals read and export
  *   operations        sellers and stores (read, status, store limit), sync, plans read, settings read
  *   customer_support  orders view (read only), sellers read, tickets and the contact inbox (Sprint 7)
  *
@@ -41,10 +41,12 @@ export const ADMIN_CAPABILITIES = [
   'tickets.read',
   'tickets.reply',
   'contact.read',
+  // Sprint 8 (S8-B6): the referrals list and the rewards export (read only).
+  'referrals.read',
 ] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 
-const FINANCE: readonly AdminCapability[] = ['overview.read', 'payments.read', 'payments.decide', 'payouts.manage', 'commission.read', 'commission.write', 'plans.read'];
+const FINANCE: readonly AdminCapability[] = ['overview.read', 'payments.read', 'payments.decide', 'payouts.manage', 'commission.read', 'commission.write', 'plans.read', 'referrals.read'];
 const OPERATIONS: readonly AdminCapability[] = [
   'overview.read',
   'sellers.read',

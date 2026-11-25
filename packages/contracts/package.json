@@ -12,7 +12,9 @@
     "./team": "./src/team.ts",
     "./api-keys": "./src/api-keys.ts",
     "./api-v1": "./src/api-v1.ts",
-    "./referral": "./src/referral.ts"
+    "./referral": "./src/referral.ts",
+    "./admin-referrals": "./src/admin-referrals.ts",
+    "./storefront-events": "./src/storefront-events.ts"
   },
   "scripts": {
     "build": "tsc",

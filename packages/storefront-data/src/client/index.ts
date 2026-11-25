@@ -29,3 +29,5 @@ export { StorefrontProvider } from "./provider";
 export { useCardAvailable, useCodAvailable, useOrderTransport } from "./context";
 export type { CartQuoteLineVM, CartQuoteVM } from "../view-models/cart-quote";
 /* @theme-integration-patch:client-index */
+// Sprint 8 (S8-B6): the anonymous counters a theme's pages ask for.
+export { useCheckoutStartEvent, useProductViewEvent } from "./use-store-events";

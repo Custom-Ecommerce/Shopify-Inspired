@@ -159,6 +159,8 @@ const SAMPLE: Array<{ name: string; rel: string; method: 'GET' | 'POST'; url: st
   { name: 'audit export', rel: 'audit/export', method: 'GET', url: '/api/admin/audit/export', allowed: ['owner'] },
   { name: 'users list', rel: 'users', method: 'GET', url: '/api/admin/users', allowed: ['owner'] },
   { name: 'plans read', rel: 'subscription-plans', method: 'GET', url: '/api/admin/subscription-plans', allowed: ['owner', 'finance', 'operations'] },
+  { name: 'referrals list', rel: 'referrals', method: 'GET', url: '/api/admin/referrals', allowed: ['owner', 'finance'] },
+  { name: 'referral rewards export', rel: 'referrals/export', method: 'GET', url: '/api/admin/referrals/export', allowed: ['owner', 'finance'] },
   { name: 'commission rates', rel: 'commission/rates', method: 'GET', url: '/api/admin/commission/rates', allowed: ['owner', 'finance'] },
   { name: 'overview', rel: 'overview', method: 'GET', url: '/api/admin/overview', allowed: ['owner', 'finance', 'operations'] },
 ];

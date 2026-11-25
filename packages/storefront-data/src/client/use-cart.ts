@@ -5,7 +5,7 @@ import { toCartVM } from "../view-models/cart";
 import type { CartVM } from "../view-models/cart";
 import type { Money } from "../domain/money";
 import type { ProductCardVM } from "../view-models/product-card";
-import { useCartStoreApi } from "./context";
+import { useCartStoreApi, useStoreTracker } from "./context";
 
 export type CartableProductVM = Pick<
   ProductCardVM,
@@ -42,6 +42,7 @@ export interface UseCartResult extends CartVM {
 /** The cart of the storefront this component is rendered under. The demo has one; a live store has its own. */
 export function useCart(): UseCartResult {
   const store = useCartStoreApi();
+  const tracker = useStoreTracker();
   const lines = store((state) => state.lines);
   const isHydrated = store((state) => state.isHydrated);
   const addLine = store((state) => state.addLine);
@@ -80,9 +81,11 @@ export function useCart(): UseCartResult {
         },
         qty,
       );
+      // S8-B6: one count per add that happened.
+      tracker.track("add_to_cart");
       return true;
     },
-    [addLine],
+    [addLine, tracker],
   );
 
   const setDiscountCode = useCallback(

@@ -4,10 +4,11 @@ import { authLimiter, sellerPortalLink } from '@/lib/account-support';
 import { normalizePhoneE164, normalizeReferralCode, REFERRAL_CODE_ALPHABET, REFERRAL_CODE_LENGTH } from '@/lib/contracts';
 import { HttpError, isDuplicateKeyError } from '@/lib/http';
 import { readReferralSettings } from '@/lib/platform-settings';
+import { notifyReferralSignedUp } from '@/lib/referral-emails';
 import { RateLimitedError, Referral, User } from '@/lib/services';
 
 /*
- * Sprint 8 (S8-B5, D-118): referral codes, capture at signup and the referrer's read. The REWARD (extending the referrer's subscription) is S8-B6 and is not here.
+ * Sprint 8 (S8-B5, D-118): referral codes, capture at signup and the referrer's read. The REWARD is lib/referral-reward.ts (S8-B6).
  *
  * Capture is silent: whatever is wrong with a code (unknown, off, self-referral, over the cap, a database problem), the signup succeeds and its answer is the same,
  * so nobody can learn from it which codes exist or why one was refused. `referredBy` is set only together with a referrals row.
@@ -64,6 +65,7 @@ export function isSelfReferral(referrer: ReferralPerson, referred: ReferralPerso
 export interface NewSeller {
   id: string;
   email: string;
+  name?: string | null;
   phone?: string | null;
 }
 
@@ -90,14 +92,17 @@ export async function captureReferral(account: NewSeller, rawCode: unknown, now:
       if (err instanceof RateLimitedError) return;
       throw err;
     }
+    let created: Row;
     try {
-      await Referral.create({ referrer: referrer._id, referred: account.id, status: 'pending', monthsRewarded: 0, rewardedAt: null } as never);
+      created = (await Referral.create({ referrer: referrer._id, referred: account.id, status: 'pending', monthsRewarded: 0, rewardedAt: null } as never)) as unknown as Row;
     } catch (err) {
       // One referral per referred seller: the unique index has the last word.
       if (isDuplicateKeyError(err)) return;
       throw err;
     }
     await User.updateOne({ _id: account.id, referredBy: null } as never, { $set: { referredBy: referrer._id } } as never);
+    // S8-B6: the referrer is told, with a masked name only. After the response: it can never delay or fail the signup.
+    notifyReferralSignedUp({ referralId: String(created._id), referrer: String(referrer._id), referredName: maskName(account.name) });
   } catch (err) {
     console.error('[seller-backend] could not record a referral', err instanceof Error ? err.name : 'unknown');
   }
@@ -154,7 +159,7 @@ export async function buildReferralOverview(userId: unknown): Promise<ReferralOv
   const referrals: ReferralRow[] = rows.map((row) => ({
     id: String(row._id),
     name: maskName(names.get(String(row.referred))),
-    status: row.status === 'rewarded' ? 'rewarded' : 'pending',
+    status: row.status === 'rewarded' || row.status === 'capped' || row.status === 'refused' ? row.status : 'pending',
     monthsRewarded: typeof row.monthsRewarded === 'number' && row.monthsRewarded > 0 ? Math.round(row.monthsRewarded) : 0,
     createdAt: iso(row.createdAt) ?? new Date(0).toISOString(),
     rewardedAt: iso(row.rewardedAt),
@@ -168,7 +173,7 @@ export async function buildReferralOverview(userId: unknown): Promise<ReferralOv
     monthlyCap: settings.monthlyCap,
     totals: {
       referred: referrals.length,
-      pending: referrals.length - rewarded,
+      pending: referrals.filter((row) => row.status === 'pending').length,
       rewarded,
       monthsEarned: referrals.reduce((sum, row) => sum + row.monthsRewarded, 0),
     },

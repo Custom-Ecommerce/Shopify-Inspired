@@ -19,7 +19,7 @@ import {
 
 const EXPECTED: Record<AdminLevel, readonly AdminCapability[]> = {
   owner: [...ADMIN_CAPABILITIES],
-  finance: ['overview.read', 'payments.read', 'payments.decide', 'payouts.manage', 'commission.read', 'commission.write', 'plans.read'],
+  finance: ['overview.read', 'payments.read', 'payments.decide', 'payouts.manage', 'commission.read', 'commission.write', 'plans.read', 'referrals.read'],
   operations: ['overview.read', 'sellers.read', 'sellers.status', 'sellers.store_limit', 'stores.read', 'stores.status', 'sync.read', 'sync.manage', 'plans.read', 'settings.read'],
   customer_support: ['orders.read', 'sellers.read', 'tickets.read', 'tickets.reply', 'contact.read'],
 };

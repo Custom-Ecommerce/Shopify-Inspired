@@ -15,12 +15,12 @@ afterEach(() => {
 });
 
 const SUPPORT = ["orders.read", "sellers.read", "tickets.read", "tickets.reply", "contact.read"];
-const FINANCE = ["overview.read", "payments.read", "payments.decide", "payouts.manage", "commission.read", "commission.write", "plans.read"];
+const FINANCE = ["overview.read", "payments.read", "payments.decide", "payouts.manage", "commission.read", "commission.write", "plans.read", "referrals.read"];
 const hrefs = (caps: readonly string[] | null) => visibleNavGroups(caps).flatMap((g) => g.items.map((i) => i.href));
 
 test("the navigation follows the capabilities: support sees orders, sellers, tickets and contact messages only, finance sees money pages, an owner sees everything", () => {
   assert.deepEqual(hrefs(SUPPORT), ["/orders", "/sellers", "/support", "/contact"]);
-  assert.deepEqual(hrefs(FINANCE), ["/", "/subscriptions", "/subscription-payments", "/commission"]);
+  assert.deepEqual(hrefs(FINANCE), ["/", "/subscriptions", "/subscription-payments", "/commission", "/referrals"]);
   const all = NAV_GROUPS.flatMap((g) => g.items).map((i) => i.href);
   assert.deepEqual(hrefs(null), all, "no session answer yet: everything (the server still decides)");
   const owner = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.capability)).filter(Boolean) as string[];
