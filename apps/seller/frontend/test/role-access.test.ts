@@ -15,6 +15,8 @@ import {
   settingsTabCapability,
   settingsTabsFor,
   type OwnerAction,
+  roleMayOpen,
+  memberRoleLabel,
 } from "../lib/role-access";
 
 // Sprint 8 (S8-B4, D-118): what the dashboard shows to a role, each role against each menu item, settings tab and owner action. The backend is what enforces.
@@ -76,4 +78,27 @@ test("the dashboard asks the helper before it shows an owner-only button, tile o
     ["components/dashboard/PlanBanner.tsx", /canUse\([^)]*"billing"\)/],
   ];
   for (const [file, pattern] of places) assert.match(read(file), pattern, file);
+});
+
+test("a page opened by its address follows the role like the menu: members do not get settings, billing or products they cannot use", () => {
+  const at = (path: string) => "/s/65a000000000000000000011" + path;
+  for (const [role, path] of [["staff", "/store"], ["staff", "/billing"], ["support", "/products"], ["support", "/store"], ["manager", "/billing"], ["manager", "/team"], ["staff", "/customers/abc"], ["admin", "/orders"]] as const) {
+    assert.equal(roleMayOpen(role, at(path)), false, role + " " + path);
+  }
+  for (const [role, path] of [["staff", ""], ["staff", "/orders/abc"], ["staff", "/products/new"], ["support", "/inbox"], ["manager", "/store"], ["support", "/account"], ["staff", "/support"], [undefined, "/billing"], ["owner", "/team"]] as const) {
+    assert.equal(roleMayOpen(role, at(path)), true, role + " " + path);
+  }
+});
+
+test("a store the user works in as a member shows their role there; their own store shows none (V-05)", () => {
+  assert.deepEqual(["manager", "staff", "support", "owner", undefined, "admin"].map(memberRoleLabel), ["Manager", "Staff", "Support", null, null, null]);
+  for (const file of ["components/dashboard/StoreSwitcher.tsx", "app/(dashboard)/stores/page.tsx"]) {
+    assert.match(readFileSync(join(process.cwd(), ...file.split("/")), "utf8"), /memberRoleLabel\((s|store|activeStore)\.role\)/, file);
+  }
+});
+
+test("the dashboard home table fits a phone: customer and city columns are for wide screens, the name sits under the order number", () => {
+  const home = readFileSync(join(process.cwd(), "app", "(dashboard)", "s", "[storeId]", "page.tsx"), "utf8");
+  for (const header of ["Customer", "City", "Date"]) assert.match(home, new RegExp("header: \"" + header + "\"[^]{0,300}?hidden sm:table-cell"), header);
+  assert.match(home, /sm:hidden">\{o\.customerName\}/);
 });

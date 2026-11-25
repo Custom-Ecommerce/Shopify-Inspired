@@ -81,6 +81,9 @@ export function orderTitle(order: Pick<AdminOrderRow, "orderNumber" | "total">):
 export function totalsLines(totals: AdminOrderDetail["totals"]): Array<{ label: string; value: string }> {
   const lines = [{ label: "Subtotal", value: formatRs(totals.subtotal) }];
   if (totals.discount > 0) lines.push({ label: "Discount", value: "- " + formatRs(totals.discount) });
-  lines.push({ label: "Delivery", value: formatRs(totals.delivery) }, { label: "Total", value: formatRs(totals.total) });
+  lines.push({ label: "Delivery", value: formatRs(totals.delivery) });
+  // An exclusive tax is part of the sum; an included one is only named (its label says so) and the total does not add it again.
+  if (totals.tax !== undefined) lines.push({ label: totals.taxLabel ?? "Tax", value: formatRs(totals.tax) });
+  lines.push({ label: "Total", value: formatRs(totals.total) });
   return lines;
 }

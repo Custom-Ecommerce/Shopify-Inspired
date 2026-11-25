@@ -66,7 +66,8 @@ export type AdminOrderList = z.output<typeof adminOrderListSchema>;
 
 export const adminOrderDetailSchema = adminOrderRowSchema.extend({
   items: z.array(z.object({ name: z.string(), quantity: z.number().int().min(1), unitPrice: rupees, lineTotal: rupees }).strict()),
-  totals: z.object({ subtotal: rupees, discount: rupees, delivery: rupees, total: rupees }).strict(),
+  // tax, taxLabel and taxIncluded are there only for an order placed with tax (its own snapshot). An included tax is already inside the subtotal.
+  totals: z.object({ subtotal: rupees, discount: rupees, delivery: rupees, total: rupees, tax: rupees.optional(), taxLabel: z.string().max(40).optional(), taxIncluded: z.boolean().optional() }).strict(),
   statusHistory: z.array(z.object({ from: z.enum(ADMIN_ORDER_STATUSES), to: z.enum(ADMIN_ORDER_STATUSES), at: isoDate }).strict()),
   paymentStatus: z.enum(['unpaid', 'collected', 'paid']),
   confirmationStatus: z.enum(['not_required', 'unconfirmed', 'confirmed', 'unreachable']),

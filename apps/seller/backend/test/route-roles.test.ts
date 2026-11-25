@@ -1,5 +1,7 @@
 import { test, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
 import { Order, Return, Review, SellerAlert, Store, signSession } from '@/lib/services';
@@ -8,7 +10,7 @@ import { auditActorOf, type AuthContext } from '../src/lib/auth';
 import { resolveOwnedStoreId, setMembershipListLoader, setMembershipLoader } from '../src/lib/data-plane';
 import { setSessionUserLoader } from '../src/lib/session-user';
 import { ALERT_KINDS_BY_ROLE, alertFilterFor, alertKindsFor } from '../src/lib/seller-alerts';
-import { settingsForRole } from '../src/lib/store-settings';
+import { settingsForRole, storeDocForRole } from '../src/lib/store-settings';
 import { ROUTE_CAPABILITIES, roleMayCall } from '../src/lib/route-capabilities';
 
 // Sprint 8 (S8-B3, D-118): the REAL route handlers of a sample of 15 routes, run as every role: a role without the capability is 403 CAPABILITY_DENIED before anything is read, a foreign
@@ -368,4 +370,12 @@ test('settings by role: the owner everything; a manager everything but the payou
     assert.equal(unknown.payout, null);
     assert.equal(JSON.stringify(unknown.payments), JSON.stringify({ codEnabled: true, cardEnabled: false, cardAvailable: false }), String(role) + ': an unknown role gets the safe subset');
   }
+});
+
+test('the store document of GET /api/stores/:id holds no message templates for staff and support (the settings view already hides them)', () => {
+  const doc = { name: 'Shop', storefront: { city: 'Lahore', whatsappTemplate: 'Dear {name}', emailFooter: 'Our footer' } };
+  for (const role of ['owner', 'manager', null] as const) assert.deepEqual(storeDocForRole(doc, role), doc, String(role));
+  for (const role of ['staff', 'support'] as const) assert.deepEqual(storeDocForRole(doc, role), { name: 'Shop', storefront: { city: 'Lahore' } }, role);
+  const route = readFileSync(resolve(process.cwd(), 'src/app/api/stores/[id]/route.ts'), 'utf8');
+  assert.match(route, /NextResponse\.json\(storeDocForRole\(/, 'the route answers through it');
 });

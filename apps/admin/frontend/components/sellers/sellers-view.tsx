@@ -40,7 +40,7 @@ const COLUMNS: Array<Column<AdminSellerListItem>> = [
       ) : (
         <ul className="flex min-w-0 flex-col gap-1" aria-label={"Stores of " + seller.name}>
           {seller.stores.map((store) => (
-            <li key={store.id} className="flex min-w-0 items-center gap-2">
+            <li key={store.id} className="flex min-w-0 flex-wrap items-center gap-2">
               <Link href={"/stores/" + store.id} className="truncate text-primary underline-offset-4 hover:underline">
                 {store.name}
               </Link>
@@ -166,6 +166,7 @@ export function SellersView() {
       ) : null}
       <DataTable
         label="Sellers"
+        stackOnPhone
         columns={columns}
         rows={data?.docs ?? []}
         rowKey={(seller) => seller.id}

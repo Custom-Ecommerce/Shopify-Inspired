@@ -12,7 +12,7 @@ import { storeSettingsUpdateSchema } from '@/lib/contracts';
 import { loadStoreFor, requireSellerActor, SETTINGS_SELECT } from '@/lib/owned-store';
 import { revalidateStore } from '@/lib/revalidate';
 import { assertThemeAllowedByPlan } from '@/lib/theme-plan';
-import { buildSettingsWrite, effectiveTheme, referencedMedia, settingsFieldsOf, settingsForRole, SETTINGS_ERROR_CODE, toStoreSettings } from '@/lib/store-settings';
+import { buildSettingsWrite, effectiveTheme, referencedMedia, settingsFieldsOf, settingsForRole, SETTINGS_ERROR_CODE, storeDocForRole, toStoreSettings } from '@/lib/store-settings';
 import { resolveStoreAccess } from '@/lib/data-plane';
 
 export const runtime = 'nodejs';
@@ -39,8 +39,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     // courier settings (paymentSettings holds the fraud rules and the payment switches: owner business only). An admin reads the full document.
     let readable = projection;
     let filter: Record<string, unknown> = { _id: id };
+    let role: Parameters<typeof storeDocForRole>[1] = null;
     if (ctx.actor === 'seller') {
       const access = await resolveStoreAccess(request, ctx, { store: { equals: id } }, { capability: 'store.view' });
+      role = access.role;
       filter = access.isOwner ? { _id: id, owner: ctx.userObjectId } : { _id: id };
       if (!access.isOwner) readable = (projection ?? []).filter((field) => field !== 'paymentSettings' && field !== 'courierSettings') as typeof projection;
     }
@@ -49,7 +51,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const doc = await query.lean();
     if (!doc) throw new HttpError(404, 'Store not found');
 
-    return NextResponse.json(toWire(plainDoc(doc)), { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(storeDocForRole(toWire(plainDoc(doc)) as Record<string, unknown>, role), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
   }

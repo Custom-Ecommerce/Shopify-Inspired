@@ -47,3 +47,8 @@ export function funnelBars(funnel: AnalyticsFunnel): FunnelBar[] {
 export const overallText = (funnel: Pick<AnalyticsFunnel, "overall">): string => `${percentText(funnel.overall)} of visits ended in an order`;
 
 export const shortDay = (date: string): string => date.slice(5);
+
+/** The config of the "Orders by Status" chart: one entry per status, so the legend names each slice (not the value it counts). */
+export function statusLegendConfig(statuses: readonly string[]): Record<string, { label: string }> {
+  return Object.fromEntries([...statuses.map((status) => [status, { label: status.charAt(0).toUpperCase() + status.slice(1) }]), ["value", { label: "Orders" }]]);
+}

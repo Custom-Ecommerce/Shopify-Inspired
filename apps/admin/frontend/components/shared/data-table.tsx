@@ -24,12 +24,15 @@ export interface DataTableProps<T> {
   emptyTitle: string;
   emptyHint?: string;
   label: string;
+  /** On a phone, each row becomes a block with every column under its header, so no value or button is pushed off the screen. */
+  stackOnPhone?: boolean;
 }
 
 const SKELETON_ROWS = 6;
 
 /** The list table every console list uses: loading skeleton, error with retry, empty state, then the rows. */
-export function DataTable<T>({ columns, rows, rowKey, loading, error, onRetry, emptyTitle, emptyHint, label }: DataTableProps<T>) {
+export function DataTable<T>({ columns, rows, rowKey, loading, error, onRetry, emptyTitle, emptyHint, label, stackOnPhone = false }: DataTableProps<T>) {
+  const cellClass = (column: Column<T>) => cn(column.className, stackOnPhone && "max-md:block max-md:whitespace-normal max-md:py-1.5");
   if (error !== null && rows.length === 0) {
     return (
       <Card role="alert" className="flex flex-col items-center gap-4 border-destructive/20 bg-destructive/8 px-6 py-12 text-center">
@@ -60,8 +63,8 @@ export function DataTable<T>({ columns, rows, rowKey, loading, error, onRetry, e
 
   return (
     <Card className="overflow-hidden">
-      <Table aria-label={label} aria-busy={loading}>
-        <TableHeader>
+      <Table aria-label={label} aria-busy={loading} className={cn(stackOnPhone && "max-md:block")}>
+        <TableHeader className={cn(stackOnPhone && "max-md:hidden")}>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
             {columns.map((column) => (
               <TableHead key={column.key} className={column.className}>
@@ -70,7 +73,7 @@ export function DataTable<T>({ columns, rows, rowKey, loading, error, onRetry, e
             ))}
           </TableRow>
         </TableHeader>
-        <TableBody className={cn(loading && rows.length > 0 && "opacity-60")}>
+        <TableBody className={cn(loading && rows.length > 0 && "opacity-60", stackOnPhone && "max-md:block")}>
           {rows.length === 0
             ? Array.from({ length: SKELETON_ROWS }, (_, index) => (
                 <TableRow key={index} className="h-14 hover:bg-transparent">
@@ -82,9 +85,10 @@ export function DataTable<T>({ columns, rows, rowKey, loading, error, onRetry, e
                 </TableRow>
               ))
             : rows.map((row) => (
-                <TableRow key={rowKey(row)} className="h-14">
+                <TableRow key={rowKey(row)} className={cn("h-14", stackOnPhone && "max-md:block max-md:h-auto max-md:py-2")}>
                   {columns.map((column) => (
-                    <TableCell key={column.key} className={column.className}>
+                    <TableCell key={column.key} className={cellClass(column)}>
+                      {stackOnPhone ? <span className="mb-0.5 block text-xs font-medium text-muted-foreground md:hidden" aria-hidden="true">{column.header}</span> : null}
                       {column.cell(row)}
                     </TableCell>
                   ))}

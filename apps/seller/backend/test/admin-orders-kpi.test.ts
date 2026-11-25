@@ -170,6 +170,24 @@ test('the detail has items, totals, status history, payment and confirmation sta
   assert.equal((await detailPOST(signed('/api/internal/orders/detail', { orderId: 'x' }))).status, 422);
 });
 
+test('the detail of a taxed order carries its tax line and the rows add up to the total (exclusive); an included tax is named, not added again', async () => {
+  const base = orders.find((o) => o._id === ORDER_1) as unknown as Record<string, unknown>;
+  const saved = { ...base };
+  try {
+    Object.assign(base, { subtotal: 7000, discountAmount: 500, deliveryCharges: 250, taxAmount: 813, taxMode: 'exclusive', taxRatePercent: 12.5, taxLabel: 'GST', total: 7563 });
+    const read = async () => (await (await detailPOST(signed('/api/internal/orders/detail', { orderId: ORDER_1 }))).json()).order;
+    const exclusive = await read();
+    assert.equal(adminOrderDetailSchema.safeParse(exclusive).success, true);
+    assert.deepEqual(exclusive.totals, { subtotal: 7000, discount: 500, delivery: 250, total: 7563, tax: 813, taxLabel: 'GST', taxIncluded: false });
+    assert.equal(exclusive.totals.subtotal - exclusive.totals.discount + exclusive.totals.tax + exclusive.totals.delivery, exclusive.totals.total);
+    Object.assign(base, { taxMode: 'inclusive', taxAmount: 722, total: 6750 });
+    assert.deepEqual((await read()).totals, { subtotal: 7000, discount: 500, delivery: 250, total: 6750, tax: 722, taxLabel: 'GST (included)', taxIncluded: true });
+  } finally {
+    for (const key of Object.keys(base)) delete base[key];
+    Object.assign(base, saved);
+  }
+});
+
 test('the KPI route answers whole rupees from the NEW ledger with aggregations; COD orders at rate 0 still count; no old ledger is read', async () => {
   const res = await kpiPOST(signed('/api/internal/kpi', {}));
   assert.equal(res.status, 200);

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { STEP_LABELS, funnelBars, hasVisits, overallText, percentText } from "../lib/analytics-view";
+import { STEP_LABELS, funnelBars, hasVisits, overallText, percentText, statusLegendConfig } from "../lib/analytics-view";
 import { roleCan, roleSeesMenu } from "../lib/role-access";
 import { TRUNCATED_MESSAGE, isTruncated, periodRange, salesExportHref, salesFileName } from "../lib/sales-export";
 
@@ -88,4 +88,11 @@ test("the page: a period switch, bars without a chart library for the funnel, em
   const button = read("components/dashboard/SalesExportButton.tsx");
   assert.match(button, /min-h-11 w-full sm:w-auto/);
   assert.doesNotMatch(read("package.json"), /chart\.js|victory|nivo|visx|apexcharts/, "no new chart library");
+});
+
+test("the orders by status legend names each status and wraps on a phone (it said Orders for every slice)", () => {
+  assert.deepEqual(statusLegendConfig(["pending", "delivered"]), { pending: { label: "Pending" }, delivered: { label: "Delivered" }, value: { label: "Orders" } });
+  const page = read("app/(dashboard)/s/[storeId]/analytics/page.tsx");
+  assert.match(page, /config=\{statusLegendConfig\(Object\.keys\(data\.ordersByStatus\)\)\}/);
+  assert.match(page, /<ChartLegendContent nameKey="name" className="flex-wrap/);
 });

@@ -8,6 +8,7 @@
  * A store with no role (an older backend) is the owner's. A role this code does not know sees nothing role-gated (fail closed).
  */
 import {
+  SELLER_ROLE_LABELS,
   SELLER_ROLES,
   sellerCan,
   sellerCapabilities,
@@ -91,6 +92,25 @@ export function roleSeesMenu(role: unknown, href: string): boolean {
   if (dashboardRole(role) === null || !(href in MENU_CAPABILITY)) return false;
   const capability = MENU_CAPABILITY[href];
   return capability === null || capability === undefined ? true : roleCan(role, capability);
+}
+
+/** The word shown next to a store the user works in as a team member (V-05); null for their own store, or a role this code does not know. */
+export function memberRoleLabel(role: unknown): string | null {
+  const effective = dashboardRole(role);
+  return effective === null || effective === "owner" ? null : SELLER_ROLE_LABELS[effective];
+}
+
+export const ROLE_CLOSED_TEXT = "Your role in this store cannot open this page. Ask the store owner if you need it.";
+
+/**
+ * Whether a page opened by its address belongs to the role: the page below /s/<storeId> is judged by the menu row of its first segment, so a page the
+ * menu hides is not drawn either (a half page, an empty tab bar or the member's own billing under another seller's store would only mislead). A path with
+ * no menu row is left to the page: the server enforces every call in any case.
+ */
+export function roleMayOpen(role: unknown, pathname: string): boolean {
+  const segment = pathname.replace(/^\/s\/[^/]+/, "").split("/")[1] ?? "";
+  const href = "/" + segment;
+  return href in MENU_CAPABILITY ? roleSeesMenu(role, href) : true;
 }
 
 /** Whether a step of the go-live checklist has a button this role can use: its settings tab, the domain page, or (products, account, stock) a page the role has. */

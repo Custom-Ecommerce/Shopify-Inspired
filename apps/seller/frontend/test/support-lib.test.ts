@@ -201,3 +201,9 @@ test("nothing in the media dialogs asks for break-word, which would undo the dia
   assert.ok(dialogText.length >= 3, "the descriptions and the usage rows");
   for (const tag of dialogText) assert.equal(tag.includes("break-words"), false, tag);
 });
+
+test("a long email, name or key name wraps inside a confirm dialog too (remove a team member, revoke a key)", () => {
+  const dialog = readFileSync(resolve(process.cwd(), "components/ui/alert-dialog.tsx"), "utf8");
+  const content = /data-slot="alert-dialog-content"\s+data-size=\{size\}\s+className=\{cn\(\s+"([^"]*)"/.exec(dialog)?.[1] ?? "";
+  assert.ok(content.includes("[overflow-wrap:anywhere]"), content.slice(0, 80));
+});

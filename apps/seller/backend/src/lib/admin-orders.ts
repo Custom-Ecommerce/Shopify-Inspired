@@ -1,4 +1,5 @@
 import type { AdminOrderDetail, AdminOrderList, AdminOrderRow } from '@markaz/contracts';
+import { readOrderTax, TAX_LABEL_MAX, taxLineLabel } from '@/lib/contracts';
 import { HttpError } from '@/lib/http';
 import { Order, Store, assertCan } from '@/lib/services';
 import { escapeRegex } from '@/lib/storefront/product-query';
@@ -10,7 +11,7 @@ import { escapeRegex } from '@/lib/storefront/product-query';
  */
 
 const LIST_FIELDS = 'store orderId status paymentMethod total city items createdAt updatedAt';
-const DETAIL_FIELDS = LIST_FIELDS + ' subtotal deliveryCharges discountAmount statusHistory paymentStatus confirmationStatus';
+const DETAIL_FIELDS = LIST_FIELDS + ' subtotal deliveryCharges discountAmount taxAmount taxMode taxRatePercent taxLabel statusHistory paymentStatus confirmationStatus';
 const DAY_MS = 86_400_000;
 
 type Doc = Record<string, any>;
@@ -86,6 +87,13 @@ export async function listAdminOrders(filters: OrderListFilters): Promise<AdminO
   };
 }
 
+/** The tax line of the detail, from the order's own snapshot. An order without tax (or from before tax) adds nothing. */
+function taxTotals(doc: Doc): { tax?: number; taxLabel?: string; taxIncluded?: boolean } {
+  const tax = readOrderTax(doc);
+  if (tax.taxAmount === 0) return {};
+  return { tax: tax.taxAmount, taxLabel: taxLineLabel(typeof doc.taxLabel === 'string' ? doc.taxLabel.slice(0, TAX_LABEL_MAX) : null, tax.taxMode), taxIncluded: tax.taxMode === 'inclusive' };
+}
+
 /** POST /api/internal/orders/detail { orderId }: items, totals, status history, payment and confirmation state. Still no name, phone, address or email. */
 export async function readAdminOrder(orderId: string): Promise<{ order: AdminOrderDetail }> {
   assertCan('admin', 'read', 'adminOrdersView', ['orderNumber', 'items', 'totals', 'statusHistory', 'paymentStatus', 'confirmationStatus']);
@@ -104,7 +112,7 @@ export async function readAdminOrder(orderId: string): Promise<{ order: AdminOrd
     order: {
       ...toOrderRow(doc, name),
       items,
-      totals: { subtotal: whole(doc.subtotal), discount: whole(doc.discountAmount), delivery: whole(doc.deliveryCharges), total: whole(doc.total) },
+      totals: { subtotal: whole(doc.subtotal), discount: whole(doc.discountAmount), delivery: whole(doc.deliveryCharges), total: whole(doc.total), ...taxTotals(doc) },
       statusHistory: history,
       paymentStatus: doc.paymentStatus ?? 'unpaid',
       confirmationStatus: doc.confirmationStatus ?? 'not_required',

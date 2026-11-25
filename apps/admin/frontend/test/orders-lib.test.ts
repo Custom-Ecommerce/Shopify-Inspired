@@ -49,6 +49,9 @@ test("a backwards date range is named; the wording is whole rupees", () => {
   assert.deepEqual([paymentMethodText("cod"), paymentMethodText("card"), paymentMethodText(null)], ["Cash on delivery", "Card", "Not set"]);
   assert.deepEqual(totalsLines({ subtotal: 7000, discount: 0, delivery: 250, total: 7250 }).map((l) => l.label), ["Subtotal", "Delivery", "Total"]);
   assert.deepEqual(totalsLines({ subtotal: 7000, discount: 500, delivery: 250, total: 6750 })[1], { label: "Discount", value: "- Rs. 500" });
+  const taxed = totalsLines({ subtotal: 7000, discount: 500, delivery: 250, total: 7563, tax: 813, taxLabel: "GST", taxIncluded: false });
+  assert.deepEqual(taxed.map((l) => l.label), ["Subtotal", "Discount", "Delivery", "GST", "Total"]);
+  assert.deepEqual(taxed[3], { label: "GST", value: "Rs. 813" });
 });
 
 test("the page and its helpers never name a private field: no phone, address, email or customer name in the view, the lib or the routes", () => {

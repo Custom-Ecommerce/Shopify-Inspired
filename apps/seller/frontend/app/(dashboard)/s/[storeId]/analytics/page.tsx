@@ -25,6 +25,7 @@ import {
   hasVisits,
   overallText,
   shortDay,
+  statusLegendConfig,
 } from "@/lib/analytics-view";
 import { useDashboard } from "@/lib/dashboard-context";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
@@ -48,7 +49,6 @@ const STATUS_COLORS: Record<string, string> = {
 
 const revenueChartConfig = { amount: { label: "Revenue", color: "var(--chart-1)" } } satisfies ChartConfig;
 const visitsChartConfig = { visits: { label: "Visits", color: "var(--chart-2)" } } satisfies ChartConfig;
-const statusChartConfig = { value: { label: "Orders" } } satisfies ChartConfig;
 
 function RankedList({ rows, empty }: { rows: Array<{ key: string; name: string; value: string }>; empty: string }) {
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>;
@@ -199,7 +199,7 @@ export default function DashboardAnalyticsPage() {
 
           <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
             <ChartCard title="Orders by Status">
-              <ChartContainer config={statusChartConfig} className="h-[220px] w-full">
+              <ChartContainer config={statusLegendConfig(Object.keys(data.ordersByStatus))} className="h-[280px] w-full">
                 <PieChart>
                   <Pie data={Object.entries(data.ordersByStatus).map(([name, value]) => ({ name, value }))} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80}>
                     {Object.keys(data.ordersByStatus).map((name) => (
@@ -207,7 +207,7 @@ export default function DashboardAnalyticsPage() {
                     ))}
                   </Pie>
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent />} />
+                  <ChartLegend content={<ChartLegendContent nameKey="name" className="flex-wrap gap-x-3 gap-y-1" />} />
                 </PieChart>
               </ChartContainer>
             </ChartCard>

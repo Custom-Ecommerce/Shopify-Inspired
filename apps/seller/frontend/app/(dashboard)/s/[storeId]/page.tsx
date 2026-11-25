@@ -137,16 +137,20 @@ function buildRecentOrderColumns(storeId: string): ColumnDef<PayloadOrderDoc>[] 
   {
     header: "Order ID",
     render: (o) => (
-      <Link
-        href={storeHref(storeId, `/orders/${o.id}`)}
-        className="font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-      >
-        {o.orderId}
-      </Link>
+      <>
+        <Link
+          href={storeHref(storeId, `/orders/${o.id}`)}
+          className="font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {o.orderId}
+        </Link>
+        {/* On a phone the customer sits under the number: six columns pushed the total off the screen. */}
+        <span className="block max-w-[8rem] truncate text-xs sm:hidden">{o.customerName}</span>
+      </>
     ),
   },
-  { header: "Customer", accessorKey: "customerName" },
-  { header: "City", accessorKey: "city" },
+  { header: "Customer", accessorKey: "customerName", className: "hidden sm:table-cell" },
+  { header: "City", accessorKey: "city", className: "hidden sm:table-cell" },
   {
     header: "Total",
     render: (o) => (

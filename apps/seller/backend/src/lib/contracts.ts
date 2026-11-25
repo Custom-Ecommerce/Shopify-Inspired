@@ -201,6 +201,7 @@ export const {
   taxLineLabel,
   readOrderTax,
   isValidTaxRate,
+  TAX_LABEL_MAX,
 } = contracts;
 
 // Sprint 8 (S8-B4, D-118): API keys.

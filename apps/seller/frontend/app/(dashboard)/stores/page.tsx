@@ -17,6 +17,7 @@ import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
 import { WorkspaceShell } from "@/components/dashboard/WorkspaceShell";
 import { authFailureView } from "@/components/dashboard/WorkspaceNotice";
 import { getWorkspace } from "@/lib/dashboard-auth";
+import { memberRoleLabel } from "@/lib/role-access";
 import { storeBasePath } from "@/lib/store-routes";
 import type { Workspace, WorkspaceStore } from "@/lib/types/dashboard";
 
@@ -44,6 +45,7 @@ function StoreCard({ store }: { store: WorkspaceStore }) {
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-heading text-base font-semibold text-foreground">{store.name}</h2>
           <p className="truncate font-mono text-xs text-muted-foreground">{address}</p>
+          {memberRoleLabel(store.role) ? <p className="text-xs text-muted-foreground">Your role: {memberRoleLabel(store.role)}</p> : null}
         </div>
         <StatusBadge status={store.status} className="shrink-0" />
       </div>

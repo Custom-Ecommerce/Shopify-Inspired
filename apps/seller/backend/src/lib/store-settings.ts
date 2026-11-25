@@ -302,6 +302,20 @@ export function settingsForRole(settings: StoreSettings, role: SellerRole | null
   };
 }
 
+/**
+ * The same safe subset for the store DOCUMENT of GET /api/stores/:id: staff and support get no message templates there either (the route already leaves out the
+ * payment and courier settings for every member). Any other role, an admin included, gets the document as it is.
+ */
+export function storeDocForRole<T extends Record<string, unknown>>(doc: T, role: SellerRole | null): T {
+  if (role !== 'staff' && role !== 'support') return doc;
+  const storefront = doc.storefront;
+  if (typeof storefront !== 'object' || storefront === null) return doc;
+  const { whatsappTemplate: _whatsapp, emailFooter: _footer, ...rest } = storefront as Record<string, unknown>;
+  void _whatsapp;
+  void _footer;
+  return { ...doc, storefront: rest };
+}
+
 // ------------------------------------------------------------------------------------------------------------ writing
 
 const invalid = (field: string, message: string): HttpError => new HttpError(400, message, SETTINGS_ERROR_CODE, field);

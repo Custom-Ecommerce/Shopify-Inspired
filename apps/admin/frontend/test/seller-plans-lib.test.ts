@@ -86,3 +86,10 @@ test("S8-B5: the API key count per seller, read from the usage of the same signe
   assert.equal(apiKeysText({ used, limits: { ...limits, apiKeys: null } }), "API keys 0 of unlimited");
   assert.match(readFileSync(join(process.cwd(), "components", "sellers", "sellers-view.tsx"), "utf8"), /apiKeysText\(plan\)/);
 });
+
+test("the sellers list stacks on a phone, so the member counts, plan and action buttons are not pushed off the screen", () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), ...path.split("/")), "utf8");
+  assert.match(read("components/sellers/sellers-view.tsx"), /label="Sellers"\s+stackOnPhone/);
+  const table = read("components/shared/data-table.tsx");
+  for (const part of ["max-md:hidden", "max-md:block max-md:whitespace-normal", "stackOnPhone = false"]) assert.ok(table.includes(part), part);
+});
