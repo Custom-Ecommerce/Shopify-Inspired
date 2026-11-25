@@ -320,3 +320,50 @@ test('GET: a settings read that fails falls back to the environment, an unknown 
   assert.equal((await get('65a0000000000000000000ff')).status, 404);
   assert.equal((await get(OTHER_ADMIN)).status, 403);
 });
+
+// ------------------------------------------------------------------------------------------------- GET: the plan limit
+
+test('GET shows the limit of the seller’s plan, which the seller backend enforces, ahead of the platform setting', async (t) => {
+  const saved = storeLimitSteps.readPlans;
+  t.after(() => {
+    storeLimitSteps.readPlans = saved;
+  });
+  settingsDoc = { maxStoresPerSeller: 4 };
+  let planStoreLimit: number | null = 1;
+  const asked: unknown[] = [];
+  storeLimitSteps.readPlans = (async (adminId: string, input: { sellerIds: string[] }) => {
+    asked.push([adminId, input.sellerIds]);
+    return { plans: input.sellerIds.map((sellerId) => ({ sellerId, planStoreLimit })) };
+  }) as never;
+  type Body = { seller: { effectiveLimit: number; source: string; planLimit: number | null } };
+  const read = async (id: string) => ((await (await get(id)).json()) as Body).seller;
+
+  const free = await read(SELLER_ID);
+  assert.deepEqual([free.effectiveLimit, free.source, free.planLimit], [1, 'plan', 1]);
+  assert.deepEqual(asked, [[ADMIN_ID, [SELLER_ID]]]);
+
+  const overridden = await read(SELLER_WITH_LIMIT);
+  assert.deepEqual([overridden.effectiveLimit, overridden.source, overridden.planLimit], [6, 'override', 1], 'the override still wins, and the plan shows underneath');
+
+  planStoreLimit = null;
+  const unlimited = await read(SELLER_ID);
+  assert.deepEqual([unlimited.effectiveLimit, unlimited.source], [1000, 'plan'], 'a plan with no store limit');
+});
+
+test('GET still answers when the seller backend cannot say which plan the seller is on', async (t) => {
+  const saved = storeLimitSteps.readPlans;
+  const quiet = console.error;
+  console.error = () => {};
+  t.after(() => {
+    storeLimitSteps.readPlans = saved;
+    console.error = quiet;
+  });
+  storeLimitSteps.readPlans = (async () => {
+    throw new Error('seller backend down');
+  }) as never;
+  settingsDoc = { maxStoresPerSeller: 4 };
+  const response = await get(SELLER_ID);
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { seller: { planLimit: number | null; source: string } };
+  assert.deepEqual([body.seller.planLimit, body.seller.source], [null, 'setting']);
+});

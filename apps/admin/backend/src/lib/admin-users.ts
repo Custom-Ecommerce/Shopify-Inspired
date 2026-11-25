@@ -13,7 +13,8 @@ const auth = unwrapCjs(authNs) as typeof authNs;
  * (owner level) in authorizeAdmin; the policy row adminUsers says again what may be written. An admin account is disabled, never deleted.
  *
  *   last owner      the last ACTIVE owner can neither be disabled nor demoted (409 LAST_OWNER). Two owners changing each other at the very same
- *                   instant could both pass the check; the console is small and the next request would show it, so no lock is taken.
+ *                   instant both pass the first check, so it is made again AFTER the write: whoever finds no other active owner takes its own
+ *                   change back (409). No lock: in the worst case both are refused and nobody changes.
  *   self            an admin cannot change their own level or disable themselves (403 SELF_CHANGE).
  *   audit           every change writes who, the target, from, to and the reason.
  *   invite          a new account with a random password nobody knows, and a 7 day single-use link (the token is stored hashed). The person sets the
@@ -86,7 +87,9 @@ export async function inviteAdminUser(actorId: string, input: { name: string; em
     dedupeKey: 'admin_invite:' + id,
   } as never).catch((err: unknown) => console.error('[admin-backend] could not queue an invitation', err instanceof Error ? err.message : 'unknown'));
   await audit('admin_user.invited', id, actorId, { email: input.email, adminLevel: input.adminLevel });
-  return { user: toAdminUser({ ...created, adminLevel: input.adminLevel, accountStatus: 'active', emailVerifiedAt: null }) };
+  // create() answers a Mongoose document: spreading it copies none of its fields, so it is turned into a plain object first.
+  const plain = typeof created.toObject === 'function' ? (created.toObject() as Doc) : created;
+  return { user: toAdminUser({ ...plain, adminLevel: input.adminLevel, accountStatus: 'active', emailVerifiedAt: null }) };
 }
 
 /** The invited person sets their password with the link: once, within 7 days. */
@@ -121,6 +124,10 @@ export async function changeAdminLevel(actorId: string, targetId: string, input:
     .select(FIELDS)
     .lean()) as unknown as Doc | null;
   if (!updated) throw new AdminHttpError(409, 'This account was changed by someone else. Reload and try again.', 'CHANGED');
+  if (from === 'owner' && target.accountStatus !== 'suspended' && (await otherActiveOwners(targetId)) === 0) {
+    await User.findOneAndUpdate({ _id: targetId, role: 'admin', adminLevel: input.adminLevel } as never, { $set: { adminLevel: 'owner' } } as never, { new: true }).select('_id').lean();
+    throw new AdminHttpError(409, 'This is the last active owner. Make someone else an owner first.', 'LAST_OWNER');
+  }
   await audit('admin_user.level_changed', targetId, actorId, { from, to: input.adminLevel, reason: input.reason });
   return { user: toAdminUser(updated), changed: true };
 }
@@ -142,6 +149,10 @@ export async function setAdminStatus(actorId: string, targetId: string, status: 
     .select(FIELDS)
     .lean()) as unknown as Doc | null;
   if (!updated) throw new AdminHttpError(409, 'This account was changed by someone else. Reload and try again.', 'CHANGED');
+  if (status === 'suspended' && effectiveAdminLevel(target.adminLevel) === 'owner' && (await otherActiveOwners(targetId)) === 0) {
+    await User.findOneAndUpdate({ _id: targetId, role: 'admin', accountStatus: 'suspended' } as never, { $set: { accountStatus: 'active', suspensionReason: null } } as never, { new: true }).select('_id').lean();
+    throw new AdminHttpError(409, 'This is the last active owner and cannot be disabled.', 'LAST_OWNER');
+  }
   await audit(status === 'suspended' ? 'admin_user.disabled' : 'admin_user.enabled', targetId, actorId, { from, to: status, reason: input.reason });
   return { user: toAdminUser(updated), changed: true };
 }

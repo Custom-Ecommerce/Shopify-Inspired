@@ -31,8 +31,8 @@ const COLUMNS: Array<Column<AdminAuditEntry>> = [
     header: "Action",
     cell: (entry) => (
       <div className="flex min-w-0 flex-col">
-        <span className="truncate font-medium">{actionLabel(entry.action)}</span>
-        <span className="truncate text-xs text-muted-foreground">{entry.action}</span>
+        <span className="font-medium [overflow-wrap:anywhere] sm:truncate">{actionLabel(entry.action)}</span>
+        <span className="text-xs text-muted-foreground [overflow-wrap:anywhere] sm:truncate">{entry.action}</span>
       </div>
     ),
   },

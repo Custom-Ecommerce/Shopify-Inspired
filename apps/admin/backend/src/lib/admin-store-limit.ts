@@ -1,6 +1,6 @@
 import { AdminHttpError } from '@/lib/admin-auth';
 import { SETTINGS_GLOBAL_TYPE } from '@/lib/admin-commission';
-import { setSellerStoreLimit } from '@/lib/seller-moderation-client';
+import { readSellerPlans, setSellerStoreLimit } from '@/lib/seller-moderation-client';
 import { PlatformSettingsModel, Store, User, writeAuditLog } from '@/lib/workspace';
 
 /**
@@ -13,12 +13,14 @@ import { PlatformSettingsModel, Store, User, writeAuditLog } from '@/lib/workspa
  *
  * The effective limit shown to the operator (describeStoreLimit) follows the same order as the seller backend's lib/effective-limits.ts:
  * override > plan > platform setting > environment (SELLER_MAX_STORES, else 3). The two are separate copies on purpose: the apps share code
- * only through packages. There is no plan limit until EP-14.
+ * only through packages. The plan limit is read from the seller backend (the signed plans call), which resolves the effective plan.
  */
 
 export const STORE_LIMIT_SOURCES = ['override', 'plan', 'setting', 'env'] as const;
 export type StoreLimitSource = (typeof STORE_LIMIT_SOURCES)[number];
 export const DEFAULT_ENV_STORE_LIMIT = 3;
+/** A plan with no store limit counts as this many, as in the seller backend (lib/workspace.ts). */
+export const UNLIMITED_STORES_SHOWN = 1000;
 
 const positiveWhole = (value: unknown): number | null => (typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 ? value : null);
 
@@ -50,7 +52,21 @@ export function describeStoreLimit(input: { override?: unknown; planLimit?: unkn
 
 export const storeLimitSteps = {
   applyInSellerBackend: setSellerStoreLimit,
+  readPlans: readSellerPlans,
 };
+
+/** The store limit of the seller's effective plan, or null when the seller backend cannot say (the dialog then says it could not be read). */
+async function planStoreLimitOf(adminId: string, sellerId: string): Promise<number | null> {
+  try {
+    const { plans } = await storeLimitSteps.readPlans(adminId, { sellerIds: [sellerId] });
+    const row = plans.find((entry) => entry.sellerId === sellerId);
+    if (!row || row.planStoreLimit === undefined) return null;
+    return row.planStoreLimit ?? UNLIMITED_STORES_SHOWN;
+  } catch (err) {
+    console.error('[admin-backend] could not read the plan store limit', err instanceof Error ? err.message : 'unknown');
+    return null;
+  }
+}
 
 export interface StoreLimitChange {
   adminId: string;
@@ -114,7 +130,7 @@ export async function changeStoreLimit(change: StoreLimitChange): Promise<StoreL
 }
 
 /** What the Store limit dialog shows: the seller, the effective limit and where it comes from, and how many stores the seller has. */
-export async function readStoreLimit(sellerId: string) {
+export async function readStoreLimit(adminId: string, sellerId: string) {
   const seller = (await User.findById(sellerId).select('role name email storeLimitOverride').lean()) as
     | { role?: unknown; name?: unknown; email?: unknown; storeLimitOverride?: unknown }
     | null;
@@ -131,7 +147,8 @@ export async function readStoreLimit(sellerId: string) {
     platformMax = null;
   }
   const storesUsed = await Store.countDocuments({ owner: sellerId } as never);
-  const view = describeStoreLimit({ override: seller.storeLimitOverride, planLimit: null, platformMax, envMax: process.env.SELLER_MAX_STORES });
+  const planLimit = await planStoreLimitOf(adminId, sellerId);
+  const view = describeStoreLimit({ override: seller.storeLimitOverride, planLimit, platformMax, envMax: process.env.SELLER_MAX_STORES });
   return {
     id: sellerId,
     name: typeof seller.name === 'string' ? seller.name : '',

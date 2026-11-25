@@ -187,3 +187,15 @@ test("the backend's issues land on the form fields, a limit issue on its own fie
   assert.equal(conflictField(409, "The plan was changed by someone else. Reload and try again."), null);
   assert.equal(conflictField(400, "key"), null);
 });
+
+test('at 375 px the plans table keeps the price, status and actions on screen, and long audit action names wrap', async () => {
+  const { readFileSync } = await import('node:fs');
+  const read = (file: string) => readFileSync(process.cwd() + '/components/' + file, 'utf8');
+  const plans = read('subscriptions/subscriptions-view.tsx');
+  assert.match(plans, /key: "price", header: "Price", className: "hidden sm:table-cell"/);
+  assert.match(plans, /header: "Status",\s+className: "hidden sm:table-cell"/);
+  assert.match(plans, /sm:hidden">\s+<span className="tabular-nums">\{priceLabel\(plan\.priceRs\)\}/, 'the hidden columns are shown under the name');
+  assert.match(plans, /flex flex-col gap-2 sm:flex-row sm:flex-wrap">\s+<Button[^>]*aria-label=\{"Edit "/, 'the actions stack on a phone');
+  const audit = read('audit/audit-view.tsx');
+  assert.equal(audit.match(/\[overflow-wrap:anywhere\] sm:truncate/g)?.length, 2);
+});

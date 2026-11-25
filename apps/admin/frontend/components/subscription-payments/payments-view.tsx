@@ -225,7 +225,7 @@ function PaymentDialog({ action, payment, onClose, onDone }: { action: PaymentAc
       <form onSubmit={onSubmit} className="flex flex-col gap-3" noValidate>
         <p className="text-sm text-muted-foreground">{copy.hint}</p>
         {action === "confirm" ? (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border border-border bg-muted/30 p-3 text-sm" data-slot="confirm-facts">
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-lg border border-border bg-muted/30 p-3 text-sm" data-slot="confirm-facts">
             {confirmFacts(payment).map((fact) => (
               <div key={fact.label} className="contents">
                 <dt className="text-muted-foreground">{fact.label}</dt>

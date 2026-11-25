@@ -105,7 +105,7 @@ function StoreLimitForm({ sellerId, view, onClose, onDone }: { sellerId: string;
           <li key={source} className={source === view.source ? "font-medium text-foreground" : undefined}>
             {STORE_LIMIT_SOURCE_LABELS[source]}
             {source === "override" ? ": " + (view.storeLimitOverride === null ? "none" : view.storeLimitOverride) : null}
-            {source === "plan" ? ": " + (view.planLimit === null ? "no plan limit yet" : view.planLimit) : null}
+            {source === "plan" ? ": " + (view.planLimit === null ? "could not be read" : view.planLimit) : null}
             {source === "setting" ? ": " + (view.platformMax === null ? "not set" : view.platformMax) : null}
             {source === "env" ? ": " + view.envMax : null}
             {source === view.source ? " (in use)" : null}

@@ -265,6 +265,31 @@ test('the LAST active owner can be neither demoted nor disabled; with a second o
   await assert.rejects(() => setAdminStatus(OWNER2, OWNER, 'suspended', { reason: 'Still last' }), (e: any) => e.code === 'LAST_OWNER');
 });
 
+test('two owners changing each other at the same moment never leave the console without an owner: the change is taken back', async () => {
+  users.push({ _id: OWNER2, name: 'Two', email: 't@x.test', role: 'admin', adminLevel: 'owner', accountStatus: 'active', tokenVersion: 0, emailVerifiedAt: new Date(), createdAt: new Date() });
+  const second = () => users.find((u) => u._id === OWNER2)!;
+  const write = UserModel.findOneAndUpdate;
+  // The other owner's request lands between this request's check and its write, so the actor is no longer an active owner.
+  const meanwhile = (change: Record<string, unknown>): void => {
+    let landed = false;
+    UserModel.findOneAndUpdate = (filter: any, update: any) => {
+      if (!landed) Object.assign(users[0]!, change);
+      landed = true;
+      return write(filter, update);
+    };
+  };
+
+  meanwhile({ adminLevel: 'finance' });
+  await assert.rejects(() => changeAdminLevel(OWNER, OWNER2, { adminLevel: 'finance', reason: 'At the same time' }), (e: any) => e.status === 409 && e.code === 'LAST_OWNER');
+  assert.equal(second().adminLevel, 'owner');
+
+  Object.assign(users[0]!, { adminLevel: 'owner' });
+  meanwhile({ accountStatus: 'suspended' });
+  await assert.rejects(() => setAdminStatus(OWNER, OWNER2, 'suspended', { reason: 'At the same time' }), (e: any) => e.status === 409 && e.code === 'LAST_OWNER');
+  assert.equal(second().accountStatus, 'active');
+  assert.equal(audits.length, 0, 'a change that was taken back is not recorded as made');
+});
+
 test('disable and enable: audited, end the sessions (tokenVersion), refuse self, and are idempotent', async () => {
   const off = await setAdminStatus(OWNER, FINANCE, 'suspended', { reason: 'Left the company' });
   assert.deepEqual([off.changed, users[1]!.accountStatus, users[1]!.tokenVersion], [true, 'suspended', 1]);
@@ -298,6 +323,19 @@ test('invite: a new admin with the chosen level, a 7 day single-use hashed token
   await assert.rejects(() => acceptAdminInvite(raw, 'a-very-strong-passphrase-123'), (e: any) => e.code === 'TOKEN_INVALID');
   await assert.rejects(() => acceptAdminInvite('A'.repeat(43), 'a-very-strong-passphrase-123'), (e: any) => e.code === 'TOKEN_INVALID');
   await assert.rejects(() => inviteAdminUser(OWNER, { name: 'Dup', email: 'o@x.test', adminLevel: 'finance' }), (e: any) => e.status === 409 && e.code === 'EMAIL_TAKEN');
+});
+
+test('invite: the answer describes the new account when create() returns a real Mongoose document (id, name, email, as the console reads them)', async () => {
+  // The other stubs answer a plain object; the real model answers a document, whose fields a spread does not copy.
+  UserModel.create = async (doc: any) => {
+    const document = new UserModel(doc);
+    users.push(document.toObject());
+    return document;
+  };
+  const out = await inviteAdminUser(OWNER, { name: 'Real Document', email: 'doc@x.test', adminLevel: 'finance' });
+  assert.match(out.user.id, /^[0-9a-f]{24}$/);
+  assert.deepEqual([out.user.name, out.user.email, out.user.adminLevel, out.user.accepted], ['Real Document', 'doc@x.test', 'finance', false]);
+  assert.equal(JSON.stringify(out).includes('passwordHash'), false);
 });
 
 test('the migration plan makes every admin without a level an owner, explicitly; a second run finds nothing', () => {

@@ -19,14 +19,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
-    await authorizeAdmin(request, 'sellers.read');
+    const { userId } = await authorizeAdmin(request, 'sellers.read');
     requirePolicy(() => {
       assertCan('admin', 'read', 'users', ['name', 'email', 'storeLimitOverride']);
       assertCan('admin', 'read', 'stores');
     });
     const { id } = await context.params;
     if (!mongoose.isValidObjectId(id)) throw new AdminHttpError(404, 'Seller not found');
-    return Response.json({ seller: await readStoreLimit(id) }, { headers: NO_STORE });
+    return Response.json({ seller: await readStoreLimit(userId, id) }, { headers: NO_STORE });
   } catch (err) {
     return errorResponse(err);
   }

@@ -183,3 +183,11 @@ test("a refusal keeps its status and the backend's own words, so the operator se
     (err: unknown) => err instanceof ApiError && err.status === 422 && err.issues[0]?.path === "reason",
   );
 });
+
+test('the confirm dialog wraps a long email or reference inside itself: the value column may shrink below its longest word (375 px)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const view = readFileSync(process.cwd() + '/components/subscription-payments/payments-view.tsx', 'utf8');
+  const facts = /<dl className="([^"]*)" data-slot="confirm-facts">/.exec(view)?.[1] ?? '';
+  assert.ok(facts.includes('grid-cols-[auto_minmax(0,1fr)]'), facts);
+  assert.match(view, /<dd className="break-words font-medium">\{fact\.value\}<\/dd>/);
+});

@@ -85,6 +85,8 @@ export const adminSellerPlanSchema = z.object({
   daysLeft: z.number().int().min(0).nullable(),
   limits: effectivePlanLimitsSchema,
   used: planUsageCountsSchema,
+  /** The plan's own store limit, before any override (limits.stores already has the override); null is unlimited. The Store limit dialog reads it. */
+  planStoreLimit: limit.optional(),
 });
 export type AdminSellerPlan = z.output<typeof adminSellerPlanSchema>;
 

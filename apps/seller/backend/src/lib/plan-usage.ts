@@ -115,7 +115,7 @@ export async function buildSellerPlans(sellerIds: readonly string[], now: Date =
       storeLimitOverride: overrideOf.get(sellerId),
       used: { stores: owned.length, products: most(perStore), staffSeats: most(seatsPerStore), apiKeys: most(keysPerStore) },
     });
-    return { sellerId, plan: usage.plan, status: usage.status, periodEnd: usage.periodEnd, daysLeft: usage.daysLeft, limits: usage.limits, used: usage.used };
+    return { sellerId, plan: usage.plan, status: usage.status, periodEnd: usage.periodEnd, daysLeft: usage.daysLeft, limits: usage.limits, used: usage.used, planStoreLimit: plan.limits.stores };
   });
 }
 

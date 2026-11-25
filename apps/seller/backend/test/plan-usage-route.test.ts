@@ -395,3 +395,9 @@ test('the sellers page counts the store with the most of each, and never another
   const plans = await buildSellerPlans([A, B, C], NOW);
   assert.deepEqual(plans.map((p) => [p.used.staffSeats, p.used.apiKeys]), [[2, 2], [1, 0], [0, 0]]);
 });
+
+test('the sellers call also answers the plan’s own store limit, which an override does not replace (the admin Store limit dialog)', async () => {
+  userRows[B] = { storeLimitOverride: 5 };
+  const [plan] = await buildSellerPlans([B], NOW);
+  assert.deepEqual([plan!.limits.stores, plan!.planStoreLimit], [5, 1]);
+});

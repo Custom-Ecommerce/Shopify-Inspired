@@ -27,19 +27,25 @@ function columns(onEdit: (plan: AdminSubscriptionPlan) => void, onArchive: (plan
       header: "Plan",
       cell: (plan) => (
         <div className="flex min-w-0 flex-col">
-          <span className="block max-w-64 truncate font-medium">{plan.name}</span>
-          <span className="block max-w-72 truncate text-xs text-muted-foreground">
+          <span className="block font-medium [overflow-wrap:anywhere] sm:max-w-64 sm:truncate">{plan.name}</span>
+          <span className="block text-xs text-muted-foreground [overflow-wrap:anywhere] sm:max-w-72 sm:truncate">
             {plan.key !== null ? <code className="font-mono">{plan.key}</code> : plan.tier !== null ? "Old tier: " + TIER_LABELS[plan.tier] : "Old plan"}
             {" · "}
             {limitsSummary(plan.limits)}
           </span>
+          {/* On a phone the price and status columns are hidden, so they are shown here and the actions stay on screen. */}
+          <span className="mt-1 flex flex-wrap items-center gap-2 sm:hidden">
+            <span className="tabular-nums">{priceLabel(plan.priceRs)}</span>
+            <Badge variant={planStatus(plan) === "active" ? "default" : "neutral"}>{PLAN_STATUS_LABELS[planStatus(plan)]}</Badge>
+          </span>
         </div>
       ),
     },
-    { key: "price", header: "Price", cell: (plan) => <span className="whitespace-nowrap tabular-nums">{priceLabel(plan.priceRs)}</span> },
+    { key: "price", header: "Price", className: "hidden sm:table-cell", cell: (plan) => <span className="whitespace-nowrap tabular-nums">{priceLabel(plan.priceRs)}</span> },
     {
       key: "status",
       header: "Status",
+      className: "hidden sm:table-cell",
       cell: (plan) => {
         const status = planStatus(plan);
         return <Badge variant={status === "active" ? "default" : "neutral"}>{PLAN_STATUS_LABELS[status]}</Badge>;
@@ -71,7 +77,7 @@ function columns(onEdit: (plan: AdminSubscriptionPlan) => void, onArchive: (plan
       key: "actions",
       header: "Actions",
       cell: (plan) => (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button variant="outline" size="sm" aria-label={"Edit " + plan.name} onClick={() => onEdit(plan)}>
             Edit
           </Button>
