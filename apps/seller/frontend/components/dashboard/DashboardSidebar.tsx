@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarGroup,
@@ -21,6 +23,9 @@ import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { useDashboard, useStoreHref } from "@/lib/dashboard-context";
 import { storeBasePath } from "@/lib/store-routes";
+import { roleSeesMenu } from "@/lib/role-menu";
+import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
+import { fetchUnreadCount, unreadBadge } from "@/lib/support";
 import {
   LayoutDashboard,
   Package,
@@ -33,6 +38,8 @@ import {
   Users,
   Megaphone,
   BookOpen,
+  Images,
+  FileText,
   BarChart,
   DollarSign,
   CreditCard,
@@ -42,6 +49,10 @@ import {
   Contact,
   Ban,
   ShoppingBasket,
+  MessageSquare,
+  LifeBuoy,
+  KeyRound,
+  UsersRound,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -60,7 +71,11 @@ export const NAV_GROUPS = [
       { href: "/", label: "Overview", icon: LayoutDashboard, exact: true },
       { href: "/products", label: "Products", icon: Package },
       { href: "/categories", label: "Categories", icon: FolderTree },
+      // Sprint 7 (S7-B2): the store's pictures and videos, with where each is used.
+      { href: "/media", label: "Media", icon: Images },
       { href: "/orders", label: "Orders", icon: ShoppingCart },
+      // Sprint 7 (S7-B4): messages shoppers sent through the store's contact form, with the unread count.
+      { href: "/inbox", label: "Inbox", icon: MessageSquare },
       // Sprint 5 EP-10.US02: the customers who ordered, with private notes.
       { href: "/customers", label: "Customers", icon: Contact },
       // Sprint 5 EP-11.US02: the phones and emails the store refuses orders from.
@@ -79,6 +94,8 @@ export const NAV_GROUPS = [
       { href: "/referrals", label: "Referrals", icon: Users },
       { href: "/broadcast", label: "Broadcast", icon: Megaphone },
       { href: "/blog", label: "Blog & Lookbook", icon: BookOpen },
+      // Sprint 7 (S7-B3): the static pages (about, contact, shipping, returns, privacy) and their footer links.
+      { href: "/pages", label: "Pages", icon: FileText },
     ],
   },
   {
@@ -94,8 +111,13 @@ export const NAV_GROUPS = [
     links: [
       { href: "/store", label: "Store Settings", icon: Settings },
       { href: "/domain", label: "Domain", icon: Globe },
+      // Sprint 8 (S8-B4): the store's staff and its API keys. Owner only (the menu hides them from every other role).
+      { href: "/team", label: "Team", icon: UsersRound },
+      { href: "/api-keys", label: "API keys", icon: KeyRound },
       // Sprint 4 EP-08.US04.T02: the seller's own account (profile, password, email, devices).
       { href: "/account", label: "Account", icon: UserCog },
+      // Sprint 7 (S7-B4): the seller's tickets to the Markazify team.
+      { href: "/support", label: "Support", icon: LifeBuoy },
     ],
   },
 ] as const;
@@ -105,6 +127,20 @@ export function DashboardSidebar() {
   const href = useStoreHref();
   const pathname = usePathname();
   const basePath = storeBasePath(storeId);
+  const storeFetch = useStoreFetch();
+  const [unread, setUnread] = useState<number | null>(null);
+
+  // The unread count beside Inbox: read once, then every 60 seconds; a failed read shows no badge.
+  useEffect(() => {
+    let alive = true;
+    const read = () => void fetchUnreadCount(storeFetch).then((count) => alive && setUnread(count));
+    read();
+    const timer = setInterval(read, 60000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [storeFetch, pathname]);
   const rootDomainUrl = process.env.NEXT_PUBLIC_ROOT_DOMAIN_URL || "localhost:3000";
   const protocol = rootDomainUrl.includes("localhost") ? "http" : "https";
 
@@ -142,7 +178,10 @@ export function DashboardSidebar() {
       </div>
 
       <SidebarContent>
-        {NAV_GROUPS.map((group) => (
+        {NAV_GROUPS.map((group) => ({ group, links: group.links.filter((link) => roleSeesMenu(activeStore?.role, link.href)) }))
+          // S8-B3: the menu shows only what the role may use (the backend is what enforces it); a group left empty is not shown.
+          .filter(({ links }) => links.length > 0)
+          .map(({ group, links }) => (
           <SidebarGroup key={group.label}>
             {/* Group labels hidden in icon mode by the sidebar primitive */}
             <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -150,7 +189,7 @@ export function DashboardSidebar() {
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {group.links.map((link) => {
+                {links.map((link) => {
                   const active = isActive(link.href, "exact" in link ? link.exact : false);
                   const Icon = link.icon;
                   return (
@@ -173,6 +212,7 @@ export function DashboardSidebar() {
                         </span>
                         <span>{link.label}</span>
                       </SidebarMenuButton>
+                      {link.href === "/inbox" && unreadBadge(unread) !== "" ? <SidebarMenuBadge aria-label={unreadBadge(unread) + " unread messages"}>{unreadBadge(unread)}</SidebarMenuBadge> : null}
                     </SidebarMenuItem>
                   );
                 })}

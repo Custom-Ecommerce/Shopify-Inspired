@@ -9,6 +9,12 @@ export const BACKFILL_BATCH = 100;
  * The orders that owe ledger entries and lack them: delivered-and-collected COD (one entry) and paid card orders (two),
  * found with a lookup on the entries collection so each call moves on to the next orders that still lack entries. A
  * cancelled card order is left alone.
+ *
+ * Sprint 6 D-116: this selects ONLY orders that lack an entry, and a COD order at 0 percent still gets its (zero) entry, so a
+ * changed COD percent never touches an order that already has one and the job cannot loop on zero-commission orders.
+ * CO-85 (still open, P3, before scale): the oldest 100 orders without an entry come first, so an order that can never get one (for
+ * example a deleted store) stays at the front and blocks the rest, and the lookup scans every delivered order each run. A failure
+ * marker or a created-after window plus an index is the planned fix; it is deliberately NOT done here.
  */
 export async function ordersMissingEntries(limit: number = BACKFILL_BATCH): Promise<LedgerOrder[]> {
   return (await Order.aggregate([

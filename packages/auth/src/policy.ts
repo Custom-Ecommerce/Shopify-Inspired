@@ -26,7 +26,8 @@ readonly delete: PolicyRule;
 
 // Blueprint v3 section 1.2, store.operations: what a seller may write.
 // Sprint 4 EP-04.US03 (D-088): payoutDetails too. It is not in SELLER_STORE_READABLE_FIELDS: a seller reads it masked only.
-export const SELLER_STORE_WRITABLE_FIELDS = ['name', 'storefront', 'paymentSettings', 'courierSettings', 'payoutDetails'] as const;
+// S7-B5: 'domain' too, written only by the domain connect, verify and disconnect routes (the settings schema is strict and has no domain).
+export const SELLER_STORE_WRITABLE_FIELDS = ['name', 'storefront', 'paymentSettings', 'courierSettings', 'payoutDetails', 'domain'] as const;
 
 // Payload STORE_STAFF_WRITABLE_FIELDS (apps/admin/src/collections/Stores.ts).
 export const ADMIN_STORE_WRITABLE_FIELDS = [
@@ -47,9 +48,16 @@ export const PUBLIC_STORE_READABLE_FIELDS = ['name', 'slug', 'internalHandle', '
 export const ADMIN_SELLER_WRITABLE_FIELDS = ['accountStatus', 'storeLimitOverride'] as const;
 
 // Staff user administration. passwordHash is never writable through a generic update.
-export const ADMIN_USER_READABLE_FIELDS = ['name', 'email', 'role', 'store', 'createdAt', 'updatedAt'] as const;
-export const ADMIN_USER_CREATABLE_FIELDS = ['name', 'email', 'role', 'store'] as const;
-export const ADMIN_USER_WRITABLE_FIELDS = ['name', 'role', 'store'] as const;
+// storeLimitOverride (Sprint 6) is read here; it is written only through the sellers collection (ADMIN_SELLER_WRITABLE_FIELDS).
+// S6-B6: an admin never writes `role` through the generic users row (privilege escalation). Admin accounts are managed through adminUsers, owner level only.
+export const ADMIN_USER_READABLE_FIELDS = ['name', 'email', 'role', 'store', 'storeLimitOverride', 'adminLevel', 'createdAt', 'updatedAt'] as const;
+export const ADMIN_USER_CREATABLE_FIELDS = ['name', 'email', 'store'] as const;
+export const ADMIN_USER_WRITABLE_FIELDS = ['name', 'store'] as const;
+
+// Sprint 6 (S6-B6, D-118): the admin accounts. The routes require the users.manage capability (owner level) for every write; this row says what may be written.
+export const ADMIN_ACCOUNT_READABLE_FIELDS = ['name', 'email', 'adminLevel', 'accountStatus', 'emailVerifiedAt', 'createdAt', 'updatedAt'] as const;
+export const ADMIN_ACCOUNT_INVITABLE_FIELDS = ['name', 'email', 'adminLevel'] as const;
+export const ADMIN_ACCOUNT_WRITABLE_FIELDS = ['adminLevel', 'accountStatus', 'suspensionReason'] as const;
 
 // Commission ledger as the supervisor may read it: totals only, no order identifiers
 // (Payload CommissionLedger fields minus orderId, sellerOrderDocId, stripePaymentIntentId, applicationFeeId).
@@ -61,7 +69,36 @@ export const ADMIN_LEDGER_READABLE_FIELDS = [
 // Payload PlatformSettings: settingsRevision has update access false, so it is excluded.
 export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
 'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired',
+// Sprint 6 (D-116, D-118): the COD commission percent and the plan settings.
+'codCommissionPercent', 'paymentInstructions', 'graceDays', 'trialDays', 'supportEmail', 'supportPhone',
+// Sprint 8 (S8-B5): referrals.
+'referralRewardMonths', 'referralMonthlyCap',
 ] as const;
+
+// Sprint 6 EP-14 (D-118): subscription plans are data. What a seller (or the public) may read of a plan: the plan facts, never the Stripe
+// price id, the revision or the archive data. The admin creates, edits and archives; the revision is moved by the server (system) only.
+export const PUBLIC_PLAN_READABLE_FIELDS = ['key', 'name', 'priceRs', 'interval', 'limits', 'features', 'sortOrder', 'isActive'] as const;
+export const ADMIN_PLAN_CREATABLE_FIELDS = ['key', 'name', 'priceRs', 'interval', 'limits', 'features', 'sortOrder', 'stripePriceId', 'isActive'] as const;
+// The key never changes after creation, and archivedAt/isActive are how a plan is archived (there is no delete).
+export const ADMIN_PLAN_WRITABLE_FIELDS = ['name', 'priceRs', 'limits', 'features', 'sortOrder', 'stripePriceId', 'isActive', 'archivedAt'] as const;
+
+// Sprint 6 EP-14 (D-118): a seller's subscription. A seller reads their OWN (the route scopes it to the signed-in user: a policy row cannot say
+// "own"); an admin creates and changes it (manual payment marked paid, a trial, a cancel); the revision and the expiry are moved by the system.
+export const SELLER_SUBSCRIPTION_READABLE_FIELDS = ['planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd', 'pendingPlanKey'] as const;
+export const ADMIN_SUBSCRIPTION_CREATABLE_FIELDS = ['seller', 'planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd'] as const;
+// The seller never changes (one subscription per seller); revision is the server's.
+export const ADMIN_SUBSCRIPTION_WRITABLE_FIELDS = ['planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd'] as const;
+
+// Sprint 6 (S6-B4, D-118): a manual subscription payment. A seller reads and creates their OWN (the route scopes by the signed-in user; a policy
+// row cannot say "own"), and says "I paid" (method, reference, proof, the claimed status). Only the planKey comes from the seller: the amount is the
+// plan's price, written by the server (system). An admin reads everything and decides (status, who, when, why, the period); nobody deletes.
+export const SELLER_PAYMENT_READABLE_FIELDS = ['planKey', 'amountRs', 'periodStart', 'periodEnd', 'method', 'reference', 'proofUrl', 'status', 'reason', 'claimedAt', 'decidedAt'] as const;
+export const SELLER_PAYMENT_CREATABLE_FIELDS = ['planKey'] as const;
+export const SELLER_PAYMENT_WRITABLE_FIELDS = ['method', 'reference', 'proofUrl', 'status', 'claimedAt'] as const;
+export const ADMIN_PAYMENT_WRITABLE_FIELDS = ['status', 'decidedBy', 'decidedAt', 'reason', 'periodStart', 'periodEnd'] as const;
+
+// Sprint 6 (S6-B5): the safe fields of the admin's read-only orders view (adminOrdersView row below).
+export const ADMIN_ORDERS_VIEW_FIELDS = ['orderNumber', 'store', 'storeName', 'status', 'paymentMethod', 'total', 'city', 'createdAt', 'updatedAt', 'itemCount', 'items', 'totals', 'statusHistory', 'paymentStatus', 'confirmationStatus'] as const;
 
 // What a seller may set on a category of their store. store and isDemo are never client-writable.
 export const SELLER_CATEGORY_WRITABLE_FIELDS = ['name', 'slug', 'order', 'description'] as const;
@@ -150,6 +187,40 @@ update: {
 actors: ['admin', 'system'],
 fields: { admin: ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS, system: '*' },
 },
+delete: { actors: [], fields: '*' },
+},
+
+subscriptions: {
+// Seller: own only (the route filters by the signed-in user). The public reads none.
+read: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_SUBSCRIPTION_READABLE_FIELDS, admin: '*', system: '*' } },
+create: { actors: ['admin', 'system'], fields: { admin: ADMIN_SUBSCRIPTION_CREATABLE_FIELDS, system: '*' } },
+update: { actors: ['admin', 'system'], fields: { admin: ADMIN_SUBSCRIPTION_WRITABLE_FIELDS, system: '*' } },
+// A subscription is never deleted: it expires or is cancelled and stays as the record.
+delete: { actors: [], fields: '*' },
+},
+
+subscriptionPayments: {
+read: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_PAYMENT_READABLE_FIELDS, admin: '*', system: '*' } },
+create: { actors: ['seller', 'system'], fields: { seller: SELLER_PAYMENT_CREATABLE_FIELDS, system: '*' } },
+update: { actors: ['seller', 'admin', 'system'], fields: { seller: SELLER_PAYMENT_WRITABLE_FIELDS, admin: ADMIN_PAYMENT_WRITABLE_FIELDS, system: '*' } },
+// A payment is a record of money: it is voided or rejected, never deleted.
+delete: { actors: [], fields: '*' },
+},
+
+adminUsers: {
+read: { actors: ['admin', 'system'], fields: { admin: ADMIN_ACCOUNT_READABLE_FIELDS, system: '*' } },
+create: { actors: ['admin', 'system'], fields: { admin: ADMIN_ACCOUNT_INVITABLE_FIELDS, system: '*' } },
+update: { actors: ['admin', 'system'], fields: { admin: ADMIN_ACCOUNT_WRITABLE_FIELDS, system: '*' } },
+// An admin account is disabled, never deleted: the audit trail keeps pointing at it.
+delete: { actors: [], fields: '*' },
+},
+
+// Sprint 6 (S6-B5): the admin's READ-ONLY view of orders: safe fields only (no name, phone, address or email). The old `orders` row still lets an
+// admin read everything (D-067, CO-32); the admin console's orders and analytics paths use THIS row instead. Nobody writes through it.
+adminOrdersView: {
+read: { actors: ['admin', 'system'], fields: { admin: ADMIN_ORDERS_VIEW_FIELDS, system: ADMIN_ORDERS_VIEW_FIELDS } },
+create: { actors: [], fields: '*' },
+update: { actors: [], fields: '*' },
 delete: { actors: [], fields: '*' },
 },
 
@@ -314,10 +385,15 @@ delete: { actors: [], fields: {} },
 },
 
 subscriptionPlans: {
-read: { actors: ['public', 'admin', 'system'], fields: { public: ['name', 'tier'], admin: '*', system: '*' } },
-create: { actors: ['admin', 'system'], fields: '*' },
-update: { actors: ['admin', 'system'], fields: '*' },
-delete: { actors: ['admin', 'system'], fields: '*' },
+// Sprint 6: a seller reads the public view (GET /api/plans); the anonymous storefront may too (pricing). Admin and system read everything.
+read: {
+actors: ['public', 'seller', 'admin', 'system'],
+fields: { public: PUBLIC_PLAN_READABLE_FIELDS, seller: PUBLIC_PLAN_READABLE_FIELDS, admin: '*', system: '*' },
+},
+create: { actors: ['admin', 'system'], fields: { admin: ADMIN_PLAN_CREATABLE_FIELDS, system: '*' } },
+update: { actors: ['admin', 'system'], fields: { admin: ADMIN_PLAN_WRITABLE_FIELDS, system: '*' } },
+// Archiving (update isActive false) is the only removal: nobody deletes a plan, system included.
+delete: { actors: [], fields: '*' },
 },
 
 // The outbox is written only by server-side services running as 'system'.
@@ -385,27 +461,42 @@ Object.assign(POLICY_MATRIX, {
   media: {
     read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
     create: { actors: ['system', 'seller'], fields: { system: '*', seller: ['alt'] } },
-    update: { actors: ['system'], fields: { system: '*' } },
+    // Sprint 7 (S7-B1): a seller renames a file of their own store (PATCH /api/media/:id). The name is the only field: never the url, the
+    // alt text, the store or the Cloudinary id. The admin has no media update.
+    update: { actors: ['system', 'seller'], fields: { system: '*', seller: ['name'] } },
     // Sprint 4 CO-09: a seller deletes their own store's media (DELETE /api/media/:id, 409 while in use).
     delete: { actors: ['admin', 'system', 'seller'], fields: '*' },
   },
 });
 
 // B10.4 declarations, added only where the matrix does not already declare the collection. Sellers read their
-// store's articles and orders; writes are system and admin only, as in Payload.
+// store's orders (writes: system and admin only, as in Payload); since Sprint 7 they also write their store's articles.
+export const SELLER_ARTICLE_FIELDS = ['type', 'title', 'slug', 'excerpt', 'content', 'coverImage', 'status', 'tags', 'seoTitle', 'seoDescription'] as const;
+// Sprint 7 (S7-B3): the fields of a static page a seller may write (the contract's PAGE_WRITE_FIELDS).
+export const SELLER_PAGE_FIELDS = ['title', 'slug', 'body', 'status', 'showInFooter', 'sortOrder'] as const;
 {
   const declarations: Record<string, unknown> = {
+    // Sprint 7 (S7-B2, CO-116): a seller writes the articles of their own store, through an explicit field list. The store, the publish date, the
+    // revision and the media references are set by the server, never by the body. The admin and the system keep what they had.
     storeArticles: {
       read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
-      create: { actors: ['system'], fields: { system: '*' } },
-      update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
-      delete: { actors: ['admin', 'system'], fields: '*' },
+      create: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_ARTICLE_FIELDS] } },
+      update: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: [...SELLER_ARTICLE_FIELDS] } },
+      delete: { actors: ['admin', 'system', 'seller'], fields: '*' },
     },
     orders: {
       read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
       create: { actors: ['system'], fields: { system: '*' } },
       update: { actors: ['admin', 'system'], fields: { admin: '*', system: '*' } },
       delete: { actors: ['admin', 'system'], fields: '*' },
+    },
+    // Sprint 7 (S7-B3): a seller writes the static pages of their own store, through an explicit field list. The store, the revision, the publish date,
+    // the template and the media references are the server's. The admin may read (for moderation) and nothing else.
+    storePages: {
+      read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+      create: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_PAGE_FIELDS] } },
+      update: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_PAGE_FIELDS] } },
+      delete: { actors: ['system', 'seller'], fields: '*' },
     },
   };
   for (const [name, rule] of Object.entries(declarations)) {
@@ -552,5 +643,25 @@ Object.assign(POLICY_MATRIX, {
     create: { actors: ['system'], fields: { system: '*' } },
     update: { actors: ['seller', 'system'], fields: { seller: SELLER_ABANDONED_CART_UPDATABLE_FIELDS, system: '*' } },
     delete: { actors: ['seller', 'system'], fields: { seller: '*', system: '*' } },
+  },
+});
+
+// Sprint 7 (S7-B4): the contact inbox and the support tickets. A contact message is written by the public form (the system actor), read and answered by the
+// store's seller (store scope) or by the admin (platform scope; the admin only reads, replies go through the signed seller call). A ticket is the seller's
+// own request to the platform: the seller creates, reads and answers their own, the admin reads and answers by capability (tickets.read, tickets.reply).
+export const SELLER_CONTACT_FIELDS = ['status', 'replies'] as const;
+export const SELLER_TICKET_FIELDS = ['subject', 'messages', 'store', 'orderRef', 'status'] as const;
+Object.assign(POLICY_MATRIX, {
+  contactMessages: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: { actors: ['system'], fields: { system: '*' } },
+    update: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_CONTACT_FIELDS] } },
+    delete: { actors: ['system'], fields: '*' },
+  },
+  tickets: {
+    read: { actors: ['admin', 'system', 'seller'], fields: { admin: '*', system: '*', seller: '*' } },
+    create: { actors: ['system', 'seller'], fields: { system: '*', seller: [...SELLER_TICKET_FIELDS] } },
+    update: { actors: ['admin', 'system', 'seller'], fields: { admin: ['messages', 'status'], system: '*', seller: ['messages', 'status'] } },
+    delete: { actors: ['system'], fields: '*' },
   },
 });

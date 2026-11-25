@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { DataTable, TablePagination, type Column } from "@/components/shared/data-table";
 import { FilterTile } from "@/components/shared/filter-tile";
 import { Badge } from "@/components/ui/badge";
@@ -14,30 +14,85 @@ import type { AdminSubscriptionPlan } from "@/lib/contracts";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
 import { useDebouncedSearch } from "@/lib/hooks/use-debounced-search";
+import { PlanArchiveDialog } from "@/components/subscriptions/plan-archive-dialog";
+import { PlanDialog } from "@/components/subscriptions/plan-dialog";
+import { PLAN_STATUS_LABELS, canArchive, limitsSummary, planStatus, priceLabel } from "@/lib/plans";
 import { TIER_LABELS, TIER_VALUES, TIER_VARIANTS, parseSubscriptionState, subscriptionStateToQuery, type SubscriptionListState } from "@/lib/subscriptions";
 
-const COLUMNS: Array<Column<AdminSubscriptionPlan>> = [
-  { key: "plan", header: "Plan", cell: (plan) => <span className="block max-w-64 truncate font-medium">{plan.name}</span> },
-  { key: "tier", header: "Tier", cell: (plan) => <Badge variant={TIER_VARIANTS[plan.tier]}>{TIER_LABELS[plan.tier]}</Badge> },
-  {
-    key: "price",
-    header: "Stripe price",
-    className: "hidden md:table-cell",
-    cell: (plan) => <code className="block max-w-56 truncate font-mono text-xs text-muted-foreground">{plan.stripePriceId}</code>,
-  },
-  {
-    key: "added",
-    header: "Added",
-    className: "hidden lg:table-cell",
-    cell: (plan) => (
-      <time dateTime={plan.createdAt} title={formatDateTime(plan.createdAt)} className="text-muted-foreground">
-        {formatRelative(plan.createdAt)}
-      </time>
-    ),
-  },
-];
+/** Sprint 6 EP-14: a plan is data. The key and the limits show under the name; an old plan (before Sprint 6) shows its tier and has no limits. */
+function columns(onEdit: (plan: AdminSubscriptionPlan) => void, onArchive: (plan: AdminSubscriptionPlan) => void): Array<Column<AdminSubscriptionPlan>> {
+  return [
+    {
+      key: "plan",
+      header: "Plan",
+      cell: (plan) => (
+        <div className="flex min-w-0 flex-col">
+          <span className="block font-medium [overflow-wrap:anywhere] sm:max-w-64 sm:truncate">{plan.name}</span>
+          <span className="block text-xs text-muted-foreground [overflow-wrap:anywhere] sm:max-w-72 sm:truncate">
+            {plan.key !== null ? <code className="font-mono">{plan.key}</code> : plan.tier !== null ? "Old tier: " + TIER_LABELS[plan.tier] : "Old plan"}
+            {" · "}
+            {limitsSummary(plan.limits)}
+          </span>
+          {/* On a phone the price and status columns are hidden, so they are shown here and the actions stay on screen. */}
+          <span className="mt-1 flex flex-wrap items-center gap-2 sm:hidden">
+            <span className="tabular-nums">{priceLabel(plan.priceRs)}</span>
+            <Badge variant={planStatus(plan) === "active" ? "default" : "neutral"}>{PLAN_STATUS_LABELS[planStatus(plan)]}</Badge>
+          </span>
+        </div>
+      ),
+    },
+    { key: "price", header: "Price", className: "hidden sm:table-cell", cell: (plan) => <span className="whitespace-nowrap tabular-nums">{priceLabel(plan.priceRs)}</span> },
+    {
+      key: "status",
+      header: "Status",
+      className: "hidden sm:table-cell",
+      cell: (plan) => {
+        const status = planStatus(plan);
+        return <Badge variant={status === "active" ? "default" : "neutral"}>{PLAN_STATUS_LABELS[status]}</Badge>;
+      },
+    },
+    {
+      key: "tier",
+      header: "Old tier",
+      className: "hidden lg:table-cell",
+      cell: (plan) => (plan.tier === null ? <span className="text-muted-foreground">-</span> : <Badge variant={TIER_VARIANTS[plan.tier]}>{TIER_LABELS[plan.tier]}</Badge>),
+    },
+    {
+      key: "price-id",
+      header: "Stripe price",
+      className: "hidden xl:table-cell",
+      cell: (plan) => <code className="block max-w-56 truncate font-mono text-xs text-muted-foreground">{plan.stripePriceId ?? "-"}</code>,
+    },
+    {
+      key: "added",
+      header: "Added",
+      className: "hidden lg:table-cell",
+      cell: (plan) => (
+        <time dateTime={plan.createdAt} title={formatDateTime(plan.createdAt)} className="text-muted-foreground">
+          {formatRelative(plan.createdAt)}
+        </time>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      cell: (plan) => (
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button variant="outline" size="sm" aria-label={"Edit " + plan.name} onClick={() => onEdit(plan)}>
+            Edit
+          </Button>
+          {canArchive(plan) ? (
+            <Button variant="destructive" size="sm" aria-label={"Archive " + plan.name} onClick={() => onArchive(plan)}>
+              Archive
+            </Button>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
+}
 
-/** The subscription plans at /subscriptions. Search, tier, and page live in the URL. Plans are read only until AF3. */
+/** The subscription plans at /subscriptions (Sprint 6 EP-14: create, edit and archive). Search, tier, and page live in the URL. */
 export function SubscriptionsView() {
   const router = useRouter();
   const pathname = usePathname();
@@ -59,14 +114,28 @@ export function SubscriptionsView() {
 
   const filtered = state.q !== "" || state.tier !== "";
 
+  // Sprint 6 EP-14: create, edit and archive, each behind its own dialog.
+  const [editing, setEditing] = useState<AdminSubscriptionPlan | "new" | null>(null);
+  const [archiving, setArchiving] = useState<AdminSubscriptionPlan | null>(null);
+  const tableColumns = useMemo(() => columns((plan) => setEditing(plan), (plan) => setArchiving(plan)), []);
+  const hasOldTiers = data ? TIER_VALUES.some((tier) => data.counts[tier] > 0) : false;
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <div>
-        <h2 className="font-heading mb-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Subscriptions</h2>
-        <p className="text-sm text-muted-foreground">The plans sellers can subscribe to, each tied to a Stripe price. Plans are read only here; editing arrives in a later phase.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-heading mb-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Subscriptions</h2>
+          <p className="text-sm text-muted-foreground">
+            The plans sellers can subscribe to. A plan is data: its price is whole rupees and its limits are enforced. Payment is manual first; Stripe is off.
+          </p>
+        </div>
+        <Button onClick={() => setEditing("new")}>
+          <Plus aria-hidden />
+          New plan
+        </Button>
       </div>
 
-      {data ? (
+      {data && hasOldTiers ? (
         <div className="grid gap-4 sm:grid-cols-3" role="group" aria-label="Filter plans by tier">
           {TIER_VALUES.map((tier) => (
             <FilterTile
@@ -110,15 +179,36 @@ export function SubscriptionsView() {
       ) : null}
       <DataTable
         label="Subscription plans"
-        columns={COLUMNS}
+        columns={tableColumns}
         rows={data?.docs ?? []}
         rowKey={(plan) => plan.id}
         loading={loading}
         error={error ? error.message : null}
         onRetry={refetch}
         emptyTitle={filtered ? "No plans match" : "No plans yet"}
-        emptyHint={filtered ? "Try a different name or clear the tier filter." : "Plans appear here once they are created in the admin database."}
+        emptyHint={filtered ? "Try a different name or clear the tier filter." : "Create the first plan, or run the bootstrap script to seed Free and Growth."}
       />
+
+      {editing !== null ? (
+        <PlanDialog
+          plan={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onDone={() => {
+            setEditing(null);
+            refetch();
+          }}
+        />
+      ) : null}
+      {archiving !== null ? (
+        <PlanArchiveDialog
+          plan={archiving}
+          onClose={() => setArchiving(null)}
+          onDone={() => {
+            setArchiving(null);
+            refetch();
+          }}
+        />
+      ) : null}
 
       {data ? <TablePagination page={data.page} totalPages={data.totalPages} totalDocs={data.totalDocs} noun="plan" disabled={loading} onPage={(page) => go({ ...state, page })} /> : null}
     </div>

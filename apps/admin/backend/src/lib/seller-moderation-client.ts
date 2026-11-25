@@ -18,6 +18,13 @@ import type {
 } from '../../../../../packages/contracts/src/moderation';
 
 import type { ModerationReview, ModerationReviewList } from '../../../../../packages/contracts/src/review';
+import type { AdminSellerPlansResponse } from '../../../../../packages/contracts/src/subscription';
+import type { AdminPaymentList, AdminPaymentWriteResponse } from '../../../../../packages/contracts/src/subscription-payments';
+import type { AdminOrderList, AdminOrderDetail } from '../../../../../packages/contracts/src/admin-orders';
+import type { AdminKpi } from '../../../../../packages/contracts/src/admin-overview';
+import type { RetentionRunResponse } from '../../../../../packages/contracts/src/admin-retries';
+import type { AdminReferralExport, AdminReferralList } from '../../../../../packages/contracts/src/admin-referrals';
+import type { AdminTraffic } from '../../../../../packages/contracts/src/admin-traffic';
 
 const { INTERNAL_SECRET_MIN_LENGTH, internalRequestHeaders } = unwrapCjs(signatureNs) as typeof signatureNs;
 
@@ -107,6 +114,23 @@ export const setSellerAccountStatus = (
   input: { userId: string; status: 'active' | 'suspended'; reason: string | null },
 ): Promise<{ userId: string; status: string; changed: boolean }> => send('POST', '/api/internal/accounts/status', adminId, input, 'Seller account control');
 
+/**
+ * Sprint 6 EP-12.US02.T02 (D-118): applies a seller's store-limit override in the seller database, where provisionStore reads it
+ * (POST /api/internal/accounts/store-limit, signed like the account status call). null clears the override.
+ */
+export const setSellerStoreLimit = (
+  adminId: string,
+  input: { userId: string; storeLimitOverride: number | null },
+): Promise<{ userId: string; storeLimitOverride: number | null; changed: boolean }> =>
+  send('POST', '/api/internal/accounts/store-limit', adminId, input, 'Seller store limit');
+
+/**
+ * Sprint 6 EP-14.US02.T08 (D-118): the plan, status and usage of up to 100 sellers, read in the seller database (POST
+ * /api/internal/plans/sellers, signed like the store-limit call). Read only.
+ */
+export const readSellerPlans = (adminId: string, input: { sellerIds: string[] }): Promise<AdminSellerPlansResponse> =>
+  send('POST', '/api/internal/plans/sellers', adminId, input, 'Seller plans');
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Sprint 4 EP-05.US03, US06 (D-090): payouts and the commission report. The ledger and the payouts live in the seller
 // database, so each of these is one signed call to the seller backend (the same signature as moderation).
@@ -157,3 +181,65 @@ export const hideReview = (adminId: string, reviewId: string, reason: string): P
 
 export const unhideReview = (adminId: string, reviewId: string): Promise<ModerationReview> =>
   send('POST', BASE_PATH + '/reviews/unhide', adminId, { reviewId }, REVIEW_LABEL);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-14 (S6-B4, D-118, D-093): manual subscription payments. The payments and the subscriptions live in the seller database, so each of
+// these is one signed call to the seller backend (the same signature as moderation). Only that call decides: the console never writes a payment.
+
+const SUBSCRIPTION_PAYMENT_LABEL = 'Subscription payments';
+
+export const listSubscriptionPayments = (adminId: string, params: { status?: string; page?: number; limit?: number }): Promise<AdminPaymentList> =>
+  send('GET', '/api/internal/subscription-payments' + query(params), adminId, undefined, SUBSCRIPTION_PAYMENT_LABEL);
+
+export const confirmSubscriptionPayment = (adminId: string, input: { paymentId: string; amountRs: number; reason: string }): Promise<AdminPaymentWriteResponse> =>
+  send('POST', '/api/internal/subscription-payments/confirm', adminId, input, SUBSCRIPTION_PAYMENT_LABEL);
+
+export const rejectSubscriptionPayment = (adminId: string, input: { paymentId: string; reason: string }): Promise<AdminPaymentWriteResponse> =>
+  send('POST', '/api/internal/subscription-payments/reject', adminId, input, SUBSCRIPTION_PAYMENT_LABEL);
+
+export const voidSubscriptionPayment = (adminId: string, input: { paymentId: string; reason: string }): Promise<AdminPaymentWriteResponse> =>
+  send('POST', '/api/internal/subscription-payments/void', adminId, input, SUBSCRIPTION_PAYMENT_LABEL);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 (S6-B5, D-093, D-095): the read-only orders view and the overview KPIs. Signed calls to the seller backend, which returns SAFE fields
+// only (no name, phone, address or email) and computes the KPIs from the NEW commission ledger.
+
+export const listAdminOrders = (adminId: string, input: Record<string, unknown>): Promise<AdminOrderList> =>
+  send('POST', '/api/internal/orders', adminId, input, 'Orders');
+
+export const readAdminOrderDetail = (adminId: string, input: { orderId: string }): Promise<{ order: AdminOrderDetail }> =>
+  send('POST', '/api/internal/orders/detail', adminId, input, 'Orders');
+
+export const readKpi = (adminId: string): Promise<AdminKpi> => send('POST', '/api/internal/kpi', adminId, {}, 'Overview KPIs');
+
+/** Sprint 6 (S6-B7): the retention run, a signed call to the seller backend. A dry run (the default) only counts; apply purges, capped per target. */
+export const runRetention = (adminId: string, input: { apply?: boolean }): Promise<RetentionRunResponse> => send('POST', '/api/internal/retention/admin', adminId, input, 'Retention');
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 7 (S7-B4): support tickets and the platform contact messages. They live in the seller database, so each is one signed call (the same signature
+// as moderation). The seller backend answers with the sellers names and the messages as plain text; the console shows them as text.
+
+const SUPPORT_LABEL = 'Support';
+export type SupportListFilters = { status?: string | undefined; page?: number | undefined; limit?: number | undefined };
+const clean = (filters: SupportListFilters): Record<string, unknown> => Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== ''));
+
+export const listSupportTickets = (adminId: string, filters: SupportListFilters): Promise<Record<string, unknown>> =>
+  send('POST', '/api/internal/support/tickets/list', adminId, clean(filters), SUPPORT_LABEL);
+export const readSupportTicket = (adminId: string, id: string): Promise<Record<string, unknown>> => send('POST', '/api/internal/support/tickets/detail', adminId, { id }, SUPPORT_LABEL);
+export const replySupportTicket = (adminId: string, input: { id: string; revision: number; text: string }): Promise<Record<string, unknown>> =>
+  send('POST', '/api/internal/support/tickets/reply', adminId, input, SUPPORT_LABEL);
+export const setSupportTicketStatus = (adminId: string, input: { id: string; revision: number; status: string }): Promise<Record<string, unknown>> =>
+  send('POST', '/api/internal/support/tickets/status', adminId, input, SUPPORT_LABEL);
+export const listPlatformContact = (adminId: string, filters: SupportListFilters): Promise<Record<string, unknown>> =>
+  send('POST', '/api/internal/support/contact/list', adminId, clean(filters), SUPPORT_LABEL);
+export const readPlatformContact = (adminId: string, id: string): Promise<Record<string, unknown>> => send('POST', '/api/internal/support/contact/detail', adminId, { id }, SUPPORT_LABEL);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 8 (S8-B6): referrals, read only. The rows live in the seller database; the seller backend masks the referred seller.
+
+export const listReferrals = (adminId: string, input: Record<string, unknown>): Promise<AdminReferralList> => send('POST', '/api/internal/referrals', adminId, input, 'Referrals');
+
+export const exportReferralRewards = (adminId: string, input: Record<string, unknown>): Promise<AdminReferralExport> => send('POST', '/api/internal/referrals/export', adminId, input, 'Referrals');
+
+// Sprint 8 (S8-B7): the platform's visits and orders per day, sums only.
+export const readTraffic = (adminId: string): Promise<AdminTraffic> => send('POST', '/api/internal/traffic', adminId, {}, 'Traffic');

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { cartStorageKey, createStorefrontCartStore, DEMO_CART_KEY, DEMO_CART_STORE } from "./cart-store";
-import { CardAvailableProvider, CartStoreProvider, CodAvailableProvider, DEMO_FAVOURITES_STORE, FavouritesStoreProvider, OrderTransportProvider } from "./context";
+import { CardAvailableProvider, CartStoreProvider, CodAvailableProvider, DEMO_FAVOURITES_STORE, FavouritesStoreProvider, OrderTransportProvider, TrackerProvider } from "./context";
+import { browserSend, createStoreTracker, doNotTrackOn } from "../domain/analytics";
 import { createFavouritesStore, favouritesKey } from "../domain/favourites";
 import { createBffTransport } from "../transport/remote";
 import { createMockTransport, mockTransport } from "../transport/mock";
@@ -49,7 +50,24 @@ export function StorefrontProvider({
     [storeKey, hasDemoFixtures],
   );
 
+  // Sprint 8 (S8-B6): anonymous counters of a live store; nothing for a demo or a preview. The visit is counted once per browser session.
+  const tracker = useMemo(
+    () =>
+      createStoreTracker({
+        storeKey,
+        preview,
+        doNotTrack: () => doNotTrackOn({ navigator: globalThis.navigator as { doNotTrack?: string | null }, window: globalThis as { doNotTrack?: string | null } }),
+        storage: () => globalThis.sessionStorage,
+        send: browserSend(),
+      }),
+    [storeKey, preview],
+  );
+  useEffect(() => {
+    tracker.visit();
+  }, [tracker]);
+
   return (
+    <TrackerProvider value={tracker}>
     <OrderTransportProvider value={transport}>
       <CartStoreProvider value={cart}>
         <FavouritesStoreProvider value={favourites}>
@@ -59,6 +77,7 @@ export function StorefrontProvider({
         </FavouritesStoreProvider>
       </CartStoreProvider>
     </OrderTransportProvider>
+    </TrackerProvider>
   );
 }
 /* @theme-integration-patch:provider */

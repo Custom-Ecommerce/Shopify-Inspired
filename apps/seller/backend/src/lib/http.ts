@@ -16,6 +16,47 @@ export class HttpError extends Error {
   }
 }
 
+/** Sprint 6 EP-14 (D-118): the body of a refused add. See lib/plan.ts (assertWithinPlan). */
+export interface PlanLimitBody {
+  code: 'PLAN_LIMIT_REACHED';
+  limitKind: 'products' | 'stores' | 'customDomain' | 'premiumThemes' | 'staffSeats' | 'apiKeys';
+  limit: number;
+  used: number;
+  plan: string;
+  /** SB-F1: the plan's display name, for the words a seller reads (plan is its key). */
+  planName?: string;
+  upgradeHint: string;
+}
+
+/** A refused add: 403 { errors: [{ message }], code PLAN_LIMIT_REACHED, limitKind, limit, used, plan, upgradeHint }. */
+export class PlanLimitError extends HttpError {
+  readonly body: PlanLimitBody;
+
+  constructor(body: PlanLimitBody, message: string) {
+    super(403, message, 'PLAN_LIMIT_REACHED');
+    this.name = 'PlanLimitError';
+    this.body = body;
+  }
+}
+
+/** Sprint 6 EP-14 (S6-B4): what a downgrade would break, one entry per limit the seller's use passes. */
+export interface DowngradeExceedsEntry {
+  limit: 'stores' | 'products' | 'staffSeats' | 'apiKeys';
+  allowed: number;
+  used: number;
+}
+
+/** A refused downgrade: 422 { errors: [{ message }], code DOWNGRADE_EXCEEDS_LIMITS, exceeds: [{ limit, allowed, used }] }. */
+export class DowngradeExceedsError extends HttpError {
+  readonly exceeds: DowngradeExceedsEntry[];
+
+  constructor(exceeds: DowngradeExceedsEntry[], message: string) {
+    super(422, message, 'DOWNGRADE_EXCEEDS_LIMITS');
+    this.name = 'DowngradeExceedsError';
+    this.exceeds = exceeds;
+  }
+}
+
 /** Payload-compatible error envelope: { errors: [{ message }] }, plus code and field when the error names them. */
 export function jsonError(status: number, message: string, code?: string, field?: string): NextResponse {
   return NextResponse.json(
@@ -47,6 +88,10 @@ export function parseIntParam(raw: string | null, fallback: number, min: number,
 
 /** Translates thrown errors into responses. Anything unrecognised is a 500 with no detail. */
 export function handleRouteError(err: unknown): NextResponse {
+  if (err instanceof PlanLimitError) return NextResponse.json({ errors: [{ message: err.message }], ...err.body }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+  if (err instanceof DowngradeExceedsError) {
+    return NextResponse.json({ errors: [{ message: err.message }], code: err.errorCode, exceeds: err.exceeds }, { status: 422, headers: { 'Cache-Control': 'no-store' } });
+  }
   if (err instanceof HttpError) return jsonError(err.status, err.message, err.errorCode, err.errorField);
   if (err instanceof SessionRejectedError) return jsonError(401, err.message, err.code);
   if (err instanceof RateLimitedError) return tooManyRequests(err.retryAfterSeconds);

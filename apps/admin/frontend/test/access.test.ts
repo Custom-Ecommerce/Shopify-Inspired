@@ -30,3 +30,9 @@ test("the next path accepts same-site paths only", () => {
   assert.equal(safeNextPath(null), "/");
   assert.equal(safeNextPath(""), "/");
 });
+
+test("S6-B6: the forgot, reset and invitation pages are reachable without a cookie; a page next to them is not", () => {
+  for (const page of ["/forgot-password", "/reset-password", "/accept-invite"]) assert.deepEqual(decideAccess(page, false), { action: "allow" }, page);
+  assert.equal(decideAccess("/forgot-password/x", false).action, "redirect");
+  assert.equal(decideAccess("/users", false).action, "redirect");
+});

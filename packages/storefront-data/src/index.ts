@@ -14,12 +14,39 @@ export { toCartVM } from "./view-models/cart";
 export type { CartVM, CartLineVM } from "./view-models/cart";
 export type { CatalogPageData } from "./view-models/catalog";
 export { storePaths } from "./view-models/paths";
+export { CONTACT_LIMITS, contactFailure, emptyContactForm, toContactInput, validateContactForm } from "./domain/contact";
+export type { ContactFailure, ContactFieldErrors, ContactFormValues } from "./domain/contact";
+export { PLATFORM_CONTACT_SCOPE, buildPlatformContactBody, platformContactAnswer } from "./domain/platform-contact";
+export type { PlatformContactAnswer, PlatformContactBody, PlatformContactBuild } from "./domain/platform-contact";
+export type { SubmitContactInput } from "./transport/types";
+export { renderContentTree } from "./view-models/content-nodes";
+export type { ContentClasses } from "./view-models/content-nodes";
+export {
+  articleDescription,
+  articleTitle,
+  buildStoreRobotsTxt,
+  buildStoreSitemapXml,
+  canonicalUrl,
+  cleanOrigin,
+  contentFooterLinks,
+  formatPublishedDate,
+  toArticleCardVM,
+  toArticleVM,
+  toContentPageVM,
+} from "./domain/content";
+export type { ArticleCardVM, ArticleVM, ContentPageVM, FooterLink } from "./domain/content";
+export { canonicalStoreOrigin, feedOrigin } from "./domain/custom-domain";
+export { STOREFRONT_THEME_CONFIG_DEFAULTS, THEME_FONT_STACKS, storefrontThemeConfigOf, themeStyleVars } from "./domain/theme-config";
+export type { StorefrontThemeConfig } from "./domain/theme-config";
+export type { StorefrontArticle, StorefrontArticleList, StorefrontArticleSummary, StorefrontPage, StorefrontPageLink, StorefrontPageLookup } from "./transport/content-types";
 export { toCategoryVMs } from "./view-models/chrome";
 export type { CategoryVM, StoreChromeVM } from "./view-models/chrome";
 export { createMockTransport, mockProduct } from "./transport/mock";
 export type { MockFixtures, MockProductInput } from "./transport/mock";
 export { validateCheckout } from "./domain/checkout";
 export { cartLineNotice, checkoutBlockReason, compareCartToQuote } from "./view-models/cart-quote";
+export { DEFAULT_TAX_LABEL, taxLineLabel, toTaxLine } from "./view-models/tax-line";
+export type { TaxLineInput, TaxLineVM, TaxMode } from "./view-models/tax-line";
 export type { CartLineNotice, CartQuoteChanges } from "./view-models/cart-quote";
 export type { CheckoutValues, CheckoutFieldErrors } from "./domain/checkout";
 export type { ProductQuery, ProductListPage, ProductSort, StorefrontCategory, StorefrontProductDetail, StorefrontProductSummary } from "./transport/types";
@@ -66,6 +93,8 @@ export type {
   OrderConfirmationPageProps,
   OrderTrackingPageProps,
   ContentPageProps,
+  BlogPageProps,
+  ArticlePageProps,
   NotFoundPageProps,
   UnavailablePageProps,
   CollectionsPageProps,

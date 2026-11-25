@@ -6,7 +6,18 @@
   "exports": {
     ".": "./src/index.ts",
     "./checkout": "./src/checkout.ts",
-    "./store-settings": "./src/store-settings.ts"
+    "./store-settings": "./src/store-settings.ts",
+    "./theme-config": "./src/theme-config.ts",
+    "./tax": "./src/tax.ts",
+    "./team": "./src/team.ts",
+    "./api-keys": "./src/api-keys.ts",
+    "./api-v1": "./src/api-v1.ts",
+    "./referral": "./src/referral.ts",
+    "./admin-referrals": "./src/admin-referrals.ts",
+    "./storefront-events": "./src/storefront-events.ts",
+    "./sales-report": "./src/sales-report.ts",
+    "./analytics": "./src/analytics.ts",
+    "./admin-traffic": "./src/admin-traffic.ts"
   },
   "scripts": {
     "build": "tsc",

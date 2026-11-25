@@ -17,7 +17,7 @@ const ACTIONS = ['hide', 'unhide'] as const;
  */
 export async function POST(request: Request, context: { params: Promise<{ action: string }> }): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'reviews.moderate');
     const { action } = await context.params;
     if (!(ACTIONS as readonly string[]).includes(action)) throw new AdminHttpError(404, 'Not found');
     requirePolicy(() => assertCan('admin', 'update', 'reviews', ['status', 'hiddenReason', 'hiddenAt', 'hiddenBy']));

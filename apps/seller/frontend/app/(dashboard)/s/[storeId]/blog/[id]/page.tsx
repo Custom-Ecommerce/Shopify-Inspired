@@ -7,16 +7,9 @@ import { ArticleForm } from "@/components/dashboard/ArticleForm";
 import { PageHeader } from "@/components/dashboard/shared/PageHeader";
 import { LoadingState } from "@/components/dashboard/shared/LoadingState";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
+import type { ArticleDetail } from "@/lib/articles";
 
-interface ArticleApiResponse {
-  id: string;
-  title: string;
-  slug: string;
-  excerpt?: string | null;
-  content?: unknown;
-  type: string;
-  status: string;
-}
+type ArticleApiResponse = ArticleDetail & { coverImageUrl?: string | null };
 
 export default function EditArticlePage() {
   const storeFetch = useStoreFetch();
@@ -26,18 +19,18 @@ export default function EditArticlePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    storeFetch(`/api/dashboard/storeArticles/${params.id}`)
-      .then((res) => res.json())
+    storeFetch(`/api/dashboard/storeArticles/${params.id}`, { cache: "no-store" })
+      .then((res) => res.json().catch(() => null))
       .then((data) => {
         if (data?.id) setArticle(data);
-        else setError("Article not found.");
+        else setError(typeof data?.error === "string" ? data.error : "Article not found.");
       })
       .catch(() => setError("Could not reach the backend."))
       .finally(() => setLoading(false));
   }, [params.id, storeFetch]);
 
   return (
-    <div className="p-6 sm:p-8">
+    <div className="p-4 sm:p-8">
       <PageHeader title="Edit Article" />
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}

@@ -1,7 +1,7 @@
 import mongoose, { Schema, type Model, type Types } from 'mongoose';
 
 /** The same values as AUTH_TOKEN_KINDS in @markaz/auth (this package depends on mongoose only). */
-export const AUTH_TOKEN_MODEL_KINDS = ['password_reset', 'email_verify', 'email_change'] as const;
+export const AUTH_TOKEN_MODEL_KINDS = ['password_reset', 'email_verify', 'email_change', 'admin_invite'] as const;
 
 /**
  * Collection: authtokens (Sprint 4 EP-08, D-093). One row per emailed account link. Only the SHA-256 hex of the token

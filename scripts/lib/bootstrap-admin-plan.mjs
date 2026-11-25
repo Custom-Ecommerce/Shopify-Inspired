@@ -3,12 +3,45 @@
 
 export const PLATFORM_SETTINGS_GLOBAL_TYPE = 'platformSettings';
 
+/**
+ * Sprint 6 EP-14 (D-118): the two plans every platform starts with. They are DATA: an admin edits them in the console afterwards, and this
+ * script never touches a plan that exists (see planBootstrap). null is unlimited. Money is whole rupees. The facts here (price, the
+ * product limit, custom domain, themes) must match apps/storefront/content/marketing/pricing.ts; a test checks it.
+ */
+export const PLAN_SEEDS = Object.freeze([
+  Object.freeze({
+    key: 'free',
+    name: 'Free',
+    priceRs: 0,
+    interval: 'month',
+    limits: Object.freeze({ stores: 1, products: 10, staffSeats: 0, apiKeys: 0, customDomain: false, premiumThemes: false }),
+    features: Object.freeze(['Up to 10 products', 'Standard themes', 'Cash on Delivery', 'Community support', 'Markazify subdomain']),
+    sortOrder: 1,
+  }),
+  Object.freeze({
+    key: 'growth',
+    name: 'Growth',
+    priceRs: 2500,
+    interval: 'month',
+    limits: Object.freeze({ stores: 3, products: null, staffSeats: 3, apiKeys: 3, customDomain: true, premiumThemes: true }),
+    features: Object.freeze(['Unlimited products', 'Premium themes', 'Custom domain support', 'Local payment gateways', 'Priority WhatsApp support']),
+    sortOrder: 2,
+  }),
+]);
+
 /** The defaults the code already uses (packages/db-schemas billing/platform-settings.ts; seller lib/platform-settings.ts). */
 export const SETTINGS_DEFAULTS = Object.freeze({
   defaultCommissionRate: 4,
   maxStoresPerSeller: 3,
   settingsRevision: 0,
   storeApprovalRequired: false,
+  // Sprint 6 (D-116, D-118): COD carries no commission by default; a lapsed plan keeps its limits for 7 days; no trial.
+  codCommissionPercent: 0,
+  graceDays: 7,
+  trialDays: 0,
+  // Sprint 8 (S8-B5): one free month per rewarded referral, at most five a month.
+  referralRewardMonths: 1,
+  referralMonthlyCap: 5,
 });
 
 /**
@@ -35,6 +68,7 @@ function idOf(value) {
  *   sellerUsers: Array<{ _id: unknown }>,           // users with role seller
  *   stores: Array<{ owner?: unknown }>,             // stores (only `owner` is read)
  *   sellerMirrors: Array<{ _id?: unknown, sellerId?: unknown }>, // documents of `sellers`
+ *   planDocs?: Array<{ key?: unknown }>,            // documents of `subscriptionPlans` (only `key` is read)
  * }} existing
  */
 export function planBootstrap(existing) {
@@ -42,8 +76,29 @@ export function planBootstrap(existing) {
   const sellerUsers = existing.sellerUsers ?? [];
   const stores = existing.stores ?? [];
   const sellerMirrors = existing.sellerMirrors ?? [];
+  const planDocs = existing.planDocs ?? [];
 
   const createSettings = settingsDocs.length === 0 ? { globalType: PLATFORM_SETTINGS_GLOBAL_TYPE, ...SETTINGS_DEFAULTS } : null;
+
+  // Sprint 6: a plan is created only when no plan has its key (archived ones count). A plan that exists is never updated: an admin may have
+  // edited it, and the console is where plans change.
+  const planKeys = new Set();
+  for (const plan of planDocs) {
+    const key = idOf(plan.key);
+    if (key) planKeys.add(key);
+  }
+  const createPlans = PLAN_SEEDS.filter((seed) => !planKeys.has(seed.key)).map((seed) => ({
+    key: seed.key,
+    name: seed.name,
+    priceRs: seed.priceRs,
+    interval: seed.interval,
+    limits: { ...seed.limits },
+    features: [...seed.features],
+    sortOrder: seed.sortOrder,
+    isActive: true,
+    archivedAt: null,
+    revision: 0,
+  }));
 
   const owners = new Set();
   for (const store of stores) {
@@ -88,7 +143,10 @@ export function planBootstrap(existing) {
   return {
     createSettings,
     createMirrors,
+    createPlans,
     counts: {
+      plansPresent: planKeys.size,
+      plansToCreate: createPlans.length,
       settingsPresent: settingsDocs.length,
       settingsToCreate: createSettings ? 1 : 0,
       sellerUsers: seen.size,

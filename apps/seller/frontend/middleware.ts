@@ -9,8 +9,9 @@ function parseJwt(token: string) {
   }
 }
 
+// /accept-invite (S8-B2): the link in a staff invite email, opened with or without a session (the page says what to do).
 // /unsubscribe (EP-07.US04): the link in a broadcast email, opened by a customer who has no seller session.
-const PUBLIC_ACCOUNT_PAGES = ['/forgot-password', '/reset-password', '/verify-email', '/unsubscribe'];
+const PUBLIC_ACCOUNT_PAGES = ['/forgot-password', '/reset-password', '/verify-email', '/unsubscribe', '/accept-invite'];
 
 export function middleware(request: NextRequest) {
   if (request.nextUrl.searchParams.has('clear')) {

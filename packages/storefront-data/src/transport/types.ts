@@ -155,6 +155,11 @@ export interface StorefrontOrder {
   subtotal: number;
   deliveryCharges: number;
   discount: number;
+  /** Sprint 8 (S8-B1): the tax the order was placed with (a snapshot). Absent or 0 when the order has none. Exclusive: part of `total`. Inclusive: already in the prices. */
+  taxAmount?: number;
+  taxMode?: "exclusive" | "inclusive" | null;
+  /** The store's own name for the tax, as it was when the order was placed. */
+  taxLabel?: string | null;
   total: number;
   createdAt: string;
   updatedAt: string;
@@ -317,9 +322,24 @@ export type OrderRejection =
   | { code: "contact_blocked"; message: string };
 
 import type { StorefrontCartQuoteDto, StorefrontCartQuoteIssue, StorefrontCartQuoteLine } from "@markaz/contracts/checkout";
+import type { StorefrontArticle, StorefrontArticleList, StorefrontPageLink, StorefrontPageLookup } from "./content-types";
 
 /** Which adapter produced the data. Lets callers and logs say which source they got. */
 export type TransportKind = "mock" | "remote";
+
+/**
+ * Sprint 7 (S7-B4): a shopper's message to the store (the contact form). `website` is the HONEYPOT: a hidden field no person fills. The server answers success and keeps
+ * nothing when it is filled, so a bot learns nothing. Either an email or a phone is needed so the store can answer.
+ */
+export interface SubmitContactInput {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  message: string;
+  /** The shopper agreed to be answered at the address and number given. Always true when sent. */
+  consent: true;
+  website?: string | null;
+}
 
 export interface OrderConfirmationInput {
   orderNumber: string;
@@ -375,6 +395,10 @@ export interface OrderTransport {
   getProductReviews(slug: string, page?: number): Promise<StorefrontProductReviews>;
   /** Sprint 5 EP-28: keeps the shopper's cart for the seller to follow up (WhatsApp first). Resolves when saved; callers ignore failures. */
   saveAbandonedCart(input: SaveAbandonedCartInput): Promise<void>;
+  /** Sprint 7 (S7-B4): sends the shopper's message to the store. Resolves ONLY once the store has kept it; refusals reject with OrderRejectedError (invalid_request with its field, rate_limited, store_inactive). Optional so existing transports keep working. */
+  submitContact?(input: SubmitContactInput): Promise<void>;
+  /** Sprint 8 (S8-B6): counts one anonymous event of this store (server side only; the store is the transport's). Optional so existing transports keep working. */
+  recordEvent?(input: { event: "page_view" | "product_view" | "add_to_cart" | "checkout_start"; productSlug?: string }): Promise<void>;
   /** The Live products among these ids, at most 48 per call. An id with no Live product is simply absent from the answer. */
   getProductsByIds(ids: string[]): Promise<StorefrontProductSummary[]>;
 }
@@ -410,5 +434,13 @@ export interface StorefrontTransport extends OrderTransport {
   listProducts?(query?: ProductQuery): Promise<ProductListPage>;
   /** Resolves to null when no product has this slug. The route turns that into a 404. */
   getProduct(slug: string): Promise<StorefrontProductDetail | null>;
+  /** Sprint 7 (S7-B3): the published blog articles, newest first, one page at a time. Optional so existing transports (and test doubles) keep working: a store without it has no blog. */
+  listArticles?(page?: number, limit?: number): Promise<StorefrontArticleList>;
+  /** One published article by slug, its text as the safe tree. null for a draft, an unknown slug or another type. */
+  getArticle?(slug: string): Promise<StorefrontArticle | null>;
+  /** The published static pages in footer order (address and title only). */
+  listPages?(): Promise<StorefrontPageLink[]>;
+  /** One static page by slug: found, a draft (404, no default copy) or none (the default copy may be used). */
+  getPage?(slug: string): Promise<StorefrontPageLookup>;
 }
 /* @theme-integration-patch:types */

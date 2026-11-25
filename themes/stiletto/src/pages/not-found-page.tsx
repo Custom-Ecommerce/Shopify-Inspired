@@ -11,7 +11,7 @@ export function NotFoundPage(_props: NotFoundPageProps) {
       <StilettoHeader />
 
       <main className="relative" data-source="static" data-source-note="Static not-found page (new UI, not in the original design).">
-        <CollectionHeader title="Page Not Found" description="We could not find what you were looking for." itemCount={0} />
+        <CollectionHeader title="Page Not Found" description="We could not find what you were looking for." />
       </main>
 
       <StilettoFooter />

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'discounts');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'discounts.read' });
 
     const params = request.nextUrl.searchParams;
     const page = parseIntParam(params.get('page'), 1, 1, 100000);
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (!body.ok) return body.response;
     assertCan(ctx.actor, 'create', 'discounts', Object.keys(body.data));
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'discounts.write' });
 
     try {
       const created = await Discount.create({

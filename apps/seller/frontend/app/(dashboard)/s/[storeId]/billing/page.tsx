@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/dashboard/shared/LoadingState";
 import { toast } from "sonner";
+import { PlanBanner } from "@/components/dashboard/PlanBanner";
+import { SubscriptionSection } from "@/components/dashboard/SubscriptionSection";
 
 /*
  * Sprint 4 EP-04.US03.T03 (D-088): Stripe Connect is gone. Stripe does not serve Pakistani merchants, so card money is
@@ -53,6 +55,12 @@ function BillingContent() {
       <h1 className="font-heading text-2xl font-semibold tracking-tight mb-6">Billing &amp; Payments</h1>
 
       <div className="flex max-w-2xl flex-col gap-6">
+        {/* Sprint 6 EP-14.US02: the plan, its status and the usage bars. */}
+        <PlanBanner />
+
+        {/* Sprint 6 EP-14 (S6-B4, D-118): the plan, how to pay by bank, JazzCash or Easypaisa, "I paid", and the payment history. */}
+        <SubscriptionSection />
+
         <SectionCard title="Payment Methods" description="Choose how customers can pay for their orders on your store.">
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-4">

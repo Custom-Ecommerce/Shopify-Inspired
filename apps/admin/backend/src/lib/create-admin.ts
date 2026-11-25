@@ -49,6 +49,8 @@ export async function createFirstAdmin(
     name: input.name?.trim() || 'Platform admin',
     email,
     role: 'admin',
+    // Sprint 6 (S6-B6, D-118): the first operator is the owner, written explicitly.
+    adminLevel: 'owner',
     store: null,
     passwordHash,
     loginAttempts: 0,

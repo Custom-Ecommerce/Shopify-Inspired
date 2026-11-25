@@ -14,7 +14,7 @@ export function UnavailablePage({ message, retryHref, onRetry }: UnavailablePage
       <StilettoHeader />
 
       <main className="relative" data-source="static" data-source-note="Static unavailable page (new UI, not in the original design).">
-        <CollectionHeader title="Temporarily Unavailable" description={text} itemCount={0} />
+        <CollectionHeader title="Temporarily Unavailable" description={text} />
         <div className="py-12 md:py-16 px-4 md:px-12 max-w-container-max mx-auto w-full">
           {onRetry ? (
             <button type="button" onClick={onRetry} className="inline-flex items-center gap-2 font-sans text-[12px] uppercase tracking-[0.15em] font-medium text-[var(--featured-text)] border-b border-[var(--featured-text)] pb-4 hover:opacity-60 transition-opacity">

@@ -7,9 +7,17 @@ const realFetch = globalThis.fetch;
 const overview = {
   stores: { total: 8, byStatus: { pending: 2, active: 5, suspended: 1, archived: 0 } },
   sellers: { total: 7, newInWindow: 2, windowDays: 30 },
-  ledger: {
-    pending: { count: 3, orderAmount: 120000, commissionAmount: 4800 },
-    settled: { count: 10, orderAmount: 900000, commissionAmount: 36000 },
+  kpi: {
+    periods: {
+      today: { gatewaySales: 1000, commission: 40, gatewayOrders: 1, codOrderValue: 2000, codOrders: 2 },
+      last7: { gatewaySales: 7000, commission: 280, gatewayOrders: 7, codOrderValue: 14000, codOrders: 14 },
+      last30: { gatewaySales: 20000, commission: 800, gatewayOrders: 20, codOrderValue: 30000, codOrders: 30 },
+    },
+    ordersByPeriod: { today: 3, last7: 21, last30: 50 },
+    unsettledBalance: -1200,
+    ordersByStatus: { pending: 4, confirmed: 0, processing: 0, dispatched: 0, delivered: 9, cancelled: 0, returned: 0 },
+    sellersByPlan: [{ planKey: "growth", status: "active", count: 3 }, { planKey: "free", status: "none", count: 4 }],
+    topStores: [{ storeId: "65a000000000000000000011", storeName: "Zara Lawn", sales: 50000 }],
   },
   outbox: { counts: { pending: 1, sent: 10, dead: 0 }, oldestPendingAt: NOW, lastSentAt: null },
   generatedAt: NOW,
@@ -40,7 +48,8 @@ test("getOverview calls the same-origin proxy and returns the validated overview
   assert.equal(seen[0].method, undefined);
   assert.equal(result.stores.total, 8);
   assert.equal(result.sellers.newInWindow, 2);
-  assert.equal(result.ledger.settled.commissionAmount, 36000);
+  assert.equal(result.kpi?.periods.last30.commission, 800);
+  assert.equal(result.kpi?.unsettledBalance, -1200);
   assert.equal(result.outbox.lastSentAt, null);
 });
 

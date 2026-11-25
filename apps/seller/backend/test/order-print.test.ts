@@ -264,3 +264,31 @@ test('print: notes, history and idempotency data are neither loaded nor returned
     assert.equal(selected.split(' ').includes(field), false, field);
   }
 });
+
+// Sprint 8 (S8-B1, D-118): the print sheet shows the tax line when the order carries tax (an exclusive tax is already in codAmount).
+
+test('S8-B1 print: an order with tax carries its tax amount, mode and label; an exclusive tax is part of the COD amount to collect', async () => {
+  const taxed = seed(1, { subtotal: 2400, deliveryCharges: 100, taxAmount: 408, taxMode: 'exclusive', taxRatePercent: 17, taxLabel: 'GST', total: 2908 });
+  const inclusive = seed(2, { taxAmount: 349, taxMode: 'inclusive', taxRatePercent: 17, taxLabel: 'Tax' });
+  const { body } = await print([taxed, inclusive].join(','));
+  assert.equal(orderPrintResponseSchema.safeParse(body).success, true);
+  assert.deepEqual([body.orders[0].taxAmount, body.orders[0].taxMode, body.orders[0].taxLabel], [408, 'exclusive', 'GST']);
+  assert.equal(body.orders[0].codAmount, 2908, 'the shopper pays the tax with the items: the rider collects the total');
+  assert.deepEqual([body.orders[1].taxAmount, body.orders[1].taxMode, body.orders[1].taxLabel], [349, 'inclusive', 'Tax']);
+  assert.equal(body.orders[1].codAmount, 2500, 'an inclusive tax is already in the total');
+  assert.equal('taxRatePercent' in body.orders[0], false, 'the rate is not part of the sheet');
+});
+
+test('S8-B1 print: an order with no tax (or an old one) has no tax keys at all, so the sheet is exactly what it was', async () => {
+  const plain = seed(1);
+  const zero = seed(2, { taxAmount: 0, taxMode: 'exclusive' });
+  const noMode = seed(3, { taxAmount: 50 });
+  const { body } = await print([plain, zero, noMode].join(','));
+  for (const sheet of body.orders) {
+    for (const key of ['taxAmount', 'taxMode', 'taxLabel']) assert.equal(key in sheet, false, key);
+  }
+  assert.deepEqual(Object.keys(body.orders[0]).sort(), [
+    'address', 'city', 'codAmount', 'courier', 'createdAt', 'customerName', 'id', 'items', 'orderId', 'paymentMethod',
+    'paymentStatus', 'phone', 'status', 'trackingNumber',
+  ]);
+});

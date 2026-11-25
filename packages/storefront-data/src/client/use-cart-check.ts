@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { cartLineNotice, checkoutBlockReason, compareCartToQuote } from "../view-models/cart-quote";
 import type { CartLineNotice } from "../view-models/cart-quote";
+import type { TaxLineVM } from "../view-models/tax-line";
 import { useCart } from "./use-cart";
 import { useCartQuote } from "./use-cart-quote";
 
@@ -13,6 +14,8 @@ export interface UseCartCheckResult {
   noticeFor: (variantId: string) => CartLineNotice | null;
   /** Why the cart cannot go to checkout as it stands, in words for the button. Null when it can. */
   blockReason: string | null;
+  /** Sprint 8 (S8-B1): the store's tax as the server quoted it, or null when there is none to show (tax off, or the cart is closed or not quoted yet). */
+  tax: TaxLineVM | null;
 }
 
 /**
@@ -46,6 +49,7 @@ export function useCartCheck(isOpen: boolean): UseCartCheckResult {
         return line ? cartLineNotice(line) : null;
       },
       blockReason: isOpen && quote ? checkoutBlockReason(lines, quote) : null,
+      tax: isOpen && quote ? quote.tax : null,
     };
   }, [quote, notices, isOpen, lines]);
 }

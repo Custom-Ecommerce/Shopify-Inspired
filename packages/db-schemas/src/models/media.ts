@@ -7,6 +7,8 @@ import mongoose, { Schema, type Document, type Model, type Types } from 'mongoos
 export interface IMedia extends Document {
   store: Types.ObjectId;
   alt: string;
+  /** Sprint 7: the library name (renamed by the seller). Display only: the url and the Cloudinary public id never change with it. */
+  name?: string | null;
   url: string;
   cloudinaryPublicId: string;
   cloudinaryResourceType: string;
@@ -29,6 +31,7 @@ const MediaSchema = new Schema<IMedia>(
   {
     store: { type: Schema.Types.ObjectId, required: true, index: true },
     alt: { type: String, required: true, trim: true },
+    name: { type: String, trim: true, maxlength: 120, default: null },
     url: { type: String, required: true },
     cloudinaryPublicId: { type: String, required: true },
     cloudinaryResourceType: { type: String, required: true, default: 'image' },

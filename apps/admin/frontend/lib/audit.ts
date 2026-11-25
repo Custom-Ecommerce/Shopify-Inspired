@@ -25,7 +25,24 @@ export function auditStateToQuery(state: AuditListState, withLimit = false): str
   return params.toString();
 }
 
+/** The link of the CSV export with the page's current filters (action and search). Dates are added by the export itself when asked for. */
+export function auditExportHref(state: Pick<AuditListState, "q" | "action">, range: { from?: string; to?: string } = {}): string {
+  const params = new URLSearchParams();
+  if (state.q !== "") params.set("q", state.q);
+  if (state.action !== "") params.set("action", state.action);
+  if (range.from) params.set("from", range.from);
+  if (range.to) params.set("to", range.to);
+  const query = params.toString();
+  return "/api/audit/export" + (query === "" ? "" : "?" + query);
+}
+
 const ACTION_LABELS: Record<string, string> = {
+  "admin_user.invited": "Admin invited",
+  "admin_user.level_changed": "Admin level changed",
+  "admin_user.disabled": "Admin disabled",
+  "admin_user.enabled": "Admin enabled",
+  "audit.exported": "Audit log exported",
+  "order.detail_viewed": "Order opened",
   "store.suspend": "Store suspended",
   "store.activate": "Store activated",
   "store.change_rolled_back": "Change not recorded",

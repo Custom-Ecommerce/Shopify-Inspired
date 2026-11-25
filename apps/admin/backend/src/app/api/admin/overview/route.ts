@@ -1,9 +1,10 @@
 import { errorResponse } from '@/lib/admin-auth';
-import { OVERVIEW_LEDGER_FIELDS, newSellerSince, toOverview } from '@/lib/admin-overview';
+import { newSellerSince, toOverview } from '@/lib/admin-overview';
+import { readKpi } from '@/lib/seller-moderation-client';
 import { authorizeAdmin, NO_STORE, requirePolicy } from '@/lib/admin-session';
 import type { Doc } from '@/lib/admin-stores';
 import { SYNC_STATUSES } from '@/lib/admin-sync';
-import { assertCan, CommissionLedgerModel, Store, SyncOutbox, User } from '@/lib/workspace';
+import { assertCan, Store, SyncOutbox, User } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,22 +18,24 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'overview.read');
     requirePolicy(() => {
       assertCan('admin', 'read', 'stores');
       assertCan('admin', 'read', 'users', ['role', 'createdAt']);
-      assertCan('admin', 'read', 'commissionLedger', OVERVIEW_LEDGER_FIELDS);
+      // S6-B5 (D-095): the old commission ledger is no longer read here; the KPIs come from the seller backend's NEW ledger.
       assertCan('admin', 'read', 'sync-outbox');
     });
 
     const now = new Date();
-    const [storeGroups, sellerTotal, sellerRecent, ledgerGroups, outboxCounts, oldestPending, lastSent] = await Promise.all([
+    const [storeGroups, sellerTotal, sellerRecent, kpi, outboxCounts, oldestPending, lastSent] = await Promise.all([
       Store.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
       User.countDocuments({ role: 'seller' } as never),
       User.countDocuments({ role: 'seller', createdAt: { $gte: newSellerSince(now) } } as never),
-      CommissionLedgerModel.aggregate([
-        { $group: { _id: '$status', count: { $sum: 1 }, orderAmount: { $sum: '$orderAmount' }, commissionAmount: { $sum: '$commissionAmount' } } },
-      ]),
+      // The KPIs are one signed call. If the seller backend is down the rest of the overview still answers, with kpi null.
+      readKpi(userId).catch((err: unknown) => {
+        console.error('[admin-backend] overview KPIs unavailable', err instanceof Error ? err.message : 'unknown');
+        return null;
+      }),
       Promise.all(SYNC_STATUSES.map((status) => SyncOutbox.countDocuments({ status } as never))),
       SyncOutbox.findOne({ status: 'pending' } as never)
         .sort({ createdAt: 1 })
@@ -49,7 +52,7 @@ export async function GET(request: Request): Promise<Response> {
         storeGroups,
         sellerTotal,
         sellerRecent,
-        ledgerGroups,
+        kpi,
         outboxCounts,
         oldestPending: oldestPending as unknown as Doc | null,
         lastSent: lastSent as unknown as Doc | null,

@@ -35,7 +35,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const query = await readAccountBody(new Request('http://query.invalid', { method: 'POST', body: JSON.stringify(raw) }), returnListQuerySchema);
     assertCan(ctx.actor, 'read', 'returns');
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'returns.read');
     const storeId = String(store._id);
 
     const filter: Row = { store: oid(storeId) };
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const orderIds = [...new Set(rows.map((row) => String(row.order)))];
     // One query for the page's orders: the lines, subtotal and discount also give each return's refund cap (SB-6, verification bug 8: the list
     // used to send no refundCap, so the page hid "Record a refund"). The caps come from refundCapsForPage, the rule of the detail and the refund.
-    const orders = orderIds.length === 0 ? [] : ((await Order.find({ _id: { $in: orderIds }, store: oid(storeId) }).select('customerName paymentMethod items subtotal discountAmount').lean()) as unknown as Row[]);
+    const orders = orderIds.length === 0 ? [] : ((await Order.find({ _id: { $in: orderIds }, store: oid(storeId) }).select('customerName paymentMethod items subtotal discountAmount taxAmount taxMode').lean()) as unknown as Row[]);
     const byId = new Map(orders.map((order) => [String(order._id), order]));
     const caps = await refundCapsForPage(storeId, rows, byId);
     const docs = rows.map((row) => {

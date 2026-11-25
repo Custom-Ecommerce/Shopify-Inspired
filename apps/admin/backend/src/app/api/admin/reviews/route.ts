@@ -15,7 +15,7 @@ const FILTERS = ['page', 'limit', 'storeId', 'status'] as const;
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'reviews.moderate');
     requirePolicy(() => assertCan('admin', 'read', 'reviews'));
 
     const params = new URL(request.url).searchParams;

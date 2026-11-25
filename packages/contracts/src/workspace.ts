@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { objectIdSchema } from './object-id';
 import { STORE_STATUSES, CUSTOM_DOMAIN_STATUSES } from './store';
+import { STORE_ACCESS_ROLES } from './team';
 
 /** Shape the seller frontend declares in lib/types/dashboard.ts (WorkspaceStore, WorkspaceUser, ...). */
 export const workspaceUserSchema = z.object({
@@ -12,6 +13,8 @@ export const workspaceUserSchema = z.object({
 
 export const workspaceStoreSchema = z.object({
   id: objectIdSchema,
+  /** Sprint 8 (S8-B2): the role of the signed-in user in this store: owner of their own, or the staff role of a store they were invited to. Absent from an older backend (an owner). */
+  role: z.enum(STORE_ACCESS_ROLES).optional(),
   name: z.string().min(1),
   slug: z.string().min(1),
   internalHandle: z.string().nullable().optional(),
@@ -36,6 +39,8 @@ export const workspaceLimitsSchema = z.object({
   used: z.number().int().min(0),
   max: z.number().int().min(0),
   canCreate: z.boolean(),
+  /** Sprint 6 EP-12: where max comes from (the seller's override, the plan, the platform setting or the environment). Absent from an older backend. */
+  source: z.enum(['override', 'plan', 'setting', 'env']).optional(),
 });
 
 export const workspaceSchema = z.object({

@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'commission.read');
     requirePolicy(() => assertCan('admin', 'read', 'stores'));
     const parsed = parseHistoryQuery(new URL(request.url).searchParams);
     if (!parsed.ok) return Response.json({ error: 'Invalid request', issues: parsed.issues }, { status: 422, headers: NO_STORE });

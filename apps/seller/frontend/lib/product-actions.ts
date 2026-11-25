@@ -1,3 +1,5 @@
+import { announcePlanLimit } from "@/lib/plan-usage";
+
 /** The proxy sends `{ error, details }`. A refused field has its own message in details. */
 export function refusalMessage(body: unknown, fallback = "Could not save this product."): string {
   const { error, details } = (body ?? {}) as { error?: string; details?: unknown };
@@ -16,6 +18,8 @@ export async function duplicateProduct(storeFetch: StoreFetch, productId: string
     const body: unknown = await res.json().catch(() => null);
     const id = (body as { id?: unknown } | null)?.id;
     if (res.ok && typeof id === "string") return { id };
+    // Sprint 6 EP-14: the plan's product limit opens the upgrade dialog (the refusal text still comes back for a toast).
+    announcePlanLimit(body);
     return { refusal: refusalMessage(body, "Could not duplicate this product.") };
   } catch {
     return { refusal: "Could not reach the backend. Please try again." };
@@ -27,7 +31,9 @@ export async function runProductAction(storeFetch: StoreFetch, productId: string
   try {
     const res = await storeFetch(`/api/dashboard/products/${productId}/${action}`, { method: "POST" });
     if (res.ok) return null;
-    return refusalMessage(await res.json().catch(() => null), "Could not update this product.");
+    const body: unknown = await res.json().catch(() => null);
+    announcePlanLimit(body);
+    return refusalMessage(body, "Could not update this product.");
   } catch {
     return "Could not reach the backend. Please try again.";
   }

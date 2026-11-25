@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { listAudit } from "@/lib/api/client";
-import { actionLabel, actorLabel, auditStateToQuery, entityHref, parseAuditListState, type AuditListState } from "@/lib/audit";
+import { actionLabel, actorLabel, auditExportHref, auditStateToQuery, entityHref, parseAuditListState, type AuditListState } from "@/lib/audit";
 import type { AdminAuditEntry } from "@/lib/contracts";
 import { formatDateTime, formatRelative, shortId } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
@@ -31,8 +31,8 @@ const COLUMNS: Array<Column<AdminAuditEntry>> = [
     header: "Action",
     cell: (entry) => (
       <div className="flex min-w-0 flex-col">
-        <span className="truncate font-medium">{actionLabel(entry.action)}</span>
-        <span className="truncate text-xs text-muted-foreground">{entry.action}</span>
+        <span className="font-medium [overflow-wrap:anywhere] sm:truncate">{actionLabel(entry.action)}</span>
+        <span className="text-xs text-muted-foreground [overflow-wrap:anywhere] sm:truncate">{entry.action}</span>
       </div>
     ),
   },
@@ -72,7 +72,7 @@ const COLUMNS: Array<Column<AdminAuditEntry>> = [
 ];
 
 /** The audit log at /audit. Search, action filter, and page live in the URL. Entries are read only. */
-export function AuditView() {
+export function AuditView({ canExport = false }: { canExport?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -125,6 +125,15 @@ export function AuditView() {
             </option>
           ))}
         </Select>
+        {canExport ? (
+          <a
+            href={auditExportHref(state)}
+            download="audit-log.csv"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Export CSV
+          </a>
+        ) : null}
       </div>
 
       {error && data ? (

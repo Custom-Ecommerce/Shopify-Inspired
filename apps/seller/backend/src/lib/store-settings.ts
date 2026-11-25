@@ -1,13 +1,23 @@
 import * as themesNs from '@markaz/platform-kit/themes';
 import type { StoreSettings, StoreSettingsUpdate } from '@markaz/contracts';
+import type { SellerRole } from '@markaz/auth';
 import { unwrapCjs } from '@/lib/cjs';
 import {
   CARD_CHECKOUT_UNSUPPORTED_BY_THEME,
   CARD_CHECKOUT_UNSUPPORTED_MESSAGE,
   CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
   NO_USABLE_PAYMENT_METHOD,
+  THEME_NOT_AVAILABLE,
+  THEME_NOT_AVAILABLE_MESSAGE,
   RETURN_WINDOW_DAYS_DEFAULT,
   NO_USABLE_PAYMENT_METHOD_MESSAGE,
+  THEME_CONFIG_KEYS,
+  DEFAULT_FRAUD_SETTINGS,
+  TAX_KEYS,
+  TAX_RATE_REQUIRED_MESSAGE,
+  isValidTaxRate,
+  resolveTaxSettings,
+  resolveThemeConfig,
   cityKey,
   maskAccountNumber,
   matchPakistanCity,
@@ -39,6 +49,9 @@ export interface StoreDoc {
   storefront?: unknown;
   paymentSettings?: unknown;
   payoutDetails?: unknown;
+  /** Sprint 7 (S7-B6): read by the go-live checklist. */
+  domain?: unknown;
+  customDomainStatus?: unknown;
   updatedAt?: unknown;
 }
 
@@ -172,10 +185,39 @@ export function readReturnWindowDays(storefront: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 30 ? value : (RETURN_WINDOW_DAYS_DEFAULT as number);
 }
 
+// ------------------------------------------------------------------------------------------------------------- custom domain
+
+/** Sprint 7 (S7-B6): whether the platform address redirects to the verified custom domain. Kept in storefront (the public record reads it). OFF unless exactly true. */
+export function readRedirectToCustomDomain(storefront: unknown): boolean {
+  return record(storefront).redirectToCustomDomain === true;
+}
+
+// ------------------------------------------------------------------------------------------------------------- theme config
+
+/** Sprint 7 (S7-B7): the Stiletto theme config of a store, the defaults filled in. A stored value that does not pass its rule reads as the default for that field. */
+export function readThemeConfig(storefront: unknown) {
+  return resolveThemeConfig(record(storefront).themeConfig);
+}
+
+// ------------------------------------------------------------------------------------------------------------- tax
+
+/**
+ * Sprint 8 (S8-B1, D-118): the tax settings of a store, the defaults filled in (off, 0%, exclusive, "Tax"). Kept in storefront.tax. A stored value that does not
+ * pass its rule reads as the default for that field, and tax that is on without a valid rate reads as off.
+ */
+export function readTax(storefront: unknown) {
+  return resolveTaxSettings(record(storefront).tax);
+}
+
+/** The code and message of a hero image that is not one of the seller's own pictures (422). */
+export const THEME_CONFIG_IMAGE_INVALID = 'THEME_CONFIG_IMAGE_INVALID';
+export const THEME_CONFIG_IMAGE_MESSAGE = 'Choose a picture from your own media library for the hero.';
+
 // ------------------------------------------------------------------------------------------------------------- theme
 
-export function installedThemeSlugs(): string[] {
-  return themes.listInstalledThemes().map((entry) => entry.slug);
+/** Sprint 7 (D-115): the themes a seller may choose (installed, available, not hidden): Stiletto only. */
+export function sellerThemeSlugs(): string[] {
+  return themes.listSellerThemes().map((entry) => entry.slug);
 }
 
 /** Whether a theme's checkout can take a card payment (the manifest flag; false when the theme has none). */
@@ -183,10 +225,14 @@ export function themeSupportsCardCheckout(slug: string): boolean {
   return themes.themeSupportsCardCheckout(slug);
 }
 
-/** The theme a store renders with: its own if it is installed, else the platform default (as the storefront does). */
+/** The theme a store renders with: its own if a seller can choose it, else the platform default, Stiletto (as the storefront does, D-115). */
 export function effectiveTheme(storefront: unknown): string {
-  const chosen = text(record(storefront).activeTheme);
-  return chosen !== null && themes.isInstalledThemeSlug(chosen) ? chosen : themes.DEFAULT_THEME_SLUG;
+  return themes.resolveRenderTheme(text(record(storefront).activeTheme)).slug;
+}
+
+/** The theme the store chose that it cannot render (mola, gani, mustafa ...), or null: the Theme tab shows a notice for it. */
+export function unavailableTheme(storefront: unknown): string | null {
+  return themes.resolveRenderTheme(text(record(storefront).activeTheme)).unavailableTheme;
 }
 
 // -------------------------------------------------------------------------------------------------- the settings DTO
@@ -204,7 +250,8 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
   const storeId = String(doc._id);
   const sf = record(doc.storefront);
   const social = record(sf.social);
-  const [logo, banner, seoImage] = await Promise.all([mediaOf(sf.logo, storeId), mediaOf(sf.banner, storeId), mediaOf(sf.seoImage, storeId)]);
+  const themeConfig = readThemeConfig(sf);
+  const [logo, banner, seoImage, heroImage] = await Promise.all([mediaOf(sf.logo, storeId), mediaOf(sf.banner, storeId), mediaOf(sf.seoImage, storeId), mediaOf(themeConfig.heroImage, storeId)]);
   return {
     id: storeId,
     slug: String(doc.slug ?? ''),
@@ -224,13 +271,49 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     delivery: readDelivery(sf),
     payments: { ...readPayments(doc.paymentSettings), cardAvailable: cardPaymentsAvailable() },
     payout: maskPayout(doc.payoutDetails),
-    theme: { activeTheme: effectiveTheme(sf), supportsCardCheckout: themeSupportsCardCheckout(effectiveTheme(sf)) },
+    theme: { activeTheme: effectiveTheme(sf), supportsCardCheckout: themeSupportsCardCheckout(effectiveTheme(sf)), unavailableTheme: unavailableTheme(sf) },
     messages: { ...readMessages(sf), abandonedCartEmail: readAbandonedCartEmail(doc.paymentSettings) },
     // Sprint 5 EP-11: kept in paymentSettings (never in storefront, which the public storefront reads).
     fraud: readFraud(doc.paymentSettings),
     returns: { returnWindowDays: readReturnWindowDays(sf) },
+    domain: { redirectToCustomDomain: readRedirectToCustomDomain(sf) },
+    themeConfig: { ...themeConfig, heroImage },
+    tax: readTax(sf),
     updatedAt: iso(doc.updatedAt),
   };
+}
+
+/**
+ * Sprint 8 (S8-B3, D-118): the settings a ROLE may see. The owner reads everything. A manager reads everything except the payout account (payouts are owner-only, not even
+ * masked). Staff and support get the SAFE SUBSET only: no payment or fraud details, no payout, no domain, no message templates: those fields come back as neutral
+ * defaults (cash on delivery shown on, card off, the fraud defaults), never the stored values.
+ */
+export function settingsForRole(settings: StoreSettings, role: SellerRole | null): StoreSettings {
+  if (role === 'owner') return settings;
+  const manager: StoreSettings = { ...settings, payout: null };
+  if (role === 'manager') return manager;
+  const { domain: _domain, ...rest } = manager;
+  void _domain;
+  return {
+    ...rest,
+    payments: { codEnabled: true, cardEnabled: false, cardAvailable: false },
+    fraud: DEFAULT_FRAUD_SETTINGS as StoreSettings['fraud'],
+    messages: { whatsappTemplate: null, emailFooter: null, abandonedCartEmail: false },
+  };
+}
+
+/**
+ * The same safe subset for the store DOCUMENT of GET /api/stores/:id: staff and support get no message templates there either (the route already leaves out the
+ * payment and courier settings for every member). Any other role, an admin included, gets the document as it is.
+ */
+export function storeDocForRole<T extends Record<string, unknown>>(doc: T, role: SellerRole | null): T {
+  if (role !== 'staff' && role !== 'support') return doc;
+  const storefront = doc.storefront;
+  if (typeof storefront !== 'object' || storefront === null) return doc;
+  const { whatsappTemplate: _whatsapp, emailFooter: _footer, ...rest } = storefront as Record<string, unknown>;
+  void _whatsapp;
+  void _footer;
+  return { ...doc, storefront: rest };
 }
 
 // ------------------------------------------------------------------------------------------------------------ writing
@@ -252,15 +335,19 @@ export function settingsFieldsOf(update: StoreSettingsUpdate): string[] {
   const fields = new Set<string>();
   if (update.profile?.name !== undefined) fields.add('name');
   const profileRest = update.profile ? Object.keys(update.profile).filter((key) => key !== 'name') : [];
-  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns) fields.add('storefront');
+  if (profileRest.length > 0 || update.branding || update.social || update.seo || update.delivery || update.theme || update.messages || update.returns || update.domain || update.themeConfig !== undefined || update.tax) fields.add('storefront');
   if (update.payments || update.fraud || update.messages?.abandonedCartEmail !== undefined) fields.add('paymentSettings');
   if (update.payout !== undefined) fields.add('payoutDetails');
   return [...fields];
 }
 
 /** The media ids the update names, with the field each is for (the route checks they are this store's). */
-export function referencedMedia(update: StoreSettingsUpdate): Array<{ field: string; id: string }> {
-  const refs: Array<{ field: string; id: string }> = [];
+export function referencedMedia(update: StoreSettingsUpdate): Array<{ field: string; id: string; /** The answer for a picture that is not the store's own (default 400). */ status?: number; code?: string; message?: string; imageOnly?: boolean }> {
+  const refs: Array<{ field: string; id: string; status?: number; code?: string; message?: string; imageOnly?: boolean }> = [];
+  // S7-B7: the hero picture of the theme config must be one of the seller's own IMAGES: a different store's file, or a video, is a 422.
+  if (update.themeConfig?.heroImage) {
+    refs.push({ field: 'themeConfig.heroImage', id: update.themeConfig.heroImage, status: 422, code: THEME_CONFIG_IMAGE_INVALID, message: THEME_CONFIG_IMAGE_MESSAGE, imageOnly: true });
+  }
   if (update.branding?.logo) refs.push({ field: 'branding.logo', id: update.branding.logo });
   if (update.branding?.banner) refs.push({ field: 'branding.banner', id: update.branding.banner });
   if (update.seo?.image) refs.push({ field: 'seo.image', id: update.seo.image });
@@ -318,7 +405,11 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
     if (d.estimate !== undefined) put('deliveryEstimate', d.estimate);
   }
   if (update.theme) {
-    if (!installedThemeSlugs().includes(update.theme.activeTheme)) throw invalid('theme.activeTheme', 'Choose a theme from the list.');
+    if (!sellerThemeSlugs().includes(update.theme.activeTheme)) {
+      // A theme the platform knows but a seller cannot choose (hidden, coming soon, archived) is a 422; a slug nobody has heard of is a 400.
+      if (themes.isThemeSlug(update.theme.activeTheme)) throw new HttpError(422, THEME_NOT_AVAILABLE_MESSAGE, THEME_NOT_AVAILABLE, 'theme.activeTheme');
+      throw invalid('theme.activeTheme', 'Choose a theme from the list.');
+    }
     put('activeTheme', update.theme.activeTheme);
   }
   if (update.messages) {
@@ -336,6 +427,32 @@ export function buildSettingsWrite(doc: StoreDoc, update: StoreSettingsUpdate, n
   }
   if (update.returns) {
     if (update.returns.returnWindowDays !== undefined) put('returnWindowDays', update.returns.returnWindowDays);
+  }
+  if (update.domain) {
+    if (update.domain.redirectToCustomDomain !== undefined) put('redirectToCustomDomain', update.domain.redirectToCustomDomain);
+  }
+  // Sprint 7 (S7-B7): null resets the theme config to the defaults; an object changes only the fields it names, onto what is stored. Every value
+  // was validated and normalised by the schema before it got here, so nothing else can be stored.
+  if (update.themeConfig === null) {
+    put('themeConfig', null);
+  } else if (update.themeConfig) {
+    const stored = { ...record(record(sf).themeConfig) };
+    for (const key of THEME_CONFIG_KEYS) {
+      const value = (update.themeConfig as Record<string, unknown>)[key];
+      if (value !== undefined) stored[key] = value;
+    }
+    put('themeConfig', stored);
+  }
+  // Sprint 8 (S8-B1): the tax group changes only the fields it names, onto what is stored. Every value was validated by the schema; what is left to check
+  // here needs the stored value too: tax cannot be on without a valid rate (400, field tax.ratePercent), so a broken setting never reaches the database.
+  if (update.tax) {
+    const stored = { ...record(sf.tax) };
+    for (const key of TAX_KEYS) {
+      const value = (update.tax as Record<string, unknown>)[key];
+      if (value !== undefined) stored[key] = value;
+    }
+    if (stored.enabled === true && !isValidTaxRate(stored.ratePercent)) throw invalid('tax.ratePercent', TAX_RATE_REQUIRED_MESSAGE);
+    put('tax', stored);
   }
   if (storefrontChanged) {
     set.storefront = sf;

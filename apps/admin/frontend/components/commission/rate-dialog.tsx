@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { changeDefaultRate, changeStoreRate } from "@/lib/api/client";
-import { REASON_MAX, REASON_MIN, describeRateChange, parseRateInput } from "@/lib/commission-rates";
+import { GATEWAY_ONLY_NOTE, REASON_MAX, REASON_MIN, describeRateChange, parseRateInput } from "@/lib/commission-rates";
 import { useAdminMutation } from "@/lib/hooks/use-admin-mutation";
 
 export type RateTarget =
@@ -84,6 +84,9 @@ export function RateDialog({ target, onClose, onDone }: { target: RateTarget; on
         </div>
       ) : (
         <form onSubmit={next} className="flex flex-col gap-3" noValidate>
+          <p className="text-sm text-muted-foreground" data-slot="gateway-only-note">
+            {GATEWAY_ONLY_NOTE}
+          </p>
           {store ? (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={useDefault} onChange={(event) => setUseDefault(event.target.checked)} />

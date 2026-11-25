@@ -86,7 +86,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const limit = parseIntParam(params.get('limit'), 20, 1, 100);
 
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'media.read' });
     const filter = { store: storeId };
 
     const [rows, totalDocs] = await Promise.all([
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     assertCan(ctx.actor, 'create', 'media', ['alt']);
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'media.write' });
 
     if (isVideo) return await createVideo(storeId, fields.data.alt, file);
 

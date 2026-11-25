@@ -1,7 +1,7 @@
-import { storefrontStoreSchema } from '@/lib/contracts';
+import { storefrontStoreSchema, toStorefrontThemeConfig } from '@/lib/contracts';
 import { Media } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
-import { readPayments } from '@/lib/store-settings';
+import { readPayments, readThemeConfig } from '@/lib/store-settings';
 
 /** A Mongo document as .lean() returns it. Mixed fields stay unknown until read defensively. */
 export interface StoreRow {
@@ -9,6 +9,9 @@ export interface StoreRow {
   slug: string;
   name: string;
   internalHandle?: string | null;
+  /** S7-B6: the custom domain and its status. The public record carries the domain only when it is verified. */
+  domain?: string | null;
+  customDomainStatus?: string | null;
   isThemeDemo?: boolean;
   storefront?: unknown;
   paymentSettings?: unknown;
@@ -25,6 +28,11 @@ function text(value: unknown): string | null {
 /** Whole rupees (D-004): a store's settings are not validated yet, so a decimal is rounded where it is read. */
 function amount(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+}
+
+/** S7-B6: the store's custom domain, only when it is verified (a pending or failed one is never public). */
+export function verifiedDomainOf(store: Pick<StoreRow, 'domain' | 'customDomainStatus'>): string | null {
+  return store.customDomainStatus === 'verified' && typeof store.domain === 'string' && store.domain !== '' ? store.domain : null;
 }
 
 const HEX_ID = /^[0-9a-fA-F]{24}$/;
@@ -48,11 +56,16 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
   const pay = record(store.paymentSettings);
   const [logoUrl, bannerUrl, seoImageUrl] = await Promise.all([mediaUrl(sf.logo, store._id), mediaUrl(sf.banner, store._id), mediaUrl(sf.seoImage, store._id)]);
   const social = record(sf.social);
+  // S7-B7: the validated theme config, defaults filled in (a stored value that fails its rule reads as the default). The hero picture is the store's own media.
+  const themeConfig = readThemeConfig(sf);
+  const heroImageUrl = await mediaUrl(themeConfig.heroImage, store._id);
 
   return storefrontStoreSchema.parse({
     id: String(store._id),
     slug: store.slug,
     internalHandle: store.internalHandle ?? null,
+    customDomain: verifiedDomainOf(store),
+    redirectToCustomDomain: verifiedDomainOf(store) !== null && sf.redirectToCustomDomain === true,
     name: store.name,
     status,
     isThemeDemo: store.isThemeDemo === true,
@@ -85,5 +98,6 @@ export async function toStorefrontStoreDto(store: StoreRow, status: 'active' | '
     social: { facebook: text(social.facebook), instagram: text(social.instagram), tiktok: text(social.tiktok), whatsapp: text(social.whatsapp) },
     features: { socialProofEnabled: false },
     theme: { activeTheme: text(sf.activeTheme) },
+    themeConfig: toStorefrontThemeConfig(themeConfig, heroImageUrl),
   });
 }

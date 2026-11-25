@@ -1,12 +1,13 @@
-import { isRecord, jsonResponse, requireSyncSignature } from '../_guard';
+import { connectDb } from '@/lib/db';
+import { repair } from '@/lib/sync-receiver';
+import { jsonResponse, requireSyncSignature } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * POST /api/internal/sync/repair. Asks for a replay of a range of revisions to a seller. The request is checked and
- * signed like every sync call, but no replay is built yet, so nothing is queued. The answer says so (501) rather
- * than acknowledging a repair that will never run. Build the replay before answering 202 here.
+ * POST /api/internal/sync/repair { store, group?, fromRevision, toRevision }. Signed. Requeues the missing range in the sender outbox (sent or dead rows
+ * back to pending); never replays what is already acknowledged; idempotent. 202 with the counts, 422 for a bad or too long range.
  */
 export async function POST(request: Request): Promise<Response> {
   const guard = await requireSyncSignature(request);
@@ -18,16 +19,8 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     return jsonResponse({ error: 'invalid JSON' }, 400);
   }
-
-  if (
-    !isRecord(payload) ||
-    typeof payload.store !== 'string' ||
-    typeof payload.fromRevision !== 'number' ||
-    typeof payload.toRevision !== 'number' ||
-    payload.fromRevision > payload.toRevision
-  ) {
-    return jsonResponse({ error: 'invalid repair request' }, 422);
-  }
-
-  return jsonResponse({ error: 'revision repair is not implemented; nothing was queued' }, 501);
+  await connectDb();
+  const result = await repair(payload);
+  if (!result.ok) return jsonResponse({ error: result.error }, 422);
+  return jsonResponse(result.body, 202);
 }

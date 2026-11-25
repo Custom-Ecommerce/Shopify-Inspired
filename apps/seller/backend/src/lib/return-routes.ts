@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
+import type { SellerCapability } from '@markaz/auth';
 import type { SellerReturn } from '@markaz/contracts';
 import { readAccountBody } from '@/lib/account-support';
-import { authenticate, type AuthContext } from '@/lib/auth';
+import { authenticate, type AuthContext, auditActorOf } from '@/lib/auth';
 import { HttpError } from '@/lib/http';
 import { loadOwnedStore, requireSellerActor } from '@/lib/owned-store';
 import { readOrderOf, returnNotFound, type Actor } from '@/lib/return-actions';
@@ -35,12 +36,13 @@ export async function prepareReturnRoute<T>(
   request: NextRequest,
   params: { id: string; returnId: string },
   action: { schema: BodySchema<T>; fields: (body: T) => string[] },
+  capability: SellerCapability,
 ): Promise<{ route: ReturnRouteContext; body: T }> {
   const ctx = await authenticate(request);
   requireSellerActor(ctx);
   const body = await readAccountBody(request, action.schema);
   assertCan(ctx.actor, 'update', 'returnActions', action.fields(body));
-  const store = await loadOwnedStore(request, ctx, params.id, 'name owner');
+  const store = await loadOwnedStore(request, ctx, params.id, 'name owner', capability);
   if (!mongoose.isValidObjectId(params.returnId)) throw returnNotFound();
   return {
     body,
@@ -49,25 +51,25 @@ export async function prepareReturnRoute<T>(
       storeId: String(store._id),
       storeName: typeof store.name === 'string' ? store.name : '',
       returnId: params.returnId,
-      actor: { userObjectId: ctx.userObjectId, auditActor: 'seller:' + ctx.userId },
+      actor: { userObjectId: ctx.userObjectId, auditActor: auditActorOf(ctx) },
     },
   };
 }
 
 /** The same steps for the actions that take no body (approve). */
-export async function prepareReturnRouteNoBody(request: NextRequest, params: { id: string; returnId: string }): Promise<ReturnRouteContext> {
+export async function prepareReturnRouteNoBody(request: NextRequest, params: { id: string; returnId: string }, capability: SellerCapability): Promise<ReturnRouteContext> {
   const ctx = await authenticate(request);
   requireSellerActor(ctx);
   // An action with no body still needs a role check on the policy row; the first field is the one every action row allows.
   assertCan(ctx.actor, 'update', 'returnActions', ['reason']);
-  const store = await loadOwnedStore(request, ctx, params.id, 'name owner');
+  const store = await loadOwnedStore(request, ctx, params.id, 'name owner', capability);
   if (!mongoose.isValidObjectId(params.returnId)) throw returnNotFound();
   return {
     ctx,
     storeId: String(store._id),
     storeName: typeof store.name === 'string' ? store.name : '',
     returnId: params.returnId,
-    actor: { userObjectId: ctx.userObjectId, auditActor: 'seller:' + ctx.userId },
+    actor: { userObjectId: ctx.userObjectId, auditActor: auditActorOf(ctx) },
   };
 }
 

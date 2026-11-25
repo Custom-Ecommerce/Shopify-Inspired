@@ -85,3 +85,13 @@ target: 'seller', entity: 'store', entityId: 'abc', group: 'governance', revisio
 });
 assert.notEqual(doc.validateSync(), undefined);
 });
+
+test('Sprint 6: User.storeLimitOverride defaults to null, takes a whole number of 1 or more, and refuses the rest', () => {
+  const make = (extra: Record<string, unknown>) => new User({ name: 'Ali', email: 'ali@example.com', passwordHash: 'h', ...extra });
+  assert.equal(make({}).storeLimitOverride, null);
+  assert.equal(make({ storeLimitOverride: 5 }).validateSync(), undefined);
+  assert.equal(make({ storeLimitOverride: null }).validateSync(), undefined);
+  assert.notEqual(make({ storeLimitOverride: 0 }).validateSync(), undefined);
+  assert.notEqual(make({ storeLimitOverride: 2.5 }).validateSync(), undefined);
+  assert.notEqual(make({ storeLimitOverride: -1 }).validateSync(), undefined);
+});

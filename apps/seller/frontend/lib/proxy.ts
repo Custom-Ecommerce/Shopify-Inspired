@@ -14,13 +14,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { extractStoreIds, getDashboardUser, isImplicitDefaultEnabled } from "@/lib/dashboard-auth";
+import { extractAccessibleStoreIds, getDashboardUser, isImplicitDefaultEnabled } from "@/lib/dashboard-auth";
 import { ERROR_STATUS, type ApiErrorBody, type ErrorCode } from "@/lib/error-codes";
 import { clientAddressHeaders } from "@/lib/client-address";
 
 import type { DashboardUser } from "@/lib/types/dashboard";
 
 export const PAYLOAD_API_URL = (process.env.SELLER_BACKEND_API_URL || "http://localhost:4001").replace(/\/$/, "");
+
+/** Response headers of a file download the browser may read. */
+export const DOWNLOAD_HEADERS = ["x-report-rows", "x-report-row-cap", "x-report-truncated", "x-customers-row-cap", "x-customers-truncated"] as const;
 
 export interface ProxyAuthResult {
   token?: string;
@@ -165,7 +168,16 @@ async function normalizeUpstreamError(
   const code = str(rec.code) ?? str(firstData?.code) ?? str(first?.code) ?? defaultCodeForStatus(res.status);
   const message =
     str(rec.error) ?? str(rec.message) ?? str(first?.message) ?? `Request failed with status ${res.status}.`;
-  const details = rec.details ?? errors ?? rec.issues;
+  // Sprint 6 EP-14: a refused add (PLAN_LIMIT_REACHED) keeps its numbers and its upgrade hint, so the dashboard can open the upgrade dialog.
+  const planLimit =
+    code === "PLAN_LIMIT_REACHED"
+      ? { limitKind: rec.limitKind, limit: rec.limit, used: rec.used, plan: rec.plan, planName: rec.planName, upgradeHint: rec.upgradeHint }
+      : undefined;
+  // Sprint 6 EP-14 (S6-B4): a refused downgrade (DOWNGRADE_EXCEEDS_LIMITS) keeps what exceeds, per limit.
+  const exceeds = code === "DOWNGRADE_EXCEEDS_LIMITS" && Array.isArray(rec.exceeds) ? rec.exceeds : undefined;
+  // Sprint 7 (S7-B1): a refused media delete (MEDIA_IN_USE) keeps where the file is used (the same list as GET /api/media/:id/usage), so the dashboard can name the places.
+  const mediaInUse = code === "MEDIA_IN_USE" ? { mediaId: rec.mediaId, total: rec.total, features: rec.features, products: rec.products, branding: rec.branding } : undefined;
+  const details = planLimit ?? exceeds ?? mediaInUse ?? rec.details ?? errors ?? rec.issues;
 
   return apiError(res.status, code, message, {
     details,
@@ -236,7 +248,8 @@ export async function resolveDashboardAuth(
   }
 
   // 3. owned
-  const owned = extractStoreIds(user);
+  // S8-B3: the stores the user owns AND the stores they are an active member of (the backend decides what their role may do there).
+  const owned = extractAccessibleStoreIds(user);
   const scope: StoreScope = opts.storeScope ?? "required";
   if (scope === "none") return { auth: { token, user, stores: owned } };
 
@@ -409,6 +422,11 @@ export async function proxyToBackend(req: NextRequest, options: ProxyOptions): P
     if (resContentType) forwardHeaders["content-type"] = resContentType;
     const contentDisposition = res.headers.get("content-disposition");
     if (contentDisposition) forwardHeaders["content-disposition"] = contentDisposition;
+    // S8-B7: what a download says about itself (row count, "this file was cut"). Only these names are passed on.
+    for (const name of DOWNLOAD_HEADERS) {
+      const value = res.headers.get(name);
+      if (value !== null) forwardHeaders[name] = value;
+    }
     return new NextResponse(blob, { status: res.status, headers: forwardHeaders });
   } catch (err) {
     console.error(`${logScope} [${requestId}] Unreadable upstream response from ${url.pathname}:`, err);

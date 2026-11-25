@@ -182,15 +182,31 @@ test('a refund that lands before its sale fails with 500, releases the claim, an
   assert.equal(state.ledger.length, 1);
 });
 
-test('a subscription update is upserted once, and its replay is a duplicate', async () => {
-  const delivery = deliver(subscriptionEvent('evt_sub_1', 'active'));
-  const first = await handleStripeWebhook(delivery.raw, delivery.signature);
-  const replay = await handleStripeWebhook(delivery.raw, delivery.signature);
-  assert.equal(first.status, 200);
-  assert.equal(replay.body.duplicate, true);
-  assert.equal(state.subscriptions.length, 1);
-  assert.equal(state.subscriptions[0].stripeSubscriptionId, 'sub_1');
-  assert.equal(state.subscriptions[0].status, 'active');
+test('a subscription update is upserted once, and its replay is a duplicate (Stripe subscriptions switched ON, D-118)', async () => {
+  // Sprint 6 (S6-B2): the Stripe subscription code is behind SUBSCRIPTION_STRIPE_ENABLED, off by default. This test is about the ON path.
+  const saved = process.env.SUBSCRIPTION_STRIPE_ENABLED;
+  process.env.SUBSCRIPTION_STRIPE_ENABLED = 'true';
+  try {
+    const delivery = deliver(subscriptionEvent('evt_sub_1', 'active'));
+    const first = await handleStripeWebhook(delivery.raw, delivery.signature);
+    const replay = await handleStripeWebhook(delivery.raw, delivery.signature);
+    assert.equal(first.status, 200);
+    assert.equal(replay.body.duplicate, true);
+    assert.equal(state.subscriptions.length, 1);
+    assert.equal(state.subscriptions[0].stripeSubscriptionId, 'sub_1');
+    assert.equal(state.subscriptions[0].status, 'active');
+  } finally {
+    if (saved === undefined) delete process.env.SUBSCRIPTION_STRIPE_ENABLED;
+    else process.env.SUBSCRIPTION_STRIPE_ENABLED = saved;
+  }
+});
+
+test('with Stripe subscriptions OFF (the default) a subscription update is acknowledged and ignored', async () => {
+  const delivery = deliver(subscriptionEvent('evt_sub_2', 'active'));
+  const outcome = await handleStripeWebhook(delivery.raw, delivery.signature);
+  assert.equal(outcome.status, 200);
+  assert.equal(outcome.body.ignored, 'subscription_stripe_off');
+  assert.equal(state.subscriptions.length, 0);
 });
 
 function checkoutEvent(eventId: string, metadata: Doc): Doc {

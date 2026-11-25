@@ -4,6 +4,9 @@ import mongoose, { Schema, type Document, type Model, type Types } from 'mongoos
 export const USER_ROLES = ['admin', 'seller'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 /** Sprint 4 EP-08 (D-093): a suspended or blocked account is refused on every authenticated request. */
+/** Sprint 6 (S6-B6, D-118): the level of an ADMIN account. Missing on a role admin reads as owner (back-compat). Sellers have none. */
+export const ADMIN_USER_LEVELS = ['owner', 'finance', 'operations', 'customer_support'] as const;
+export type AdminUserLevel = (typeof ADMIN_USER_LEVELS)[number];
 export const USER_ACCOUNT_STATUSES = ['active', 'suspended', 'blocked'] as const;
 export type UserAccountStatus = (typeof USER_ACCOUNT_STATUSES)[number];
 
@@ -27,6 +30,16 @@ emailVerifiedAt?: Date | null;
 phone?: string | null;
 /** The new address of an email change until its link is used; the old email stays the login until then. */
 pendingEmail?: string | null;
+/**
+ * Sprint 6 EP-12.US02 (D-118): an admin's override of the seller's store limit (an integer of 1 or more), or null/missing for
+ * none. It wins over the plan, the platform setting and the environment. Only an admin writes it, with a reason.
+ */
+storeLimitOverride?: number | null;
+adminLevel?: AdminUserLevel | null;
+/** Sprint 8 (S8-B5, D-118): the seller's own referral code, made once, on first need. Absent until then (never null: the unique index is partial). */
+referralCode?: string;
+/** The seller whose code this account signed up with. Set only together with a referrals row. */
+referredBy?: Types.ObjectId | null;
 createdAt: Date;
 updatedAt: Date;
 }
@@ -57,12 +70,18 @@ tokenVersion: { type: Number, default: 0, min: 0 },
 emailVerifiedAt: { type: Date, default: null },
 phone: { type: String, default: null, maxlength: 20 },
 pendingEmail: { type: String, default: null, lowercase: true, trim: true, maxlength: 254 },
+adminLevel: { type: String, enum: [...ADMIN_USER_LEVELS], default: undefined },
+referralCode: { type: String, maxlength: 16 },
+referredBy: { type: Schema.Types.ObjectId, ref: 'User' },
+storeLimitOverride: { type: Number, default: null, min: 1, validate: { validator: (value: unknown) => value === null || value === undefined || Number.isInteger(value), message: 'storeLimitOverride must be a whole number' } },
 },
 { timestamps: true, collection: 'users' },
 );
 
 // The sellers list filters by role and sorts by join date.
 UserSchema.index({ role: 1, createdAt: -1 });
+// Sprint 8 (S8-B5): a code names one seller. Partial: most accounts have none.
+UserSchema.index({ referralCode: 1 }, { unique: true, name: 'referralCode_unique', partialFilterExpression: { referralCode: { $type: 'string' } } });
 
 export const User: Model<IUser> =
 (mongoose.models.User as Model<IUser> | undefined) ?? mongoose.model<IUser>('User', UserSchema, 'users');

@@ -16,6 +16,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listCommissionRates } from "@/lib/api/client";
 import { RATE_MODE_LABELS, RATE_MODE_VALUES, type RateModeValue } from "@/lib/commission";
+import { PLATFORM_RATE_DESCRIPTION, STORE_RATE_DESCRIPTION } from "@/lib/commission-rates";
 import type { AdminCommissionRateItem } from "@/lib/contracts";
 import { formatPercent } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
@@ -87,7 +88,7 @@ export function RatesPanel({ state, go }: PanelProps) {
         <Card>
           <CardHeader>
             <CardTitle>Platform default rate</CardTitle>
-            <CardDescription>Applies to every store whose rate source is the platform default.</CardDescription>
+            <CardDescription>{PLATFORM_RATE_DESCRIPTION}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -103,6 +104,10 @@ export function RatesPanel({ state, go }: PanelProps) {
           <Skeleton className="h-32" />
         </div>
       ) : null}
+
+      <p className="text-sm text-muted-foreground" data-slot="store-rate-note">
+        {STORE_RATE_DESCRIPTION}
+      </p>
 
       <div className="flex flex-col gap-3 sm:flex-row" role="search">
         <div className="relative flex-1">

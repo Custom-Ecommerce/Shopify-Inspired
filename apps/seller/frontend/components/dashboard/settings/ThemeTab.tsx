@@ -7,7 +7,10 @@ import { FormAlert } from "@/components/auth/AccountCard";
 import { PreviewStoreButton } from "@/components/dashboard/PreviewStoreButton";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { cn } from "@/lib/utils";
+import { unavailableThemeNotice } from "@/lib/theme-notice";
 import { SaveBar, useTabSave, type TabProps } from "./shared";
+import { ThemeConfigEditor } from "./ThemeConfigEditor";
+import { RESET_BODY, SAVED_TEXT, defaultForm, formFromConfig, formProblems, isConfigDirty, isDefaultForm, themeConfigPatch, type ThemeConfigForm, type ThemeConfigRead } from "@/lib/theme-config-form";
 
 interface ThemeOption {
   slug: string;
@@ -16,15 +19,37 @@ interface ThemeOption {
   previewImage: string | null;
   isDefaultForNewStores: boolean;
   supportsCardCheckout?: boolean;
+  /** S7-B7 (D-118): a premium theme (paid tier) and whether this seller plan locks it. No theme is premium today; Stiletto is free. */
+  premium?: boolean;
+  locked?: boolean;
 }
 
-/** Theme: the installed themes from GET /api/themes, a link to the existing store preview, and a save. */
+/** Sprint 7 (CO-81): a theme's static preview image. A file that does not load is left out, so a broken picture never shows. */
+function ThemePreviewImage({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} data-testid="theme-preview-image" className="aspect-[4/3] w-full rounded-lg border bg-muted/30 object-cover" />
+  );
+}
+
+/** Theme: the themes a seller can choose from GET /api/themes (today Stiletto), a link to the existing store preview, and a save. */
 export function ThemeTab({ settings, save, onDirty }: TabProps) {
   const storeFetch = useStoreFetch();
   const [themes, setThemes] = useState<ThemeOption[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [active, setActive] = useState(settings.theme.activeTheme);
   const form = useTabSave(save);
+
+  // Sprint 7 (S7-B7): the look editor has its own form and save (the settings group "themeConfig"). The server keeps ONE live version of it, so "preview before
+  // saving" is the small drawing inside the editor; after saving, the preview button above shows the real store.
+  const savedConfig = formFromConfig((settings as { themeConfig?: ThemeConfigRead }).themeConfig);
+  const [config, setConfig] = useState<ThemeConfigForm>(savedConfig);
+  const configForm = useTabSave(save);
+  const savedConfigKey = JSON.stringify(savedConfig);
+  useEffect(() => setConfig(savedConfig), [savedConfigKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const configDirty = isConfigDirty(savedConfig, config);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,16 +71,38 @@ export function ThemeTab({ settings, save, onDirty }: TabProps) {
 
   useEffect(() => setActive(settings.theme.activeTheme), [settings.theme.activeTheme]);
   const dirty = active !== settings.theme.activeTheme;
-  useEffect(() => onDirty(dirty), [dirty, onDirty]);
+  useEffect(() => onDirty(dirty || configDirty), [dirty, configDirty, onDirty]);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     await form.run({ theme: { activeTheme: active } }, "Theme saved. Open the preview to see it.");
   }
 
+  async function onSaveConfig(event: React.FormEvent) {
+    event.preventDefault();
+    if (Object.keys(formProblems(config)).length > 0) return;
+    const body = themeConfigPatch(savedConfig, config);
+    if (body === null) return;
+    await configForm.run({ themeConfig: body }, SAVED_TEXT);
+  }
+
+  async function onResetConfig() {
+    // Reset to defaults is saved at once: the whole group null, which the server stores as no config.
+    const ok = await configForm.run({ ...RESET_BODY }, "The look is back to the defaults.");
+    if (ok) setConfig(defaultForm());
+  }
+
+  const notice = unavailableThemeNotice(settings.theme.unavailableTheme, themes?.find((theme) => theme.slug === settings.theme.activeTheme)?.name ?? "Stiletto");
+
   return (
+    <div className="flex flex-col gap-8">
     <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
       <SectionCard title="Theme" description="The look of your storefront. Your products and settings stay the same.">
+        {notice ? (
+          <div className="mb-4">
+            <FormAlert tone="info">{notice}</FormAlert>
+          </div>
+        ) : null}
         {loadError ? (
           <FormAlert tone="error">The themes could not be loaded. Reload the page.</FormAlert>
         ) : themes === null ? (
@@ -69,16 +116,14 @@ export function ThemeTab({ settings, save, onDirty }: TabProps) {
               const selected = active === theme.slug;
               return (
                 <label key={theme.slug} className={cn("flex min-h-11 cursor-pointer flex-col gap-2 rounded-xl border p-3", selected ? "border-primary bg-primary/5" : "hover:bg-muted/40")}>
-                  <input type="radio" name="theme" className="sr-only" checked={selected} onChange={() => setActive(theme.slug)} />
-                  {theme.previewImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={theme.previewImage} alt="" className="aspect-[4/3] w-full rounded-lg object-cover" />
-                  ) : null}
+                  <input type="radio" name="theme" className="sr-only" checked={selected} disabled={theme.locked === true} onChange={() => setActive(theme.slug)} />
+                  {theme.previewImage ? <ThemePreviewImage src={theme.previewImage} /> : null}
                   <span className="flex items-center justify-between gap-2">
                     <span className="font-medium">{theme.name}</span>
                     {selected ? <Check className="size-4 text-primary" aria-label="Selected" /> : null}
                   </span>
                   <span className="text-xs capitalize text-muted-foreground">{theme.tier}{theme.isDefaultForNewStores ? " · default for new stores" : ""}</span>
+                {theme.locked ? <span className="text-xs text-muted-foreground">Needs the Growth plan.</span> : null}
                 </label>
               );
             })}
@@ -96,5 +141,20 @@ export function ThemeTab({ settings, save, onDirty }: TabProps) {
       </SectionCard>
       <SaveBar dirty={dirty} busy={form.busy} feedback={form.feedback} />
     </form>
+
+    <form onSubmit={onSaveConfig} className="flex flex-col gap-6" noValidate>
+      <ThemeConfigEditor
+        form={config}
+        onChange={setConfig}
+        onReset={() => void onResetConfig()}
+        errors={configForm.fieldErrors}
+        busy={configForm.busy}
+        resetDisabled={isDefaultForm(savedConfig) && isDefaultForm(config)}
+        storeName={settings.profile.name}
+      />
+      <SaveBar dirty={configDirty && Object.keys(formProblems(config)).length === 0} busy={configForm.busy} feedback={configForm.feedback} label="Save the look" />
+    </form>
+    </div>
   );
 }
+

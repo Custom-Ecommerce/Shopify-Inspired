@@ -35,6 +35,32 @@ export const TEMPLATE_NAMES = [
   // Sprint 5 EP-21: a shopper left a review (to the seller). EP-28: the optional email about a cart left behind (to the shopper).
   'review_received_seller',
   'abandoned_cart',
+  // Sprint 6 EP-12.US02 (CO-82): the platform paused a store, suspended a seller account, or reactivated it.
+  'store_paused',
+  'account_suspended',
+  'account_reactivated',
+  // Sprint 6 EP-14 (S6-B4, D-118): manual subscription payments. A payment was claimed (to the platform's support address), confirmed or
+  // rejected or voided (to the seller), and a subscription is about to end or has ended (to the seller).
+  'payment_claimed',
+  'payment_confirmed',
+  'payment_rejected',
+  'subscription_expiring',
+  'subscription_expired',
+  // Sprint 6 (S6-B6): an admin invitation (7 day link).
+  'admin_invite',
+  // Sprint 7 (S7-B4): a shopper wrote to a store (to the seller), a visitor wrote to the platform (to its support address), the store answered a shopper,
+  // and the platform answered a seller's support ticket (to the seller).
+  'contact_message_store',
+  'contact_message_platform',
+  'contact_reply',
+  'ticket_admin_reply',
+  // Sprint 8 (S8-B2, D-118): a store's team: the invite (to the invitee), the invite accepted (to the owner), access removed (to the member).
+  'staff_invite',
+  'staff_invite_accepted',
+  'staff_access_removed',
+  // Sprint 8 (S8-B6, D-118): both to the REFERRER: a referred seller signed up (a masked name only), and the free months a referral earned.
+  'referral_signed_up',
+  'referral_rewarded',
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
@@ -72,18 +98,49 @@ export const TEMPLATE_VARIABLES = [
   // Sprint 5 EP-21: the rating ("5 out of 5") and the text of a new review, for the seller's email.
   'reviewRating',
   'reviewText',
+  // Sprint 6 EP-12.US02: the reason an operator gave when pausing a store or suspending an account.
+  'suspensionReason',
+  // Sprint 6 EP-14 (S6-B4): the plan, the amount, the transfer reference, the end of the period, the admin's reason, and the seller's email.
+  'planName',
+  'paymentAmount',
+  'paymentReference',
+  'periodEnd',
+  'paymentReason',
+  'sellerEmail',
+  // Sprint 7 (S7-B4): the sender's name, email and phone, the message, a reply, and a ticket's subject.
+  'contactName',
+  'contactEmail',
+  'contactPhone',
+  'contactMessage',
+  'replyText',
+  'ticketSubject',
+  // Sprint 8 (S8-B1, D-118): the tax line of an order ("Tax (included): Rs. 170"), only when the order carries tax. Optional in the templates that use it.
+  'taxLine',
+  // Sprint 8 (S8-B2): the role ("Manager", "Staff", "Support"), the person's name or email, and who invited them.
+  'memberRole',
+  'memberName',
+  'invitedBy',
+  // Sprint 8 (S8-B6): the referred seller's MASKED name, the number of free months, and one sentence saying where they apply.
+  'referredName',
+  'monthsGained',
+  'rewardNote',
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export type TemplateVars = Partial<Record<TemplateVariable, string>>;
 
 /** Variables whose value is several lines (one order line each); HTML keeps the line breaks. */
-const MULTILINE: ReadonlySet<string> = new Set(['items', 'broadcastMessage', 'emailFooter', 'reviewText']);
+const MULTILINE: ReadonlySet<string> = new Set(['items', 'broadcastMessage', 'emailFooter', 'reviewText', 'contactMessage', 'replyText']);
 /** Variables that are links: in HTML they become a link, and only http(s) is accepted. */
 const LINKS: ReadonlySet<string> = new Set(['trackingLink', 'dashboardLink', 'actionLink', 'storefrontLink', 'unsubscribeLink']);
 
 export interface TemplateDefinition {
   /** The variables the texts may use; every one must have a value when rendering. */
   variables: readonly TemplateVariable[];
+  /**
+   * Variables the texts may use that need no value (Sprint 8, S8-B1: taxLine). A line made of only an optional placeholder is left out entirely when the
+   * value is missing or empty, so an order without tax reads exactly as it did before.
+   */
+  optionalVariables?: readonly TemplateVariable[];
   subject: string;
   /** Lines of the English part. An empty string is a blank line. */
   en: readonly string[];
@@ -96,6 +153,7 @@ export interface TemplateDefinition {
 export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
   order_placed_customer: {
     variables: ['storeName', 'customerName', 'orderNumber', 'items', 'total', 'paymentMethod', 'trackingLink'],
+    optionalVariables: ['taxLine'],
     subject: '{{storeName}}: we received your order {{orderNumber}}',
     en: [
       'Hi {{customerName}},',
@@ -104,6 +162,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       '',
       '{{items}}',
       '',
+      '{{taxLine}}',
       'Total: {{total}}',
       'Payment: {{paymentMethod}}',
       '',
@@ -112,6 +171,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
     ur: [
       '{{customerName}}، السلام علیکم،',
       '{{storeName}} سے آرڈر کرنے کا شکریہ۔ آپ کا آرڈر نمبر {{orderNumber}} ہے۔',
+      '{{taxLine}}',
       'کل رقم: {{total}}',
       'ادائیگی: {{paymentMethod}}',
       'اپنا آرڈر یہاں دیکھیں: {{trackingLink}}',
@@ -120,6 +180,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
   },
   order_placed_seller: {
     variables: ['storeName', 'orderNumber', 'customerName', 'items', 'total', 'paymentMethod', 'city', 'dashboardLink'],
+    optionalVariables: ['taxLine'],
     subject: 'New order {{orderNumber}} for {{storeName}}',
     en: [
       'You have a new order on {{storeName}}.',
@@ -127,6 +188,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'Order: {{orderNumber}}',
       'Customer: {{customerName}}, {{city}}',
       'Payment: {{paymentMethod}}',
+      '{{taxLine}}',
       'Total: {{total}}',
       '',
       '{{items}}',
@@ -137,6 +199,7 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       '{{storeName}} پر نیا آرڈر آیا ہے۔',
       'آرڈر نمبر: {{orderNumber}}',
       'گاہک: {{customerName}}، {{city}}',
+      '{{taxLine}}',
       'کل رقم: {{total}}',
       'آرڈر دیکھیں: {{dashboardLink}}',
     ],
@@ -384,6 +447,50 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
     ],
     whatsapp: 'You left items in your cart at {{storeName}}: {{storefrontLink}}\nآپ کی کارٹ میں سامان رہ گیا ہے۔',
   },
+  store_paused: {
+    variables: ['storeName', 'suspensionReason'],
+    subject: '{{storeName}} was paused',
+    en: [
+      'Your store {{storeName}} was paused by the Markazify team. Shoppers cannot open it or place orders until it is switched on again.',
+      '',
+      'Reason: {{suspensionReason}}',
+      '',
+      'Your products, orders and settings are all kept. Reply to this email if you think this is a mistake.',
+    ],
+    ur: [
+      'آپ کا اسٹور {{storeName}} Markazify ٹیم نے روک دیا ہے۔ دوبارہ چالو ہونے تک خریدار اسے کھول نہیں سکتے اور آرڈر نہیں دے سکتے۔',
+      'وجہ: {{suspensionReason}}',
+      'آپ کی مصنوعات، آرڈرز اور سیٹنگز محفوظ ہیں۔ اگر آپ کو لگتا ہے کہ یہ غلطی ہے تو اس ای میل کا جواب دیں۔',
+    ],
+    whatsapp: 'Your store {{storeName}} was paused: {{suspensionReason}}\nآپ کا اسٹور روک دیا گیا ہے۔',
+  },
+  account_suspended: {
+    variables: ['appName', 'customerName', 'suspensionReason'],
+    subject: '{{appName}}: your account was suspended',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Your {{appName}} account was suspended by our team. While it is suspended you cannot sign in or change your stores.',
+      '',
+      'Reason: {{suspensionReason}}',
+      '',
+      'Your storefront stays online unless a store itself was taken down. Reply to this email if you think this is a mistake.',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کا {{appName}} اکاؤنٹ ہماری ٹیم نے معطل کر دیا ہے۔ معطلی کے دوران آپ سائن اِن نہیں کر سکتے اور اپنے اسٹورز میں تبدیلی نہیں کر سکتے۔',
+      'وجہ: {{suspensionReason}}',
+      'جب تک کسی اسٹور کو خود بند نہ کیا جائے، آپ کا اسٹور آن لائن رہتا ہے۔ اگر آپ کو لگتا ہے کہ یہ غلطی ہے تو اس ای میل کا جواب دیں۔',
+    ],
+    whatsapp: 'Your {{appName}} account was suspended: {{suspensionReason}}\nآپ کا اکاؤنٹ معطل کر دیا گیا ہے۔',
+  },
+  account_reactivated: {
+    variables: ['appName', 'customerName'],
+    subject: '{{appName}}: your account is active again',
+    en: ['Hi {{customerName}},', '', 'Your {{appName}} account is active again. You can sign in and manage your stores as before.'],
+    ur: ['{{customerName}}، السلام علیکم،', 'آپ کا {{appName}} اکاؤنٹ دوبارہ فعال ہو گیا ہے۔ آپ پہلے کی طرح سائن اِن کر کے اپنے اسٹورز چلا سکتے ہیں۔'],
+    whatsapp: 'Your {{appName}} account is active again.\nآپ کا اکاؤنٹ دوبارہ فعال ہو گیا ہے۔',
+  },
   payout_paid: {
     variables: ['storeName', 'payoutAmount', 'payoutMethod', 'payoutReference', 'dashboardLink'],
     subject: '{{storeName}}: we sent you {{payoutAmount}}',
@@ -421,6 +528,278 @@ export const TEMPLATES: Record<TemplateName, TemplateDefinition> = {
       'یہ رقم آپ کے بیلنس میں واپس آ گئی ہے اور اگلی ادائیگی میں شامل ہو گی۔ اپنی کمائی دیکھیں: {{dashboardLink}}',
     ],
     whatsapp: 'The payout of {{payoutAmount}} for {{storeName}} was cancelled: {{voidReason}}. {{dashboardLink}}\nآپ کی ادائیگی منسوخ کر دی گئی ہے۔',
+  },
+  payment_claimed: {
+    variables: ['customerName', 'sellerEmail', 'planName', 'paymentAmount', 'paymentMethod', 'paymentReference'],
+    subject: 'Subscription payment to check: {{customerName}}, {{planName}}, {{paymentAmount}}',
+    en: [
+      '{{customerName}} ({{sellerEmail}}) says they paid for the {{planName}} plan.',
+      '',
+      'Amount: {{paymentAmount}}',
+      'Paid by: {{paymentMethod}}',
+      'Reference: {{paymentReference}}',
+      '',
+      'Check the money in your account, then confirm or reject the payment in the admin console under Subscription payments.',
+    ],
+    ur: [
+      '{{customerName}} ({{sellerEmail}}) کا کہنا ہے کہ انہوں نے {{planName}} پلان کی ادائیگی کر دی ہے۔',
+      'رقم: {{paymentAmount}}',
+      'ذریعہ: {{paymentMethod}}',
+      'حوالہ نمبر: {{paymentReference}}',
+      'اپنے اکاؤنٹ میں رقم دیکھیں، پھر ایڈمن کنسول میں ادائیگی کی تصدیق یا انکار کریں۔',
+    ],
+    whatsapp: '{{customerName}} paid {{paymentAmount}} for {{planName}} ({{paymentMethod}}, ref {{paymentReference}}). Please check and confirm.\nادائیگی کی تصدیق درکار ہے۔',
+  },
+  payment_confirmed: {
+    variables: ['customerName', 'planName', 'paymentAmount', 'periodEnd', 'dashboardLink'],
+    subject: 'Your {{planName}} plan payment of {{paymentAmount}} is confirmed',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Thank you. We received your payment of {{paymentAmount}} and your {{planName}} plan is active until {{periodEnd}}.',
+      '',
+      'See your plan: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'شکریہ۔ آپ کی {{paymentAmount}} کی ادائیگی مل گئی ہے اور آپ کا {{planName}} پلان {{periodEnd}} تک فعال ہے۔',
+      'اپنا پلان دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Your {{planName}} plan payment of {{paymentAmount}} is confirmed. Active until {{periodEnd}}. {{dashboardLink}}\nآپ کی ادائیگی کی تصدیق ہو گئی ہے۔',
+  },
+  payment_rejected: {
+    variables: ['customerName', 'planName', 'paymentAmount', 'paymentReason', 'dashboardLink'],
+    subject: 'About your {{planName}} plan payment of {{paymentAmount}}',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Your payment of {{paymentAmount}} for the {{planName}} plan was not accepted.',
+      '',
+      'Reason: {{paymentReason}}',
+      '',
+      'Your plan page shows where things stand, and you can start again from there: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کی {{planName}} پلان کی {{paymentAmount}} کی ادائیگی قبول نہیں کی گئی۔',
+      'وجہ: {{paymentReason}}',
+      'آپ کے پلان کی موجودہ صورتحال اور دوبارہ کوشش کے لیے: {{dashboardLink}}',
+    ],
+    whatsapp: 'We could not accept your {{paymentAmount}} payment for {{planName}}: {{paymentReason}}. {{dashboardLink}}\nآپ کی ادائیگی قبول نہیں ہوئی۔',
+  },
+  subscription_expiring: {
+    variables: ['customerName', 'planName', 'periodEnd', 'dashboardLink'],
+    subject: 'Your {{planName}} plan ends on {{periodEnd}}',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Your {{planName}} plan ends on {{periodEnd}}. To keep your limits, renew before then.',
+      '',
+      'Renew your plan: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کا {{planName}} پلان {{periodEnd}} کو ختم ہو رہا ہے۔ اپنی حدیں برقرار رکھنے کے لیے اس سے پہلے تجدید کریں۔',
+      'پلان کی تجدید کریں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Your {{planName}} plan ends on {{periodEnd}}. Renew: {{dashboardLink}}\nآپ کا پلان جلد ختم ہو رہا ہے۔',
+  },
+  subscription_expired: {
+    variables: ['customerName', 'planName', 'dashboardLink'],
+    subject: 'Your {{planName}} plan has ended',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Your {{planName}} plan has ended and the Free plan limits now apply. Nothing was deleted: your stores, products and orders are all still there. You just cannot add more than the Free plan allows.',
+      '',
+      'Start again any time: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کا {{planName}} پلان ختم ہو گیا ہے اور اب Free پلان کی حدیں لاگو ہیں۔ کچھ بھی حذف نہیں ہوا: آپ کے اسٹورز، مصنوعات اور آرڈرز سب موجود ہیں۔',
+      'دوبارہ شروع کرنے کے لیے: {{dashboardLink}}',
+    ],
+    whatsapp: 'Your {{planName}} plan has ended; the Free limits now apply. Nothing was deleted. {{dashboardLink}}\nآپ کا پلان ختم ہو گیا ہے۔',
+  },
+  referral_signed_up: {
+    variables: ['customerName', 'referredName', 'dashboardLink'],
+    subject: '{{referredName}} signed up with your referral link',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      '{{referredName}} created a Markazify account with your referral code. If the referral qualifies when they make their first plan payment, you earn free time.',
+      '',
+      'See your referrals: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      '{{referredName}} نے آپ کے ریفرل کوڈ سے اکاؤنٹ بنایا ہے۔ ان کی پہلی پلان ادائیگی پر اہل ہونے کی صورت میں آپ کو مفت مدت ملے گی۔',
+      'اپنے ریفرل دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: '{{referredName}} signed up with your referral code. {{dashboardLink}}\nآپ کے ریفرل کوڈ سے نیا اکاؤنٹ بنا ہے۔',
+  },
+  referral_rewarded: {
+    variables: ['customerName', 'monthsGained', 'rewardNote', 'dashboardLink'],
+    subject: 'Your referral earned you {{monthsGained}} free month(s)',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'A seller you referred paid for their first plan, so you earned {{monthsGained}} free month(s).',
+      '',
+      '{{rewardNote}}',
+      '',
+      'See your plan: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کے ریفر کیے ہوئے سیلر نے اپنی پہلی پلان ادائیگی کر دی ہے، اس لیے آپ کو {{monthsGained}} ماہ مفت ملے ہیں۔',
+      '{{rewardNote}}',
+      'اپنا پلان دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Your referral earned you {{monthsGained}} free month(s). {{rewardNote}} {{dashboardLink}}\nآپ کو مفت مدت ملی ہے۔',
+  },
+  admin_invite: {
+    variables: ['appName', 'customerName', 'actionLink', 'validFor'],
+    subject: '{{appName}}: you have been invited',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'You have been invited to the {{appName}} console. Set your password with this link: {{actionLink}}',
+      '',
+      'The link works once and is valid for {{validFor}}.',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'آپ کو {{appName}} کنسول کی دعوت دی گئی ہے۔ اس لنک سے اپنا پاس ورڈ بنائیں: {{actionLink}}',
+      'یہ لنک ایک بار کام کرتا ہے اور {{validFor}} تک درست ہے۔',
+    ],
+    whatsapp: 'You are invited to {{appName}}. Set your password: {{actionLink}} (valid {{validFor}})\nآپ کو دعوت دی گئی ہے۔',
+  },
+  staff_invite: {
+    variables: ['storeName', 'memberRole', 'invitedBy', 'actionLink', 'validFor'],
+    subject: '{{invitedBy}} invited you to {{storeName}} on Markazify',
+    en: [
+      'Hi,',
+      '',
+      '{{invitedBy}} invited you to join the team of {{storeName}} on Markazify as {{memberRole}}.',
+      '',
+      'Accept the invitation: {{actionLink}}',
+      '',
+      'The link is valid for {{validFor}}. Sign in with, or create an account for, the email address this message was sent to. If you did not expect this, ignore it.',
+    ],
+    ur: [
+      'السلام علیکم،',
+      '{{invitedBy}} نے آپ کو {{storeName}} کی ٹیم میں {{memberRole}} کے طور پر شامل ہونے کی دعوت دی ہے۔',
+      'دعوت قبول کریں: {{actionLink}}',
+      'یہ لنک {{validFor}} تک درست ہے۔',
+    ],
+    whatsapp: '{{invitedBy}} invited you to {{storeName}} as {{memberRole}}: {{actionLink}} (valid {{validFor}})\nآپ کو ٹیم میں شامل ہونے کی دعوت دی گئی ہے۔',
+  },
+  staff_invite_accepted: {
+    variables: ['storeName', 'memberName', 'memberRole', 'dashboardLink'],
+    subject: '{{memberName}} joined {{storeName}}',
+    en: [
+      'Hi,',
+      '',
+      '{{memberName}} accepted your invitation and now works in {{storeName}} as {{memberRole}}.',
+      '',
+      'Manage your team: {{dashboardLink}}',
+    ],
+    ur: [
+      'السلام علیکم،',
+      '{{memberName}} نے آپ کی دعوت قبول کر لی ہے اور اب {{storeName}} میں {{memberRole}} کے طور پر کام کرتے ہیں۔',
+      'ٹیم دیکھیں: {{dashboardLink}}',
+    ],
+    whatsapp: '{{memberName}} joined {{storeName}} as {{memberRole}}. {{dashboardLink}}\nنیا ٹیم ممبر شامل ہو گیا ہے۔',
+  },
+  staff_access_removed: {
+    variables: ['storeName', 'memberName'],
+    subject: 'Your access to {{storeName}} was removed',
+    en: [
+      'Hi {{memberName}},',
+      '',
+      'The owner of {{storeName}} removed your access to the store on Markazify. You can no longer sign in to it.',
+      '',
+      'If you think this is a mistake, ask the store owner.',
+    ],
+    ur: [
+      '{{memberName}}، السلام علیکم،',
+      '{{storeName}} کے مالک نے مارکزیفائی پر اس اسٹور تک آپ کی رسائی ختم کر دی ہے۔',
+      'اگر یہ غلطی لگے تو اسٹور کے مالک سے پوچھیں۔',
+    ],
+    whatsapp: 'Your access to {{storeName}} was removed.\nآپ کی رسائی ختم کر دی گئی ہے۔',
+  },
+  contact_message_store: {
+    variables: ['storeName', 'contactName', 'contactEmail', 'contactPhone', 'contactMessage', 'dashboardLink'],
+    subject: '{{storeName}}: a new message from {{contactName}}',
+    en: [
+      '{{contactName}} wrote to {{storeName}} from the contact form.',
+      '',
+      'Email: {{contactEmail}}',
+      'Phone: {{contactPhone}}',
+      '',
+      '{{contactMessage}}',
+      '',
+      'Read it and answer from your inbox: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{contactName}} نے {{storeName}} کو رابطہ فارم سے پیغام بھیجا ہے۔',
+      'ای میل: {{contactEmail}}',
+      'فون: {{contactPhone}}',
+      'اپنے ان باکس میں پیغام پڑھیں اور جواب دیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'New message from {{contactName}} for {{storeName}}. Open your inbox: {{dashboardLink}}\nنیا پیغام موصول ہوا ہے۔',
+  },
+  contact_message_platform: {
+    variables: ['contactName', 'contactEmail', 'contactMessage'],
+    subject: 'Markazify contact form: {{contactName}}',
+    en: [
+      '{{contactName}} ({{contactEmail}}) wrote through the contact form.',
+      '',
+      '{{contactMessage}}',
+      '',
+      'The message is also in the admin console under Contact messages.',
+    ],
+    ur: [
+      '{{contactName}} ({{contactEmail}}) نے رابطہ فارم سے پیغام بھیجا ہے۔',
+      'پیغام ایڈمن کنسول میں رابطہ پیغامات کے تحت بھی موجود ہے۔',
+    ],
+    whatsapp: 'Contact form: {{contactName}} ({{contactEmail}}) wrote to Markazify.\nنیا رابطہ پیغام۔',
+  },
+  contact_reply: {
+    variables: ['storeName', 'contactName', 'replyText'],
+    subject: '{{storeName}} answered your message',
+    en: [
+      'Hi {{contactName}},',
+      '',
+      '{{storeName}} answered your message:',
+      '',
+      '{{replyText}}',
+    ],
+    ur: [
+      '{{contactName}}، السلام علیکم،',
+      '{{storeName}} نے آپ کے پیغام کا جواب دیا ہے۔',
+    ],
+    whatsapp: '{{storeName}}: {{replyText}}\nآپ کے پیغام کا جواب۔',
+  },
+  ticket_admin_reply: {
+    variables: ['customerName', 'ticketSubject', 'replyText', 'dashboardLink'],
+    subject: 'Markazify support answered: {{ticketSubject}}',
+    en: [
+      'Hi {{customerName}},',
+      '',
+      'Markazify support answered your ticket "{{ticketSubject}}":',
+      '',
+      '{{replyText}}',
+      '',
+      'Open the ticket: {{dashboardLink}}',
+    ],
+    ur: [
+      '{{customerName}}، السلام علیکم،',
+      'مارکازیفائی سپورٹ نے آپ کے ٹکٹ "{{ticketSubject}}" کا جواب دیا ہے۔',
+      'ٹکٹ کھولیں: {{dashboardLink}}',
+    ],
+    whatsapp: 'Support answered "{{ticketSubject}}": {{replyText}}\nسپورٹ کا جواب۔',
   },
   broadcast: {
     variables: ['storeName', 'broadcastSubject', 'broadcastMessage', 'emailFooter', 'unsubscribeLink'],
@@ -467,8 +846,8 @@ export function templateProblems(templates: Record<string, TemplateDefinition> =
   const known = new Set<string>(TEMPLATE_VARIABLES);
   const problems: string[] = [];
   for (const [name, template] of Object.entries(templates)) {
-    const declared = new Set<string>(template.variables);
-    for (const variable of template.variables) {
+    const declared = new Set<string>([...template.variables, ...(template.optionalVariables ?? [])]);
+    for (const variable of [...template.variables, ...(template.optionalVariables ?? [])]) {
       if (!known.has(variable)) problems.push(name + ': declares unknown variable ' + variable);
     }
     for (const text of [template.subject, ...template.en, ...template.ur, template.whatsapp]) {
@@ -497,7 +876,22 @@ function requireValues(name: TemplateName, template: TemplateDefinition, vars: T
     if (typeof value !== 'string' || value.trim() === '') throw new TemplateError(name + ': missing value for ' + variable);
     values[variable] = value;
   }
+  // An optional variable has a value or is empty; it never fails a render.
+  for (const variable of template.optionalVariables ?? []) {
+    const value = vars[variable];
+    values[variable] = typeof value === 'string' ? singleLine(value) : '';
+  }
   return values;
+}
+
+/** The lines to show: a line that is only an optional placeholder with no value is dropped (no blank line is left in its place). */
+function visibleLines(template: TemplateDefinition, lines: readonly string[], values: Record<string, string>): string[] {
+  const optional = new Set<string>(template.optionalVariables ?? []);
+  if (optional.size === 0) return [...lines];
+  return lines.filter((line) => {
+    const only = /^\s*\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}\s*$/.exec(line);
+    return !(only && optional.has(only[1]!) && (values[only[1]!] ?? '') === '');
+  });
 }
 
 function fillText(text: string, values: Record<string, string>, oneLine: boolean): string {
@@ -562,14 +956,16 @@ export function renderTemplate(name: TemplateName, vars: TemplateVars, options: 
 
   const subject = fillText(template.subject, values, true).slice(0, 200);
   const footer = (options.footer ?? '').trim();
-  const baseText = [...template.en.map((line) => fillText(line, values, false)), '', '---', '', ...template.ur.map((line) => fillText(line, values, false))].join('\n');
+  const en = visibleLines(template, template.en, values);
+  const ur = visibleLines(template, template.ur, values);
+  const baseText = [...en.map((line) => fillText(line, values, false)), '', '---', '', ...ur.map((line) => fillText(line, values, false))].join('\n');
   const text = footer ? baseText + '\n\n---\n' + footer : baseText;
   const footerHtml = footer ? '<div dir="auto" style="margin-top:16px;color:#555">' + escapeHtml(footer).replace(/\r?\n/g, '<br>') + '</div>' : '';
   const html =
     '<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111">' +
-    htmlBlock(template.en, values, false) +
+    htmlBlock(en, values, false) +
     '<hr style="border:none;border-top:1px solid #ddd;margin:16px 0">' +
-    htmlBlock(template.ur, values, true) +
+    htmlBlock(ur, values, true) +
     footerHtml +
     '</body></html>';
   const whatsapp = fillText(template.whatsapp, values, false);

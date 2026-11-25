@@ -45,6 +45,7 @@ const ReturnModel = Return as any;
 let entries: Array<Record<string, any>> = [];
 let storeRate: { commissionMode?: string; commissionRate?: number } = {};
 let defaultRate = 4;
+let codRate = 0;
 let createFails = false;
 let aggregateOrders: Array<Record<string, any>> = [];
 let audits: Array<Record<string, any>> = [];
@@ -83,6 +84,7 @@ beforeEach(() => {
   entries = [];
   storeRate = {};
   defaultRate = 4;
+  codRate = 0;
   createFails = false;
   aggregateOrders = [];
   audits = [];
@@ -113,7 +115,7 @@ beforeEach(() => {
   EntryModel.find = (filter: any) =>
     chain(() => entries.filter((e) => String(e.order) === String(filter.order) && (filter.type?.$ne === undefined || e.type !== filter.type.$ne)).map((e) => ({ ...e })));
   StoreModel.findById = () => chain(() => ({ ...storeRate }));
-  SettingsModel.findOne = () => chain(() => ({ defaultCommissionRate: defaultRate }));
+  SettingsModel.findOne = () => chain(() => ({ defaultCommissionRate: defaultRate, codCommissionPercent: codRate }));
   // Sprint 5 EP-13.US03.T07: the backfill also reconciles return reversals. These tests have no returns, so both reads find nothing.
   OrderModel.findOne = () => chain(() => null);
   ReturnModel.find = () => chain(() => []);
@@ -198,6 +200,7 @@ test('a COD order owes its commission only when BOTH delivered and collected', a
 });
 
 test('delivered last or collected last: one cod_commission with the negative balance effect', async () => {
+  codRate = 4;
   // collected first, then the delivered transition completes it
   assert.equal(await recordCodCommission(cod({ status: 'delivered', paymentStatus: 'collected' })), 'created');
   // the other order of events ends in the same state, so the same call is the one that writes
@@ -217,9 +220,11 @@ test('two parallel or repeated calls write one entry (a duplicate key is a succe
 });
 
 test('a rate change after the order does not change the entry', async () => {
+  codRate = 4;
   await recordCodCommission(cod());
   storeRate = { commissionMode: 'custom', commissionRate: 10 };
   defaultRate = 9;
+  codRate = 9;
   assert.equal(await recordCodCommission(cod()), 'exists');
   assert.equal(entries.length, 1);
   assert.equal(entries[0]!.rate, 4);
@@ -227,6 +232,7 @@ test('a rate change after the order does not change the entry', async () => {
 });
 
 test('a discount lowers the base and the commission; delivery stays out', async () => {
+  codRate = 4;
   await recordCodCommission(cod({ subtotal: 2000, discountAmount: 500, total: 1750 }));
   assert.equal(entries[0]!.baseAmount, 1500);
   assert.equal(entries[0]!.balanceEffect, -60);
@@ -330,6 +336,7 @@ test('the backfill writes what is missing, with the current rate, and a second r
   process.env.OUTBOX_CRON_SECRET = CRON;
   aggregateOrders = [cod(), card()];
   defaultRate = 7;
+  codRate = 7;
   const res = await backfillPOST(backfillRequest(CRON));
   assert.equal(res.status, 200);
   assert.deepEqual(await res.json(), { scanned: 2, written: 2, failed: 0 });
@@ -359,11 +366,11 @@ test('a seller reads the rate of their own store, and whether it is custom or th
   stubStores();
   let res = await rateGET(get(STORE_A, tokenA), params(STORE_A));
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { rate: 4, source: 'default' });
+  assert.deepEqual(await res.json(), { gatewayRate: 4, codRate: 0, rate: 4, source: 'default' });
   storeRate = { commissionMode: 'custom', commissionRate: 6.5 };
   stubStores();
   res = await rateGET(get(STORE_A, tokenA), params(STORE_A));
-  assert.deepEqual(await res.json(), { rate: 6.5, source: 'custom' });
+  assert.deepEqual(await res.json(), { gatewayRate: 6.5, codRate: 0, rate: 6.5, source: 'custom' });
 });
 
 test('Seller B and an admin session cannot read the rate of Seller A', async () => {
@@ -385,4 +392,155 @@ test('a seller cannot set a rate: the read route has no write method and the sto
     params(STORE_A),
   );
   assert.equal(res.status, 400);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-12.US04 (D-116): cash on delivery has its own percent (0 by default); the store rate and the default are for the gateway.
+
+test('Sprint 6: at the default 0 percent a COD order STILL writes its entry, with rate 0 and balanceEffect 0 (never -0)', async () => {
+  assert.equal(await recordCodCommission(cod()), 'created');
+  assert.equal(entries.length, 1);
+  const entry = entries[0]!;
+  assert.deepEqual([entry.type, entry.rate, entry.baseAmount, entry.reversesType], ['cod_commission', 0, 2000, null]);
+  assert.equal(entry.balanceEffect, 0);
+  assert.equal(Object.is(entry.balanceEffect, -0), false);
+  // A second call finds the entry: the backfill and the transitions stay idempotent at 0 percent.
+  assert.equal(await recordCodCommission(cod()), 'exists');
+  assert.equal(entries.length, 1);
+});
+
+test('Sprint 6: at 4 percent a COD order owes 4 percent of the base after discount', async () => {
+  codRate = 4;
+  assert.equal(await recordCodCommission(cod({ subtotal: 2000, discountAmount: 500, total: 1750 })), 'created');
+  assert.deepEqual([entries[0]!.rate, entries[0]!.baseAmount, entries[0]!.balanceEffect], [4, 1500, -60]);
+});
+
+test('Sprint 6: a store custom rate does NOT apply to COD, and neither does the default gateway rate', async () => {
+  storeRate = { commissionMode: 'custom', commissionRate: 10 };
+  defaultRate = 9;
+  codRate = 0;
+  await recordCodCommission(cod());
+  assert.deepEqual([entries[0]!.rate, entries[0]!.balanceEffect], [0, 0]);
+
+  codRate = 2.5;
+  await recordCodCommission(cod({ _id: ORDER_2 }));
+  const second = entries.find((e) => String(e.order) === ORDER_2)!;
+  assert.deepEqual([second.rate, second.balanceEffect], [2.5, -50]);
+});
+
+test('Sprint 6: the COD percent has one decimal, like every rate', async () => {
+  codRate = 3.04;
+  await recordCodCommission(cod());
+  assert.equal(entries[0]!.rate, 3);
+});
+
+test('Sprint 6: card orders keep the gateway rate: the store custom rate, else the default, whatever the COD percent is', async () => {
+  codRate = 0;
+  await recordCardEntries(card({ subtotal: 2000, discountAmount: 0 }));
+  assert.equal(entries.find((e) => e.type === 'card_commission')!.balanceEffect, -80);
+  assert.equal(entries.find((e) => e.type === 'card_commission')!.rate, 4);
+
+  entries = [];
+  storeRate = { commissionMode: 'custom', commissionRate: 6 };
+  codRate = 1;
+  await recordCardEntries(card({ subtotal: 2000, discountAmount: 0 }));
+  const fee = entries.find((e) => e.type === 'card_commission')!;
+  assert.deepEqual([fee.rate, fee.balanceEffect], [6, -120]);
+  assert.equal(entries.find((e) => e.type === 'card_sale')!.balanceEffect, 2250);
+});
+
+test('Sprint 6: codCommissionRate reads the setting, then the COD_COMMISSION_PERCENT environment variable, then 0', async () => {
+  const { codCommissionRate } = await import('../src/lib/commission');
+  codRate = 3;
+  assert.equal(await codCommissionRate(), 3);
+  SettingsModel.findOne = () => chain(() => null);
+  assert.equal(await codCommissionRate(), 0);
+  process.env.COD_COMMISSION_PERCENT = '2';
+  try {
+    assert.equal(await codCommissionRate(), 2);
+  } finally {
+    delete process.env.COD_COMMISSION_PERCENT;
+  }
+});
+
+// ----------------------------------------------------------------- backfill, reversal and reconcile at 0 percent and at x percent (EP-12.US04.T02)
+
+test('Sprint 6: an order that already has an entry is never rewritten when the COD percent changes (no retroactive commission)', async () => {
+  codRate = 0;
+  await recordCodCommission(cod());
+  const before = { ...entries[0]! };
+  codRate = 4;
+  assert.equal(await recordCodCommission(cod()), 'exists');
+  codRate = 0;
+  assert.equal(await recordCodCommission(cod()), 'exists');
+  assert.equal(entries.length, 1);
+  assert.deepEqual(entries[0], before);
+
+  // and the other way round: an entry written at 4 percent keeps 4 percent when the setting drops to 0
+  entries = [];
+  codRate = 4;
+  await recordCodCommission(cod());
+  codRate = 0;
+  assert.equal(await recordCodCommission(cod()), 'exists');
+  assert.deepEqual([entries[0]!.rate, entries[0]!.balanceEffect], [4, -80]);
+});
+
+test('Sprint 6: the backfill writes a zero entry for a COD order that lacks one, and a second run finds nothing left (it cannot loop at 0 percent)', async () => {
+  process.env.OUTBOX_CRON_SECRET = CRON;
+  aggregateOrders = [cod()];
+  codRate = 0;
+  assert.deepEqual(await backfillCommission(), { scanned: 1, written: 1, failed: 0 });
+  assert.deepEqual([entries[0]!.rate, entries[0]!.balanceEffect], [0, 0]);
+  assert.deepEqual(await backfillCommission(), { scanned: 0, written: 0, failed: 0 });
+  assert.equal(entries.length, 1);
+});
+
+test('Sprint 6: the backfill leaves an order with an entry alone when the percent has changed since (it only selects orders without one)', async () => {
+  codRate = 0;
+  await recordCodCommission(cod());
+  aggregateOrders = [cod()];
+  codRate = 5;
+  assert.deepEqual(await backfillCommission(), { scanned: 0, written: 0, failed: 0 });
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0]!.rate, 0);
+});
+
+test('Sprint 6: the backfill selection still asks only for orders with fewer entries than they owe (one for COD, two for card)', async () => {
+  const { ordersMissingEntries } = await import('../src/lib/commission-backfill');
+  let pipeline: any[] = [];
+  OrderModel.aggregate = async (stages: any[]) => {
+    pipeline = stages;
+    return [];
+  };
+  await ordersMissingEntries();
+  const text = JSON.stringify(pipeline);
+  assert.ok(text.includes('"$lt":[{"$size":"$entries"}'), 'the entries lookup decides');
+  assert.ok(text.includes('commissionentries'));
+  assert.ok(text.includes('"paymentMethod":"cod","status":"delivered","paymentStatus":"collected"'));
+});
+
+test('Sprint 6: reverseLedgerForOrder with a zero COD entry writes a zero reversal and no error, and a repeat is a no-op', async () => {
+  codRate = 0;
+  await recordCodCommission(cod());
+  const first = await reverseLedgerForOrder(ORDER_1, 'cancelled');
+  assert.deepEqual(first, { written: 1, existing: 0, failed: 0 });
+  const reversal = entries.find((e) => e.type === 'reversal')!;
+  assert.equal(reversal.balanceEffect, 0);
+  assert.equal(Object.is(reversal.balanceEffect, -0), false);
+  assert.equal(reversal.reversesType, 'cod_commission');
+  assert.deepEqual(await reverseLedgerForOrder(ORDER_1, 'cancelled'), { written: 0, existing: 1, failed: 0 });
+});
+
+test('Sprint 6: reverseLedgerForOrder at x percent gives back exactly what was taken', async () => {
+  codRate = 4;
+  await recordCodCommission(cod());
+  assert.deepEqual(await reverseLedgerForOrder(ORDER_1, 'cancelled'), { written: 1, existing: 0, failed: 0 });
+  assert.equal(entries.find((e) => e.type === 'reversal')!.balanceEffect, 80);
+  // the percent changed in between: the reversal follows the ORIGINAL entry, not the setting
+  entries = [];
+  codRate = 4;
+  await recordCodCommission(cod());
+  codRate = 0;
+  await reverseLedgerForOrder(ORDER_1, 'cancelled');
+  assert.equal(entries.find((e) => e.type === 'reversal')!.balanceEffect, 80);
 });

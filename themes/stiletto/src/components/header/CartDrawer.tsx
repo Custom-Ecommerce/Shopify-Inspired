@@ -275,6 +275,13 @@ export function CartDrawer(props: CartDrawerProps) {
                 </span>
               </div>
 
+              {check.tax && (
+                <div className="flex justify-between items-center text-[12px] font-sans tracking-[0.05em] text-[var(--nav-mobile-text)]/80" data-section="cart-tax">
+                  <span>{check.tax.label}</span>
+                  <span className="font-medium">{check.tax.amount.formatted}</span>
+                </div>
+              )}
+
               {check.blockReason && (
                 <p role="alert" className="text-[11px] text-center text-[var(--status-error-text)]">{check.blockReason}</p>
               )}

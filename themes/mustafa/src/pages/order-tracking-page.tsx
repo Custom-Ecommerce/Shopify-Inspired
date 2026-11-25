@@ -1,6 +1,6 @@
 "use client";
 
-import { toMoney } from "@markaz/storefront-data";
+import { toMoney, toTaxLine } from "@markaz/storefront-data";
 import type { OrderTrackingPageProps, StorefrontOrder } from "@markaz/storefront-data";
 import { useOrderLookup } from "@markaz/storefront-data/client";
 import type { OrderLookupFailure, UseOrderLookupResult } from "@markaz/storefront-data/client";
@@ -137,6 +137,8 @@ function OrderDetails({ order }: { order: StorefrontOrder }) {
     year: "numeric",
   });
   const money = (amount: number) => toMoney(amount).formatted;
+  // Sprint 8 (S8-B1): the order's own tax snapshot; no line when it has none.
+  const taxLine = toTaxLine(order);
 
   return (
     <Card>
@@ -212,6 +214,12 @@ function OrderDetails({ order }: { order: StorefrontOrder }) {
               <div className="flex items-center justify-between">
                 <dt className="text-(color:--mu-fg-muted)">Discount</dt>
                 <dd className="tabular-nums">-{money(order.discount)}</dd>
+              </div>
+            ) : null}
+            {taxLine ? (
+              <div className="flex items-center justify-between">
+                <dt className="text-(color:--mu-fg-muted)">{taxLine.label}</dt>
+                <dd className="tabular-nums">{taxLine.amount.formatted}</dd>
               </div>
             ) : null}
             <div className="flex items-center justify-between pt-2 text-base">

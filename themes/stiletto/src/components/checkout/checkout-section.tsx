@@ -335,6 +335,7 @@ export function CheckoutSection({
     deliveryCharges,
     deliveryCityKnown,
     discount,
+    tax,
     storedCode,
     appliedCode,
     codeError,
@@ -742,6 +743,13 @@ export function CheckoutSection({
                     <div className="flex justify-between items-center">
                       <span>Discount{appliedCode ? ` (${appliedCode})` : ""}</span>
                       <span className="text-[var(--text-inverse)] font-medium">-{formatCurrency(discount)}</span>
+                    </div>
+                  )}
+
+                  {tax && (
+                    <div className="flex justify-between items-center" data-section="checkout-tax">
+                      <span>{tax.label}</span>
+                      <span className="text-[var(--text-inverse)] font-medium">{tax.amount.formatted}</span>
                     </div>
                   )}
 

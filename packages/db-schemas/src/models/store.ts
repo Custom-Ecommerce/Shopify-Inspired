@@ -21,6 +21,11 @@ slug: string;
 internalHandle?: string | null;
 domain?: string | null;
 customDomainStatus: (typeof CUSTOM_DOMAIN_STATUSES)[number];
+/** S7-B5: the random token a seller puts in the _markazify-verify TXT record. Never selected by default, never shown to another seller. */
+domainToken?: string | null;
+domainCheckedAt?: Date | null;
+/** A short code (token_missing, target_wrong, dns_error, dns_timeout, vercel_failed) of the last failed check. */
+domainFailureReason?: string | null;
 isThemeDemo: boolean;
 /** The demo category and product were seeded. Stays true after the seller deletes them, so they never come back. */
 demoSeeded: boolean;
@@ -58,6 +63,9 @@ slug: { type: String, required: true, unique: true },
 internalHandle: { type: String, unique: true, sparse: true },
 domain: { type: String },
 customDomainStatus: { type: String, enum: [...CUSTOM_DOMAIN_STATUSES], default: 'unset' },
+domainToken: { type: String, select: false },
+domainCheckedAt: { type: Date },
+domainFailureReason: { type: String },
 isThemeDemo: { type: Boolean, default: false },
 demoSeeded: { type: Boolean, default: false },
 owner: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
@@ -85,9 +93,10 @@ goLiveRequestedAt: { type: Date, default: null },
 { timestamps: true, collection: 'stores' },
 );
 
-// Custom-domain resolution (GET /api/storefront/v1/stores/by-key/:key?by=domain). Not unique: uniqueness
-// is enforced when a domain is connected.
-StoreSchema.index({ domain: 1 }, { sparse: true });
+// Custom-domain resolution (GET /api/storefront/v1/stores/by-key/:key?by=domain). S7-B5: UNIQUE, and only for a store that has
+// a host (partial on a string), so two stores can never hold one host (domain takeover). It replaces the old non-unique sparse
+// index of the same key: that index (domain_1) has to be dropped once before ensure-indexes can create this one.
+StoreSchema.index({ domain: 1 }, { unique: true, partialFilterExpression: { domain: { $type: 'string' } } });
 
 // The rates list and the stores list are newest first.
 StoreSchema.index({ createdAt: -1, _id: -1 });

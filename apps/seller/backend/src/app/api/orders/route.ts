@@ -52,7 +52,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     });
 
     const where = parseWhereParam(params.get('where'));
-    const storeId = await resolveOwnedStoreId(request, ctx, where);
+    const storeId = await resolveOwnedStoreId(request, ctx, where, { capability: 'orders.read' });
 
     if (mode.mode === 'legacy') {
       const userFilter = buildFilter(where, ORDER_FIELDS);

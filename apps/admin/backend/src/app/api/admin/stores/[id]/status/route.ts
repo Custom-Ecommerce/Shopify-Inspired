@@ -1,6 +1,7 @@
 import { AdminHttpError, errorResponse } from '@/lib/admin-auth';
 import { authorizeAdmin, NO_STORE, requirePolicy } from '@/lib/admin-session';
 import { isObjectId, toIso, type Doc } from '@/lib/admin-stores';
+import { queueStorePausedNotice } from '@/lib/seller-notices';
 import { GOVERNANCE_FIELDS, parseStatusChange, planStatusChange, readBefore, revertUpdate, type StoreStateBefore } from '@/lib/governance';
 import {
   assertCan,
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 registerSyncOutboxModel(SyncOutbox as unknown as SyncOutboxModelPort);
 
-const BEFORE_FIELDS = 'name status suspensionReason suspensionNote suspendedAt statusChangedAt govRevision';
+const BEFORE_FIELDS = 'name owner status suspensionReason suspensionNote suspendedAt statusChangedAt govRevision';
 
 export interface StatusRouteContext {
   params: Promise<{ id: string }>;
@@ -81,7 +82,7 @@ async function rollBack(args: {
  */
 export async function POST(request: Request, context: StatusRouteContext): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'stores.status');
     requirePolicy(() => {
       assertCan('admin', 'update', 'stores', GOVERNANCE_FIELDS);
       assertCan('system', 'create', 'sync-outbox');
@@ -150,6 +151,8 @@ export async function POST(request: Request, context: StatusRouteContext): Promi
     }
 
     const suspended = plan.action === 'suspend';
+    // Sprint 6 EP-12.US02.T03 (CO-82): a paused (suspended) store tells its owner, with the operator's reason, after the response.
+    if (suspended) queueStorePausedNotice({ storeId: id, storeName: String(found.name ?? ''), ownerId: found.owner, reason: input.data.reason, at: now });
     return Response.json(
       {
         store: {

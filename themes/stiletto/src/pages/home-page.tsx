@@ -23,6 +23,7 @@ export function HomePage(_props: ContractHomePageProps) {
       footerConfig={content.footerConfig}
       promoBanner={content.promoBanner}
       productShowcase={content.productShowcase}
+      sections={content.sections}
     />
   );
 }

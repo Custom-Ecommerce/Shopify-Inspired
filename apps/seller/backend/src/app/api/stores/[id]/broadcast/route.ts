@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const query = readQuery(request, broadcastListQuerySchema);
     assertCan(ctx.actor, 'read', 'broadcasts');
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'broadcast.manage');
     return NextResponse.json(await listBroadcasts(String(store._id), query), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const input = await readAccountBody(request, createBroadcastRequestSchema);
     assertCan(ctx.actor, 'create', 'broadcasts');
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner storefront');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner storefront', 'broadcast.manage');
     await requireVerifiedEmail(ctx);
     const row = await createBroadcast(ctx, { id: String(store._id), name: String(store.name ?? 'Your store'), footer: readMessages(store.storefront).emailFooter }, input);
     return NextResponse.json(row, { status: 201, headers: { 'Cache-Control': 'no-store' } });

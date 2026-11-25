@@ -4,6 +4,7 @@ import type { ProductListSort, ProductListStatus } from '@markaz/contracts';
 import { authenticate } from '@/lib/auth';
 import { PRODUCT_LIST_SORTS, PRODUCT_LIST_STATUSES, productCreateRequestSchema } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
+import { assertProductSlot } from '@/lib/plan';
 import { HttpError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { parseBody } from '@/lib/placeholder';
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'products');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'products.read' });
 
     const params = request.nextUrl.searchParams;
     const page = parseIntParam(params.get('page'), 1, 1, 100000);
@@ -136,6 +137,8 @@ export async function GET(request: NextRequest): Promise<Response> {
  *   422 PRODUCT_MEDIA_INVALID     an image is not from this store
  *   422 INVALID_VARIANTS, 409 SKU_TAKEN   see prepareProductVariants. The unique (store, skus) index decides a race
  *   409 PRODUCT_SLUG_TAKEN        said plainly when the holder is in trash (D-041). The unique (store, slug) index decides a race
+ *   400 STORE_ID_REQUIRED         no store was named (CO-72)
+ *   403 PLAN_LIMIT_REACHED        the plan's product limit is reached (Sprint 6); an edit or a delete is never refused for it
  */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -145,7 +148,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     const data = body.data;
     assertCan(ctx.actor, 'create', 'products', createdFields(data));
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'products.write' });
+    // Sprint 6 EP-14 (D-118): after the checks of who and which store, before the write. Over the limit: 403 PLAN_LIMIT_REACHED.
+    await assertProductSlot(storeId);
 
     const document = await prepareProductCreate(storeId, data);
     const created = await withSkuGuard(() => Product.create(document));

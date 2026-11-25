@@ -8,13 +8,17 @@ import { DataTable, TablePagination, type Column } from "@/components/shared/dat
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { listSellers } from "@/lib/api/client";
+import { getSellerPlans, listSellers } from "@/lib/api/client";
 import type { AdminSellerListItem } from "@/lib/contracts";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
 import { useDebouncedSearch } from "@/lib/hooks/use-debounced-search";
 import { parseSellerListState, sellerStateToQuery, type SellerListState } from "@/lib/sellers";
 import { SellerStatusDialog } from "@/components/sellers/seller-status-dialog";
+import { StoreLimitDialog } from "@/components/sellers/store-limit-dialog";
+import { Badge } from "@/components/ui/badge";
+import { PLAN_STATUS_TONE, apiKeysText, atLimit, plansBySeller, planSummaryLine, sellerIdsOf, usageText } from "@/lib/seller-plans";
+import type { AdminSellerPlan } from "@/lib/contracts";
 
 const COLUMNS: Array<Column<AdminSellerListItem>> = [
   {
@@ -36,11 +40,17 @@ const COLUMNS: Array<Column<AdminSellerListItem>> = [
       ) : (
         <ul className="flex min-w-0 flex-col gap-1" aria-label={"Stores of " + seller.name}>
           {seller.stores.map((store) => (
-            <li key={store.id} className="flex min-w-0 items-center gap-2">
+            <li key={store.id} className="flex min-w-0 flex-wrap items-center gap-2">
               <Link href={"/stores/" + store.id} className="truncate text-primary underline-offset-4 hover:underline">
                 {store.name}
               </Link>
               <StatusBadge status={store.status} />
+              {store.members && store.members.active + store.members.invited > 0 ? (
+                <span className="shrink-0 text-xs text-muted-foreground" title={store.members.active + " active, " + store.members.invited + " invited"}>
+                  {store.members.active} {store.members.active === 1 ? "member" : "members"}
+                  {store.members.invited > 0 ? ", " + store.members.invited + " invited" : ""}
+                </span>
+              ) : null}
             </li>
           ))}
           {seller.storeCount > seller.stores.length ? <li className="text-xs text-muted-foreground">+{seller.storeCount - seller.stores.length} more</li> : null}
@@ -86,25 +96,44 @@ export function SellersView() {
 
   const filtered = state.q !== "";
 
+  // Sprint 6 EP-14.US02.T08: the plan, status and usage of the sellers on this page, through a signed call to the seller backend. A separate
+  // fetch: if it fails the list still shows, and the Plan column shows a dash.
+  const ids = data ? sellerIdsOf(data.docs) : [];
+  const plansFetch = useAdminFetch(async (signal) => (ids.length === 0 ? null : getSellerPlans(ids, signal)), [ids.join(",")]);
+  const plans = useMemo(() => plansBySeller(plansFetch.data?.plans ?? []), [plansFetch.data]);
+
   // Sprint 4 EP-08.US03.T02: suspend or unsuspend, behind a confirm dialog.
   const [changing, setChanging] = useState<AdminSellerListItem | null>(null);
+  // Sprint 6 EP-12.US02.T03: the Store limit dialog.
+  const [limiting, setLimiting] = useState<AdminSellerListItem | null>(null);
   const columns = useMemo<Array<Column<AdminSellerListItem>>>(
     () => [
       ...COLUMNS,
       {
+        key: "plan",
+        header: "Plan",
+        cell: (seller) => <PlanCell plan={plans.get(seller.id) ?? null} unavailable={plansFetch.error !== null} />,
+      },
+      {
         key: "actions",
         header: "Actions",
-        cell: (seller) =>
-          seller.accountStatus === "blocked" ? (
-            <span className="text-xs text-muted-foreground">Blocked</span>
-          ) : (
-            <Button variant={seller.accountStatus === "suspended" ? "outline" : "destructive"} size="sm" onClick={() => setChanging(seller)}>
-              {seller.accountStatus === "suspended" ? "Unsuspend" : "Suspend"}
+        cell: (seller) => (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" aria-label={"Store limit of " + seller.name} onClick={() => setLimiting(seller)}>
+              Store limit
             </Button>
-          ),
+            {seller.accountStatus === "blocked" ? (
+              <span className="self-center text-xs text-muted-foreground">Blocked</span>
+            ) : (
+              <Button variant={seller.accountStatus === "suspended" ? "outline" : "destructive"} size="sm" onClick={() => setChanging(seller)}>
+                {seller.accountStatus === "suspended" ? "Unsuspend" : "Suspend"}
+              </Button>
+            )}
+          </div>
+        ),
       },
     ],
-    [],
+    [plans, plansFetch.error],
   );
 
   return (
@@ -137,6 +166,7 @@ export function SellersView() {
       ) : null}
       <DataTable
         label="Sellers"
+        stackOnPhone
         columns={columns}
         rows={data?.docs ?? []}
         rowKey={(seller) => seller.id}
@@ -158,7 +188,38 @@ export function SellersView() {
         />
       ) : null}
 
+      {limiting ? (
+        <StoreLimitDialog
+          seller={limiting}
+          onClose={() => setLimiting(null)}
+          onDone={() => {
+            setLimiting(null);
+            refetch();
+          }}
+        />
+      ) : null}
+
       {data ? <TablePagination page={data.page} totalPages={data.totalPages} totalDocs={data.totalDocs} noun="seller" disabled={loading} onPage={(page) => go({ ...state, page })} /> : null}
+    </div>
+  );
+}
+
+/** Sprint 6 EP-14.US02.T08: the plan name and status, the usage against the stores and products limits, and the API key count (S8-B5). A dash while it loads or if it failed. */
+function PlanCell({ plan, unavailable }: { plan: AdminSellerPlan | null; unavailable: boolean }) {
+  if (plan === null) return <span className="text-muted-foreground" title={unavailable ? "The plan could not be loaded" : undefined}>-</span>;
+  return (
+    <div className="flex min-w-0 flex-col gap-1" data-slot="seller-plan">
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">{plan.plan.name}</span>
+        <Badge variant={PLAN_STATUS_TONE[plan.status]}>{planSummaryLine(plan)}</Badge>
+      </span>
+      <span className={"text-xs " + (atLimit(plan.used.stores, plan.limits.stores) ? "font-medium text-foreground" : "text-muted-foreground")}>
+        Stores {usageText(plan.used.stores, plan.limits.stores)}
+      </span>
+      <span className={"text-xs " + (atLimit(plan.used.products, plan.limits.products) ? "font-medium text-foreground" : "text-muted-foreground")}>
+        Products {usageText(plan.used.products, plan.limits.products)}
+      </span>
+      <span className="text-xs text-muted-foreground">{apiKeysText(plan)}</span>
     </div>
   );
 }

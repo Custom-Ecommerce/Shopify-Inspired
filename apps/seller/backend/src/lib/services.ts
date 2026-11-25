@@ -59,6 +59,9 @@ export const Media = db.Media;
 
 // B10.4 shims: the store article and order models.
 export const StoreArticle = db.StoreArticle;
+export const StorePage = db.StorePage;
+export const ContactMessage = db.ContactMessage;
+export const SupportTicket = db.SupportTicket;
 export const Order = db.Order;
 // Track B shims: the storefront API reads stores and the catalog.
 export const Store = db.Store;
@@ -68,7 +71,13 @@ export const StockMovement = db.StockMovement;
 export const ArchivedReview = db.ArchivedReview;
 // Sprint 4 EP-07: the notification outbox and the seller's in-app alerts.
 export const NotificationOutbox = db.NotificationOutbox;
+// Sprint 6 (S6-B7): the retention purge reads the sent sync events.
+export const SyncOutbox = db.SyncOutbox;
 export const SellerAlert = db.SellerAlert;
+// Sprint 8 (S8-B2, D-118): the team of a store (staff roles and invites).
+export const StoreMember = db.StoreMember;
+// Sprint 8 (S8-B4, D-118): the API keys of a store.
+export const ApiKey = db.ApiKey;
 // Sprint 4 EP-05 (D-088): the new commission ledger. The old commissionLedger is never used from the seller backend.
 export const CommissionEntry = db.CommissionEntry;
 // Sprint 4 EP-05.US03 (D-090): payouts to stores, settled against the ledger above.
@@ -78,6 +87,17 @@ export const Payout = db.Payout;
 export const AuthToken = db.AuthToken;
 // Sprint 4 EP-04.US06 (D-095): go-live reads storeApprovalRequired from the platform settings.
 export const PlatformSettingsModel = db.PlatformSettingsModel;
+// Sprint 6 EP-14 (D-118): GET /api/plans reads the active subscription plans.
+export const SubscriptionPlanModel = db.SubscriptionPlanModel;
+// Sprint 6 EP-14 (D-118): a seller's subscription decides the plan limits that are enforced.
+export const Subscription = db.Subscription;
+// Sprint 8 (S8-B6): free months earned by referrals.
+export const SubscriptionCredit = db.SubscriptionCredit;
+// Sprint 8 (S8-B6): the anonymous storefront counters.
+export const DailyStat = db.DailyStat;
+export const ProductDailyStat = db.ProductDailyStat;
+// Sprint 6 (S6-B4): manual subscription payments (requested, claimed, confirmed, rejected, void).
+export const SubscriptionPayment = db.SubscriptionPayment;
 export const PLATFORM_SETTINGS_GLOBAL_TYPE = db.PLATFORM_SETTINGS_GLOBAL_TYPE;
 export const {
   createSessionGuard,
@@ -101,6 +121,18 @@ export const {
   sendEmailVerification,
   requestEmailChange,
   confirmEmailToken,
+  // Sprint 8 (S8-B2, D-118): invite tokens (the hash is stored, the raw value is in the link) and the seller capability matrix.
+  generateRawToken,
+  hashAuthToken,
+  isRawTokenShape,
+  sellerCan,
+  SELLER_ROLES,
+  SELLER_CAPABILITIES,
+  OWNER_ONLY_CAPABILITIES,
+  sellerCapabilities,
+  isStaffRole,
+  isSellerRole,
+  settingsGroupCapabilities,
 } = auth;
 
 // Sprint 4 EP-07.US04 (D-092): broadcasts and unsubscribes (seller database).

@@ -137,6 +137,7 @@ export function CartPage(_props: CartPageProps) {
             <CardContent className="flex flex-col gap-3">
               <SummaryRow label="Subtotal" value={(priced ? priced.subtotal : subtotal).formatted} />
               {priced ? <SummaryRow label="Delivery" value={priced.deliveryCharges.formatted} /> : null}
+              {priced?.tax ? <SummaryRow label={priced.tax.label} value={priced.tax.amount.formatted} /> : null}
               {priced ? <SummaryRow label="Total" value={priced.total.formatted} strong /> : null}
 
               {quote.status === "loading" ? (

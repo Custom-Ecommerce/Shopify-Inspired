@@ -7,6 +7,7 @@ import {
   storefrontOrderLineRequestSchema,
 } from "@markaz/contracts/checkout";
 import { MAX_LINE_QTY } from "../domain/cart";
+import { storefrontBrowserEventSchema } from "@markaz/contracts/storefront-events";
 import { ORDER_OUTCOME_UNKNOWN_CODE, OrderRejectedError, TransportUnavailableError, ReturnRefusedError, ReviewRefusedError } from "../transport/errors";
 import type { OrderRejection, OrderTransport } from "../transport/types";
 import { FAVOURITES_PAGE_SIZE } from "../domain/favourites";
@@ -60,6 +61,10 @@ export interface BffRoutes {
   productReviews(request: Request, context: BffRouteContext): Promise<Response>;
   /** Sprint 5 EP-28: keeps the shopper's cart for the seller ({ phone, email?, consent: true, lines }). Same gates as lookup; the backend prices the cart. */
   abandonedCart(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Sprint 7 (S7-B4): a shopper's message to the store ({ name, email?, phone?, message, consent: true, website? }). Same gates as lookup; answers 201 { data: { received: true } } only once the store has kept it. */
+  contact(request: Request, context: BffRouteContext): Promise<Response>;
+  /** Sprint 8 (S8-B6): one anonymous counter event ({ event, productSlug? }). Same gates; the store is the host's, never the body's. */
+  event(request: Request, context: BffRouteContext): Promise<Response>;
   /** The Live products behind a browser's favourites: GET ?ids=a,b. Public data, so it has no origin gate. */
   products(request: Request, context: BffRouteContext): Promise<Response>;
 }
@@ -125,6 +130,16 @@ const abandonedCartBody = z.object({
   email: z.string().trim().max(254).nullish(),
   consent: z.literal(true),
   lines: z.array(storefrontOrderLineRequestSchema).min(1).max(STOREFRONT_ORDER_MAX_LINES),
+});
+
+/** Sprint 7 (S7-B4): the contact form. Limits mirror storeContactRequestSchema in @markaz/contracts; the backend checks them again and is the one that decides. */
+const contactBody = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().max(200).nullish(),
+  phone: z.string().trim().max(30).nullish(),
+  message: z.string().trim().min(1).max(3000),
+  consent: z.literal(true),
+  website: z.string().max(500).nullish(),
 });
 
 const confirmationBody = z.object({
@@ -406,6 +421,13 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
   return {
     products: (request, context) => products(request, context, deps),
 
+    event: (request, context) =>
+      handle(request, context, storefrontBrowserEventSchema, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        if (!transport.recordEvent) return { kind: "error", status: 503, code: "STOREFRONT_UNAVAILABLE", message: "Storefront data is temporarily unavailable." };
+        await transport.recordEvent(input);
+        return { kind: "data", status: 200, data: { received: true } };
+      }),
+
     quote: (request, context) =>
       handle(request, context, quoteBody, deps, { needsIdempotencyKey: false }, async (transport, input) => ({
         kind: "data",
@@ -488,6 +510,13 @@ export function createBffRoutes(deps: BffDeps): BffRoutes {
           lines: input.lines.map((line) => ({ productId: line.productId, ...(line.variantId === undefined ? {} : { variantId: line.variantId }), qty: line.qty })),
         });
         return { kind: "data", status: 200, data: { saved: true } };
+      }),
+
+    contact: (request, context) =>
+      handle(request, context, contactBody, deps, { needsIdempotencyKey: false }, async (transport, input) => {
+        if (!transport.submitContact) return { kind: "error", status: 503, code: "STOREFRONT_UNAVAILABLE", message: "Storefront data is temporarily unavailable." };
+        await transport.submitContact({ name: input.name, email: input.email ?? null, phone: input.phone ?? null, message: input.message, consent: true, website: input.website ?? null });
+        return { kind: "data", status: 201, data: { received: true } };
       }),
 
     track: (request, context) =>

@@ -15,6 +15,11 @@ import { CommissionEntry, Store, writeAuditLog } from '@/lib/services';
  * subtotal and discountAmount. Every write is best effort: it logs without secrets, never throws and never blocks the
  * transition that caused it. The unique index { order, type, reversesType } makes a repeat or a parallel write a no-op, so
  * a duplicate key counts as success. A backfilled entry uses the rate that applies NOW.
+ *
+ * Sprint 6 D-116: cash on delivery has its OWN percent, the platform setting codCommissionPercent (default 0). A store's custom rate and
+ * the platform default rate belong to GATEWAY (card) orders only. At 0 percent a COD order STILL writes its cod_commission entry, with rate 0
+ * and balanceEffect 0: earnings, the admin report and the backfill all count entries. An entry already written is never rewritten when the
+ * percent changes (the unique index makes the repeat a no-op), so a change applies to orders collected after it, never retroactively.
  */
 
 export const COMMISSION_RATE_MAX = 100;
@@ -35,7 +40,10 @@ export interface StoreRateFields {
 
 export type RateSource = 'custom' | 'default';
 
-/** The store's custom rate when it has one (mode custom and a valid rate), else the platform default; one decimal. */
+/**
+ * The GATEWAY (card) rate: the store's custom rate when it has one (mode custom and a valid rate), else the platform default;
+ * one decimal. Cash on delivery does not use it (codCommissionRate).
+ */
 export async function commissionRateAndSource(store: StoreRateFields | null): Promise<{ rate: number; source: RateSource }> {
   if (store && store.commissionMode === 'custom' && validRate(store.commissionRate)) {
     return { rate: roundRate(store.commissionRate), source: 'custom' };
@@ -46,6 +54,14 @@ export async function commissionRateAndSource(store: StoreRateFields | null): Pr
 
 export async function commissionRateFor(store: StoreRateFields | null): Promise<number> {
   return (await commissionRateAndSource(store)).rate;
+}
+
+/**
+ * Sprint 6 D-116: the commission percent on cash-on-delivery orders: the platform setting codCommissionPercent (document, then the
+ * COD_COMMISSION_PERCENT environment variable, then 0), one decimal. A store's custom rate does NOT apply here.
+ */
+export async function codCommissionRate(): Promise<number> {
+  return roundRate((await readPlatformSettings()).codCommissionPercent);
 }
 
 /**
@@ -130,13 +146,14 @@ export function codCommissionDue(order: LedgerOrder): boolean {
 
 /**
  * Writes the order's cod_commission when it is due. Safe to call from both events (delivered, collected): only the call that
- * sees both states writes, and a second one finds the entry. Never throws.
+ * sees both states writes, and a second one finds the entry. Never throws. The rate is the platform COD percent (0 by default, D-116);
+ * at 0 the entry is still written (rate 0, balanceEffect 0).
  */
 export async function recordCodCommission(order: LedgerOrder): Promise<'created' | 'exists' | 'not_due' | 'failed'> {
   if (!codCommissionDue(order)) return 'not_due';
   if (!ledgerReady()) return 'failed';
   try {
-    const { rate } = await commissionRateAndSource(await storeRateFields(order.store));
+    const rate = await codCommissionRate();
     const base = commissionBase(order);
     const result = await writeEntry({ store: order.store, order: order._id, type: 'cod_commission', balanceEffect: -commissionFor(base, rate), baseAmount: base, rate });
     return result;
@@ -146,7 +163,7 @@ export async function recordCodCommission(order: LedgerOrder): Promise<'created'
   }
 }
 
-/** The card sale and its commission, once the order is paid. Each entry is idempotent on its own. Never throws. */
+/** The card sale and its commission, once the order is paid, at the GATEWAY rate (store custom rate, else the default). Each entry is idempotent on its own. Never throws. */
 export async function recordCardEntries(order: LedgerOrder): Promise<'ok' | 'not_due' | 'failed'> {
   if (order.paymentMethod !== 'card' || order.paymentStatus !== 'paid') return 'not_due';
   if (!ledgerReady()) return 'failed';

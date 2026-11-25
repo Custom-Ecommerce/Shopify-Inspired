@@ -17,6 +17,7 @@ import { SidebarMenuButton } from "@/components/ui/sidebar";
 import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
 import { useDashboard } from "@/lib/dashboard-context";
 import { parseStorePath, switchTargetHref } from "@/lib/store-routes";
+import { memberRoleLabel } from "@/lib/role-access";
 
 /** Search only earns its space once the list is long (Blueprint §6.6: > ~7 stores). */
 const SEARCH_THRESHOLD = 7;
@@ -70,7 +71,10 @@ export function StoreSwitcher() {
         </div>
         <div className="flex min-w-0 flex-1 flex-col text-left group-data-[collapsible=icon]:hidden">
           <span className="truncate text-sm font-medium">{activeStore.name}</span>
-          <span className="truncate font-mono text-xs text-muted-foreground">{activeStore.slug}</span>
+          <span className="truncate font-mono text-xs text-muted-foreground">
+            {memberRoleLabel(activeStore.role) ? `${memberRoleLabel(activeStore.role)} · ` : ""}
+            {activeStore.slug}
+          </span>
         </div>
         <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />
       </PopoverTrigger>
@@ -91,7 +95,10 @@ export function StoreSwitcher() {
                 >
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-sm font-medium">{s.name}</span>
-                    <span className="truncate font-mono text-xs text-muted-foreground">{s.slug}</span>
+                    <span className="truncate font-mono text-xs text-muted-foreground">
+                      {memberRoleLabel(s.role) ? `${memberRoleLabel(s.role)} · ` : ""}
+                      {s.slug}
+                    </span>
                   </div>
                   <StatusBadge status={s.status} className="shrink-0" />
                 </CommandItem>

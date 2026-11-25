@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { storefrontThemeConfigSchema } from './theme-config';
 import { STOCK_STATUSES } from './stock-status';
 import { STOREFRONT_ORDER_MAX_LINES, storefrontCheckoutCustomerSchema, storefrontDiscountCodeSchema, storefrontOrderLineRequestSchema } from './checkout';
 
@@ -132,6 +133,12 @@ export const storefrontStoreSchema = z.object({
     })
     .optional(),
   social: z.object({ facebook: nullableText, instagram: nullableText, tiktok: nullableText, whatsapp: nullableText }).optional(),
+  /** S7-B6: the store's VERIFIED custom domain (a host), else null. Never a pending or failed one. Optional so an older backend still parses. */
+  customDomain: z.string().nullable().optional(),
+  /** S7-B6: the seller asked the platform subdomain to redirect to the custom domain. Only means something with a customDomain. */
+  redirectToCustomDomain: z.boolean().optional(),
+  /** S7-B7: the Stiletto theme config, defaults filled in. Optional so an older backend still parses (the storefront then uses the defaults). */
+  themeConfig: storefrontThemeConfigSchema.optional(),
   features: z.object({ socialProofEnabled: z.boolean() }),
   theme: z.object({ activeTheme: nullableText }),
 });
@@ -278,6 +285,13 @@ export const storefrontOrderCreatedSchema = z.object({
   deliveryCharges: price,
   /** Rupees taken off the subtotal by a code. */
   discount: price.default(0),
+  /**
+   * Sprint 8 (S8-B1, D-118): the tax the order was placed with, whole rupees, from the order's own snapshot. 0 and null mode on an order with no
+   * tax (including every order from before tax existed). Exclusive: part of `total`. Inclusive: already inside the prices, `total` unchanged.
+   */
+  taxAmount: price.default(0),
+  taxMode: z.enum(['exclusive', 'inclusive']).nullable().default(null),
+  taxLabel: z.string().max(40).nullable().default(null),
   total: price,
   createdAt: z.string().min(1),
 });

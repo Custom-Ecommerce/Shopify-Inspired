@@ -30,17 +30,22 @@ export type ResolveStoreResult =
   | { outcome: "error"; error: unknown };
 
 /**
- * Resolves a store by public slug or permanent internal handle.
+ * Resolves a store by public slug, permanent internal handle, or (S7-B6) custom domain.
+ *
+ * A key with a dot is a custom domain: a store slug and a handle never contain one (a-z, 0-9 and hyphens), so the middleware passes the custom host as the tenant key
+ * and every page, route and BFF call below this function serves it exactly like the store's subdomain. The backend answers only for a VERIFIED domain, and an unknown,
+ * unverified, failed or disconnected host is the same "not found" as an unknown store. A custom host never carries a preview token.
  *
  * Wrapped in React `cache()`, so layouts, pages and `generateMetadata` that
  * call it with the same arguments during one request share a single lookup.
  * Never throws: every failure is returned as a value.
  */
 export const resolveStore = cache(
-  async (key: string, by: "slug" | "handle"): Promise<ResolveStoreResult> => {
+  async (key: string, by: "slug" | "handle" | "domain"): Promise<ResolveStoreResult> => {
     try {
-      const token = await requestPreviewToken();
-      const result = await fetchStoreByKey(key, by, token);
+      const mode = key.includes(".") ? "domain" : by;
+      const token = mode === "domain" ? null : await requestPreviewToken();
+      const result = await fetchStoreByKey(key, mode, token);
       if (result.kind === "active") {
         return { outcome: "ok", store: result.store, previewToken: result.preview ? token : null };
       }

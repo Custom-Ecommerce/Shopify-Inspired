@@ -10,6 +10,7 @@ import {
   formatRupees,
   payBlockReason,
   payoutFormIssues,
+  reportBreakdown,
   reportInputIssue,
   reportQuery,
 } from "../lib/payouts";
@@ -97,4 +98,23 @@ test("the commission page has payout views, which keep the page and search in th
   assert.equal(commissionStateToUrl({ view: "payout-history", page: 3, q: "", status: "", mode: "" }), "view=payout-history&page=3");
   assert.equal(parseCommissionState(new URLSearchParams("view=payout-history")).view, "payout-history");
   assert.equal(parseCommissionState(new URLSearchParams("view=payout")).view, "rates");
+});
+
+// Sprint 6 EP-12.US04.T04 (D-116): the commission report labels its cash on delivery and gateway lines.
+
+test("the report breakdown has a cash on delivery line and a gateway line, and says when COD carried no commission", () => {
+  const lines = reportBreakdown({ cod: { commissionEarned: 0, sales: 5000, ordersCount: 3 }, gateway: { commissionEarned: 60, sales: 1500, ordersCount: 1 } });
+  assert.deepEqual(lines, [
+    { key: "cod", label: "Cash on delivery", commissionEarned: 0, sales: 5000, ordersCount: 3, noCommission: true },
+    { key: "gateway", label: "Gateway (card)", commissionEarned: 60, sales: 1500, ordersCount: 1, noCommission: false },
+  ]);
+});
+
+test("a COD line with a commission is not worded as no commission, and an empty COD line is not either", () => {
+  assert.equal(reportBreakdown({ cod: { commissionEarned: 100, sales: 5000, ordersCount: 3 } })![0]!.noCommission, false);
+  assert.equal(reportBreakdown({ cod: { commissionEarned: 0, sales: 0, ordersCount: 0 } })![0]!.noCommission, false);
+});
+
+test("a report without the split (an older backend) has no breakdown", () => {
+  assert.equal(reportBreakdown({}), null);
 });

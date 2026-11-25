@@ -51,7 +51,7 @@ test("GET forwards to the backend with the token as a bearer and passes no query
 test("both methods need the cookie, and the backend is not called without it", async () => {
   const calls = stubBackend(200, {});
   assert.equal((await settingsGET(req("GET", "/api/settings", undefined, {}, ""))).status, 401);
-  assert.equal((await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5 }, {}, ""))).status, 401);
+  assert.equal((await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5, reason: "Q4" }, {}, ""))).status, 401);
   assert.equal(calls.length, 0);
 });
 
@@ -72,7 +72,8 @@ test("PATCH is validated here: a bad body never reaches the backend", async () =
     { defaultCommissionRate: 5, updatedAt: "2026-10-11T10:00:00.000Z" },
   ];
   for (const body of bad) {
-    const response = await settingsPATCH(req("PATCH", "/api/settings", body));
+    // A reason is sent with each, so each is refused for its own field and not only for a missing reason (SB-F1).
+    const response = await settingsPATCH(req("PATCH", "/api/settings", { reason: "Q4", ...(body as object) }));
     assert.equal(response.status, 422, JSON.stringify(body));
     assert.ok(Array.isArray(((await response.json()) as { issues: unknown[] }).issues));
   }
@@ -91,20 +92,20 @@ test("PATCH forwards the checked body as a PATCH, with the note and reason trimm
 
 test("a note cleared with null is forwarded as null", async () => {
   const calls = stubBackend(200, { settings: {}, queued: null });
-  assert.equal((await settingsPATCH(req("PATCH", "/api/settings", { stripeCommissionNote: null }))).status, 200);
-  assert.deepEqual(JSON.parse(String(calls[0].init?.body)), { stripeCommissionNote: null });
+  assert.equal((await settingsPATCH(req("PATCH", "/api/settings", { stripeCommissionNote: null, reason: "Q4" }))).status, 200);
+  assert.deepEqual(JSON.parse(String(calls[0].init?.body)), { stripeCommissionNote: null, reason: "Q4" });
 });
 
 test("a write from another origin is refused without calling the backend", async () => {
   const calls = stubBackend(200, {});
-  const response = await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5 }, { origin: "http://evil.example" }));
+  const response = await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5, reason: "Q4" }, { origin: "http://evil.example" }));
   assert.equal(response.status, 403);
   assert.equal(calls.length, 0);
 });
 
 test("a revision clash is passed on as 409 and a missing settings document as 404", async () => {
   stubBackend(409, { error: "The settings were changed by someone else. Reload and try again." });
-  const clash = await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5 }));
+  const clash = await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5, reason: "Q4" }));
   assert.equal(clash.status, 409);
   assert.equal(((await clash.json()) as { error: string }).error, "The settings were changed by someone else. Reload and try again.");
   stubBackend(404, { error: "Platform settings have not been set up" });
@@ -115,7 +116,7 @@ test("a revision clash is passed on as 409 and a missing settings document as 40
 
 test("the backend's validation issues are passed on with a 422", async () => {
   stubBackend(422, { error: "Invalid request", issues: [{ path: "defaultCommissionRate", message: "must be a number from 0 to 100" }] });
-  const response = await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5 }));
+  const response = await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5, reason: "Q4" }));
   assert.equal(response.status, 422);
   assert.deepEqual(((await response.json()) as { issues: unknown[] }).issues, [{ path: "defaultCommissionRate", message: "must be a number from 0 to 100" }]);
 });
@@ -126,8 +127,25 @@ test("a refused session clears the cookie, a refused permission is 403, and a ba
   assert.equal(refused.status, 401);
   assert.match(refused.headers.get("set-cookie") ?? "", /Max-Age=0/);
   stubBackend(403, { error: "Forbidden" });
-  assert.equal((await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5 }))).status, 403);
+  assert.equal((await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5, reason: "Q4" }))).status, 403);
   stubBackend(500, { error: "Internal error" });
-  assert.equal((await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5 }))).status, 502);
+  assert.equal((await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5, reason: "Q4" }))).status, 502);
   assert.equal((await settingsGET(req("GET", "/api/settings"))).status, 502);
+});
+
+test("Sprint 6: the proxy refuses a COD percent of 101 and a grace period of 31 before it reaches the backend", async () => {
+  const calls = stubBackend(200, { settings: { defaultCommissionRate: 4 } });
+  for (const body of [{ codCommissionPercent: 101 }, { graceDays: 31 }, { trialDays: 61 }, { supportEmail: "not an email" }, { paymentInstructions: "x".repeat(1001) }]) {
+    const response = await settingsPATCH(req("PATCH", "/api/settings", { ...body, reason: "x" }));
+    assert.equal(response.status, 422, JSON.stringify(body));
+  }
+  assert.equal(calls.length, 0);
+});
+
+test("SB-F1: a change without a reason is refused here and never reaches the backend", async () => {
+  const calls = stubBackend(200, { settings: {}, queued: null });
+  const response = await settingsPATCH(req("PATCH", "/api/settings", { defaultCommissionRate: 5 }));
+  assert.equal(response.status, 422);
+  assert.deepEqual(((await response.json()) as { issues: Array<{ path: string }> }).issues.map((issue) => issue.path), ["reason"]);
+  assert.equal(calls.length, 0);
 });

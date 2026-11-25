@@ -5,6 +5,7 @@ import {
   CONFLICT_MESSAGE,
   NOT_SET_UP_MESSAGE,
   SETTINGS_FIELDS,
+  SETTINGS_REASON_REQUIRED,
   buildRevertUpdate,
   buildSettingsUpdate,
   changedFieldsAgainstStored,
@@ -12,6 +13,7 @@ import {
   parseSettingsUpdate,
   revisionFilter,
   settingsSnapshot,
+  syncPayload,
   toSettingsRow,
 } from '@/lib/admin-settings';
 import type { Doc } from '@/lib/admin-stores';
@@ -30,7 +32,7 @@ export const dynamic = 'force-dynamic';
 
 registerSyncOutboxModel(SyncOutbox as unknown as SyncOutboxModelPort);
 
-const SELECT = 'defaultCommissionRate maxStoresPerSeller stripeCommissionNote storeApprovalRequired settingsRevision createdAt updatedAt';
+const SELECT = 'defaultCommissionRate maxStoresPerSeller stripeCommissionNote storeApprovalRequired codCommissionPercent paymentInstructions graceDays trialDays supportEmail supportPhone referralRewardMonths referralMonthlyCap settingsRevision createdAt updatedAt';
 const NOT_RECORDED = 'The change could not be recorded and was not applied';
 const NOT_UNDONE = 'The settings could not be recorded, and the change could not be put back. Check the settings before doing anything else.';
 /** The platform settings are one document; the sync outbox addresses it by this id (the dispatcher's platform binding). */
@@ -41,13 +43,13 @@ function settingsFilter(): never {
 }
 
 /**
- * GET /api/admin/settings. The platform settings (default commission rate, store limit per seller, Stripe commission
- * note) with the revision and the time of the last change. The platform settings document is never created here: if
+ * GET /api/admin/settings. The platform settings (default and COD commission rates, store limit per seller, Stripe commission
+ * note, the plan settings) with the revision and the time of the last change. The platform settings document is never created here: if
  * the platform has none, the answer is a 404, not made-up defaults.
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'settings.read');
     requirePolicy(() => assertCan('admin', 'read', 'platformSettings'));
 
     const found = (await PlatformSettingsModel.findOne(settingsFilter()).select(SELECT).lean()) as unknown as Doc | null;
@@ -59,7 +61,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 /**
- * PATCH /api/admin/settings. Changes the settings sent (an optional reason goes to the audit entry). The write is
+ * PATCH /api/admin/settings. Changes the settings sent; a reason (1 to 300 characters) is required and goes to the audit entry. The write is
  * conditional on the revision that was read, so two operators cannot both win (409), and it advances the revision. A
  * change to a setting the seller receives is queued for the seller. The change is audited with the values before and
  * after; if the audit entry or the queue write fails, the settings are put back and the call fails. If the put-back
@@ -67,7 +69,7 @@ export async function GET(request: Request): Promise<Response> {
  */
 export async function PATCH(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'settings.write');
     requirePolicy(() => {
       assertCan('admin', 'update', 'platformSettings', SETTINGS_FIELDS);
       // The revision is moved by the server, never by the operator: that write runs as the system actor.
@@ -82,7 +84,11 @@ export async function PATCH(request: Request): Promise<Response> {
       throw new AdminHttpError(400, 'Body must be JSON');
     }
     const input = parseSettingsUpdate(raw);
-    if (!input.ok) return Response.json({ error: 'Invalid request', issues: input.issues }, { status: 422, headers: NO_STORE });
+    if (!input.ok && input.issues.some((issue) => issue.path !== 'reason')) return Response.json({ error: 'Invalid request', issues: input.issues }, { status: 422, headers: NO_STORE });
+    // SB-F1: every change says why. Missing, blank or too long is a 400 and nothing is read or written.
+    if (!input.ok || input.data.reason === null) {
+      return Response.json({ error: SETTINGS_REASON_REQUIRED, issues: [{ path: 'reason', message: SETTINGS_REASON_REQUIRED }] }, { status: 400, headers: NO_STORE });
+    }
     const { changes, reason } = input.data;
 
     const found = (await PlatformSettingsModel.findOne(settingsFilter()).select(SELECT).lean()) as unknown as Doc | null;
@@ -120,11 +126,7 @@ export async function PATCH(request: Request): Promise<Response> {
           entity: 'platform',
           entityId: SYNC_ENTITY_ID,
           group: 'settings',
-          payload: {
-            defaultCommissionRate: after.defaultCommissionRate,
-            maxStoresPerSeller: after.maxStoresPerSeller,
-            storeApprovalRequired: after.storeApprovalRequired,
-          },
+          payload: syncPayload(after),
         });
         queued = { eventId: event.eventId, revision: event.revision };
       }

@@ -28,6 +28,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <AuthShell>
       <LoginForm next={next} notice={notice} />
+      <a href="/forgot-password" className="mt-3 inline-block text-sm text-muted-foreground underline-offset-4 hover:underline">
+        Forgot your password?
+      </a>
     </AuthShell>
   );
 }

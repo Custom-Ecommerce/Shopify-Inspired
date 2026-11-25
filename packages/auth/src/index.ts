@@ -11,3 +11,7 @@ export * from './auth-tokens';
 export * from './session-guard';
 export * from './rate-limit';
 export * from './account-flows';
+// Sprint 6 (S6-B6, D-118): admin levels and the capability matrix.
+export * from './admin-levels';
+// Sprint 8 (S8-B2, D-118): seller staff roles and the seller capability matrix.
+export * from './seller-capabilities';

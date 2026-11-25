@@ -2,6 +2,7 @@ import type { ProductCreateRequest, ProductCsvColumn, ProductImportReport, Produ
 import { PRODUCT_CSV_COLUMNS, PRODUCT_IMPORT_MAX_ROWS, productCreateRequestSchema, productUpdateRequestSchema } from '@/lib/contracts';
 import { HttpError, isDuplicateKeyError } from '@/lib/http';
 import { CsvFormatError, DAMAGED_TEXT_MESSAGE, looksDamaged, parseCsv, restoreCell, serializeCsv } from '@/lib/product-csv';
+import { productSlotsFor } from '@/lib/plan';
 import { publishProblem } from '@/lib/product-lifecycle';
 import { ProductVariantError, withSkuGuard } from '@/lib/product-variants';
 import {
@@ -417,6 +418,7 @@ export async function runProductImport(storeId: string, text: string, dryRun: bo
   }
 
   const context = await loadContext(storeId, dryRun, groups);
+  const slots = await productSlotsFor(storeId);
   let created = 0;
   let updated = 0;
   const failedHandles = new Set<string>();
@@ -440,6 +442,8 @@ export async function runProductImport(storeId: string, text: string, dryRun: bo
         await updateFromRows(handle, group, current, context, warnings);
         updated += 1;
       } else {
+        // Sprint 6 (D-118): a new product takes a slot of the plan's product limit; an update never does.
+        if (slots.remaining !== null && created >= slots.remaining) throw new RowProblem(first.row, await slots.refusal());
         await createFromRows(handle, group, context, warnings);
         created += 1;
       }

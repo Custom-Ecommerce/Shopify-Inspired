@@ -82,6 +82,41 @@ export function commissionReversal(input: ReversalInput): number {
   return Math.min(left, Math.round((commission * returned) / base));
 }
 
+export interface ReturnTaxInput {
+  /** The order's tax snapshot: whole rupees (0 or absent when it had none) and how it was applied. */
+  taxAmount: number | null | undefined;
+  taxMode: string | null | undefined;
+  /** The order's commission base: subtotal less discount (the amount the tax was worked out on; delivery is never in it). */
+  orderBase: number;
+  /** The returned bases (tax-free, as commissionReversal reads them) of the returns of this order that came before this one. */
+  previousBase: number;
+  /** The returned base of THIS return (tax-free). */
+  returnedBase: number;
+}
+
+/**
+ * Sprint 8 (S8-B1, D-118): the part of the tax the shopper paid that belongs to this return, in whole rupees, ADDED to the refund cap.
+ *
+ *   exclusive  the tax was added on top of the prices, so the shopper paid it: the return gets its proportional share of it
+ *   inclusive  the prices already contain the tax, so the returned base already carries it: nothing is added (no double counting)
+ *
+ * Proportional and exact: the share is the difference of two running amounts, taxAmount x base / orderBase rounded half up, taken at the returned bases
+ * before and after this return. The shares of all the returns of an order therefore add up to the tax paid, no rupee lost or created by rounding, and a
+ * return that brings the returned base up to the order base takes whatever remains. The commission reversal and the commission base never see this: they
+ * keep reading the tax-free base (D-089).
+ */
+export function returnTaxShare(input: ReturnTaxInput): number {
+  const tax = whole(input.taxAmount);
+  const base = whole(input.orderBase);
+  if (tax <= 0 || base <= 0 || input.taxMode !== 'exclusive') return 0;
+  const running = (returned: number): number => {
+    const x = Math.min(whole(returned), base);
+    return x >= base ? tax : Math.round((tax * x) / base);
+  };
+  const before = whole(input.previousBase);
+  return Math.max(0, running(before + whole(input.returnedBase)) - running(before));
+}
+
 export type WindowState = 'open' | 'closed' | 'not_delivered' | 'returns_off';
 
 /**

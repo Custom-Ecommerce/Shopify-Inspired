@@ -97,4 +97,6 @@ export interface StoreData {
   contact?: { phone: string | null; whatsapp: string | null; email: string | null; address: string | null; city: string | null };
   social?: { facebook: string | null; instagram: string | null; tiktok: string | null; whatsapp: string | null } | null;
   deliveryEstimate?: string | null;
+  /** Sprint 7 (S7-B7): the store's theme config as the backend validated it. Absent: the defaults. */
+  themeConfig?: unknown;
 }

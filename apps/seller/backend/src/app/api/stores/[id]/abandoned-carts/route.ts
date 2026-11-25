@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const query = readQuery(request, abandonedCartListQuerySchema);
     assertCan(ctx.actor, 'read', 'abandonedCarts');
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'abandoned_carts.manage');
     return NextResponse.json(await listCarts(String(store._id), query), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);

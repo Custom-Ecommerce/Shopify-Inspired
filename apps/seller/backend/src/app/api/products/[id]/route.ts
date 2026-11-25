@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'products');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'products.read' });
 
     return NextResponse.json(await loadSellerProduct(storeId, id), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
@@ -64,7 +64,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const data = body.data;
     assertCan(ctx.actor, 'update', 'products', Object.keys(data));
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'products.write' });
 
     const current = (await Product.findOne({ _id: id, store: storeId, deletedAt: null }).select('options variants media').lean()) as unknown as {
       options?: Array<{ name: string; values: string[] }> | null;
@@ -106,7 +106,7 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     const permanent = request.nextUrl.searchParams.get('permanent') === 'true';
     assertCan(ctx.actor, 'delete', permanent ? 'productLifecycle' : 'products');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'products.write' });
 
     const existing = (await Product.findOne({ _id: id, store: storeId })
       .select('store title slug isDemo deletedAt deletedBy moderation')

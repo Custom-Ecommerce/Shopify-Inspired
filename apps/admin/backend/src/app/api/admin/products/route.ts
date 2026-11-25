@@ -11,7 +11,7 @@ const FILTERS = ['page', 'limit', 'storeId', 'status', 'q'] as const;
 /** GET /api/admin/products. Every store's products, read through the seller backend (D-026), which checks the filters. */
 export async function GET(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'products.moderate');
     requirePolicy(() => assertCan('admin', 'read', 'productModeration'));
 
     const params = new URL(request.url).searchParams;

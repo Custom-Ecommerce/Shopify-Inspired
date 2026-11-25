@@ -1,4 +1,8 @@
-/** Static copy for /pages/<slug>. Sellers cannot edit these yet. */
+/**
+ * DEFAULT copy for /pages/<slug> (Sprint 7, S7-B3). A store's own PUBLISHED page at that address always wins; this copy is shown only when the store has
+ * no page there at all (not even a draft: a draft is a 404). Plain text. Sellers write their own in the dashboard (Pages), starting from the editable
+ * templates in packages/platform-kit/src/page-templates.ts.
+ */
 export const CONTENT_PAGES: Record<string, { title: string; body: string }> = {
   about: {
     title: "About us",

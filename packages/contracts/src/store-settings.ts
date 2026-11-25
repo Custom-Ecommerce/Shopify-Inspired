@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { normalizePhoneE164 } from './checkout';
+import { storeTaxReadSchema, storeTaxUpdateSchema } from './tax';
+import { storeThemeConfigUpdateSchema } from './theme-config';
 
 /*
  * Sprint 4 EP-04 (D-094, D-088): the store settings a seller saves with ONE PATCH /api/stores/:id, the shape the
@@ -328,6 +330,13 @@ export const storeFraudSchema = z.object({
 /** 422 on PATCH /api/stores/:id: the store would be card only on a theme whose checkout cannot take a card payment (SB-11, V-06). */
 export const CARD_CHECKOUT_UNSUPPORTED_BY_THEME = 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME';
 
+/**
+ * 422 on PATCH /api/stores/:id (Sprint 7, D-115): the theme exists but a seller cannot choose it (hidden, coming soon or archived). A slug the
+ * platform has never heard of stays a 400. Field: theme.activeTheme.
+ */
+export const THEME_NOT_AVAILABLE = 'THEME_NOT_AVAILABLE';
+export const THEME_NOT_AVAILABLE_MESSAGE = 'This theme is not available yet. Choose Stiletto.';
+
 /** The sentences the seller sees for it; the server, the Payments tab and the Theme tab use these. */
 export const CARD_CHECKOUT_UNSUPPORTED_MESSAGE = 'This theme cannot take card payments yet, so cash on delivery has to stay on. Choose the Stiletto theme to accept card only.';
 export const CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE = 'This theme cannot take card payments yet. Turn cash on delivery on first, or choose the Stiletto theme.';
@@ -357,6 +366,15 @@ export const storeReturnsUpdateSchema = z
   .strict();
 export const storeReturnsSchema = z.object({ returnWindowDays: z.number().int().min(0).max(RETURN_WINDOW_DAYS_MAX) });
 
+// ---------------------------------------------------------------------------------------------------- custom domain (Sprint 7, S7-B6)
+
+/**
+ * The settings group 'domain': redirect the store's platform address (<slug>.<root>) to its verified custom domain. OFF by default. It only has an effect while
+ * the domain is verified and the store is live; saving it earlier is allowed and does nothing until then.
+ */
+export const storeDomainUpdateSchema = z.object({ redirectToCustomDomain: z.boolean({ error: 'redirectToCustomDomain must be true or false' }) }).partial().strict();
+export const storeDomainSettingsSchema = z.object({ redirectToCustomDomain: z.boolean() });
+
 export const storeThemeUpdateSchema = z.object({ activeTheme: z.string().regex(/^[a-z0-9-]{2,40}$/, 'choose a theme from the list') }).strict();
 
 /**
@@ -379,6 +397,12 @@ export const storeSettingsUpdateSchema = z
     fraud: storeFraudUpdateSchema,
     // Sprint 5 EP-13: the return window.
     returns: storeReturnsUpdateSchema,
+    // Sprint 7 (S7-B6): redirect the platform address to the verified custom domain.
+    domain: storeDomainUpdateSchema,
+    // Sprint 7 (S7-B7): the Stiletto theme config. null resets it to the defaults. Strict (theme-config.ts).
+    themeConfig: storeThemeConfigUpdateSchema.nullable(),
+    // Sprint 8 (S8-B1, D-118): the store's tax (off by default, one rate, exclusive or inclusive). Owner and manager may change it. Strict (tax.ts).
+    tax: storeTaxUpdateSchema,
   })
   .partial()
   .strict()
@@ -394,6 +418,25 @@ export function maskAccountNumber(value: string): string {
 }
 
 const mediaSchema = z.object({ id: z.string(), url: z.string().nullable() }).nullable();
+
+/** The theme config as the editor reads it (S7-B7). */
+export const storeThemeConfigReadSchema = z.object({
+  primaryColor: z.string(),
+  accentColor: z.string(),
+  fontFamily: z.string(),
+  heroTitle: z.string().nullable(),
+  heroSubtitle: z.string().nullable(),
+  heroImage: mediaSchema,
+  heroCtaLabel: z.string().nullable(),
+  heroCtaLink: z.string().nullable(),
+  announcementText: z.string().nullable(),
+  announcementEnabled: z.boolean(),
+  showFeatured: z.boolean(),
+  showCategories: z.boolean(),
+  showReviews: z.boolean(),
+  showBlog: z.boolean(),
+});
+export type StoreThemeConfigRead = z.output<typeof storeThemeConfigReadSchema>;
 
 export const maskedPayoutSchema = z.object({
   method: z.enum(PAYOUT_METHODS),
@@ -433,10 +476,21 @@ export const storeSettingsSchema = z.object({
     cardAvailable: z.boolean(),
   }),
   payout: maskedPayoutSchema.nullable(),
-  theme: z.object({ activeTheme: z.string(), supportsCardCheckout: z.boolean() }),
+  theme: z.object({
+    activeTheme: z.string(),
+    supportsCardCheckout: z.boolean(),
+    /** Sprint 7 (D-115): the theme the store chose earlier but that is not available (mola, gani, mustafa). The store renders activeTheme instead; the Theme tab says so. */
+    unavailableTheme: z.string().nullable().optional(),
+  }),
   messages: z.object({ whatsappTemplate: z.string().nullable(), emailFooter: z.string().nullable(), abandonedCartEmail: z.boolean() }),
   fraud: storeFraudSchema,
   returns: storeReturnsSchema,
+  /** Sprint 7 (S7-B6). Optional so an older backend still parses. */
+  domain: storeDomainSettingsSchema.optional(),
+  /** Sprint 7 (S7-B7): the theme config with the defaults filled in; the hero image is the media (id and url) or null. Optional so an older backend still parses. */
+  themeConfig: storeThemeConfigReadSchema.optional(),
+  /** Sprint 8 (S8-B1): the tax settings with the defaults filled in (off, 0%, exclusive, "Tax"). Optional so an older backend still parses. */
+  tax: storeTaxReadSchema.optional(),
   updatedAt: z.string().nullable(),
 });
 export type StoreSettings = z.output<typeof storeSettingsSchema>;
@@ -444,7 +498,8 @@ export type StoreSettings = z.output<typeof storeSettingsSchema>;
 // -------------------------------------------------------------------------------------------- readiness and go-live
 
 /** The go-live checklist (D-094), in the order the dashboard shows it. tab names the settings tab that fixes it. */
-export const STORE_READINESS_ITEMS = ['profile', 'delivery', 'payment', 'payout', 'product', 'email'] as const;
+/** Sprint 7 (S7-B6): 'domain' is listed only while a custom domain is connected, and is optional: it never blocks go-live and is never in `missing`. */
+export const STORE_READINESS_ITEMS = ['profile', 'delivery', 'payment', 'payout', 'product', 'email', 'domain'] as const;
 export type StoreReadinessItem = (typeof STORE_READINESS_ITEMS)[number];
 
 /** Sprint 5 EP-11.US04.T03: a warning does not block go-live. Only 'stock' exists: every published product is out of stock. */
@@ -454,7 +509,7 @@ export type StoreReadinessWarningKey = (typeof STORE_READINESS_WARNINGS)[number]
 export const storeReadinessSchema = z.object({
   ready: z.boolean(),
   status: z.string(),
-  items: z.array(z.object({ key: z.enum(STORE_READINESS_ITEMS), ok: z.boolean(), label: z.string(), tab: z.string() })),
+  items: z.array(z.object({ key: z.enum(STORE_READINESS_ITEMS), ok: z.boolean(), label: z.string(), tab: z.string(), optional: z.boolean().optional() })),
   missing: z.array(z.enum(STORE_READINESS_ITEMS)),
   /** Absent when there is nothing to warn about. Never part of `missing`, never blocks go-live. */
   warnings: z.array(z.object({ key: z.enum(STORE_READINESS_WARNINGS), label: z.string(), tab: z.string() })).optional(),

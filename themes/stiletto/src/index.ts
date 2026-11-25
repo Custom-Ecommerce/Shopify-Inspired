@@ -10,6 +10,8 @@ import { CheckoutPage } from "./pages/checkout-page";
 import { OrderConfirmationPage } from "./pages/order-confirmation-page";
 import { OrderTrackingPage } from "./pages/order-tracking-page";
 import { ContentPage } from "./pages/content-page";
+import { BlogPage } from "./pages/blog-page";
+import { ArticlePage } from "./pages/article-page";
 import { NotFoundPage } from "./pages/not-found-page";
 import { UnavailablePage } from "./pages/unavailable-page";
 import { CollectionsPage } from "./pages/collections-page";
@@ -43,6 +45,8 @@ const theme = defineTheme({
     Collection: CollectionPage,
     Feedback: FeedbackPage,
     Favourites: FavouritesPage,
+    Blog: BlogPage,
+    BlogPost: ArticlePage,
   },
   wantsChrome: true,
   demo,

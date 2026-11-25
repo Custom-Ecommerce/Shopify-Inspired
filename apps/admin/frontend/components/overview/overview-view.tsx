@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -11,7 +12,8 @@ import { getOverview } from "@/lib/api/client";
 import type { AdminOverview } from "@/lib/contracts";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
-import { outboxRows, overviewTiles, storeRows, updatedLabel, type OverviewRow, type OverviewTile } from "@/lib/overview";
+import { TrafficCard } from "@/components/overview/traffic-card";
+import { KPI_PERIODS, kpiTiles, planRows, topStoreRows, outboxRows, overviewTiles, storeRows, updatedLabel, type KpiPeriodKey, type OverviewRow, type OverviewTile } from "@/lib/overview";
 
 function TileCard({ tile }: { tile: OverviewTile }) {
   return (
@@ -84,9 +86,76 @@ function Moment({ label, iso }: { label: string; iso: string | null }) {
   );
 }
 
+function KpiSection({ kpi }: { kpi: NonNullable<AdminOverview["kpi"]> }) {
+  const [period, setPeriod] = useState<KpiPeriodKey>("last7");
+  return (
+    <section aria-label="Sales" className="flex flex-col gap-4" data-slot="kpi">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-heading text-lg font-semibold">Sales</h3>
+        <div role="group" aria-label="Period" className="flex gap-1">
+          {KPI_PERIODS.map((option) => (
+            <Button key={option.key} size="sm" variant={option.key === period ? "default" : "outline"} className="min-h-11 min-w-16" aria-pressed={option.key === period} onClick={() => setPeriod(option.key)}>
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {kpiTiles(kpi, period).map((tile) => (
+          <Card key={tile.key} className="p-5">
+            <h4 className="text-sm font-medium text-muted-foreground">{tile.title}</h4>
+            <p className="mt-3 text-2xl font-bold tabular-nums tracking-tight">{tile.value}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{tile.hint}</p>
+          </Card>
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Sellers by plan</CardTitle>
+            <CardDescription>Accounts by plan and subscription status.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col gap-1">
+              {planRows(kpi).map((row) => (
+                <li key={row.key} className="flex items-center justify-between gap-3 px-2 py-2 text-sm">
+                  <span className="min-w-0 break-words">
+                    {row.label} <span className="text-xs text-muted-foreground">({row.status})</span>
+                  </span>
+                  <span className="font-medium tabular-nums">{row.count}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Top stores</CardTitle>
+            <CardDescription>By sales in the last 30 days.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topStoreRows(kpi).length === 0 ? <p className="px-2 text-sm text-muted-foreground">No sales yet.</p> : null}
+            <ul className="flex flex-col gap-1">
+              {topStoreRows(kpi).map((row) => (
+                <li key={row.key}>
+                  <Link href={row.href} className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm hover:bg-accent/50">
+                    <span className="min-w-0 break-words">{row.name}</span>
+                    <span className="font-medium tabular-nums">{row.sales}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+  );
+}
+
 function OverviewBody({ overview }: { overview: AdminOverview }) {
   return (
     <>
+      {overview.kpi !== null ? <KpiSection kpi={overview.kpi} /> : <p className="text-sm text-muted-foreground">Sales figures are unavailable right now.</p>}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {overviewTiles(overview).map((tile) => (
           <TileCard key={tile.key} tile={tile} />
@@ -106,6 +175,8 @@ function OverviewBody({ overview }: { overview: AdminOverview }) {
           }
         />
       </div>
+      {/* S8-B7: visits and orders per day, a read of its own. */}
+      <TrafficCard />
     </>
   );
 }

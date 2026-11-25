@@ -1,9 +1,9 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { Store, User, signSession } from '@/lib/workspace';
+import { Store, StoreMember, User, signSession } from '@/lib/workspace';
 import { ADMIN_AUDIENCE } from '@/lib/admin-auth';
-import { STORE_PREVIEW, buildSellerFilter, groupStoresByOwner, parseSellerListQuery, toSellerItem } from '@/lib/admin-sellers';
+import { STORE_PREVIEW, buildSellerFilter, groupStoresByOwner, memberCountsByStore, parseSellerListQuery, toSellerItem } from '@/lib/admin-sellers';
 
 const SECRET = 'x'.repeat(40);
 const ADMIN_ID = '65a000000000000000000001';
@@ -22,13 +22,16 @@ before(async () => {
   GET = (await import('../src/app/api/admin/sellers/route')).GET;
 });
 
-const calls: { userFind: any[]; userCount: any[]; storeFind: any[]; skip: number[] } = { userFind: [], userCount: [], storeFind: [], skip: [] };
+const calls: { userFind: any[]; userCount: any[]; storeFind: any[]; skip: number[]; memberPipelines: unknown[] } = { userFind: [], userCount: [], storeFind: [], skip: [], memberPipelines: [] };
 
 interface Stub {
   role?: string;
   sellers?: unknown[];
   total?: number;
   stores?: unknown[];
+  /** Sprint 8 (S8-B3): the rows of the member count ($group on store and status). */
+  members?: unknown[];
+  membersFail?: boolean;
 }
 
 function install(stub: Stub): () => void {
@@ -38,7 +41,14 @@ function install(stub: Stub): () => void {
     userFind: UserModel.find,
     userCount: UserModel.countDocuments,
     storeFind: StoreModel.find,
+    memberAggregate: (StoreMember as any).aggregate,
   };
+  (StoreMember as any).aggregate = async (pipeline: unknown) => {
+    calls.memberPipelines.push(pipeline);
+    if (stub.membersFail) throw new Error('down');
+    return stub.members ?? [];
+  };
+  calls.memberPipelines.length = 0;
   calls.userFind.length = 0;
   calls.userCount.length = 0;
   calls.storeFind.length = 0;
@@ -58,6 +68,7 @@ function install(stub: Stub): () => void {
   };
   return () => {
     (mongoose as any).connect = originals.connect;
+    (StoreMember as any).aggregate = originals.memberAggregate;
     UserModel.findById = originals.userFindById;
     UserModel.find = originals.userFind;
     UserModel.countDocuments = originals.userCount;
@@ -160,4 +171,66 @@ test('an empty page does not query stores, and an invalid query is 422 and reads
   } finally {
     restore();
   }
+});
+
+test('Sprint 8 (S8-B3): each store of a seller shows how many people work in it (active members and open invitations), read only, under the sellers.read capability', async () => {
+  const restore = install({
+    sellers: [seller],
+    stores: [store('65a000000000000000000010', 'Lahore Looms', SELLER_ID), store('65a000000000000000000011', 'Karachi Kurtas', SELLER_ID)],
+    members: [
+      { _id: { store: '65a000000000000000000010', status: 'active' }, n: 2 },
+      { _id: { store: '65a000000000000000000010', status: 'invited' }, n: 1 },
+      { _id: { store: '65a000000000000000000010', status: 'disabled' }, n: 5 },
+    ],
+  });
+  try {
+    const response = await GET(await request('/api/admin/sellers'));
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as any;
+    assert.deepEqual(body.docs[0].stores.map((s: any) => [s.name, s.members]), [['Lahore Looms', { active: 2, invited: 1 }], ['Karachi Kurtas', { active: 0, invited: 0 }]]);
+    const pipeline = calls.memberPipelines[0] as any[];
+    assert.deepEqual(Object.keys(pipeline[0].$match), ['store', 'status'], 'only the stores of this page, only active and invited');
+    assert.deepEqual(pipeline[0].$match.status, { $in: ['active', 'invited'] });
+    assert.equal(JSON.stringify(body).includes('tokenHash'), false);
+    assert.equal(JSON.stringify(body).includes('invitedBy'), false);
+  } finally {
+    restore();
+  }
+});
+
+test('Sprint 8 (S8-B3): a failing member count never breaks the sellers list, and an empty page does not ask for counts', async () => {
+  const failing = install({ sellers: [seller], stores: [store('65a000000000000000000010', 'Lahore Looms', SELLER_ID)], membersFail: true });
+  const errors = console.error;
+  console.error = () => {};
+  try {
+    const response = await GET(await request('/api/admin/sellers'));
+    assert.equal(response.status, 200);
+    assert.deepEqual(((await response.json()) as any).docs[0].stores[0].members, { active: 0, invited: 0 });
+  } finally {
+    console.error = errors;
+    failing();
+  }
+  const empty = install({ sellers: [] });
+  try {
+    await GET(await request('/api/admin/sellers'));
+    assert.equal(calls.memberPipelines.length, 0);
+  } finally {
+    empty();
+  }
+});
+
+test('Sprint 8 (S8-B3): memberCountsByStore counts active and invited only and ignores a malformed row', () => {
+  const counts = memberCountsByStore([
+    { _id: { store: 'a', status: 'active' }, n: 3 },
+    { _id: { store: 'a', status: 'invited' }, n: 1 },
+    { _id: { store: 'a', status: 'disabled' }, n: 9 },
+    { _id: { store: 'b', status: 'active' }, n: -2 },
+    { _id: { status: 'active' }, n: 4 },
+    { _id: { store: 'c', status: 'active' }, n: 'x' },
+    {},
+  ]);
+  assert.deepEqual(counts.get('a'), { active: 3, invited: 1 });
+  assert.deepEqual(counts.get('b'), { active: 0, invited: 0 });
+  assert.deepEqual(counts.get('c'), { active: 0, invited: 0 });
+  assert.equal(counts.size, 3);
 });

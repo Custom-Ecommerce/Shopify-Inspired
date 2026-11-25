@@ -3,6 +3,9 @@ import type { ProductDetailVM } from "./product-detail";
 import type { ProductCardVM } from "./product-card";
 import type { CategoryVM } from "./chrome";
 import type { StorefrontProductReviews } from "../transport/types";
+import type { ContentTree } from "@markaz/platform-kit/content-markdown";
+import type { ArticleCardVM, ArticleVM } from "../domain/content";
+import type { StorefrontThemeConfig } from "@markaz/contracts";
 
 /** Shell-level view-models consumed by a theme's Layout (ThemeModule contract v1). */
 export interface StoreVM {
@@ -18,6 +21,8 @@ export interface StoreVM {
   social?: { facebook: string | null; instagram: string | null; tiktok: string | null; whatsapp: string | null } | null;
   /** The seller's delivery time text, for example "2 to 4 days". */
   deliveryEstimate?: string | null;
+  /** Sprint 7 (S7-B7): the validated theme config of the store (defaults filled in server-side). Absent for a theme demo and for a theme that has no config: the defaults then apply. */
+  themeConfig?: StorefrontThemeConfig | null;
 }
 
 export interface NavLinkVM {
@@ -73,7 +78,22 @@ export interface OrderTrackingPageProps {
 }
 export interface ContentPageProps {
   title: string;
+  /** Plain text: the default copy, or the store's page as plain words (a theme without a tree renderer shows this). */
   body: string;
+  /** Sprint 7 (S7-B3): the store's own page as the SAFE TREE. Render it with renderContentTree; when it is absent the page is default copy, shown as `body`. */
+  content?: ContentTree;
+  /** Sprint 7 (S7-B4): the address of the page (about, contact ...). The contact page shows the store's contact form. */
+  slug?: string;
+}
+/** Sprint 7 (S7-B3): the blog list, published articles newest first. */
+export interface BlogPageProps {
+  articles: ArticleCardVM[];
+  page: number;
+  totalPages: number;
+}
+/** Sprint 7 (S7-B3): one published article, its text as the safe tree. */
+export interface ArticlePageProps {
+  article: ArticleVM;
 }
 export type NotFoundPageProps = Record<string, never>;
 /** The list lives in the browser, so the page loads it with useFavouriteProducts. */

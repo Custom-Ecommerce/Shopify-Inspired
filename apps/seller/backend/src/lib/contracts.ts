@@ -25,8 +25,11 @@ export const { discountDatesProblem, discountRefusalMessage, discountValueProble
 // B10.2 contracts: returns.
 export const { returnStatusUpdateSchema, RETURN_TRANSITIONS } = contracts;
 
-// B10.3 contracts: media.
-export const { mediaUploadFieldsSchema } = contracts;
+// B10.3 contracts: media. Sprint 7 (S7-B1): the rename body and the usage answer.
+export const { mediaUploadFieldsSchema, mediaRenameRequestSchema, MEDIA_NAME_MAX } = contracts;
+
+// Sprint 7 (D-115): a theme a seller cannot choose.
+export const { THEME_NOT_AVAILABLE, THEME_NOT_AVAILABLE_MESSAGE } = contracts;
 
 // PB-7: admin moderation.
 export const {
@@ -140,7 +143,28 @@ export const {
   emailChangeRequestSchema,
   sellerAccountStatusRequestSchema,
   internalAccountStatusRequestSchema,
+  internalStoreLimitRequestSchema,
+  internalSellerPlansRequestSchema,
+  expiryJobRequestSchema,
 } = contracts;
+
+// Sprint 6 EP-14 (S6-B4, D-118): manual subscription payments, downgrade and cancel.
+export const {
+  PAYMENT_METHOD_LABELS,
+  upgradeRequestSchema,
+  claimPaymentRequestSchema,
+  downgradeRequestSchema,
+  cancelRequestSchema,
+  adminPaymentListQuerySchema,
+  internalConfirmPaymentRequestSchema,
+  internalDecidePaymentRequestSchema,
+} = contracts;
+
+// Sprint 6 (S6-B7): the retention run.
+export const { retentionRunRequestSchema } = contracts;
+
+// Sprint 6 (S6-B5): the admin's read-only orders view.
+export const { internalOrderListRequestSchema, internalOrderDetailRequestSchema } = contracts;
 
 // Sprint 4 EP-04: store settings, delivery, payments, payout, readiness and go-live.
 export const {
@@ -155,6 +179,50 @@ export const {
   CARD_CHECKOUT_UNSUPPORTED_BY_THEME,
   CARD_CHECKOUT_UNSUPPORTED_MESSAGE,
   CARD_CHECKOUT_UNSUPPORTED_THEME_MESSAGE,
+} = contracts;
+
+// Sprint 7 (S7-B7): the Stiletto theme config.
+export const {
+  THEME_CONFIG_DEFAULTS,
+  THEME_CONFIG_KEYS,
+  resolveThemeConfig,
+  toStorefrontThemeConfig,
+  STOREFRONT_THEME_CONFIG_DEFAULTS,
+  storeThemeConfigUpdateSchema,
+} = contracts;
+
+// Sprint 8 (S8-B1, D-118): store tax.
+export const {
+  TAX_KEYS,
+  TAX_RATE_REQUIRED_MESSAGE,
+  DEFAULT_TAX_SETTINGS,
+  resolveTaxSettings,
+  taxAmountOf,
+  taxLineLabel,
+  readOrderTax,
+  isValidTaxRate,
+  TAX_LABEL_MAX,
+} = contracts;
+
+// Sprint 8 (S8-B4, D-118): API keys.
+export const { API_KEY_SCOPES, API_KEY_ERROR_CODES, apiKeyCreateRequestSchema, apiKeySchema, apiKeyListResponseSchema, apiKeyCreateResponseSchema, apiKeyResponseSchema } = contracts;
+
+// Sprint 8 (S8-B2, D-118): a store's team.
+export const {
+  TEAM_ROLES,
+  TEAM_ERROR_CODES,
+  TEAM_INVITE_TTL_DAYS,
+  INVITE_INVALID_MESSAGE,
+  teamInviteRequestSchema,
+  teamRoleChangeRequestSchema,
+  teamMemberActionRequestSchema,
+  teamAcceptRequestSchema,
+  teamInviteInfoQuerySchema,
+  teamListResponseSchema,
+  teamMemberResponseSchema,
+  teamInviteInfoSchema,
+  teamAcceptResponseSchema,
+  storeAccessSchema,
 } = contracts;
 
 // Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
@@ -245,6 +313,7 @@ export const {
   returnWindow,
   returnableQuantities,
   returnedBase,
+  returnTaxShare,
 } = contracts;
 
 // Sprint 5 EP-21 (D-107, D-108): reviews of delivered orders, the seller's reply and the admin's hide.
@@ -279,3 +348,67 @@ export const {
   abandonedCartListQuerySchema,
   abandonedCartRequestSchema,
 } = contracts;
+
+// Sprint 7 (S7-B2): writing articles.
+export const {
+  ARTICLE_CONTENT_MAX,
+  ARTICLE_INVALID,
+  ARTICLE_REVISION_CONFLICT,
+  ARTICLE_SLUG_MAX,
+  ARTICLE_SLUG_TAKEN,
+  ARTICLE_WRITE_FIELDS,
+  articleCreateSchema,
+  articleUpdateSchema,
+} = contracts;
+
+// Sprint 7 (S7-B3): static pages.
+export const {
+  PAGE_INVALID,
+  PAGE_REVISION_CONFLICT,
+  PAGE_SLUG_RESERVED,
+  PAGE_SLUG_TAKEN,
+  PAGE_SLUG_MAX,
+  PAGE_TEMPLATE_UNKNOWN,
+  isReservedPageSlug,
+  pageCreateSchema,
+  pageFromTemplateSchema,
+  pageUpdateSchema,
+} = contracts;
+
+// Sprint 7 (S7-B4): contact messages and support tickets.
+export const {
+  CONTACT_INVALID,
+  CONTACT_REVISION_CONFLICT,
+  TICKET_INVALID,
+  TICKET_REVISION_CONFLICT,
+  TICKET_CLOSED,
+  storeContactRequestSchema,
+  platformContactRequestSchema,
+  contactListQuerySchema,
+  contactStatusUpdateSchema,
+  contactReplySchema,
+  ticketCreateSchema,
+  ticketReplySchema,
+  ticketCloseSchema,
+  ticketStatusUpdateSchema,
+  ticketListQuerySchema,
+  internalSupportIdSchema,
+  internalTicketReplySchema,
+  internalTicketStatusSchema,
+  internalSupportListSchema,
+} = contracts;
+
+// Sprint 8 (S8-B5): the paging bounds of the public API v1.
+export const { API_V1_LIMIT_DEFAULT, API_V1_LIMIT_MAX } = contracts;
+
+// Sprint 8 (S8-B5): referral codes.
+export const { normalizeReferralCode, REFERRAL_CODE_ALPHABET, REFERRAL_CODE_LENGTH } = contracts;
+
+// Sprint 8 (S8-B6): the admin's referrals view.
+export const { adminReferralListQuerySchema, adminReferralExportQuerySchema, ADMIN_REFERRAL_EXPORT_CAP } = contracts;
+
+// Sprint 8 (S8-B6): the anonymous storefront counters.
+export const { storefrontEventRequestSchema, STAT_RETENTION_DAYS, PRODUCT_STAT_SLUGS_PER_DAY } = contracts;
+
+// Sprint 8 (S8-B7): the sales report and the platform traffic.
+export const { salesReportQuerySchema, SALES_REPORT_COLUMNS, SALES_REPORT_MAX_DAYS, SALES_REPORT_ROW_CAP, ADMIN_TRAFFIC_DAYS } = contracts;

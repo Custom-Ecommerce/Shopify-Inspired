@@ -28,11 +28,12 @@ export function PageHeader({ title, description, children, className }: PageHead
     >
       <div className="min-w-0 flex-1">
         {/* font-heading resolves to Poppins via the theme token */}
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+        {/* A title can be a seller's own words (a ticket subject): one long word must wrap, never widen a phone screen. */}
+        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground [overflow-wrap:anywhere] sm:text-3xl">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">{description}</p>
         )}
       </div>
       {children && (

@@ -9,6 +9,7 @@ import {
   buildSettingsUpdate,
   changedFieldsAgainstStored,
   revisionFilter,
+  syncPayload,
   toSettingsRow,
 } from '@/lib/admin-settings';
 import type { Doc } from '@/lib/admin-stores';
@@ -28,7 +29,7 @@ export const dynamic = 'force-dynamic';
 
 registerSyncOutboxModel(SyncOutbox as unknown as SyncOutboxModelPort);
 
-const SELECT = 'defaultCommissionRate maxStoresPerSeller storeApprovalRequired settingsRevision updatedAt';
+const SELECT = 'defaultCommissionRate maxStoresPerSeller storeApprovalRequired codCommissionPercent paymentInstructions graceDays trialDays supportEmail supportPhone referralRewardMonths referralMonthlyCap settingsRevision updatedAt';
 const FIELD = ['defaultCommissionRate'] as const;
 /** The platform settings are one document; the sync outbox addresses it by this id (see /api/admin/settings). */
 const SYNC_ENTITY_ID = 'platform';
@@ -38,7 +39,7 @@ const filter = (): never => ({ globalType: SETTINGS_GLOBAL_TYPE }) as never;
 /** GET /api/admin/commission/default: the platform default commission rate. */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'commission.read');
     requirePolicy(() => assertCan('admin', 'read', 'platformSettings'));
     const found = (await PlatformSettingsModel.findOne(filter()).select(SELECT).lean()) as unknown as Doc | null;
     if (!found) throw new AdminHttpError(404, NOT_SET_UP_MESSAGE);
@@ -50,13 +51,14 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 /**
- * PUT /api/admin/commission/default { rate, reason }: the platform default, 0 to 100, one decimal. The same conditional write,
+ * PUT /api/admin/commission/default { rate, reason }: the platform default for GATEWAY (card) orders, 0 to 100, one decimal.
+ * Cash on delivery has its own percent (codCommissionPercent, D-116). The same conditional write,
  * revision, audit and seller sync as PATCH /api/admin/settings, plus a history row. Applies to orders delivered or paid
  * after the change; no existing ledger entry is rewritten.
  */
 export async function PUT(request: Request): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'commission.write');
     requirePolicy(() => {
       assertCan('admin', 'update', 'platformSettings', FIELD);
       assertCan('system', 'update', 'platformSettings');
@@ -112,11 +114,7 @@ export async function PUT(request: Request): Promise<Response> {
         entity: 'platform',
         entityId: SYNC_ENTITY_ID,
         group: 'settings',
-        payload: {
-          defaultCommissionRate: after.defaultCommissionRate,
-          maxStoresPerSeller: after.maxStoresPerSeller,
-          storeApprovalRequired: after.storeApprovalRequired,
-        },
+        payload: syncPayload(after),
       });
       queued = { eventId: event.eventId, revision: event.revision };
     } catch (err) {

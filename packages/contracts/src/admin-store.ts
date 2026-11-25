@@ -18,6 +18,8 @@ export const adminStoreListItemSchema = z.object({
   slug: z.string(),
   status: z.enum(STORE_STATUSES),
   domain: z.string().nullable(),
+  /** S7-B5: read only here; the seller connects and verifies the domain. */
+  customDomainStatus: z.enum(CUSTOM_DOMAIN_STATUSES).optional(),
   isThemeDemo: z.boolean(),
   commissionRate: z.number().finite().min(0),
   commissionMode: z.enum(COMMISSION_MODES),

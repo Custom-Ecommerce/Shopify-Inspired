@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { storeBasePath } from "@/lib/store-routes";
+import { UpgradeDialog } from "@/components/dashboard/UpgradeDialog";
+import { planLimitFrom, type PlanLimitInfo } from "@/lib/plan-usage";
 
 interface ApiErrorPayload {
   error?: string;
@@ -36,6 +38,8 @@ function messageFor(status: number, body: ApiErrorPayload | null): FormError {
             : "You've reached the maximum number of stores for your account. Contact support if you need more.",
         retryable: false,
       };
+    case "PLAN_LIMIT_REACHED":
+      return { message: planLimitFrom(body)?.message ?? "You have reached your plan's store limit.", retryable: false };
     case "ACCOUNT_SUSPENDED":
       return {
         message: "Your seller account is suspended, so new stores can't be created. Please contact support.",
@@ -64,6 +68,8 @@ export function CreateStoreForm() {
   const [name, setName] = useState("");
   const [error, setError] = useState<FormError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  // Sprint 6 EP-14: the plan's store limit opens the upgrade dialog (the message below stays too).
+  const [limit, setLimit] = useState<PlanLimitInfo | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -89,6 +95,8 @@ export function CreateStoreForm() {
       }
 
       if (res.status !== 201) {
+        const refused = planLimitFrom(data);
+        if (refused !== null) setLimit(refused);
         setError(messageFor(res.status, data));
         return;
       }
@@ -161,6 +169,7 @@ export function CreateStoreForm() {
           "Create store"
         )}
       </Button>
+      <UpgradeDialog info={limit} onClose={() => setLimit(null)} billingHref={null} />
     </form>
   );
 }

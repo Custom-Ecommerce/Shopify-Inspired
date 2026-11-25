@@ -14,14 +14,14 @@ const price = (lines: PricingLine[], fields: Partial<DiscountRule> | null = {}) 
 
 test('no code leaves the totals alone', () => {
   const { totals, applied, refusal } = priceCart([line(1000)], store, null, NOW);
-  assert.deepEqual(totals, { subtotal: 1000, deliveryCharges: 250, discount: 0, total: 1250 });
+  assert.deepEqual(totals, { subtotal: 1000, deliveryCharges: 250, discount: 0, taxAmount: 0, total: 1250 });
   assert.equal(applied, null);
   assert.equal(refusal, null);
 });
 
 test('percent comes off the subtotal only, never delivery', () => {
   const { totals, applied } = price([line(1000, 2)]);
-  assert.deepEqual(totals, { subtotal: 2000, deliveryCharges: 250, discount: 200, total: 2050 });
+  assert.deepEqual(totals, { subtotal: 2000, deliveryCharges: 250, discount: 200, taxAmount: 0, total: 2050 });
   assert.equal(applied?.amount, 200);
 });
 
@@ -41,7 +41,7 @@ for (const [base, percent, expected] of [
 }
 
 test('fixed takes whole rupees off', () => {
-  assert.deepEqual(price([line(2000)], { type: 'fixed_amount', value: 300 }).totals, { subtotal: 2000, deliveryCharges: 250, discount: 300, total: 1950 });
+  assert.deepEqual(price([line(2000)], { type: 'fixed_amount', value: 300 }).totals, { subtotal: 2000, deliveryCharges: 250, discount: 300, taxAmount: 0, total: 1950 });
 });
 
 test('a discount larger than the subtotal stops at the subtotal; delivery is still paid and the total is never below zero', () => {

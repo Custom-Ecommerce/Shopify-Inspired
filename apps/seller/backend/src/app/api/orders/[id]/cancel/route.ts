@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import type { OrderCancelRequest } from '@markaz/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { cancelRefusal, canCancel, nextStatuses, ORDER_CANCEL_REFUSAL_MESSAGES, orderCancelRequestSchema } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
@@ -71,14 +71,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       throw new HttpError(503, 'Seller database unavailable');
     });
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'orders.write' });
 
     const result = await cancelOrder({
       orderId: id,
       storeId,
       reason: body.reason,
       note: body.note,
-      actor: { userObjectId: ctx.userObjectId, auditActor: 'seller:' + ctx.userId },
+      actor: { userObjectId: ctx.userObjectId, auditActor: auditActorOf(ctx) },
     });
 
     if (result.outcome === 'not_found') throw notFound();

@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError, handleRouteError } from '@/lib/http';
-import { NO_STORE, requireDatabase, toAlertWire, unreadCount } from '@/lib/seller-alerts';
+import { NO_STORE, alertFilterFor, requireDatabase, toAlertWire, unreadCount } from '@/lib/seller-alerts';
 import { assertCan, SellerAlert } from '@/lib/services';
 
 export const runtime = 'nodejs';
@@ -24,13 +24,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const { id } = await context.params;
     await requireDatabase();
     if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Alert not found');
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'alerts.read' });
 
-    const marked = await SellerAlert.findOneAndUpdate({ _id: id, store: storeId, readAt: null }, { $set: { readAt: new Date() } }, { new: true }).lean();
-    const alert = marked ?? (await SellerAlert.findOne({ _id: id, store: storeId }).lean());
+    const marked = await SellerAlert.findOneAndUpdate({ _id: id, ...alertFilterFor(storeId, ctx.storeRole), readAt: null }, { $set: { readAt: new Date() } }, { new: true }).lean();
+    const alert = marked ?? (await SellerAlert.findOne({ _id: id, ...alertFilterFor(storeId, ctx.storeRole) }).lean());
     if (!alert) throw new HttpError(404, 'Alert not found');
 
-    return NextResponse.json({ alert: toAlertWire(alert), unread: await unreadCount(storeId) }, { headers: NO_STORE });
+    return NextResponse.json({ alert: toAlertWire(alert), unread: await unreadCount(storeId, ctx.storeRole) }, { headers: NO_STORE });
   } catch (err) {
     return handleRouteError(err);
   }

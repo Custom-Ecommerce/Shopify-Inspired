@@ -28,7 +28,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'products.read' });
 
     const store = (await Store.findById(storeId).select('slug').lean()) as { slug?: string } | null;
     if (!store?.slug) throw new HttpError(404, 'Store not found');

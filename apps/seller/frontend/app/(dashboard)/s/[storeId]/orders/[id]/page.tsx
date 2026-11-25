@@ -1,5 +1,6 @@
 "use client";
 
+import { taxRowLabel } from "@/lib/tax-view";
 import type { DashboardOrderDetail, DashboardOrderTimelineEntry, OrderCancelResponse, OrderStockRestore } from "@markaz/contracts";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -1106,6 +1107,11 @@ export default function OrderDetailPage() {
             {order.discountAmount > 0 ? (
               <Row label={order.discountCode ? "Discount (" + order.discountCode + ")" : "Discount"}>
                 <span className="tabular-nums">-{money(order.discountAmount)}</span>
+              </Row>
+            ) : null}
+            {order.taxAmount && order.taxAmount > 0 ? (
+              <Row label={taxRowLabel(order.taxLabel, order.taxMode, order.taxRatePercent)}>
+                <span className="tabular-nums">{money(order.taxAmount)}</span>
               </Row>
             ) : null}
             <Row label="Total">

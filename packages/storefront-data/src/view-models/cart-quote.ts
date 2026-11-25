@@ -2,6 +2,8 @@ import { STOCK_WARNING_THRESHOLD } from "@markaz/contracts/checkout";
 import { toMoney } from "../domain/money";
 import type { Money } from "../domain/money";
 import type { CartQuote, CartQuoteIssue } from "../transport/types";
+import { toTaxLine } from "./tax-line";
+import type { TaxLineVM } from "./tax-line";
 
 export interface CartQuoteLineVM {
   productId: string;
@@ -20,6 +22,8 @@ export interface CartQuoteVM {
   subtotal: Money;
   deliveryCharges: Money;
   discount: Money;
+  /** Sprint 8 (S8-B1): the store's tax as the server worked it out, or null when there is none to show. Exclusive: part of the total. Inclusive: already in the prices. */
+  tax: TaxLineVM | null;
   total: Money;
   canCheckout: boolean;
   /** The code that made the discount. Null when none was sent or it was refused. */
@@ -42,6 +46,7 @@ export function toCartQuoteVM(quote: CartQuote): CartQuoteVM {
     subtotal: toMoney(quote.subtotal),
     deliveryCharges: toMoney(quote.deliveryCharges),
     discount: toMoney(quote.discount),
+    tax: toTaxLine(quote),
     total: toMoney(quote.total),
     canCheckout: quote.canCheckout,
     discountCode: quote.discountCode,

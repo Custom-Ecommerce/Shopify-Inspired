@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/dashboard/shared/EmptyState";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
 import { ConfirmationBadge, RiskFlagChips } from "@/components/dashboard/orders/ConfirmationBits";
 import { OrderCheckbox, OrderSelectionBar, OrderSelectionProvider, SelectPageCheckbox } from "@/components/dashboard/orders/OrderSelection";
+import { SalesExportButton } from "@/components/dashboard/SalesExportButton";
 import {
   ORDER_STATUS_LABEL,
   OrderStatusBadge,
@@ -330,7 +331,10 @@ export default async function DashboardOrdersPage({
 
   return (
     <div className="flex min-w-0 flex-col gap-6 p-4 sm:p-8">
-      <PageHeader title="Orders" className="mb-0" />
+      <PageHeader title="Orders" className="mb-0">
+        {/* S8-B7: the report takes the status and the dates of this list; a search and the confirmation tab are not part of it. */}
+        <SalesExportButton filters={{ status: filters.status, from: filters.from, to: filters.to }} note="Uses the status and dates above, not the search." />
+      </PageHeader>
 
       {/* A plain GET form: Enter or the button submits, and the filters land in the URL. The tab is kept, the page resets. */}
       <form className="flex flex-wrap items-end gap-2" role="search">

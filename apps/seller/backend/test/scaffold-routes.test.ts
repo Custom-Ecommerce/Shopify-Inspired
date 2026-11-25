@@ -53,14 +53,26 @@ test('login with a valid body but no database is refused with 503', async () => 
   assert.equal(response.status, 503);
 });
 
-test('domain connect is still 501 until the Vercel integration decision (ID-20)', async () => {
+// S7-B5: the two 501 placeholders are real routes now. With no session (and here no session secret) they are refused at the door, never 501
+// and never open. The behaviour itself is in domain-routes.test.ts.
+test('domain connect is no longer a 501 placeholder: with no session it is refused before anything else', async () => {
   const response = await connect(json({ domain: 'shop.example.com' }), params(STORE));
-  assert.equal(response.status, 501);
+  assert.notEqual(response.status, 501);
+  assert.ok([401, 503].includes(response.status), 'status ' + response.status);
 });
 
-test('domain verify is still 501 until the Vercel integration decision (ID-20)', async () => {
+test('domain verify is no longer a 501 placeholder: with no session it is refused before anything else', async () => {
   const response = await verify(json({}), params(STORE));
-  assert.equal(response.status, 501);
+  assert.notEqual(response.status, 501);
+  assert.ok([401, 503].includes(response.status), 'status ' + response.status);
+});
+
+test('the domain disconnect and state routes exist and are not open either', async () => {
+  const disconnect = (await import('../src/app/api/stores/[id]/domain/disconnect/route')).POST;
+  const state = (await import('../src/app/api/stores/[id]/domain/route')).GET;
+  for (const response of [await disconnect(json({}), params(STORE)), await state(json({}), params(STORE))]) {
+    assert.ok([401, 503].includes(response.status), 'status ' + response.status);
+  }
 });
 
 // Sprint 4 EP-04.US03.T03 (D-088): the Stripe Connect onboarding routes were removed, so their two tests are gone.

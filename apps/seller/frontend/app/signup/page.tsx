@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Mail, Lock, User, Loader2 } from "lucide-react";
@@ -9,6 +9,9 @@ import { Surface } from "@/components/shared/Surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { inviteLoginHref, inviteTokenFromSearch, nextAfterAuth, signupInviteFrom, signupWords, type SignupInvite } from "@/lib/invite-view";
+import { refCookie, refFromSearch, signupRef } from "@/lib/referral-cookie";
+import { tooManyAttemptsMessage } from "@/lib/retry-after";
 
 /** Simple advisory strength: 0 = weak, 1 = fair, 2 = strong. */
 function passwordStrength(pw: string): 0 | 1 | 2 {
@@ -34,8 +37,34 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  // SB-F1: opened from a staff invite, the page takes the invited address (read only) and the store's name from the same lookup the invite page uses.
+  const [invite, setInvite] = useState<(SignupInvite & { token: string }) | null>(null);
 
   const strength = useMemo(() => passwordStrength(password), [password]);
+
+  // S8-B5: remember ?ref= for 7 days, so it survives a detour through email. The server clears it once the account is made.
+  useEffect(() => {
+    const code = refFromSearch(window.location.search);
+    if (code !== null) document.cookie = refCookie(code, window.location.protocol === "https:");
+  }, []);
+
+  useEffect(() => {
+    const token = inviteTokenFromSearch(window.location.search);
+    if (token === null) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/team/invite?token=" + encodeURIComponent(token), { cache: "no-store" });
+        const found = res.ok ? signupInviteFrom(await res.json()) : null;
+        if (found === null) return;
+        setInvite({ ...found, token });
+        setEmail(found.email);
+      } catch {
+        // The lookup is a help: without it this is an ordinary signup, and the invite page still checks everything.
+      }
+    })();
+  }, []);
+
+  const words = signupWords(invite);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,18 +72,24 @@ export default function SignupPage() {
     setErrorMessage(null);
     try {
       // Account only — the first store is created after login at /stores/new.
+      const ref = signupRef(window.location.search, document.cookie);
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password, name, ...(ref === null ? {} : { ref }) }),
       });
       const data = await res.json();
+      if (res.status === 429) {
+        setErrorMessage(tooManyAttemptsMessage(res.headers.get("retry-after")));
+        return;
+      }
       if (!res.ok) {
         setErrorMessage(data?.error ?? data?.message ?? "Signup failed.");
         return;
       }
 
-      router.push("/");
+      // S8-B2: an invitee who came from the accept-invite page returns to it; anything else goes to the dashboard.
+      router.push(nextAfterAuth(window.location.search));
       router.refresh();
     } catch {
       setErrorMessage("Could not reach the backend. Please try again.");
@@ -77,10 +112,10 @@ export default function SignupPage() {
             Seller Portal
           </p>
           <h1 className="mt-1 font-heading text-3xl font-semibold tracking-tight text-foreground">
-            Start selling
+            {words.title}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create your account — you will set up your store next.
+          <p className="mt-1 break-words text-sm text-muted-foreground">
+            {words.text}
           </p>
         </div>
 
@@ -123,11 +158,18 @@ export default function SignupPage() {
                 autoComplete="email"
                 value={email}
                 placeholder="name@markazify.com" onChange={(e) => setEmail(e.target.value)}
-                className="h-11 pl-10"
+                className="h-11 pl-10 read-only:bg-muted"
                 required
+                readOnly={invite !== null}
                 aria-invalid={!!errorMessage}
+                aria-describedby={invite === null ? undefined : "email-invited"}
               />
             </div>
+            {invite === null ? null : (
+              <p id="email-invited" className="text-xs text-muted-foreground">
+                This is the address your invitation was sent to.
+              </p>
+            )}
           </div>
 
           {/* Password */}
@@ -220,7 +262,7 @@ export default function SignupPage() {
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link
-            href="/login"
+            href={invite === null ? "/login" : inviteLoginHref(invite.token)}
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
             Sign in

@@ -20,7 +20,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     requireSellerActor(ctx);
     assertCan(ctx.actor, 'read', 'stores', ['name', 'storefront', 'paymentSettings']);
     const { id } = await context.params;
-    const doc = await loadOwnedStore(request, ctx, id, SETTINGS_SELECT);
+    const doc = await loadOwnedStore(request, ctx, id, SETTINGS_SELECT, 'settings.read');
     return NextResponse.json(await storeReadiness(doc, ctx), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);

@@ -15,6 +15,9 @@ export const {
 } = contracts;
 export const { adminSellerListEnvelopeSchema, adminSyncOutboxSchema, adminAuditListSchema, adminSellerStatusResponseSchema } = contracts;
 export type { AdminSellerStatusResponse } from "@markaz/contracts";
+// Sprint 6 EP-12.US02: the seller store limit (override, effective limit and its source).
+export const { adminSellerStoreLimitSchema, adminSellerStoreLimitSetResponseSchema, sellerStoreLimitRequestSchema, STORE_LIMIT_OVERRIDE_MAX } = contracts;
+export type { AdminSellerStoreLimit, AdminSellerStoreLimitSetResponse } from "@markaz/contracts";
 export type { SessionUser, LoginRequest } from "@markaz/contracts";
 export type {
   AdminStoreListItem,
@@ -56,6 +59,17 @@ export const {
   ADMIN_SETTINGS_MAX_STORES_MAX,
   ADMIN_SETTINGS_NOTE_MAX,
   ADMIN_SETTINGS_REASON_MAX,
+  ADMIN_SETTINGS_PAYMENT_INSTRUCTIONS_MAX,
+  ADMIN_SETTINGS_GRACE_DAYS_MIN,
+  ADMIN_SETTINGS_GRACE_DAYS_MAX,
+  ADMIN_SETTINGS_TRIAL_DAYS_MIN,
+  ADMIN_SETTINGS_TRIAL_DAYS_MAX,
+  ADMIN_SETTINGS_SUPPORT_EMAIL_MAX,
+  ADMIN_SETTINGS_SUPPORT_PHONE_MAX,
+  ADMIN_SETTINGS_REFERRAL_MONTHS_MIN,
+  ADMIN_SETTINGS_REFERRAL_MONTHS_MAX,
+  ADMIN_SETTINGS_REFERRAL_CAP_MIN,
+  ADMIN_SETTINGS_REFERRAL_CAP_MAX,
 } = contracts;
 export type {
   AdminPlatformSettings,
@@ -92,3 +106,27 @@ export type {
   PayoutRow,
   PayoutStatusValue,
 } from "@markaz/contracts";
+
+// Sprint 6 EP-14 (D-118): subscription plans are data (create, update, archive).
+export const { createPlanRequestSchema, updatePlanRequestSchema, archivePlanRequestSchema, adminPlanWriteResponseSchema } = contracts;
+export type { AdminPlanWriteResponse } from "@markaz/contracts";
+
+// Sprint 6 EP-14.US02: the plan, status and usage of a seller (the sellers page).
+export const { adminSellerPlansResponseSchema, EFFECTIVE_PLAN_STATUSES } = contracts;
+export type { AdminSellerPlan, AdminSellerPlansResponse, EffectivePlanStatus } from "@markaz/contracts";
+
+// Sprint 6 EP-14 (S6-B4, D-118): manual subscription payments.
+export const { adminPaymentListSchema, adminPaymentWriteResponseSchema, confirmPaymentBodySchema, decidePaymentBodySchema } = contracts;
+export type { AdminPayment, AdminPaymentList, AdminPaymentWriteResponse } from "@markaz/contracts";
+
+// Sprint 6 (S6-B6): admin users and levels.
+export const { adminUserListSchema, adminUserResponseSchema, inviteAdminRequestSchema, changeLevelRequestSchema, setAdminStatusRequestSchema } = contracts;
+export type { AdminUser } from "@markaz/contracts";
+
+// Sprint 6 (S6-B5): the read-only orders view and the overview KPIs.
+export const { adminOrderListSchema, adminOrderDetailResponseSchema, ADMIN_ORDER_FORBIDDEN_KEYS } = contracts;
+export type { AdminOrderRow, AdminOrderList, AdminOrderDetail, AdminKpi } from "@markaz/contracts";
+
+// Sprint 6 (S6-B7): retries and retention.
+export const { retryRequestSchema, retryResponseSchema, failedEmailListSchema, retentionRunRequestSchema, retentionRunResponseSchema, RETRY_CAP, RETENTION_TARGET_KEYS } = contracts;
+export type { FailedEmailRow, RetentionRunResponse } from "@markaz/contracts";

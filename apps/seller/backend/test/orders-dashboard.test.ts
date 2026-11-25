@@ -568,3 +568,33 @@ test('orders: a stored status outside the seven reads as unknown, never as pendi
   assert.deepEqual(detail.allowedNext, []);
   assert.equal(detail.canCancel, false);
 });
+
+// Sprint 8 (S8-B1, D-118): the detail page's order carries its tax snapshot, and only when it has one.
+
+test('S8-B1 orders: the detail shows the tax the order was placed with (amount, mode, rate, label); the total is the stored total', async () => {
+  orders.push(order(20, { subtotal: 3000, deliveryCharges: 250, taxAmount: 510, taxMode: 'exclusive', taxRatePercent: 17, taxLabel: 'GST', total: 3760 }));
+  orders.push(order(21, { subtotal: 3000, deliveryCharges: 250, taxAmount: 436, taxMode: 'inclusive', taxRatePercent: 17, taxLabel: 'Tax', total: 3250 }));
+  const taxed = (await (await detailGET(get('/api/orders/' + oid(20)), params(oid(20)))).json()) as any;
+  assert.equal(dashboardOrderDetailSchema.safeParse(taxed).success, true);
+  assert.deepEqual([taxed.taxAmount, taxed.taxMode, taxed.taxRatePercent, taxed.taxLabel, taxed.total], [510, 'exclusive', 17, 'GST', 3760]);
+  const inclusive = (await (await detailGET(get('/api/orders/' + oid(21)), params(oid(21)))).json()) as any;
+  assert.deepEqual([inclusive.taxAmount, inclusive.taxMode, inclusive.taxRatePercent, inclusive.total], [436, 'inclusive', 17, 3250]);
+});
+
+test('S8-B1 orders: an order with no tax, or from before tax, has no tax keys in its detail', async () => {
+  orders.push(order(22), order(23, { taxAmount: 0, taxMode: 'exclusive', taxRatePercent: 17 }), order(24, { taxAmount: 40 }));
+  for (const n of [22, 23, 24]) {
+    const detail = (await (await detailGET(get('/api/orders/' + oid(n)), params(oid(n)))).json()) as any;
+    assert.equal(dashboardOrderDetailSchema.safeParse(detail).success, true);
+    for (const key of ['taxAmount', 'taxMode', 'taxRatePercent', 'taxLabel']) assert.equal(key in detail, false, n + ' ' + key);
+  }
+});
+
+test('S8-B1 orders: the list row is unchanged by tax (only the total, which already holds an exclusive tax)', async () => {
+  orders.push(order(25, { taxAmount: 510, taxMode: 'exclusive', taxRatePercent: 17, taxLabel: 'GST', total: 3760 }));
+  const list = (await listJson('/api/orders')).body;
+  const row = list.docs.find((doc: any) => doc.id === oid(25));
+  assert.ok(row);
+  assert.equal(row.total, 3760);
+  assert.equal('taxAmount' in row, false);
+});

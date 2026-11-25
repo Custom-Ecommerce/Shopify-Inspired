@@ -9,7 +9,8 @@ import { createHash, randomBytes } from 'node:crypto';
  * { tokenHash, kind, usedAt: null, expiresAt > now }: two clicks of the same link can never both succeed.
  */
 
-export const AUTH_TOKEN_KINDS = ['password_reset', 'email_verify', 'email_change'] as const;
+// Sprint 6 (S6-B6): admin_invite is the link of an admin invitation: 7 days, works once.
+export const AUTH_TOKEN_KINDS = ['password_reset', 'email_verify', 'email_change', 'admin_invite'] as const;
 export type AuthTokenKind = (typeof AUTH_TOKEN_KINDS)[number];
 
 /** Reset links live 30 minutes; verification and email-change links 24 hours (D-093). */
@@ -17,6 +18,7 @@ export const AUTH_TOKEN_TTL_MS: Readonly<Record<AuthTokenKind, number>> = {
   password_reset: 30 * 60 * 1000,
   email_verify: 24 * 60 * 60 * 1000,
   email_change: 24 * 60 * 60 * 1000,
+  admin_invite: 7 * 24 * 60 * 60 * 1000,
 };
 
 const RAW_TOKEN_BYTES = 32;

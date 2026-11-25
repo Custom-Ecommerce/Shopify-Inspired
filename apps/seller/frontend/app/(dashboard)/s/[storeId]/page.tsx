@@ -2,8 +2,10 @@ import type { Order as PayloadOrderDoc } from "@markaz/contracts";
 import type { ListEnvelope as PayloadFindResponse } from "@markaz/api-compat";
 import Link from "next/link";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
+import { PlanBanner } from "@/components/dashboard/PlanBanner";
 import { resolveStorePage } from "@/lib/resolve-store-page";
 import { storeHref } from "@/lib/store-routes";
+import { canUse } from "@/lib/role-access";
 
 import { MetricTile } from "@/components/dashboard/shared/MetricTile";
 import { SectionCard } from "@/components/dashboard/shared/SectionCard";
@@ -135,16 +137,20 @@ function buildRecentOrderColumns(storeId: string): ColumnDef<PayloadOrderDoc>[] 
   {
     header: "Order ID",
     render: (o) => (
-      <Link
-        href={storeHref(storeId, `/orders/${o.id}`)}
-        className="font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-      >
-        {o.orderId}
-      </Link>
+      <>
+        <Link
+          href={storeHref(storeId, `/orders/${o.id}`)}
+          className="font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {o.orderId}
+        </Link>
+        {/* On a phone the customer sits under the number: six columns pushed the total off the screen. */}
+        <span className="block max-w-[8rem] truncate text-xs sm:hidden">{o.customerName}</span>
+      </>
     ),
   },
-  { header: "Customer", accessorKey: "customerName" },
-  { header: "City", accessorKey: "city" },
+  { header: "Customer", accessorKey: "customerName", className: "hidden sm:table-cell" },
+  { header: "City", accessorKey: "city", className: "hidden sm:table-cell" },
   {
     header: "Total",
     render: (o) => (
@@ -216,6 +222,9 @@ export default async function DashboardOverviewPage({
       {/* ── Onboarding checklist (only shows until dismissed or complete) */}
       <OnboardingChecklist />
 
+      {/* ── Sprint 6 EP-14: the plan and what is used of it ─────────────── */}
+      <PlanBanner compact />
+
       {/* ── Orders waiting for a confirmation call (Sprint 5 EP-11.US03.T03) ─ */}
       {unconfirmed > 0 ? (
         <Link
@@ -251,6 +260,8 @@ export default async function DashboardOverviewPage({
         data not currently fetched. These are advisory labels (blueprint §5.3 note).
       */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
+        {/* S8-B4: money summaries are the owner's (earnings); the other roles do not see the tile. */}
+        {canUse(store.role, "earnings") ? (
         <MetricTile
           label={`Revenue · ${monthName}`}
           value={revenue > 0 ? `PKR ${revenue.toLocaleString()}` : "—"}
@@ -259,6 +270,7 @@ export default async function DashboardOverviewPage({
           delta={{ value: "8%", label: "vs last month", direction: "up" }}
           href={storeHref(storeId, "/earnings")}
         />
+        ) : null}
         <MetricTile
           label="Orders Today"
           value={ordersToday}

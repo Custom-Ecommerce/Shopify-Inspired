@@ -214,65 +214,103 @@ test('the last payment method cannot be switched off', async () => {
 
 type Body = { code?: string; field?: string; error?: string; errors?: Array<{ message: string }> };
 
-test('SB-11: COD cannot go off while the theme has no card checkout (422 CARD_CHECKOUT_UNSUPPORTED_BY_THEME, payments.codEnabled)', async () => {
-  // STORE_A has no theme set, so it renders with the default, Mustafa.
-  const res = await save({ payments: { codEnabled: false, cardEnabled: true } });
-  assert.equal(res.status, 422);
-  const body = (await res.json()) as Body;
-  assert.equal(body.code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
-  assert.equal(body.field, 'payments.codEnabled');
-  assert.match(body.errors?.[0]?.message ?? '', /cannot take card payments/);
-  assert.deepEqual(stores[STORE_A]!.paymentSettings, {}, 'nothing was written');
+test('Sprint 7 (D-115): a store with no theme, or on Mustafa, renders Stiletto, so COD may go off while card is available (no theme blocks card)', async () => {
+  // STORE_A has no theme set: it renders with the fallback, Stiletto, which takes card.
+  await withCardEnv(CARD_ON, async () => {
+    const res = await save({ payments: { codEnabled: false, cardEnabled: true } });
+    assert.equal(res.status, 200);
+    assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, false);
+  });
+  // A store still holding the hidden Mustafa renders Stiletto as well.
+  stores[STORE_A]!.paymentSettings = {};
   stores[STORE_A]!.storefront.activeTheme = 'mustafa';
-  assert.equal((await save({ payments: { codEnabled: false, cardEnabled: true } })).status, 422);
-  // Switching the theme in the same request makes it fine (Sprint 5: while card is available on the platform).
-  await withCardEnv(CARD_ON, async () =>
-    assert.equal((await save({ theme: { activeTheme: 'stiletto' }, payments: { codEnabled: false, cardEnabled: true } })).status, 200),
-  );
-  assert.equal(stores[STORE_A]!.paymentSettings.codEnabled, false);
-  assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto');
+  await withCardEnv(CARD_ON, async () => assert.equal((await save({ payments: { codEnabled: false, cardEnabled: true } })).status, 200));
 });
 
-test('SB-11: COD stays switchable and card can be added on a theme without card checkout', async () => {
+test('SB-11: COD stays switchable and card can be added on any theme', async () => {
   assert.equal((await save({ payments: { codEnabled: true, cardEnabled: false } })).status, 200);
   assert.equal((await save({ payments: { codEnabled: true, cardEnabled: true } })).status, 200);
 });
 
-test('SB-11: a switch to a theme without card checkout is refused 422 while COD is off (theme.activeTheme)', async () => {
+test('Sprint 7 (D-115): a switch to a hidden or coming soon theme is refused 422 THEME_NOT_AVAILABLE (theme.activeTheme), and nothing is written', async () => {
   stores[STORE_A]!.storefront.activeTheme = 'stiletto';
-  stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
-  const res = await save({ theme: { activeTheme: 'mustafa' } });
-  assert.equal(res.status, 422);
-  const body = (await res.json()) as Body;
-  assert.equal(body.code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
-  assert.equal(body.field, 'theme.activeTheme');
-  assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto', 'the theme is unchanged');
-  // With COD on again the same switch works.
-  assert.equal((await save({ payments: { codEnabled: true } })).status, 200);
-  assert.equal((await save({ theme: { activeTheme: 'mustafa' } })).status, 200);
+  for (const slug of ['mustafa', 'mola', 'gani', 'perfecto']) {
+    const res = await save({ theme: { activeTheme: slug } });
+    assert.equal(res.status, 422, slug);
+    const body = (await res.json()) as Body;
+    assert.equal(body.code, 'THEME_NOT_AVAILABLE', slug);
+    assert.equal(body.field, 'theme.activeTheme', slug);
+    assert.match(body.errors?.[0]?.message ?? '', /not available yet/, slug);
+    assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto', 'the theme is unchanged');
+  }
+  assert.equal(audits.length, 0);
+  // A slug nobody has heard of is still a 400 (the form is wrong, not the theme).
+  const unknown = await save({ theme: { activeTheme: 'no-such-theme' } });
+  assert.equal(unknown.status, 400);
+  assert.equal(await fieldOf(unknown), 'theme.activeTheme');
+  // The one available theme is accepted.
+  assert.equal((await save({ theme: { activeTheme: 'stiletto' } })).status, 200);
 });
 
-test('SB-11: a store already card only on Mustafa can still save the same theme (the rule stops new switches only)', async () => {
+test('Sprint 7 (D-115): a store already on Mustafa can still save its other settings, and its settings say it renders Stiletto', async () => {
+  stores[STORE_A]!.storefront.activeTheme = 'mustafa';
   stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true };
-  assert.equal((await save({ theme: { activeTheme: 'mustafa' } })).status, 200);
   assert.equal((await save({ delivery: { defaultRate: 100 } })).status, 200);
+  assert.equal(stores[STORE_A]!.storefront.activeTheme, 'mustafa', 'saving something else never rewrites the theme');
+  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  const { settings } = (await read.json()) as { settings: any };
+  assert.equal(settings.theme.activeTheme, 'stiletto');
+  assert.equal(settings.theme.unavailableTheme, 'mustafa');
+  assert.equal(settings.theme.supportsCardCheckout, true);
 });
 
-test('SB-11: the settings and the theme list carry the flag; a theme without it counts as no card checkout', async () => {
-  const read = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
-  assert.equal(((await read.json()) as { settings: any }).settings.theme.supportsCardCheckout, false);
+test('Sprint 7 (D-115): mola and gani read as not available too; a store with no theme or a working one has no notice', async () => {
+  for (const slug of ['mola', 'gani']) {
+    stores[STORE_A]!.storefront.activeTheme = slug;
+    const { settings } = (await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any };
+    assert.equal(settings.theme.activeTheme, 'stiletto', slug);
+    assert.equal(settings.theme.unavailableTheme, slug, slug);
+  }
+  delete stores[STORE_A]!.storefront.activeTheme;
+  const none = (await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any };
+  assert.equal(none.settings.theme.activeTheme, 'stiletto');
+  assert.equal(none.settings.theme.unavailableTheme, null);
   stores[STORE_A]!.storefront.activeTheme = 'stiletto';
-  const again = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
-  assert.equal(((await again.json()) as { settings: any }).settings.theme.supportsCardCheckout, true);
+  const ok = (await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any };
+  assert.equal(ok.settings.theme.unavailableTheme, null);
+});
 
+test('Sprint 7 (D-115, CO-81): GET /api/themes lists only Stiletto, with its preview image and the card flag; Mustafa is hidden', async () => {
   const list = await (await import('../src/app/api/themes/route')).GET(
     new NextRequest('http://seller.test/api/themes', { headers: { authorization: 'Bearer ' + tokenA } }),
   );
   assert.equal(list.status, 200);
-  const { themes } = (await list.json()) as { themes: Array<{ slug: string; supportsCardCheckout: boolean }> };
-  assert.equal(themes.find((t) => t.slug === 'stiletto')?.supportsCardCheckout, true);
-  assert.equal(themes.find((t) => t.slug === 'mustafa')?.supportsCardCheckout, false);
-  assert.ok(themes.every((t) => typeof t.supportsCardCheckout === 'boolean'));
+  const { themes } = (await list.json()) as { themes: Array<{ slug: string; name: string; previewImage: string | null; supportsCardCheckout: boolean; isDefaultForNewStores: boolean }> };
+  assert.deepEqual(themes.map((t) => t.slug), ['stiletto']);
+  assert.equal(themes[0]!.name, 'Stiletto');
+  assert.equal(themes[0]!.supportsCardCheckout, true);
+  assert.equal(themes[0]!.isDefaultForNewStores, true);
+  assert.equal(themes[0]!.previewImage, 'https://markazify.com/theme-previews/stiletto.svg');
+  for (const hidden of ['mustafa', 'mola', 'gani', 'farooq', 'perfecto', 'minimal']) assert.ok(!themes.some((t) => t.slug === hidden), hidden);
+});
+
+test('Sprint 7 (CO-81): the preview image falls back to its plain path without a usable STOREFRONT_URL, and a theme without one has null', async () => {
+  const { previewImageUrl } = await import('../src/lib/theme-preview');
+  assert.equal(previewImageUrl('/theme-previews/stiletto.svg', 'https://markazify.com'), 'https://markazify.com/theme-previews/stiletto.svg');
+  assert.equal(previewImageUrl('/theme-previews/stiletto.svg', 'http://localhost:3000'), 'http://localhost:3000/theme-previews/stiletto.svg');
+  assert.equal(previewImageUrl('/theme-previews/stiletto.svg', undefined), '/theme-previews/stiletto.svg');
+  assert.equal(previewImageUrl('/theme-previews/stiletto.svg', 'not a url'), '/theme-previews/stiletto.svg');
+  assert.equal(previewImageUrl(undefined, 'https://markazify.com'), null);
+  assert.equal(previewImageUrl('', 'https://markazify.com'), null);
+});
+
+test('Sprint 7 (CO-81): the Stiletto preview file exists in the storefront public folder and is a plain SVG (no script, no outside link)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const file = fileURLToPath(new URL('../../../storefront/public/theme-previews/stiletto.svg', import.meta.url));
+  const svg = readFileSync(file, 'utf8');
+  assert.match(svg, /^<svg\b/);
+  assert.doesNotMatch(svg, /<script|href=|xlink:|on[a-z]+=/i);
 });
 
 test('payout details are shown masked and audited without the account number', async () => {
@@ -296,8 +334,10 @@ test('a wallet payout can be sent without a bank name (found by the Sprint 4 ver
   assert.equal(settings.payout.accountNumberMasked, '••••4567');
 });
 
-test('only an installed theme can be chosen; media must belong to the store', async () => {
-  assert.equal(await fieldOf(await save({ theme: { activeTheme: 'mola' } })), 'theme.activeTheme');
+test('only an available theme can be chosen; media must belong to the store', async () => {
+  const coming = await save({ theme: { activeTheme: 'mola' } });
+  assert.equal(coming.status, 422);
+  assert.equal(await fieldOf(coming), 'theme.activeTheme');
   assert.equal((await save({ theme: { activeTheme: 'stiletto' } })).status, 200);
   assert.equal(stores[STORE_A]!.storefront.activeTheme, 'stiletto');
   assert.equal(await fieldOf(await save({ branding: { banner: FOREIGN_MEDIA } })), 'branding.banner');
@@ -675,15 +715,14 @@ test('Sprint 5: COD may go off when card is available, and COD only is always fi
   });
 });
 
-test('Sprint 5: the old "keep one method on" 400 stays first, and the theme rule keeps its own 422 on a theme without card checkout', async () => {
+test('Sprint 5: the old "keep one method on" 400 stays first, then the card-not-available 422 (Sprint 7: the fallback theme, Stiletto, takes card, so no theme rule applies)', async () => {
   await withCardEnv({}, async () => {
     const both = await save({ payments: { codEnabled: false, cardEnabled: false } });
     assert.equal(both.status, 400);
     assert.equal(await fieldOf(both), 'payments.codEnabled');
-    // The default theme cannot take card, so the more specific SB-11 answer wins.
-    const theme = await save({ payments: { codEnabled: false, cardEnabled: true } });
-    assert.equal(theme.status, 422);
-    assert.equal(((await theme.json()) as Body).code, 'CARD_CHECKOUT_UNSUPPORTED_BY_THEME');
+    const noCard = await save({ payments: { codEnabled: false, cardEnabled: true } });
+    assert.equal(noCard.status, 422);
+    assert.equal(((await noCard.json()) as Body).code, 'NO_USABLE_PAYMENT_METHOD');
   });
 });
 
@@ -830,4 +869,326 @@ test("returns: a stored value that is not a whole number from 0 to 30 reads as t
   assert.equal((await save({ returns: { returnWindowDays: 3 } }, tokenB)).status, 403);
   assert.equal((await save({ returns: { returnWindowDays: 3 } }, tokenAdmin)).status, 403);
   assert.deepEqual(await readReturnsSettings(), { returnWindowDays: 7 });
+});
+
+// ------------------------------------------------------------------------------------------- Sprint 7 (S7-B6): custom domain
+
+const readinessFull = async () =>
+  (await (await readinessGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { ready: boolean; missing: string[]; items: Array<{ key: string; ok: boolean; label: string; tab: string; optional?: boolean }> };
+
+test('S7-B6 readiness: a store with no domain has exactly the six items and no domain step', async () => {
+  complete();
+  const result = await readinessFull();
+  assert.deepEqual(result.items.map((item) => item.key), ['profile', 'delivery', 'payment', 'payout', 'product', 'email']);
+  assert.equal(result.ready, true);
+});
+
+test('S7-B6 readiness: a connected domain (pending, failed or verified) adds an OPTIONAL domain step that never blocks go-live and is never missing', async () => {
+  complete();
+  for (const status of ['pending', 'failed']) {
+    stores[STORE_A]!.domain = 'shop.zara.pk';
+    stores[STORE_A]!.customDomainStatus = status;
+    const result = await readinessFull();
+    const step = result.items.find((item) => item.key === 'domain');
+    assert.ok(step, status);
+    assert.equal(step!.ok, false);
+    assert.equal(step!.optional, true);
+    assert.equal(step!.tab, 'domain');
+    assert.equal(result.ready, true, status + ': an unfinished domain does not block go-live');
+    assert.equal(result.missing.includes('domain'), false);
+    assert.equal(result.items.at(-1)!.key, 'domain', 'after the six');
+  }
+  stores[STORE_A]!.customDomainStatus = 'verified';
+  const done = (await readinessFull()).items.find((item) => item.key === 'domain');
+  assert.equal(done!.ok, true);
+  assert.match(done!.label, /connected/);
+  // and the go-live itself is not blocked by it
+  stores[STORE_A]!.customDomainStatus = 'pending';
+  assert.equal((await goLive()).status, 200);
+});
+
+test('S7-B6 the settings group "domain" saves the redirect switch (OFF by default), reads it back, and only an exact boolean is accepted', async () => {
+  const before = await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A));
+  assert.equal(((await before.json()) as { settings: any }).settings.domain.redirectToCustomDomain, false);
+  const res = await save({ domain: { redirectToCustomDomain: true } });
+  assert.equal(res.status, 200);
+  assert.deepEqual(((await res.json()) as { settings: any }).settings.domain, { redirectToCustomDomain: true });
+  assert.equal(stores[STORE_A]!.storefront.redirectToCustomDomain, true);
+  assert.equal(stores[STORE_A]!.slug, 'zara');
+  await settleRevalidations();
+  assert.equal(purges.filter((url) => url.includes('/api/revalidate')).length, 1, 'the storefront is purged once');
+  const off = await save({ domain: { redirectToCustomDomain: false } });
+  assert.deepEqual(((await off.json()) as { settings: any }).settings.domain, { redirectToCustomDomain: false });
+  for (const bad of ['true', 1, null, 'on']) {
+    const refused = await save({ domain: { redirectToCustomDomain: bad } });
+    assert.equal(refused.status, 400, String(bad));
+    assert.equal(await fieldOf(refused), 'domain.redirectToCustomDomain');
+  }
+});
+
+test('S7-B6 the domain group is strict: the host, the status and the token cannot be written through the settings save', async () => {
+  for (const field of ['domain', 'customDomainStatus', 'domainToken']) {
+    const res = await save({ domain: { [field]: field === 'domain' ? 'shop.zara.pk' : 'verified' } });
+    assert.equal(res.status, 400, field);
+    assert.equal(await fieldOf(res), field);
+  }
+  assert.equal(stores[STORE_A]!.domain, undefined);
+  assert.equal(stores[STORE_A]!.customDomainStatus, undefined);
+  const top = await save({ customDomainStatus: 'verified' });
+  assert.equal(top.status, 400);
+});
+
+test('S7-B6 another seller cannot change the redirect of this store', async () => {
+  const res = await save({ domain: { redirectToCustomDomain: true } }, tokenB, STORE_A);
+  assert.equal(res.status, 403);
+  assert.equal(stores[STORE_A]!.storefront.redirectToCustomDomain, undefined);
+});
+
+// ------------------------------------------------------------------------------------------- Sprint 7 (S7-B7): the Stiletto theme config
+
+const readSettings = async () => ((await (await settingsGET(req(STORE_A, tokenA, undefined, 'GET'), params(STORE_A))).json()) as { settings: any }).settings;
+
+test('S7-B7 a store that never saved a theme config reads the defaults: Stiletto itself, every section on', async () => {
+  const config = (await readSettings()).themeConfig;
+  assert.deepEqual(config, {
+    primaryColor: '#111111', accentColor: '#633e2b', fontFamily: 'theme', heroTitle: null, heroSubtitle: null, heroImage: null, heroCtaLabel: null, heroCtaLink: null,
+    announcementText: null, announcementEnabled: true, showFeatured: true, showCategories: true, showReviews: true, showBlog: true,
+  });
+});
+
+test('S7-B7 a theme config save is normalised, stored under storefront.themeConfig, read back with the defaults, audited and purges the storefront once', async () => {
+  const res = await save({ themeConfig: { primaryColor: '#ABC', accentColor: ' #00FF7F ', fontFamily: 'serif', heroTitle: '  New   season ', heroCtaLink: '/collections/new', showBlog: false } });
+  assert.equal(res.status, 200);
+  const { settings } = (await res.json()) as { settings: any };
+  assert.equal(settings.themeConfig.primaryColor, '#aabbcc');
+  assert.equal(settings.themeConfig.accentColor, '#00ff7f');
+  assert.equal(settings.themeConfig.heroTitle, 'New season');
+  assert.equal(settings.themeConfig.showBlog, false);
+  assert.equal(settings.themeConfig.showFeatured, true, 'defaults filled in');
+  assert.deepEqual(stores[STORE_A]!.storefront.themeConfig, { primaryColor: '#aabbcc', accentColor: '#00ff7f', fontFamily: 'serif', heroTitle: 'New season', heroCtaLink: '/collections/new', showBlog: false });
+  assert.equal(stores[STORE_A]!.slug, 'zara');
+  await settleRevalidations();
+  assert.equal(purges.filter((url) => url.includes('/api/revalidate')).length, 1);
+  assert.equal(audits.at(-1)!.action, 'store.settings');
+  assert.deepEqual(audits.at(-1)!.details.groups, ['themeConfig']);
+});
+
+test('S7-B7 a second save changes only the fields it names; null resets the whole config to the defaults', async () => {
+  await save({ themeConfig: { primaryColor: '#aabbcc', heroTitle: 'One' } });
+  await save({ themeConfig: { heroTitle: null, fontFamily: 'mono' } });
+  assert.deepEqual(stores[STORE_A]!.storefront.themeConfig, { primaryColor: '#aabbcc', heroTitle: null, fontFamily: 'mono' });
+  const reset = await save({ themeConfig: null });
+  assert.equal(reset.status, 200);
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, null);
+  assert.equal(((await reset.json()) as { settings: any }).settings.themeConfig.primaryColor, '#111111');
+  assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the rest of the storefront is untouched');
+});
+
+test('S7-B7 an invalid value is a 400 naming the field and NEVER reaches the database (injection attempts included)', async () => {
+  const attempts: Array<[Record<string, unknown>, string]> = [
+    [{ primaryColor: 'url(https://evil.test/x.png)' }, 'themeConfig.primaryColor'],
+    [{ primaryColor: '#fff;background:url(x)' }, 'themeConfig.primaryColor'],
+    [{ accentColor: 'expression(alert(1))' }, 'themeConfig.accentColor'],
+    [{ accentColor: '#fff}body{display:none' }, 'themeConfig.accentColor'],
+    [{ fontFamily: 'Arial, sans-serif' }, 'themeConfig.fontFamily'],
+    [{ fontFamily: 'serif;color:red' }, 'themeConfig.fontFamily'],
+    [{ heroTitle: '<script>alert(1)</script>' }, 'themeConfig.heroTitle'],
+    [{ heroTitle: 'x'.repeat(81) }, 'themeConfig.heroTitle'],
+    [{ heroSubtitle: 'x'.repeat(161) }, 'themeConfig.heroSubtitle'],
+    [{ heroCtaLabel: '<b>x</b>' }, 'themeConfig.heroCtaLabel'],
+    [{ heroCtaLink: 'javascript:alert(1)' }, 'themeConfig.heroCtaLink'],
+    [{ heroCtaLink: '//evil.test' }, 'themeConfig.heroCtaLink'],
+    [{ heroCtaLink: 'http://example.com' }, 'themeConfig.heroCtaLink'],
+    [{ announcementText: 'a'.repeat(121) }, 'themeConfig.announcementText'],
+    [{ showBlog: 'false' }, 'themeConfig.showBlog'],
+    [{ heroImage: 'https://evil.test/a.png' }, 'themeConfig.heroImage'],
+  ];
+  let writes = 0;
+  const original = StoreModel.findOneAndUpdate;
+  StoreModel.findOneAndUpdate = (...args: unknown[]) => {
+    writes += 1;
+    return original(...args);
+  };
+  for (const [themeConfig, field] of attempts) {
+    const res = await save({ themeConfig });
+    assert.equal(res.status, 400, JSON.stringify(themeConfig));
+    assert.equal(await fieldOf(res), field, JSON.stringify(themeConfig));
+  }
+  assert.equal(writes, 0, 'not one of them reached the database');
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, undefined);
+});
+
+test('S7-B7 an unknown key of the group (a style, a class, a script) is a 400 that names it', async () => {
+  for (const key of ['style', 'css', 'customCss', 'className', 'html', 'fontUrl']) {
+    const res = await save({ themeConfig: { primaryColor: '#fff', [key]: 'x' } });
+    assert.equal(res.status, 400, key);
+    assert.equal(await fieldOf(res), key);
+  }
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, undefined);
+});
+
+test('S7-B7 the hero image must be one of the seller own images: another store file or an unknown id is a 422 THEME_CONFIG_IMAGE_INVALID and nothing is written', async () => {
+  const own = await save({ themeConfig: { heroImage: LOGO } });
+  assert.equal(own.status, 200);
+  assert.deepEqual(((await own.json()) as { settings: any }).settings.themeConfig.heroImage, { id: LOGO, url: 'https://res.cloudinary.com/x/logo.png' });
+  assert.equal(stores[STORE_A]!.storefront.themeConfig.heroImage, LOGO);
+  const before = structuredClone(stores[STORE_A]!.storefront.themeConfig);
+  const foreign = await save({ themeConfig: { heroImage: FOREIGN_MEDIA, heroTitle: 'Nope' } });
+  assert.equal(foreign.status, 422);
+  const body = (await foreign.json()) as { code?: string; field?: string };
+  assert.equal(body.code, 'THEME_CONFIG_IMAGE_INVALID');
+  assert.equal(body.field, 'themeConfig.heroImage');
+  assert.deepEqual(stores[STORE_A]!.storefront.themeConfig, before, 'the title was not written either');
+  const filters: any[] = [];
+  const exists = MediaModel.exists;
+  MediaModel.exists = async (filter: any) => {
+    filters.push(filter);
+    return exists(filter);
+  };
+  await save({ themeConfig: { heroImage: LOGO } });
+  assert.deepEqual(filters.at(-1).resourceType, { $ne: 'video' }, 'a video cannot be the hero picture');
+  assert.equal(String(filters.at(-1).store), STORE_A, 'and the picture is looked up in THIS store only');
+});
+
+test('S7-B7 isolation: another seller cannot write this store theme config, and an admin cannot either', async () => {
+  const other = await save({ themeConfig: { primaryColor: '#ff0000' } }, tokenB, STORE_A);
+  assert.equal(other.status, 403);
+  const admin = await save({ themeConfig: { primaryColor: '#ff0000' } }, tokenAdmin, STORE_A);
+  assert.equal(admin.status, 403);
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, undefined);
+  const own = await save({ themeConfig: { primaryColor: '#00ff00' } }, tokenB, STORE_B);
+  assert.equal(own.status, 200);
+  assert.equal(stores[STORE_B]!.storefront.themeConfig.primaryColor, '#00ff00');
+  assert.equal(stores[STORE_A]!.storefront.themeConfig, undefined, 'one store config never lands in another');
+});
+
+test('S7-B7 a stored value that is no longer valid (a hand-edited document) reads as the default for that field, never as the stored text', async () => {
+  stores[STORE_A]!.storefront = { deliveryRate: 250, themeConfig: { primaryColor: 'url(x)', heroTitle: '<b>x</b>', fontFamily: 'Comic Sans', showBlog: false, heroCtaLink: 'javascript:alert(1)' } };
+  const config = (await readSettings()).themeConfig;
+  assert.equal(config.primaryColor, '#111111');
+  assert.equal(config.heroTitle, null);
+  assert.equal(config.fontFamily, 'theme');
+  assert.equal(config.heroCtaLink, null);
+  assert.equal(config.showBlog, false, 'a valid stored value is kept');
+});
+
+// ------------------------------------------------------------------------------------------- Sprint 8 (S8-B1, D-118): store tax
+
+test('S8-B1 a store that never saved tax reads the defaults: off, 0%, exclusive, "Tax"', async () => {
+  assert.deepEqual((await readSettings()).tax, { enabled: false, ratePercent: 0, mode: 'exclusive', label: 'Tax' });
+});
+
+test('S8-B1 a tax save is stored under storefront.tax, read back with the defaults, audited and purges the storefront once', async () => {
+  const res = await save({ tax: { enabled: true, ratePercent: 17.5, mode: 'inclusive', label: '  GST  ' } });
+  assert.equal(res.status, 200);
+  const { settings } = (await res.json()) as { settings: any };
+  assert.deepEqual(settings.tax, { enabled: true, ratePercent: 17.5, mode: 'inclusive', label: 'GST' });
+  assert.deepEqual(stores[STORE_A]!.storefront.tax, { enabled: true, ratePercent: 17.5, mode: 'inclusive', label: 'GST' });
+  assert.equal(stores[STORE_A]!.storefront.deliveryRate, 250, 'the rest of the storefront is untouched');
+  assert.equal(stores[STORE_A]!.slug, 'zara');
+  await settleRevalidations();
+  assert.equal(purges.filter((url) => url.includes('/api/revalidate')).length, 1);
+  assert.equal(audits.at(-1)!.action, 'store.settings');
+  assert.deepEqual(audits.at(-1)!.details.groups, ['tax']);
+  assert.deepEqual(audits.at(-1)!.details.fields, ['storefront']);
+  assert.deepEqual((await readSettings()).tax, settings.tax);
+});
+
+test('S8-B1 a second save changes only the fields it names; turning tax off keeps the rate', async () => {
+  await save({ tax: { enabled: true, ratePercent: 17, label: 'Tax' } });
+  await save({ tax: { mode: 'inclusive' } });
+  assert.deepEqual(stores[STORE_A]!.storefront.tax, { enabled: true, ratePercent: 17, label: 'Tax', mode: 'inclusive' });
+  await save({ tax: { enabled: false } });
+  assert.deepEqual((await readSettings()).tax, { enabled: false, ratePercent: 17, mode: 'inclusive', label: 'Tax' });
+});
+
+test('S8-B1 the rate accepts 0, 0.01, 17, 17.5 and 100 and nothing else', async () => {
+  for (const rate of [0, 0.01, 17, 17.5, 17.55, 100]) {
+    const res = await save({ tax: { enabled: true, ratePercent: rate } });
+    assert.equal(res.status, 200, String(rate));
+    assert.equal(stores[STORE_A]!.storefront.tax.ratePercent, rate);
+  }
+});
+
+test('S8-B1 an invalid tax value is a 400 naming the field and NEVER reaches the database', async () => {
+  const attempts: Array<[Record<string, unknown>, string]> = [
+    [{ enabled: true, ratePercent: 17.555 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: 0.001 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: -1 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: -0.01 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: 100.01 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: 101 }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: '17' }, 'tax.ratePercent'],
+    [{ enabled: true, ratePercent: null }, 'tax.ratePercent'],
+    [{ enabled: 'yes', ratePercent: 17 }, 'tax.enabled'],
+    [{ enabled: true, ratePercent: 17, mode: 'both' }, 'tax.mode'],
+    [{ enabled: true, ratePercent: 17, label: '<b>Tax</b>' }, 'tax.label'],
+    [{ enabled: true, ratePercent: 17, label: 'x'.repeat(21) }, 'tax.label'],
+    [{ enabled: true, ratePercent: 17, label: '   ' }, 'tax.label'],
+    [{ enabled: true, ratePercent: 17, label: 5 }, 'tax.label'],
+    // Enabled with no valid rate: the store never saved one, so turning tax on alone is refused.
+    [{ enabled: true }, 'tax.ratePercent'],
+  ];
+  let writes = 0;
+  const original = StoreModel.findOneAndUpdate;
+  StoreModel.findOneAndUpdate = (...args: unknown[]) => {
+    writes += 1;
+    return original(...args);
+  };
+  for (const [tax, field] of attempts) {
+    const res = await save({ tax });
+    assert.equal(res.status, 400, JSON.stringify(tax));
+    assert.equal(await fieldOf(res), field, JSON.stringify(tax));
+  }
+  assert.equal(writes, 0, 'not one of them reached the database');
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined);
+});
+
+test('S8-B1 an unknown key of the group is a 400 and nothing is written', async () => {
+  for (const key of ['rate', 'currency', 'perLine', 'inclusive', '__proto__x']) {
+    const res = await save({ tax: { enabled: true, ratePercent: 17, [key]: 5 } });
+    assert.equal(res.status, 400, key);
+  }
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined);
+});
+
+test('S8-B1 turning tax on is allowed once the store has a rate, in a later save', async () => {
+  assert.equal((await save({ tax: { ratePercent: 17 } })).status, 200);
+  assert.equal(stores[STORE_A]!.storefront.tax.enabled, undefined);
+  assert.equal((await save({ tax: { enabled: true } })).status, 200);
+  assert.deepEqual((await readSettings()).tax, { enabled: true, ratePercent: 17, mode: 'exclusive', label: 'Tax' });
+  // ...and the rate cannot be taken away while tax is on: no group value can make an enabled store without a rate.
+  assert.equal((await save({ tax: { ratePercent: null } })).status, 400);
+});
+
+test('S8-B1 the save is a compare-and-set on the store revision: a change made in another tab is a 409 and nothing is written', async () => {
+  const original = StoreModel.findOneAndUpdate;
+  StoreModel.findOneAndUpdate = (filter: any, update: any, options: any) => {
+    stores[STORE_A]!.updatedAt = new Date(T0.getTime() + 5000);
+    return original(filter, update, options);
+  };
+  const res = await save({ tax: { enabled: true, ratePercent: 17 } });
+  assert.equal(res.status, 409);
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined);
+});
+
+test('S8-B1 isolation: another seller cannot write this store tax, and an admin cannot either', async () => {
+  const other = await save({ tax: { enabled: true, ratePercent: 17 } }, tokenB, STORE_A);
+  assert.equal(other.status, 403);
+  const admin = await save({ tax: { enabled: true, ratePercent: 17 } }, tokenAdmin, STORE_A);
+  assert.equal(admin.status, 403);
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined);
+  const own = await save({ tax: { enabled: true, ratePercent: 5 } }, tokenB, STORE_B);
+  assert.equal(own.status, 200);
+  assert.equal(stores[STORE_B]!.storefront.tax.ratePercent, 5);
+  assert.equal(stores[STORE_A]!.storefront.tax, undefined, 'one store tax never lands in another');
+});
+
+test('S8-B1 a stored tax that is no longer valid (a hand-edited document) reads as off and as the defaults, never as the stored value', async () => {
+  stores[STORE_A]!.storefront = { deliveryRate: 250, tax: { enabled: true, ratePercent: 'lots', mode: 'weird', label: '<b>x</b>' } };
+  assert.deepEqual((await readSettings()).tax, { enabled: false, ratePercent: 0, mode: 'exclusive', label: 'Tax' });
+  stores[STORE_A]!.storefront = { tax: { enabled: true, ratePercent: 17.555 } };
+  assert.equal((await readSettings()).tax.enabled, false, 'three decimals is not a rate');
+  stores[STORE_A]!.storefront = { tax: { enabled: true, ratePercent: 17, mode: 'inclusive' } };
+  assert.deepEqual((await readSettings()).tax, { enabled: true, ratePercent: 17, mode: 'inclusive', label: 'Tax' });
 });

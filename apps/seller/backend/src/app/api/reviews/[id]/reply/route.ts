@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
     const { id } = await context.params;
-    return NextResponse.json(await saveReply(request, id, 'create'), { status: 201, headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(await saveReply(request, id, 'create', 'reviews.reply'), { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
   }

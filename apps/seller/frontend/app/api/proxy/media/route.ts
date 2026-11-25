@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { proxyPost } from "@/lib/proxy";
+import { proxyGet, proxyPost } from "@/lib/proxy";
 
 /**
  * POST /api/proxy/media — multipart upload (`file`, `alt`) to the Seller backend's `/api/media`.
@@ -10,6 +10,19 @@ import { proxyPost } from "@/lib/proxy";
  */
 export function POST(req: NextRequest) {
   return proxyPost(req, "/api/media", {
+    auth: "dashboard",
+    storeScope: "required",
+    bindStore: false,
+    logScope: "[proxy media]",
+  });
+}
+
+/**
+ * GET /api/proxy/media (Sprint 7, S7-B2) — the active store's files, newest first, in the list envelope (`page` and `limit` pass through). The media
+ * library page reads this; the store comes from `x-store-id`, verified by the proxy.
+ */
+export function GET(req: NextRequest) {
+  return proxyGet(req, "/api/media", {
     auth: "dashboard",
     storeScope: "required",
     bindStore: false,

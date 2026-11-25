@@ -1,4 +1,3 @@
-import { toLedgerTotals } from '@/lib/admin-commission';
 import { STORE_STATUSES, toIso, type Doc, type StoreStatus } from '@/lib/admin-stores';
 import { SYNC_STATUSES } from '@/lib/admin-sync';
 
@@ -9,9 +8,6 @@ import { SYNC_STATUSES } from '@/lib/admin-sync';
  */
 
 export const NEW_SELLER_WINDOW_DAYS = 30;
-
-/** The ledger fields the overview reads, a subset of the fields the admin policy may read (ADMIN_LEDGER_READABLE_FIELDS). */
-export const OVERVIEW_LEDGER_FIELDS = ['status', 'orderAmount', 'commissionAmount'] as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -69,7 +65,8 @@ export interface OverviewParts {
   storeGroups: unknown;
   sellerTotal: unknown;
   sellerRecent: unknown;
-  ledgerGroups: unknown;
+  /** Sprint 6 (S6-B5): the KPIs from the seller backend (the NEW ledger), or null when it could not be reached. */
+  kpi: unknown;
   /** Outbox counts in the order of SYNC_STATUSES. */
   outboxCounts: readonly unknown[];
   oldestPending: Doc | null | undefined;
@@ -81,7 +78,7 @@ export function toOverview(parts: OverviewParts, now: Date) {
   return {
     stores: toStoreCounts(parts.storeGroups),
     sellers: toSellerCounts(parts.sellerTotal, parts.sellerRecent),
-    ledger: toLedgerTotals(parts.ledgerGroups),
+    kpi: parts.kpi ?? null,
     outbox: toOutboxHealth(parts.outboxCounts, parts.oldestPending, parts.lastSent),
     generatedAt: now.toISOString(),
   };

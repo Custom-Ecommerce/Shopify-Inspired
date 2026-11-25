@@ -19,6 +19,9 @@ export * from './models/media';
 
 // B10.4: store articles and orders.
 export * from './models/store-article';
+export * from './models/store-page';
+export * from './models/contact-message';
+export * from './models/support-ticket';
 export * from './models/order';
 
 // B11.2: the billing ports, one implementation for every app.
@@ -53,3 +56,11 @@ export * from './models/customer-note';
 export * from './models/blocked-contact';
 // Sprint 5 EP-28 (D-107): carts a shopper left with a phone and the consent line (7 day TTL).
 export * from './models/abandoned-cart';
+// Sprint 6 (S6-B7): the acknowledged revision per (store, group).
+export * from './models/store-sync-revision';
+// Sprint 8 (S8-B2, D-118): the people invited to a store's team.
+export * from './models/store-member';
+// Sprint 8 (S8-B4, D-118): the API keys of a store (read-only v1 API). Only the hash of a secret is stored.
+export * from './models/api-key';
+// Sprint 8 (S8-B6, D-118): anonymous storefront counters, removed by TTL after 400 days.
+export * from './models/daily-stat';

@@ -7,6 +7,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { storeHref } from "@/lib/store-routes";
 import { formatRs as money } from "@/lib/format";
+import { taxRowLabel } from "@/lib/tax-view";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/dashboard/shared/ErrorState";
@@ -168,6 +169,13 @@ function PackingSlip({ order, storeName }: { order: OrderPrintSheet; storeName: 
           ))}
         </tbody>
       </table>
+
+      {order.taxAmount && order.taxAmount > 0 ? (
+        <div className="ps-row">
+          <span>{taxRowLabel(order.taxLabel, order.taxMode)}</span>
+          <span>{money(order.taxAmount)}</span>
+        </div>
+      ) : null}
 
       <div className="ps-row ps-strong">
         <span>Total quantity: {totalQty(order)}</span>

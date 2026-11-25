@@ -1,5 +1,10 @@
+import { adminTrafficSchema, type AdminTraffic } from "@markaz/contracts/admin-traffic";
+import { adminReferralListSchema, type AdminReferralList } from "@markaz/contracts/admin-referrals";
+import { referralStateToQuery, type ReferralListState } from "@/lib/referrals";
 import type { ModerationReview, ModerationReviewList } from "@markaz/contracts";
 import { reviewStateToQuery, type ReviewAction, type ReviewListState } from "@/lib/reviews";
+import { paymentApiQuery, type PaymentAction, type PaymentListState } from "@/lib/subscription-payments";
+import { orderStateToQuery, type OrderListState } from "@/lib/orders";
 import {
   adminStoreDetailSchema,
   adminStoreListEnvelopeSchema,
@@ -10,7 +15,11 @@ import {
   type StoreStatusChangeResponse,
   adminSellerListEnvelopeSchema,
   adminSellerStatusResponseSchema,
+  adminSellerStoreLimitSchema,
+  adminSellerStoreLimitSetResponseSchema,
   type AdminSellerStatusResponse,
+  type AdminSellerStoreLimit,
+  type AdminSellerStoreLimitSetResponse,
   adminSyncOutboxSchema,
   adminAuditListSchema,
   type AdminSellerListEnvelope,
@@ -19,6 +28,22 @@ import {
   adminLedgerListSchema,
   adminCommissionRatesSchema,
   adminSubscriptionPlanListSchema,
+  adminPaymentListSchema,
+  adminUserListSchema,
+  retryResponseSchema,
+  failedEmailListSchema,
+  retentionRunResponseSchema,
+  type FailedEmailRow,
+  type RetentionRunResponse,
+  adminUserResponseSchema,
+  type AdminUser,
+  adminOrderListSchema,
+  adminOrderDetailResponseSchema,
+  type AdminOrderList,
+  type AdminOrderDetail,
+  adminPaymentWriteResponseSchema,
+  type AdminPaymentList,
+  type AdminPaymentWriteResponse,
   type AdminLedgerList,
   type AdminCommissionRates,
   type AdminSubscriptionPlanList,
@@ -29,7 +54,7 @@ import { syncStateToQuery, type SyncListState } from "@/lib/sync";
 import { listStateToQuery, type StoreListState } from "@/lib/stores";
 import { ledgerStateToQuery, ratesStateToQuery, type CommissionListState } from "@/lib/commission";
 import { subscriptionStateToQuery, type SubscriptionListState } from "@/lib/subscriptions";
-import { adminOverviewSchema, type AdminOverview } from "@/lib/contracts";
+import { adminOverviewSchema, adminPlanWriteResponseSchema, adminSellerPlansResponseSchema, type AdminOverview, type AdminPlanWriteResponse, type AdminSellerPlansResponse } from "@/lib/contracts";
 import {
   commissionReportSchema,
   payoutBalanceListSchema,
@@ -147,6 +172,19 @@ export function changeSellerStatus(id: string, input: { status: "suspended" | "a
   });
 }
 
+/** Sprint 6 EP-12.US02.T03: a seller's store limit: the override, the effective limit and where it comes from. */
+export function getSellerStoreLimit(id: string, signal?: AbortSignal): Promise<AdminSellerStoreLimit> {
+  return call("/api/sellers/" + encodeURIComponent(id) + "/store-limit", adminSellerStoreLimitSchema as Parser<AdminSellerStoreLimit>, { signal });
+}
+
+/** Sprint 6 EP-12.US02.T02: set (a whole number from 1) or clear (null) a seller's store-limit override, with a reason. */
+export function setSellerStoreLimit(id: string, input: { storeLimitOverride: number | null; reason: string }): Promise<AdminSellerStoreLimitSetResponse> {
+  return call("/api/sellers/" + encodeURIComponent(id) + "/store-limit", adminSellerStoreLimitSetResponseSchema as Parser<AdminSellerStoreLimitSetResponse>, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function getSyncOutbox(state: SyncListState, signal?: AbortSignal): Promise<AdminSyncOutbox> {
   return call("/api/sync/outbox?" + syncStateToQuery(state, true), adminSyncOutboxSchema as Parser<AdminSyncOutbox>, { signal });
 }
@@ -181,6 +219,29 @@ export function listRateHistory(page: number, signal?: AbortSignal): Promise<Rat
 
 export function listSubscriptionPlans(state: SubscriptionListState, signal?: AbortSignal): Promise<AdminSubscriptionPlanList> {
   return call("/api/subscription-plans?" + subscriptionStateToQuery(state, true), adminSubscriptionPlanListSchema as Parser<AdminSubscriptionPlanList>, { signal });
+}
+
+/** Sprint 6 EP-14.US02.T08: the plan, status and usage of the sellers on the page (a failure only hides the plan column). */
+export function getSellerPlans(ids: readonly string[], signal?: AbortSignal): Promise<AdminSellerPlansResponse> {
+  return call("/api/sellers/plans?ids=" + ids.map(encodeURIComponent).join(","), adminSellerPlansResponseSchema as Parser<AdminSellerPlansResponse>, { signal });
+}
+
+/** Sprint 6 EP-14.US01: create a plan. The answer is the new plan (revision 0). */
+export function createPlan(input: unknown): Promise<AdminPlanWriteResponse> {
+  return call("/api/subscription-plans", adminPlanWriteResponseSchema as Parser<AdminPlanWriteResponse>, { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Sprint 6 EP-14.US01: change a plan. The body carries the revision the admin saw and a reason. */
+export function updatePlan(id: string, input: unknown): Promise<AdminPlanWriteResponse> {
+  return call("/api/subscription-plans/" + encodeURIComponent(id), adminPlanWriteResponseSchema as Parser<AdminPlanWriteResponse>, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+/** Sprint 6 EP-14.US01: archive a plan (the only removal). The body carries the revision and a reason. */
+export function archivePlan(id: string, input: { revision: number; reason: string }): Promise<AdminPlanWriteResponse> {
+  return call("/api/subscription-plans/" + encodeURIComponent(id) + "/archive", adminPlanWriteResponseSchema as Parser<AdminPlanWriteResponse>, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 /** The platform settings. The answer is one document, so there is no list envelope and no id. */
@@ -289,4 +350,71 @@ export function listModerationReviews(state: ReviewListState, signal?: AbortSign
 /** Hides (with a reason) or shows again one review. */
 export function runReviewAction(action: ReviewAction, reviewId: string, reason: string): Promise<ModerationReview> {
   return call("/api/reviews/" + action, looseReview, { method: "POST", body: JSON.stringify(action === "unhide" ? { reviewId } : { reviewId, reason }) });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-14 (S6-B4, D-118): manual subscription payments
+
+export function listSubscriptionPayments(state: PaymentListState, signal?: AbortSignal): Promise<AdminPaymentList> {
+  return call("/api/subscription-payments?" + paymentApiQuery(state), adminPaymentListSchema as Parser<AdminPaymentList>, { signal });
+}
+
+/** Confirm (with the amount seen and a reason), reject or void (with a reason) one payment. The id is the path's. */
+export function runPaymentAction(action: PaymentAction, paymentId: string, body: { amountRs?: number; reason: string }): Promise<AdminPaymentWriteResponse> {
+  return call("/api/subscription-payments/" + encodeURIComponent(paymentId) + "/" + action, adminPaymentWriteResponseSchema as Parser<AdminPaymentWriteResponse>, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// Sprint 6 EP-12 (S6-B5): the read-only orders view (safe fields only).
+export function listOrders(state: OrderListState, signal?: AbortSignal): Promise<AdminOrderList> {
+  return call("/api/orders?" + orderStateToQuery(state, true), adminOrderListSchema as Parser<AdminOrderList>, { signal });
+}
+
+export function getOrder(id: string, signal?: AbortSignal): Promise<AdminOrderDetail> {
+  return call("/api/orders/" + encodeURIComponent(id), adminOrderDetailResponseSchema as Parser<{ order: AdminOrderDetail }>, { signal }, (p) => p).then((r) => r.order);
+}
+
+// Sprint 6 (S6-B6, D-118): admin users and levels (owner level only; the server refuses anyone else).
+export function listAdminUsers(signal?: AbortSignal): Promise<{ users: AdminUser[] }> {
+  return call("/api/users", adminUserListSchema as Parser<{ users: AdminUser[] }>, { signal });
+}
+
+export function inviteAdminUser(body: { name: string; email: string; adminLevel: string }): Promise<{ user: AdminUser }> {
+  return call("/api/users", adminUserResponseSchema as Parser<{ user: AdminUser }>, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function runUserAction(action: "level" | "disable" | "enable", id: string, body: { reason: string; adminLevel?: string }): Promise<{ user: AdminUser }> {
+  return call("/api/users/" + encodeURIComponent(id) + "/" + action, adminUserResponseSchema as Parser<{ user: AdminUser }>, { method: "POST", body: JSON.stringify(body) });
+}
+
+// Sprint 6 (S6-B7): retries and the retention run.
+type RetryResult = { requested: number; retried: number; skipped: number };
+
+export function retryDeadEvents(ids: string[]): Promise<RetryResult> {
+  return call("/api/sync/retry", retryResponseSchema as Parser<RetryResult>, { method: "POST", body: JSON.stringify({ ids }) });
+}
+
+export function listFailedEmails(signal?: AbortSignal): Promise<{ docs: FailedEmailRow[]; totalDocs: number }> {
+  return call("/api/notifications/failed", failedEmailListSchema as Parser<{ docs: FailedEmailRow[]; totalDocs: number }>, { signal });
+}
+
+export function retryFailedEmails(ids: string[]): Promise<RetryResult> {
+  return call("/api/notifications/retry", retryResponseSchema as Parser<RetryResult>, { method: "POST", body: JSON.stringify({ ids }) });
+}
+
+/** The retention run: a dry run unless apply is true. */
+export function runRetentionNow(apply: boolean): Promise<RetentionRunResponse> {
+  return call("/api/retention", retentionRunResponseSchema as Parser<RetentionRunResponse>, { method: "POST", body: JSON.stringify(apply ? { apply: true } : {}) });
+}
+
+// Sprint 8 (S8-B6): the read-only referrals view.
+export function listReferrals(state: ReferralListState, signal?: AbortSignal): Promise<AdminReferralList> {
+  return call("/api/referrals?" + referralStateToQuery(state), adminReferralListSchema as Parser<AdminReferralList>, { signal });
+}
+
+// Sprint 8 (S8-B7): the overview's visits and orders per day.
+export function getTraffic(signal?: AbortSignal): Promise<AdminTraffic> {
+  return call("/api/overview/traffic", adminTrafficSchema as Parser<AdminTraffic>, { signal });
 }

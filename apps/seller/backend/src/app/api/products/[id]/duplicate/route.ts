@@ -23,7 +23,7 @@ export async function POST(request: NextRequest, context: ProductRouteContext): 
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'products.write' });
 
     const copyId = await duplicateProduct(storeId, id);
     return NextResponse.json(await loadSellerProduct(storeId, copyId), { status: 201 });

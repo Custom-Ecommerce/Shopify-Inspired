@@ -132,6 +132,29 @@ assert.equal(can('admin', 'update', 'platformSettings', ['settingsRevision']), f
 assert.equal(can('admin', 'update', 'platformSettings', ['defaultCommissionRate']), true);
 });
 
+test('Sprint 6: admin may write the COD commission percent and the plan settings; a seller and the public may not', () => {
+const fields = ['codCommissionPercent', 'paymentInstructions', 'graceDays', 'trialDays', 'supportEmail', 'supportPhone'];
+for (const field of fields) {
+assert.equal(can('admin', 'update', 'platformSettings', [field]), true, field);
+assert.equal(can('system', 'update', 'platformSettings', [field]), true, field);
+assert.equal(can('seller', 'update', 'platformSettings', [field]), false, field);
+assert.equal(can('public', 'update', 'platformSettings', [field]), false, field);
+}
+assert.equal(can('admin', 'update', 'platformSettings', ['codCommissionPercent', 'settingsRevision']), false);
+});
+
+test('Sprint 6: only an admin (and the system) may write storeLimitOverride; a seller, the public and a generic users update may not', () => {
+assert.equal(can('admin', 'update', 'sellers', ['storeLimitOverride']), true);
+assert.equal(can('system', 'update', 'sellers', ['storeLimitOverride']), true);
+assert.equal(can('seller', 'update', 'sellers', ['storeLimitOverride']), false);
+assert.equal(can('public', 'update', 'sellers', ['storeLimitOverride']), false);
+assert.equal(can('seller', 'update', 'users', ['storeLimitOverride']), false);
+assert.equal(can('public', 'update', 'users', ['storeLimitOverride']), false);
+assert.equal(can('admin', 'update', 'users', ['storeLimitOverride']), false);
+assert.equal(can('admin', 'read', 'users', ['storeLimitOverride']), true);
+assert.equal(can('seller', 'read', 'users', ['storeLimitOverride']), false);
+});
+
 test('audit entries are immutable, even for system', () => {
 assert.equal(can('system', 'update', 'audit-log', ['x']), false);
 assert.equal(can('system', 'delete', 'audit-log'), false);
@@ -417,4 +440,169 @@ assert.equal(can('system', 'update', 'orderPayment', ['paymentStatus', 'paidAt']
 assert.equal(can('system', 'update', 'orderPayment', ['amount']), false);
 assert.equal(can('seller', 'update', 'orderPayment', ['paymentStatus']), false);
 assert.equal(can('seller', 'update', 'orderPayment', ['paidAt']), false);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-14 (D-118): the subscriptionPlans policy row, for every actor.
+
+test('Sprint 6 plans: an admin reads everything, creates with the key, and updates without it', () => {
+assert.equal(can('admin', 'read', 'subscriptionPlans'), true);
+assert.equal(can('admin', 'read', 'subscriptionPlans', ['stripePriceId', 'revision']), true);
+assert.equal(can('admin', 'create', 'subscriptionPlans', ['key', 'name', 'priceRs', 'limits', 'features', 'sortOrder', 'stripePriceId']), true);
+assert.equal(can('admin', 'update', 'subscriptionPlans', ['name', 'priceRs', 'limits', 'features', 'sortOrder', 'stripePriceId', 'isActive', 'archivedAt']), true);
+assert.equal(can('admin', 'update', 'subscriptionPlans', ['key']), false, 'the key never changes');
+assert.equal(can('admin', 'update', 'subscriptionPlans', ['revision']), false, 'only the server moves the revision');
+assert.equal(can('admin', 'create', 'subscriptionPlans', ['revision']), false);
+});
+
+test('Sprint 6 plans: the system may do everything the server needs, including moving the revision', () => {
+assert.equal(can('system', 'read', 'subscriptionPlans'), true);
+assert.equal(can('system', 'create', 'subscriptionPlans', ['key', 'revision']), true);
+assert.equal(can('system', 'update', 'subscriptionPlans', ['revision', 'name']), true);
+});
+
+test('Sprint 6 plans: a seller and the public read only the public view', () => {
+for (const actor of ['seller', 'public'] as const) {
+assert.equal(can(actor, 'read', 'subscriptionPlans', ['key', 'name', 'priceRs', 'interval', 'limits', 'features', 'sortOrder', 'isActive']), true, actor);
+for (const hidden of ['stripePriceId', 'revision', 'archivedAt', 'tier', 'createdAt']) assert.equal(can(actor, 'read', 'subscriptionPlans', [hidden]), false, actor + ' ' + hidden);
+}
+});
+
+test('Sprint 6 plans: a seller and the public cannot create or update a plan', () => {
+for (const actor of ['seller', 'public'] as const) {
+assert.equal(can(actor, 'create', 'subscriptionPlans', ['key', 'name']), false, actor);
+assert.equal(can(actor, 'update', 'subscriptionPlans', ['name']), false, actor);
+assert.equal(can(actor, 'update', 'subscriptionPlans', ['isActive']), false, actor + ' cannot archive');
+}
+});
+
+test('Sprint 6 plans: nobody deletes a plan, system and admin included: archiving is the only removal', () => {
+for (const actor of ['admin', 'system', 'seller', 'public'] as const) assert.equal(can(actor, 'delete', 'subscriptionPlans'), false, actor);
+assert.deepEqual(POLICY_MATRIX.subscriptionPlans!.delete.actors, []);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-14 (D-118): the subscriptions policy row, for every actor.
+
+test('Sprint 6 subscriptions: an admin reads everything, creates with the seller, and updates without the seller or the revision', () => {
+assert.equal(can('admin', 'read', 'subscriptions'), true);
+assert.equal(can('admin', 'read', 'subscriptions', ['revision', 'seller']), true);
+assert.equal(can('admin', 'create', 'subscriptions', ['seller', 'planKey', 'status', 'currentPeriodEnd', 'source']), true);
+assert.equal(can('admin', 'update', 'subscriptions', ['planKey', 'status', 'periodStart', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'source', 'cancelAtPeriodEnd']), true);
+assert.equal(can('admin', 'update', 'subscriptions', ['seller']), false, 'one subscription per seller: it never moves');
+assert.equal(can('admin', 'update', 'subscriptions', ['revision']), false, 'only the server moves the revision');
+assert.equal(can('admin', 'create', 'subscriptions', ['revision']), false);
+});
+
+test('Sprint 6 subscriptions: the system may do what the expiry job needs, including the revision', () => {
+assert.equal(can('system', 'read', 'subscriptions'), true);
+assert.equal(can('system', 'create', 'subscriptions', ['seller', 'revision']), true);
+assert.equal(can('system', 'update', 'subscriptions', ['status', 'graceUntil', 'revision']), true);
+});
+
+test('Sprint 6 subscriptions: a seller reads the subscription fields (their own, by the route) and nothing else', () => {
+assert.equal(can('seller', 'read', 'subscriptions', ['planKey', 'status', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'cancelAtPeriodEnd', 'source', 'periodStart']), true);
+for (const hidden of ['seller', 'revision', 'createdAt', 'updatedAt']) assert.equal(can('seller', 'read', 'subscriptions', [hidden]), false, hidden);
+});
+
+test('Sprint 6 subscriptions: a seller cannot create or update a subscription, so cannot give themselves a plan', () => {
+assert.equal(can('seller', 'create', 'subscriptions', ['planKey']), false);
+for (const field of ['planKey', 'status', 'currentPeriodEnd', 'graceUntil', 'trialEndsAt', 'cancelAtPeriodEnd']) assert.equal(can('seller', 'update', 'subscriptions', [field]), false, field);
+});
+
+test('Sprint 6 subscriptions: the public reads, creates and updates nothing', () => {
+for (const op of ['read', 'create', 'update', 'delete'] as const) assert.equal(can('public', op, 'subscriptions'), false, op);
+});
+
+test('Sprint 6 subscriptions: nobody deletes a subscription, admin and system included', () => {
+for (const actor of ['admin', 'system', 'seller', 'public'] as const) assert.equal(can(actor, 'delete', 'subscriptions'), false, actor);
+assert.deepEqual(POLICY_MATRIX.subscriptions!.delete.actors, []);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 (S6-B4, D-118): the subscriptionPayments policy row, for every actor.
+
+test('Sprint 6 payments: a seller reads the money facts of their payment and not the admin\'s bookkeeping', () => {
+assert.equal(can('seller', 'read', 'subscriptionPayments', ['planKey', 'amountRs', 'status', 'method', 'reference', 'proofUrl', 'periodStart', 'periodEnd', 'reason', 'claimedAt', 'decidedAt']), true);
+for (const hidden of ['seller', 'decidedBy', 'revision', 'subscriptionBefore', 'subscriptionRevisionAfter', 'isOpen']) assert.equal(can('seller', 'read', 'subscriptionPayments', [hidden]), false, hidden);
+});
+
+test('Sprint 6 payments: a seller creates with the plan key only: the amount, the status and the period are never theirs', () => {
+assert.equal(can('seller', 'create', 'subscriptionPayments', ['planKey']), true);
+for (const field of ['amountRs', 'status', 'periodStart', 'periodEnd', 'seller', 'decidedBy', 'method']) assert.equal(can('seller', 'create', 'subscriptionPayments', [field]), false, field);
+});
+
+test('Sprint 6 payments: a seller can say I paid (method, reference, proof, claimed) and cannot confirm, change the amount or the period', () => {
+assert.equal(can('seller', 'update', 'subscriptionPayments', ['method', 'reference', 'proofUrl', 'status', 'claimedAt']), true);
+for (const field of ['amountRs', 'planKey', 'periodStart', 'periodEnd', 'decidedBy', 'decidedAt', 'reason', 'seller']) assert.equal(can('seller', 'update', 'subscriptionPayments', [field]), false, field);
+});
+
+test('Sprint 6 payments: an admin reads everything and updates the status fields only; an admin never creates a payment', () => {
+assert.equal(can('admin', 'read', 'subscriptionPayments'), true);
+assert.equal(can('admin', 'read', 'subscriptionPayments', ['decidedBy', 'revision', 'seller']), true);
+assert.equal(can('admin', 'update', 'subscriptionPayments', ['status', 'decidedBy', 'decidedAt', 'reason', 'periodStart', 'periodEnd']), true);
+for (const field of ['amountRs', 'planKey', 'seller', 'method', 'reference', 'revision']) assert.equal(can('admin', 'update', 'subscriptionPayments', [field]), false, field);
+assert.equal(can('admin', 'create', 'subscriptionPayments', ['planKey']), false);
+});
+
+test('Sprint 6 payments: the system does what the server needs', () => {
+assert.equal(can('system', 'read', 'subscriptionPayments'), true);
+assert.equal(can('system', 'create', 'subscriptionPayments', ['seller', 'planKey', 'amountRs']), true);
+assert.equal(can('system', 'update', 'subscriptionPayments', ['revision', 'isOpen', 'status']), true);
+});
+
+test('Sprint 6 payments: the public reads, creates and updates nothing', () => {
+for (const op of ['read', 'create', 'update', 'delete'] as const) assert.equal(can('public', op, 'subscriptionPayments'), false, op);
+});
+
+test('Sprint 6 payments: nobody deletes a payment, admin and system included', () => {
+for (const actor of ['admin', 'system', 'seller', 'public'] as const) assert.equal(can(actor, 'delete', 'subscriptionPayments'), false, actor);
+assert.deepEqual(POLICY_MATRIX.subscriptionPayments!.delete.actors, []);
+});
+
+test('Sprint 6 (S6-B4) subscriptions: a seller reads the pending plan of their own subscription, and still cannot write it (the route does, after their request)', () => {
+assert.equal(can('seller', 'read', 'subscriptions', ['pendingPlanKey']), true);
+assert.equal(can('seller', 'update', 'subscriptions', ['pendingPlanKey']), false);
+assert.equal(can('seller', 'update', 'subscriptions', ['cancelAtPeriodEnd']), false);
+assert.equal(can('public', 'read', 'subscriptions', ['pendingPlanKey']), false);
+});
+
+test('S6-B5 adminOrdersView: an admin and the system read the safe fields only, and never the shopper name, phone, address or email', () => {
+for (const actor of ['admin', 'system'] as const) {
+assert.equal(can(actor, 'read', 'adminOrdersView', ['orderNumber', 'status', 'total', 'city', 'items', 'totals', 'statusHistory']), true, actor);
+for (const hidden of ['phone', 'phoneKey', 'address', 'customerName', 'customerEmail', 'customerNote', 'customerWhatsapp', 'notes']) assert.equal(can(actor, 'read', 'adminOrdersView', [hidden]), false, actor + ' ' + hidden);
+}
+});
+
+test('S6-B5 adminOrdersView: a seller and the public read nothing through it, and nobody writes or deletes', () => {
+for (const actor of ['seller', 'public'] as const) assert.equal(can(actor, 'read', 'adminOrdersView', ['status']), false, actor);
+for (const actor of ['admin', 'system', 'seller', 'public'] as const) for (const op of ['create', 'update', 'delete'] as const) assert.equal(can(actor, op, 'adminOrdersView'), false, actor + ' ' + op);
+});
+
+test('S6-B6: an admin can no longer write role, create a user with a role, or touch adminLevel through the generic users row', () => {
+assert.equal(can('admin', 'update', 'users', ['role']), false);
+assert.equal(can('admin', 'create', 'users', ['role']), false);
+assert.equal(can('admin', 'update', 'users', ['adminLevel']), false);
+assert.equal(can('admin', 'update', 'users', ['name']), true);
+assert.equal(can('admin', 'read', 'users', ['adminLevel']), true);
+for (const actor of ['seller', 'public'] as const) {
+assert.equal(can(actor, 'update', 'users', ['role']), false, actor);
+assert.equal(can(actor, 'update', 'users', ['adminLevel']), false, actor);
+}
+});
+
+test('S6-B6 adminUsers: an admin (the routes then require owner level) invites, changes the level and disables; nobody changes a password hash or deletes', () => {
+assert.equal(can('admin', 'read', 'adminUsers', ['name', 'email', 'adminLevel', 'accountStatus']), true);
+assert.equal(can('admin', 'create', 'adminUsers', ['name', 'email', 'adminLevel']), true);
+assert.equal(can('admin', 'update', 'adminUsers', ['adminLevel', 'accountStatus', 'suspensionReason']), true);
+for (const hidden of ['passwordHash', 'role', 'tokenVersion', 'storeLimitOverride']) {
+assert.equal(can('admin', 'update', 'adminUsers', [hidden]), false, hidden);
+assert.equal(can('admin', 'create', 'adminUsers', [hidden]), false, hidden);
+}
+assert.equal(can('admin', 'read', 'adminUsers', ['passwordHash']), false);
+for (const actor of ['admin', 'system', 'seller', 'public'] as const) assert.equal(can(actor, 'delete', 'adminUsers'), false, actor);
+});
+
+test('S6-B6 adminUsers: a seller and the public read, create and update nothing', () => {
+for (const actor of ['seller', 'public'] as const) for (const op of ['read', 'create', 'update'] as const) assert.equal(can(actor, op, 'adminUsers'), false, actor + ' ' + op);
 });

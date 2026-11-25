@@ -30,5 +30,8 @@ export const storePaths = {
   },
   /** Static content pages (about, contact). */
   page: (slug: string) => "/pages/" + encodeURIComponent(slug),
+  /** Sprint 7 (S7-B3): the blog, for themes that provide it. */
+  blog: "/blog",
+  article: (slug: string) => "/blog/" + encodeURIComponent(slug),
 };
 /* @theme-integration-patch:paths */

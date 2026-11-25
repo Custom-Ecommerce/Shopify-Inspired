@@ -2,7 +2,7 @@ import type Stripe from 'stripe';
 import { stripe } from './stripe-client';
 import { getBillingPorts } from './ports';
 import { computeCommission, recordRefundReversal } from './commission';
-import { isDuplicateKeyError } from './util';
+import { isDuplicateKeyError, subscriptionStripeEnabled } from './util';
 
 export interface WebhookOutcome {
   status: number;
@@ -128,11 +128,21 @@ export async function handleStripeWebhook(rawBody: string, signature: string | n
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
+        // Sprint 6 (D-118): Stripe subscriptions are off. Acknowledge and ignore, so Stripe does not retry and nothing is written.
+        if (!subscriptionStripeEnabled()) return { status: 200, body: { received: true, ignored: 'subscription_stripe_off' } };
         await onSubscriptionChanged(event);
         break;
-      case 'checkout.session.completed':
+      case 'checkout.session.completed': {
+        // CO-62: a subscription checkout carries no order or commission metadata. It used to fall into the order path and answer 500 forever.
+        // It never writes a ledger row: the subscription itself arrives as customer.subscription.* (handled only while the flag is on).
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.mode === 'subscription') {
+          if (!subscriptionStripeEnabled()) return { status: 200, body: { received: true, ignored: 'subscription_stripe_off' } };
+          return { status: 200, body: { received: true, type: event.type, subscription: true } };
+        }
         await onCheckoutCompleted(event);
         break;
+      }
       case 'charge.refunded':
         await onChargeRefunded(event);
         break;

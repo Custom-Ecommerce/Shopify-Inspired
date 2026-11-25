@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'returns');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'returns.read' });
 
     const doc = await Return.findOne({ _id: id, store: storeId }).lean();
     if (!doc) throw new HttpError(404, 'Return not found');
@@ -51,7 +51,9 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     if (!body.ok) return body.response;
     assertCan(ctx.actor, 'update', 'returns', Object.keys(body.data));
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    // S8-B3: marking a return (approve, reject) is returns.write (support does it); a body that records a refund (amount or type) needs returns.refund (owner and manager).
+    const refundFields = body.data.refundAmount !== undefined || body.data.refundType !== undefined;
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: refundFields ? 'returns.refund' : 'returns.write' });
 
     const current = await Return.findOne({ _id: id, store: storeId }).lean();
     if (!current) throw new HttpError(404, 'Return not found');

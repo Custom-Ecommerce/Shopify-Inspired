@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { deleteAsset, uploadImage } from '@/lib/cloudinary';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { removeMediaIfUnused } from '@/lib/media-cleanup';
-import { loadOwnedStore, requireSellerActor, SETTINGS_SELECT } from '@/lib/owned-store';
+import { loadStoreFor, requireSellerActor, SETTINGS_SELECT } from '@/lib/owned-store';
 import { revalidateStore } from '@/lib/revalidate';
 import { assertCan, Media, Store, writeAuditLog } from '@/lib/services';
-import { record, SETTINGS_ERROR_CODE, toStoreSettings } from '@/lib/store-settings';
+import { record, SETTINGS_ERROR_CODE, settingsForRole, toStoreSettings } from '@/lib/store-settings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     assertCan(ctx.actor, 'create', 'media', ['alt']);
     assertCan(ctx.actor, 'update', 'stores', ['storefront']);
-    const current = await loadOwnedStore(request, ctx, id, SETTINGS_SELECT);
+    const { doc: current, role } = await loadStoreFor(request, ctx, id, SETTINGS_SELECT, ['settings.write']);
     const storeId = String(current._id);
     const previous = record(current.storefront)[kind];
 
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     const storefront = { ...record(current.storefront), [kind]: mediaId };
     const updated = await Store.findOneAndUpdate(
-      { _id: storeId, owner: ctx.userObjectId, updatedAt: current.updatedAt ?? null },
+      { _id: storeId, owner: current.owner ?? ctx.userObjectId, updatedAt: current.updatedAt ?? null },
       { $set: { storefront } },
       { new: true },
     )
@@ -85,11 +85,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     revalidateStore(storeId);
     await removeMediaIfUnused(storeId, previous === undefined || previous === null ? null : String(previous));
     try {
-      await writeAuditLog('store.branding', 'store', storeId, 'seller:' + ctx.userId, { kind, mediaId, at: new Date().toISOString() });
+      await writeAuditLog('store.branding', 'store', storeId, auditActorOf(ctx), { kind, mediaId, actorRole: role, at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the branding audit entry', err instanceof Error ? err.message : 'unknown');
     }
-    return NextResponse.json({ settings: await toStoreSettings(updated as never) }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ settings: settingsForRole(await toStoreSettings(updated as never), role) }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
   }

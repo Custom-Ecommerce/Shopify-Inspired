@@ -7,15 +7,20 @@ import {
   THEME_OPTIONS,
   THEME_SLUGS,
   getThemeEntry,
+  isPremiumTheme,
+  isSellerThemeSlug,
+  themePlanGate,
   isThemeSlug,
   listGalleryThemes,
   listInstalledThemes,
+  listSellerThemes,
+  resolveRenderTheme,
   themeSupportsCardCheckout,
 } from "./manifest";
 import { checkStoreSlug } from "../reservation";
 
 describe("theme manifest", () => {
-  it("contains the four Phase 1 themes", () => {
+  it("contains the four Phase 1 themes (slugs stay reserved whatever their status)", () => {
     for (const slug of ["mustafa", "mola", "gani", "farooq"]) {
       assert.ok(isThemeSlug(slug), slug);
     }
@@ -35,9 +40,75 @@ describe("theme manifest", () => {
     assert.equal(getThemeEntry(DEFAULT_THEME_SLUG)?.status, "available");
   });
 
-  it("marks mustafa as the free default", () => {
-    assert.equal(DEFAULT_THEME_SLUG, "mustafa");
-    assert.equal(getThemeEntry("mustafa")?.tier, "free");
+  it("makes Stiletto the render fallback, free, installed and selectable by sellers (D-115, D-118)", () => {
+    assert.equal(DEFAULT_THEME_SLUG, "stiletto");
+    assert.equal(getThemeEntry("stiletto")?.tier, "free");
+    assert.equal(getThemeEntry("stiletto")?.isDefault, true);
+    assert.ok(isSellerThemeSlug(DEFAULT_THEME_SLUG));
+    assert.ok(listInstalledThemes().some((entry) => entry.slug === DEFAULT_THEME_SLUG));
+  });
+
+  it("makes mola and gani coming_soon with their slugs still reserved (D-115)", () => {
+    for (const slug of ["mola", "gani"]) {
+      assert.equal(getThemeEntry(slug)?.status, "coming_soon", slug);
+      assert.ok(isThemeSlug(slug), slug);
+      assert.ok(!isSellerThemeSlug(slug), slug);
+      assert.ok(!listInstalledThemes().some((entry) => entry.slug === slug), slug);
+    }
+  });
+
+  it("keeps Mustafa in the manifest but hidden from sellers and from the gallery (D-115)", () => {
+    const mustafa = getThemeEntry("mustafa");
+    assert.equal(mustafa?.hiddenFromSellers, true);
+    assert.equal(mustafa?.isDefault, false);
+    assert.ok(isThemeSlug("mustafa"));
+    assert.ok(!isSellerThemeSlug("mustafa"));
+    assert.ok(!listGalleryThemes().some((entry) => entry.slug === "mustafa"));
+  });
+
+  it("lists only Stiletto for sellers", () => {
+    assert.deepEqual(listSellerThemes().map((entry) => entry.slug), ["stiletto"]);
+    assert.ok(!isSellerThemeSlug("not-a-theme"));
+    assert.ok(!isSellerThemeSlug(undefined));
+  });
+
+  it("shows Stiletto as available and mola, gani and farooq as coming soon only, in the gallery", () => {
+    const gallery = listGalleryThemes();
+    assert.equal(gallery.find((entry) => entry.slug === "stiletto")?.status, "available");
+    for (const slug of ["mola", "gani", "farooq"]) assert.equal(gallery.find((entry) => entry.slug === slug)?.status, "coming_soon", slug);
+    assert.deepEqual(gallery.filter((entry) => entry.status === "available").map((entry) => entry.slug), ["stiletto"]);
+  });
+
+  it("gives Stiletto a preview image (CO-81) and no other theme needs one", () => {
+    assert.equal(getThemeEntry("stiletto")?.previewImage, "/theme-previews/stiletto.svg");
+  });
+
+  it("renders Stiletto for a store whose theme is mola, gani, mustafa, archived, unknown or unset, and says so (D-115)", () => {
+    for (const slug of ["mola", "gani", "mustafa"]) {
+      const result = resolveRenderTheme(slug);
+      assert.equal(result.slug, "stiletto", slug);
+      assert.equal(result.source, "default", slug);
+      assert.equal(result.unavailableTheme, slug, slug);
+      assert.match(result.fallbackReason ?? "", /not available yet/, slug);
+    }
+    for (const slug of ["perfecto", "no-such-theme"]) {
+      const result = resolveRenderTheme(slug);
+      assert.equal(result.slug, "stiletto", slug);
+      assert.equal(result.unavailableTheme, slug, slug);
+    }
+    for (const unset of [null, undefined, ""]) {
+      const result = resolveRenderTheme(unset);
+      assert.equal(result.slug, "stiletto");
+      assert.equal(result.unavailableTheme, null, "a store that never chose a theme has nothing to be told");
+    }
+  });
+
+  it("renders the chosen theme when it is available and loadable, and falls back when the caller cannot load it", () => {
+    assert.deepEqual(resolveRenderTheme("stiletto"), { slug: "stiletto", source: "store", unavailableTheme: null });
+    const notLoadable = resolveRenderTheme("stiletto", () => false);
+    assert.equal(notLoadable.slug, "stiletto");
+    assert.equal(notLoadable.source, "default");
+    assert.match(notLoadable.fallbackReason ?? "", /not installed/);
   });
 
   it("creates new stores with Stiletto, an available theme (D-059)", () => {
@@ -49,7 +120,7 @@ describe("theme manifest", () => {
     const gallery = listGalleryThemes().map((entry) => entry.slug);
     assert.ok(!gallery.includes("perfecto"));
     assert.ok(!gallery.includes("minimal"));
-    assert.ok(gallery.includes("mustafa"));
+    assert.ok(gallery.includes("stiletto"));
     assert.equal(getThemeEntry("perfecto")?.status, "archived");
     assert.ok(THEME_OPTIONS.some((option) => option.value === "perfecto"));
   });
@@ -58,7 +129,9 @@ describe("theme manifest", () => {
     const labels = Object.fromEntries(THEME_OPTIONS.map((option) => [option.value, option.label]));
     assert.equal(labels.perfecto, "Perfecto (archived)");
     assert.equal(labels.farooq, "Farooq (coming soon)");
-    assert.equal(labels.mola, "Mola");
+    assert.equal(labels.mola, "Mola (coming soon)");
+    assert.equal(labels.gani, "Gani (coming soon)");
+    assert.equal(labels.stiletto, "Stiletto");
   });
 
   it("rejects non-theme values in the type guard", () => {
@@ -77,5 +150,27 @@ describe("theme manifest", () => {
         assert.equal(themeSupportsCardCheckout(entry.slug), false, entry.slug);
       }
     }
+  });
+});
+
+describe("the premium theme gate (S7-B7, D-118)", () => {
+  const FAKE = [
+    { slug: "stiletto", tier: "free" },
+    { slug: "lux", tier: "paid" },
+  ] as const;
+  it("a theme on the paid tier is premium, a free one is not, and an unknown slug is not", () => {
+    assert.equal(isPremiumTheme("lux", FAKE), true);
+    assert.equal(isPremiumTheme("stiletto", FAKE), false);
+    assert.equal(isPremiumTheme("nope", FAKE), false);
+    assert.equal(isPremiumTheme(undefined, FAKE), false);
+  });
+  it("a premium theme is locked on a plan without premium themes and open on one with them; a free theme is never locked", () => {
+    assert.deepEqual(themePlanGate("lux", false, FAKE), { premium: true, locked: true });
+    assert.deepEqual(themePlanGate("lux", true, FAKE), { premium: true, locked: false });
+    assert.deepEqual(themePlanGate("stiletto", false, FAKE), { premium: false, locked: false });
+  });
+  it("Stiletto, the theme sellers can choose today, is free: nothing is locked on the Free plan", () => {
+    assert.equal(isPremiumTheme("stiletto"), false);
+    for (const entry of listSellerThemes()) assert.equal(themePlanGate(entry.slug, false).locked, false, entry.slug);
   });
 });

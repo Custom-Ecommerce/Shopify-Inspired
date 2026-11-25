@@ -1,8 +1,9 @@
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
+import type { SellerCapability } from '@markaz/auth';
 import type { SellerReview } from '@markaz/contracts';
 import { readAccountBody } from '@/lib/account-support';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { REVIEW_ALREADY_REPLIED, REVIEW_NOT_REPLIED, reviewReplyRequestSchema } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
@@ -22,7 +23,7 @@ type Row = Record<string, unknown>;
  *   create  POST  filter { _id, store, reply: null }       409 REVIEW_ALREADY_REPLIED when a reply exists (also the loser of two parallel posts)
  *   edit    PATCH filter { _id, store, reply: { $ne: null } } 409 REVIEW_NOT_REPLIED when there is nothing to edit yet
  */
-export async function saveReply(request: NextRequest, id: string, mode: 'create' | 'edit'): Promise<SellerReview> {
+export async function saveReply(request: NextRequest, id: string, mode: 'create' | 'edit', capability: SellerCapability): Promise<SellerReview> {
   const ctx = await authenticate(request);
   if (ctx.actor !== 'seller') throw new HttpError(403, 'Only the store owner can reply to a review');
   const { reply } = await readAccountBody(request, reviewReplyRequestSchema);
@@ -31,7 +32,7 @@ export async function saveReply(request: NextRequest, id: string, mode: 'create'
     throw new HttpError(503, 'Seller database unavailable');
   });
   if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Review not found');
-  const storeId = await resolveOwnedStoreId(request, ctx, null);
+  const storeId = await resolveOwnedStoreId(request, ctx, null, { capability });
 
   const current = (await Review.findOne({ _id: id, store: storeId }).lean()) as unknown as Row | null;
   if (!current) throw new HttpError(404, 'Review not found');
@@ -52,7 +53,7 @@ export async function saveReply(request: NextRequest, id: string, mode: 'create'
 
   revalidateStoreProduct(String(storeId), String(updated.product));
   try {
-    await writeAuditLog(mode === 'create' ? 'review.reply' : 'review.reply_edit', 'review', id, 'seller:' + ctx.userId, {
+    await writeAuditLog(mode === 'create' ? 'review.reply' : 'review.reply_edit', 'review', id, auditActorOf(ctx), {
       storeId: String(storeId),
       reviewId: id,
       productId: String(updated.product),

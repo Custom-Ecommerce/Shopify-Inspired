@@ -1,6 +1,6 @@
 import type { EarningsEntryRow, EarningsPayoutRow, EarningsQuery, EarningsResponse } from '@markaz/contracts';
 import { HttpError } from '@/lib/http';
-import { commissionTotals, oid, returnsTotals, totalPaidOut, unsettledBalance } from '@/lib/ledger-aggregates';
+import { codTotals, commissionTotals, oid, returnsTotals, totalPaidOut, unsettledBalance } from '@/lib/ledger-aggregates';
 import { ACCOUNT_CODES, karachiDayLabel, resolvePeriod } from '@/lib/contracts';
 import { CommissionEntry, Order, Payout } from '@/lib/services';
 
@@ -9,6 +9,8 @@ import { CommissionEntry, Order, Payout } from '@/lib/services';
  *
  *   summary   the period, Asia/Karachi days: sales = net item subtotal of the commission entries (reversals subtract,
  *             delivery excluded), commission = their net, net = sales - commission.
+ *   cod       Sprint 6 D-116: the cash-on-delivery part of the summary (orders, sales, commission). With a COD percent of 0 its
+ *             commission is 0: the page words those sales as "no commission". Already counted in the summary, never added to it.
  *   allTime   balance = what is not yet paid out, totalPaidOut = the paid payouts.
  *   entries   a page of the period's ledger rows, with the order number looked up for THIS page only.
  *   payouts   what the platform paid (and took back).
@@ -86,8 +88,9 @@ export async function buildEarnings(storeId: string, query: EarningsQuery, now: 
     ...(query.type ? { type: query.type } : {}),
   };
 
-  const [totals, balance, paidOut, rows, totalDocs, payouts, returns] = await Promise.all([
+  const [totals, cod, balance, paidOut, rows, totalDocs, payouts, returns] = await Promise.all([
     commissionTotals(storeId, period.start, period.end),
+    codTotals(storeId, period.start, period.end),
     unsettledBalance(storeId),
     totalPaidOut(storeId),
     CommissionEntry.find(filter)
@@ -111,6 +114,8 @@ export async function buildEarnings(storeId: string, query: EarningsQuery, now: 
     summary: { sales: totals.sales, commission: totals.commission, net: totals.sales - totals.commission },
     // Sprint 5 EP-13: how much of the summary above came from returns (already netted into it).
     returns,
+    // Sprint 6 D-116: of the summary, the cash-on-delivery sales and what they paid in commission (0 while the COD percent is 0).
+    cod: { orders: cod.orders, sales: cod.sales, commission: cod.commission },
     allTime: { balance, totalPaidOut: paidOut },
     entries: { docs: rows.map((row) => toEntryRow(row, numbers)), page: query.page, limit: query.limit, totalDocs, totalPages: Math.ceil(totalDocs / query.limit) },
     payouts: payouts.map(toPayoutRow),

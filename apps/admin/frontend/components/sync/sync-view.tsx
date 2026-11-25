@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { DataTable, TablePagination, type Column } from "@/components/shared/data-table";
@@ -9,7 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getSyncOutbox } from "@/lib/api/client";
+import { getSyncOutbox, retryDeadEvents } from "@/lib/api/client";
+import { FailedEmailsSection } from "@/components/sync/failed-emails";
+import { retryButtonText, retryResultText, retryableEventIds } from "@/lib/sync-ops";
+import { toast } from "sonner";
 import type { AdminSyncEvent, AdminSyncOutbox } from "@/lib/contracts";
 import { formatDateTime, formatRelative, shortId } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
@@ -135,6 +138,20 @@ export function SyncView() {
   }
 
   const { data, error, loading, refetch } = useAdminFetch((signal) => getSyncOutbox(state, signal), [state.page, state.status]);
+  const [retrying, setRetrying] = useState(false);
+  const retryIds = state.status === "dead" ? retryableEventIds(data?.events.docs ?? []) : [];
+
+  async function retry(ids: string[]) {
+    setRetrying(true);
+    try {
+      toast.success(retryResultText(await retryDeadEvents(ids)));
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not retry.");
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   useEffect(() => {
     if (data && data.events.totalPages > 0 && state.page > data.events.totalPages) go({ ...state, page: data.events.totalPages });
@@ -176,6 +193,11 @@ export function SyncView() {
           </Button>
         </div>
       ) : null}
+      {state.status === "dead" && retryIds.length > 0 ? (
+        <Button className="min-h-11 w-full sm:w-auto" variant="outline" disabled={retrying} onClick={() => void retry(retryIds)}>
+          {retryButtonText(retryIds.length)} (this page)
+        </Button>
+      ) : null}
       <DataTable
         label="Sync events"
         columns={COLUMNS}
@@ -191,6 +213,7 @@ export function SyncView() {
       {data ? (
         <TablePagination page={data.events.page} totalPages={data.events.totalPages} totalDocs={data.events.totalDocs} noun="event" disabled={loading} onPage={(page) => go({ ...state, page })} />
       ) : null}
+      <FailedEmailsSection />
     </div>
   );
 }

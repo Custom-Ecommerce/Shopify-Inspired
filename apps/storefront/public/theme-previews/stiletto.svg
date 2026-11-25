@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Stiletto theme preview">
+  <rect width="400" height="300" fill="#faf7f2"/>
+  <rect width="400" height="34" fill="#1c1917"/>
+  <rect x="16" y="12" width="60" height="10" rx="2" fill="#faf7f2"/>
+  <rect x="270" y="14" width="22" height="6" rx="2" fill="#a8a29e"/>
+  <rect x="302" y="14" width="22" height="6" rx="2" fill="#a8a29e"/>
+  <rect x="334" y="14" width="50" height="6" rx="2" fill="#a8a29e"/>
+  <rect x="16" y="50" width="368" height="96" rx="6" fill="#e7ded0"/>
+  <rect x="36" y="76" width="150" height="14" rx="3" fill="#1c1917"/>
+  <rect x="36" y="100" width="110" height="8" rx="3" fill="#78716c"/>
+  <rect x="36" y="118" width="64" height="16" rx="8" fill="#1c1917"/>
+  <circle cx="320" cy="98" r="36" fill="#d6c7b0"/>
+  <rect x="16" y="162" width="86" height="86" rx="6" fill="#e7ded0"/>
+  <rect x="114" y="162" width="86" height="86" rx="6" fill="#e7ded0"/>
+  <rect x="212" y="162" width="86" height="86" rx="6" fill="#e7ded0"/>
+  <rect x="310" y="162" width="74" height="86" rx="6" fill="#e7ded0"/>
+  <rect x="16" y="256" width="60" height="7" rx="2" fill="#57534e"/>
+  <rect x="114" y="256" width="60" height="7" rx="2" fill="#57534e"/>
+  <rect x="212" y="256" width="60" height="7" rx="2" fill="#57534e"/>
+  <rect x="310" y="256" width="50" height="7" rx="2" fill="#57534e"/>
+  <rect x="16" y="270" width="36" height="7" rx="2" fill="#a8a29e"/>
+  <rect x="114" y="270" width="36" height="7" rx="2" fill="#a8a29e"/>
+  <rect x="212" y="270" width="36" height="7" rx="2" fill="#a8a29e"/>
+  <rect x="310" y="270" width="36" height="7" rx="2" fill="#a8a29e"/>
+</svg>

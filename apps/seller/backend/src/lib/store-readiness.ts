@@ -31,7 +31,12 @@ const LABELS: Record<StoreReadinessItem, { label: string; tab: string }> = {
   payout: { label: 'Add where we pay you (bank, JazzCash or Easypaisa)', tab: 'payments' },
   product: { label: 'Publish at least one product', tab: 'products' },
   email: { label: 'Verify your email address', tab: 'account' },
+  domain: { label: 'Finish connecting your own domain', tab: 'domain' },
 };
+
+/** The six items every store has, in the order the dashboard shows them. The domain step is added after them, only while a domain is connected. */
+const REQUIRED_ITEMS: StoreReadinessItem[] = ['profile', 'delivery', 'payment', 'payout', 'product', 'email'];
+export const DOMAIN_CONNECTED_LABEL = 'Your own domain is connected';
 
 export async function storeReadiness(doc: StoreDoc, ctx: AuthContext): Promise<StoreReadiness> {
   const sf = record(doc.storefront);
@@ -44,7 +49,7 @@ export async function storeReadiness(doc: StoreDoc, ctx: AuthContext): Promise<S
     isEmailVerified(ctx),
   ]);
 
-  const checks: Record<StoreReadinessItem, boolean> = {
+  const checks: Record<Exclude<StoreReadinessItem, 'domain'>, boolean> = {
     profile: text(doc.name) && (text(sf.contactPhone) || text(sf.whatsappNumber)) && text(sf.city),
     delivery: typeof sf.deliveryRate === 'number' && Number.isFinite(sf.deliveryRate) && sf.deliveryRate >= 0,
     payment: payments.codEnabled || (payments.cardEnabled && cardPaymentsAvailable()),
@@ -52,8 +57,13 @@ export async function storeReadiness(doc: StoreDoc, ctx: AuthContext): Promise<S
     product: Boolean(hasProduct),
     email: emailVerified,
   };
-  const items = (Object.keys(LABELS) as StoreReadinessItem[]).map((key) => ({ key, ok: checks[key], ...LABELS[key] }));
+  const items: StoreReadiness['items'] = REQUIRED_ITEMS.map((key) => ({ key, ok: checks[key as Exclude<StoreReadinessItem, 'domain'>], ...LABELS[key] }));
+  // Required items decide `missing` and go-live. The domain step (S7-B6) is shown only while a domain is connected, verified or not, and never blocks.
   const missing = items.filter((item) => !item.ok).map((item) => item.key);
+  if (typeof doc.domain === 'string' && doc.domain !== '') {
+    const verified = doc.customDomainStatus === 'verified';
+    items.push({ key: 'domain', ok: verified, label: verified ? DOMAIN_CONNECTED_LABEL : LABELS.domain.label, tab: LABELS.domain.tab, optional: true });
+  }
 
   // The warning is only worth a read when there is a published product at all (the "product" item covers none).
   let warnings: NonNullable<StoreReadiness['warnings']> = [];

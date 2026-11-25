@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { announcePlanLimit } from "@/lib/plan-usage";
 import { ArrowLeft, ArrowRight, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -340,6 +341,8 @@ export function ProductForm({ product }: { product?: SellerProductDetail }) {
       });
       const resData = await res.json();
       if (!res.ok) {
+        // Sprint 6 EP-14: a refused add (the plan's product limit) opens the upgrade dialog; the form keeps what was typed.
+        if (announcePlanLimit(resData)) return;
         toast.error(refusalMessage(resData));
         return;
       }

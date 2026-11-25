@@ -1,11 +1,11 @@
-import type { FraudSettings } from '@markaz/contracts';
+import type { FraudSettings, TaxSettings } from '@markaz/contracts';
 import { objectIdSchema } from '@/lib/contracts';
 import { readFraud } from '@/lib/fraud';
 import { connectSellerDb } from '@/lib/mongo';
 import { Store } from '@/lib/services';
 import { cardPaymentsAvailable } from '@/lib/storefront/card-config';
 import { StorefrontHttpError, databaseUnavailable, storeNotFound } from '@/lib/storefront/errors';
-import { cityRateMap, readDelivery, readPayments } from '@/lib/store-settings';
+import { cityRateMap, readDelivery, readPayments, readTax } from '@/lib/store-settings';
 
 /** What a store charges and accepts, read defensively from its Mixed settings. */
 export interface StoreCommerce {
@@ -18,6 +18,8 @@ export interface StoreCommerce {
   cityRates: Readonly<Record<string, number>>;
   /** The shipping city of a quote or an order, set by the caller. */
   city?: string | null;
+  /** Sprint 8 (S8-B1, D-118): the store's tax. Absent reads as no tax (a caller or a test that has none). */
+  tax?: TaxSettings;
   /** Sprint 5 EP-11: the phone confirmation mode and the risk rules (read from paymentSettings, never from storefront). */
   fraud?: FraudSettings;
 }
@@ -53,6 +55,7 @@ export function readStoreCommerce(row: ActiveStoreRow): StoreCommerce {
     codEnabled: payments.codEnabled,
     cardEnabled: cardPaymentsAvailable() && payments.cardEnabled,
     cityRates: cityRateMap(delivery),
+    tax: readTax(row.storefront),
     fraud: readFraud(row.paymentSettings),
   };
 }

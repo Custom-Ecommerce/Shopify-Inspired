@@ -15,11 +15,11 @@ export const COMMISSION_TYPES = ['cod_commission', 'card_commission'] as const;
 export const oid = (id: string): mongoose.Types.ObjectId => new mongoose.Types.ObjectId(id);
 
 /** The entries that carry commission: the originals and the reversals OF them. card_sale rows are money held, not sales. */
-export function commissionRowsMatch(store: string, start: Date, end: Date): Record<string, unknown> {
+export function commissionRowsMatch(store: string, start: Date, end: Date, types: readonly string[] = COMMISSION_TYPES): Record<string, unknown> {
   return {
     store: oid(store),
     createdAt: { $gte: start, $lt: end },
-    $or: [{ type: { $in: [...COMMISSION_TYPES] } }, { type: 'reversal', reversesType: { $in: [...COMMISSION_TYPES] } }],
+    $or: [{ type: { $in: [...types] } }, { type: 'reversal', reversesType: { $in: [...types] } }],
   };
 }
 
@@ -32,9 +32,9 @@ export interface CommissionTotals {
   orders: number;
 }
 
-export async function commissionTotals(store: string, start: Date, end: Date): Promise<CommissionTotals> {
+export async function commissionTotals(store: string, start: Date, end: Date, types: readonly string[] = COMMISSION_TYPES): Promise<CommissionTotals> {
   const rows = (await CommissionEntry.aggregate([
-    { $match: commissionRowsMatch(store, start, end) },
+    { $match: commissionRowsMatch(store, start, end, types) },
     {
       $group: {
         _id: null,
@@ -53,6 +53,15 @@ export async function commissionTotals(store: string, start: Date, end: Date): P
   const row = rows[0];
   // 0 - x keeps a clean 0 where the negation of 0 would be -0.
   return { sales: row?.sales ?? 0, commission: 0 - (row?.effect ?? 0), orders: Math.max(0, row?.orders ?? 0) };
+}
+
+/**
+ * Sprint 6 D-116: the cash-on-delivery part of the same totals (the cod_commission entries and the reversals of them). Sales that carried no
+ * commission (the COD percent was 0 when they were collected) are in `sales` with a `commission` of 0: the seller's page words that as
+ * "no commission".
+ */
+export function codTotals(store: string, start: Date, end: Date): Promise<CommissionTotals> {
+  return commissionTotals(store, start, end, ['cod_commission']);
 }
 
 export interface ReturnsTotals {

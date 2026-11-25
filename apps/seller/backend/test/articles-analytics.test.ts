@@ -2,8 +2,9 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { assertCan, signSession, User, StoreArticle, Order, Store } from '@/lib/services';
+import { assertCan, signSession, User, StoreArticle, Order, Store, DailyStat, Product, ProductDailyStat } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
+import { aggregateResult, runPipeline } from './helpers/aggregate';
 
 const SECRET = 'x'.repeat(40);
 const USER = '65a000000000000000000001';
@@ -55,7 +56,10 @@ function installStubs(): () => void {
     aFind: ArticleModel.find,
     aCount: ArticleModel.countDocuments,
     aFindOne: ArticleModel.findOne,
-    oFind: OrderModel.find,
+    oAggregate: OrderModel.aggregate,
+    dailyFind: (DailyStat as any).find,
+    viewsAggregate: (ProductDailyStat as any).aggregate,
+    productFind: (Product as any).find,
     uFindById: UserModel.findById,
     sFindOne: StoreModel.findOne,
     sExists: StoreModel.exists,
@@ -64,7 +68,11 @@ function installStubs(): () => void {
   ArticleModel.find = (filter: any) => query(articles.filter((r) => matches(r, filter)));
   ArticleModel.countDocuments = async (filter: any) => articles.filter((r) => matches(r, filter)).length;
   ArticleModel.findOne = (filter: any) => query(articles.filter((r) => matches(r, filter)), true);
-  OrderModel.find = (filter: any) => query(orders.filter((r) => matches(r, filter)));
+  // S8-B7: the analytics are aggregations; the counters are empty here (test/analytics.test.ts covers them).
+  OrderModel.aggregate = (pipeline: any[]) => aggregateResult(() => orders, pipeline);
+  (DailyStat as any).find = () => query([]);
+  (ProductDailyStat as any).aggregate = async (pipeline: any[]) => runPipeline([], pipeline);
+  (Product as any).find = () => query([]);
   UserModel.findById = () => ({ select: () => ({ lean: async () => ({ store: STORE }) }) });
   /* CO-57: the store comes from resolveOwnedStoreId (x-store-id checked against Store.owner, else the first owned store). */
   StoreModel.findOne = () => query([{ _id: STORE }], true);
@@ -74,7 +82,10 @@ function installStubs(): () => void {
     ArticleModel.find = originals.aFind;
     ArticleModel.countDocuments = originals.aCount;
     ArticleModel.findOne = originals.aFindOne;
-    OrderModel.find = originals.oFind;
+    OrderModel.aggregate = originals.oAggregate;
+    (DailyStat as any).find = originals.dailyFind;
+    (ProductDailyStat as any).aggregate = originals.viewsAggregate;
+    (Product as any).find = originals.productFind;
     UserModel.findById = originals.uFindById;
     StoreModel.findOne = originals.sFindOne;
     StoreModel.exists = originals.sExists;
@@ -92,11 +103,11 @@ function seed() {
     { _id: ART_OTHER, store: OTHER_STORE, title: 'Other', slug: 'other', type: 'blog', status: 'draft', createdAt: daysAgo(1), updatedAt: daysAgo(1) },
   ];
   orders = [
-    { store: STORE, orderId: 'A', status: 'delivered', city: 'Karachi', total: 2600, createdAt: daysAgo(0), items: [{ productId: 'p1', productTitle: 'Shirt', unitPrice: 1200, quantity: 2 }] },
-    { store: STORE, orderId: 'B', status: 'pending', city: 'Lahore', total: 1400, createdAt: daysAgo(2), items: [{ productId: 'p1', productTitle: 'Shirt', unitPrice: 1200, quantity: 1 }] },
-    { store: STORE, orderId: 'C', status: 'cancelled', city: 'Karachi', total: 900, createdAt: daysAgo(2), items: [{ productId: 'p2', productTitle: 'Cap', unitPrice: 900, quantity: 1 }] },
-    { store: STORE, orderId: 'D', status: 'delivered', city: 'Karachi', total: 800, createdAt: daysAgo(40), items: [{ productId: 'p2', productTitle: 'Cap', unitPrice: 800, quantity: 1 }] },
-    { store: OTHER_STORE, orderId: 'E', status: 'delivered', city: 'Multan', total: 5000, createdAt: daysAgo(0), items: [] },
+    { store: STORE, _id: '65a0000000000000000f00a1', orderId: 'A', status: 'delivered', city: 'Karachi', total: 2600, createdAt: daysAgo(0), items: [{ productId: 'p1', productTitle: 'Shirt', unitPrice: 1200, quantity: 2 }] },
+    { store: STORE, _id: '65a0000000000000000f00b1', orderId: 'B', status: 'pending', city: 'Lahore', total: 1400, createdAt: daysAgo(2), items: [{ productId: 'p1', productTitle: 'Shirt', unitPrice: 1200, quantity: 1 }] },
+    { store: STORE, _id: '65a0000000000000000f00c1', orderId: 'C', status: 'cancelled', city: 'Karachi', total: 900, createdAt: daysAgo(2), items: [{ productId: 'p2', productTitle: 'Cap', unitPrice: 900, quantity: 1 }] },
+    { store: STORE, _id: '65a0000000000000000f00d1', orderId: 'D', status: 'delivered', city: 'Karachi', total: 800, createdAt: daysAgo(40), items: [{ productId: 'p2', productTitle: 'Cap', unitPrice: 800, quantity: 1 }] },
+    { store: OTHER_STORE, _id: '65a0000000000000000f00e1', orderId: 'E', status: 'delivered', city: 'Multan', total: 5000, createdAt: daysAgo(0), items: [] },
   ];
 }
 
@@ -208,10 +219,12 @@ test('analytics ranks products by revenue and cities by orders, from the store o
   }
 });
 
-test('the policy: sellers read articles and orders, and cannot write them', () => {
+test('the policy: sellers read articles and orders, cannot write orders, and write articles only through the listed fields (Sprint 7, CO-116)', () => {
   assert.doesNotThrow(() => assertCan('seller', 'read', 'storeArticles'));
   assert.doesNotThrow(() => assertCan('seller', 'read', 'orders'));
-  assert.throws(() => assertCan('seller', 'create', 'storeArticles'));
+  assert.throws(() => assertCan('seller', 'create', 'storeArticles'), 'no field list is denied');
+  assert.doesNotThrow(() => assertCan('seller', 'create', 'storeArticles', ['title', 'content']));
+  assert.throws(() => assertCan('seller', 'create', 'storeArticles', ['title', 'publishedAt']));
   assert.throws(() => assertCan('seller', 'update', 'orders', ['status']));
 });
 

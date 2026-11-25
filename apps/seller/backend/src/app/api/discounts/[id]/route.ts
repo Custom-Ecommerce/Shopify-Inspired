@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'discounts');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'discounts.read' });
 
     const doc = await Discount.findOne({ _id: id, store: storeId }).lean();
     if (!doc) throw new HttpError(404, 'Discount not found');
@@ -59,7 +59,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const { archived, ...fields } = body.data;
     assertCan(ctx.actor, 'update', 'discounts', [...Object.keys(fields), ...(archived === undefined ? [] : ['archivedAt'])]);
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'discounts.write' });
 
     const existing = (await Discount.findOne({ _id: id, store: storeId }).lean()) as unknown as StoredDiscount | null;
     if (!existing) throw new HttpError(404, 'Discount not found');

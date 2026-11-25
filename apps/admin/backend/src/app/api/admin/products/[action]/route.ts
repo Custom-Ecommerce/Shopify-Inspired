@@ -23,7 +23,7 @@ const ACTIONS: Record<string, { operation: 'update' | 'delete'; run: Run }> = {
  */
 export async function POST(request: Request, context: { params: Promise<{ action: string }> }): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'products.moderate');
     const { action } = await context.params;
     const entry = Object.prototype.hasOwnProperty.call(ACTIONS, action) ? ACTIONS[action] : undefined;
     if (entry === undefined) throw new AdminHttpError(404, 'Not found');

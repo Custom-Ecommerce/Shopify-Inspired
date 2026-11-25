@@ -1,3 +1,6 @@
+/** Pages reachable without a session: the password flows and the invitation (S6-B6, CO-77). The link\'s token is the credential. */
+export const PUBLIC_PAGES = ["/forgot-password", "/reset-password", "/accept-invite"];
+
 export type AccessDecision = { action: "allow" } | { action: "redirect"; to: string };
 
 /**
@@ -6,7 +9,7 @@ export type AccessDecision = { action: "allow" } | { action: "redirect"; to: str
  * away on the cookie alone, so there is no redirect loop.
  */
 export function decideAccess(pathname: string, hasSessionCookie: boolean): AccessDecision {
-  if (pathname === "/login" || pathname.startsWith("/api/")) return { action: "allow" };
+  if (pathname === "/login" || pathname.startsWith("/api/") || PUBLIC_PAGES.includes(pathname)) return { action: "allow" };
   if (hasSessionCookie) return { action: "allow" };
   const to = pathname === "/" ? "/login" : "/login?next=" + encodeURIComponent(pathname);
   return { action: "redirect", to };

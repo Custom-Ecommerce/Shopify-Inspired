@@ -7,6 +7,7 @@ import { PREVIEW_RESPONSE_HEADERS, isPreviewRequest, storefrontFailure } from '@
 import { toStorefrontStoreDto, type StoreRow } from '@/lib/storefront/store-dto';
 import { servesStore } from '@/lib/storefront/store-guard';
 import { buildStoreLookup, parseLookupBy } from '@/lib/storefront/store-key';
+import { domainCacheHeaders } from '@/lib/storefront/domain-cache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,8 @@ type InactiveStatus = 'pending' | 'suspended' | 'archived';
  *   200 { data: <store> }                  the store is active
  *   200 { data: { status } }               the store exists but is pending, suspended, or archived (nothing else is exposed)
  *   200 { data: <store>, preview: true }   the preview credential is good for this store, and it is active or pending
- *   404 STORE_NOT_FOUND                    unknown or malformed key, or a domain that is not verified
+ *   404 STORE_NOT_FOUND                    unknown or malformed key, or a domain that is not verified (unknown, pending, failed and disconnected hosts all
+ *                                          answer the same 404: nothing says why). By domain, the answer carries a cache tag keyed by the host (S7-B6).
  *   400 INVALID_REQUEST                    ?by= is not one of slug, handle, domain
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ key: string }> }): Promise<Response> {
@@ -39,17 +41,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ key
     const store = (await (Store as any).findOne(lookup.filter).lean()) as (StoreRow & { status: string }) | null;
     if (!store) throw storeNotFound();
 
-    preview = servesStore(store.status, true) && (await isPreviewRequest(request, String(store._id)));
+    // S7-B6: a preview belongs to the store's subdomain (host-only cookie): a lookup by custom domain never honours one.
+    preview = lookup.by !== 'domain' && servesStore(store.status, true) && (await isPreviewRequest(request, String(store._id)));
     if (preview) {
       const status = store.status === 'pending' ? 'pending' : 'active';
       return NextResponse.json({ data: await toStorefrontStoreDto(store, status), preview: true }, { headers: PREVIEW_RESPONSE_HEADERS });
     }
 
+    const headers = lookup.by === 'domain' ? domainCacheHeaders(lookup.key) : PUBLIC_CACHE_HEADERS;
     if (store.status !== 'active') {
-      return NextResponse.json({ data: { status: store.status as InactiveStatus } }, { headers: PUBLIC_CACHE_HEADERS });
+      return NextResponse.json({ data: { status: store.status as InactiveStatus } }, { headers });
     }
 
-    return NextResponse.json({ data: await toStorefrontStoreDto(store) }, { headers: PUBLIC_CACHE_HEADERS });
+    return NextResponse.json({ data: await toStorefrontStoreDto(store) }, { headers });
   } catch (err) {
     return storefrontFailure(err, preview);
   }

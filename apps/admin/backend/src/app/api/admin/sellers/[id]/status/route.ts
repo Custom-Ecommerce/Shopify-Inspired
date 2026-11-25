@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
-    const { userId } = await authorizeAdmin(request);
+    const { userId } = await authorizeAdmin(request, 'sellers.status');
     requirePolicy(() => assertCan('admin', 'update', 'sellers', ['accountStatus']));
     const body = await readAdminBody(request, sellerAccountStatusRequestSchema);
     const { id } = await context.params;

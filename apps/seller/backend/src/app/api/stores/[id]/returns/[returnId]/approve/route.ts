@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string; returnId: string }> }): Promise<Response> {
   try {
-    const route = await prepareReturnRouteNoBody(request, await context.params);
+    const route = await prepareReturnRouteNoBody(request, await context.params, 'returns.write');
     const { doc, order } = await approveReturn(route.storeId, route.returnId, route.actor);
     const view = await sellerReturnView(route.storeId, doc, order);
     return json({

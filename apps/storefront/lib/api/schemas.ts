@@ -74,6 +74,29 @@ export const StorefrontStore = z.object({
     })
     .optional(),
   social: z.object({ facebook: nullableText, instagram: nullableText, tiktok: nullableText, whatsapp: nullableText }).optional(),
+  /** S7-B6: the VERIFIED custom domain (a host), else null; and the "redirect the platform address to it" setting. */
+  customDomain: z.string().nullable().optional(),
+  redirectToCustomDomain: z.boolean().optional(),
+  /** S7-B7: the validated Stiletto theme config, defaults filled in by the backend. Absent from an older backend: the theme then uses its defaults. */
+  themeConfig: z
+    .object({
+      primaryColor: z.string().regex(/^#[0-9a-f]{6}$/),
+      accentColor: z.string().regex(/^#[0-9a-f]{6}$/),
+      fontFamily: z.enum(["theme", "system", "serif", "rounded", "mono"]),
+      heroTitle: z.string().max(80).nullable(),
+      heroSubtitle: z.string().max(160).nullable(),
+      heroImageUrl: z.string().nullable(),
+      heroCtaLabel: z.string().max(30).nullable(),
+      // An internal path or an https address only; the theme validates it again.
+      heroCtaLink: z.string().max(300).regex(/^(\/(?!\/)|https:\/\/[^/])/).nullable(),
+      announcementText: z.string().max(120).nullable(),
+      announcementEnabled: z.boolean(),
+      showFeatured: z.boolean(),
+      showCategories: z.boolean(),
+      showReviews: z.boolean(),
+      showBlog: z.boolean(),
+    })
+    .optional(),
   features: z.object({
     socialProofEnabled: z.boolean(),
   }),

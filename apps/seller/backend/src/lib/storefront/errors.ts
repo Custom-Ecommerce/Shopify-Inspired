@@ -26,7 +26,11 @@ export type StorefrontErrorCode =
   | 'CONTACT_BLOCKED'
   // Sprint 5 EP-13.US01 and EP-21.US01: a return or a review that cannot be made. The message says why, the extra carries the reason.
   | 'RETURN_NOT_ELIGIBLE'
-  | 'REVIEW_NOT_ELIGIBLE';
+  | 'REVIEW_NOT_ELIGIBLE'
+  // Sprint 7 (S7-B3): the blog and the static pages. A draft page is PAGE_NOT_PUBLISHED, so the storefront never falls back to its default copy for it.
+  | 'ARTICLE_NOT_FOUND'
+  | 'PAGE_NOT_FOUND'
+  | 'PAGE_NOT_PUBLISHED';
 
 /** Carries the storefront error envelope: { error: { code, message }, ...extra }. */
 export class StorefrontHttpError extends Error {

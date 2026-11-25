@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { toSellerCart } from '@/lib/abandoned-carts';
 import { readAccountBody } from '@/lib/account-support';
-import { authenticate } from '@/lib/auth';
+import { auditActorOf, authenticate } from '@/lib/auth';
 import { ABANDONED_CART_NOT_FOUND, ABANDONED_CART_STATUS_CHANGED, abandonedCartContactedRequestSchema } from '@/lib/contracts';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { oid } from '@/lib/ledger-aggregates';
@@ -17,10 +17,10 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
 const notFound = (): HttpError => new HttpError(404, 'Cart not found', ABANDONED_CART_NOT_FOUND);
 
 
-async function audit(action: string, storeId: string, cartId: string, userId: string): Promise<void> {
+async function audit(action: string, storeId: string, cartId: string, actor: string): Promise<void> {
   try {
     // Ids and the time only: never the phone, the email or the items.
-    await writeAuditLog(action, 'store', storeId, 'seller:' + userId, { storeId, cartId, at: new Date().toISOString() });
+    await writeAuditLog(action, 'store', storeId, actor, { storeId, cartId, at: new Date().toISOString() });
   } catch (err) {
     console.error('[seller-backend] could not write the abandoned cart audit entry', err instanceof Error ? err.name : 'unknown');
   }
@@ -43,7 +43,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     await readAccountBody(request, abandonedCartContactedRequestSchema);
     assertCan(ctx.actor, 'update', 'abandonedCarts', ['status']);
     const params = await context.params;
-    const store = await loadOwnedStore(request, ctx, params.id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, params.id, 'name owner', 'abandoned_carts.manage');
     const storeId = String(store._id);
     if (!mongoose.isValidObjectId(params.cartId)) throw notFound();
 
@@ -56,7 +56,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     ).lean()) as unknown as Record<string, unknown> | null;
     if (!updated) throw new HttpError(409, 'This cart was already marked, or the shopper has ordered. Reload the list.', ABANDONED_CART_STATUS_CHANGED);
 
-    await audit('abandoned_cart.contacted', storeId, params.cartId, ctx.userId);
+    await audit('abandoned_cart.contacted', storeId, params.cartId, auditActorOf(ctx));
     return NextResponse.json({ cart: toSellerCart(updated) }, { headers: NO_STORE });
   } catch (err) {
     return handleRouteError(err);
@@ -75,13 +75,13 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     requireSellerActor(ctx);
     assertCan(ctx.actor, 'delete', 'abandonedCarts');
     const params = await context.params;
-    const store = await loadOwnedStore(request, ctx, params.id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, params.id, 'name owner', 'abandoned_carts.manage');
     const storeId = String(store._id);
     if (!mongoose.isValidObjectId(params.cartId)) throw notFound();
 
     const removed = await AbandonedCart.findOneAndDelete({ _id: params.cartId, store: oid(storeId) }).lean();
     if (!removed) throw notFound();
-    await audit('abandoned_cart.delete', storeId, params.cartId, ctx.userId);
+    await audit('abandoned_cart.delete', storeId, params.cartId, auditActorOf(ctx));
     return NextResponse.json({ removed: true, id: params.cartId }, { headers: NO_STORE });
   } catch (err) {
     return handleRouteError(err);

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     await readAccountBody(request, broadcastPreviewRequestSchema);
     assertCan(ctx.actor, 'read', 'broadcasts');
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'broadcast.manage');
     return NextResponse.json(await previewBroadcast(String(store._id)), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);

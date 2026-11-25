@@ -150,7 +150,21 @@ export const PROFILE_ALLOWLIST = ["email", "name"] as const;
 export const CONTROLS_ALLOWLIST = ["accountStatus", "storeLimitOverride"] as const;
 
 /** `platform.settings` — Admin → Seller. */
-export const SETTINGS_ALLOWLIST = ["defaultCommissionRate", "maxStoresPerSeller", "storeApprovalRequired"] as const;
+export const SETTINGS_ALLOWLIST = [
+  "defaultCommissionRate",
+  "maxStoresPerSeller",
+  "storeApprovalRequired",
+  // Sprint 6 (D-116, D-118): the COD percent and the plan settings the seller backend reads.
+  "codCommissionPercent",
+  "paymentInstructions",
+  "graceDays",
+  "trialDays",
+  "supportEmail",
+  "supportPhone",
+  // Sprint 8 (S8-B5, D-118): referrals.
+  "referralRewardMonths",
+  "referralMonthlyCap",
+] as const;
 
 export const SYNC_GROUP_ALLOWLISTS = {
   governance: GOVERNANCE_ALLOWLIST,

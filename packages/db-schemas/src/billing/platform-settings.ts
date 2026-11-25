@@ -20,6 +20,24 @@ const platformSettingsSchema = new Schema(
     stripeCommissionNote: { type: String },
     /** Sprint 4 D-094/D-095: when true, a seller's go-live waits for an admin to activate the store. Missing means false. */
     storeApprovalRequired: { type: Boolean, default: false },
+    /**
+     * Sprint 6 D-116: the commission percent on cash-on-delivery orders. Same type and bounds as defaultCommissionRate, but the
+     * default is 0: COD orders carry no commission unless an operator sets one. A store's custom rate never applies to COD.
+     */
+    codCommissionPercent: { type: Number, min: 0, max: 100, default: 0 },
+    /** Sprint 6 D-118: how a seller pays a subscription by hand (bank, JazzCash, Easypaisa). Plain text; escaped on output. */
+    paymentInstructions: { type: String, maxlength: 1000 },
+    /** Days a lapsed subscription keeps its plan limits before falling back to Free (0 to 30). */
+    graceDays: { type: Number, min: 0, max: 30, default: 7 },
+    /** Days of a free trial on signing up for a paid plan (0 to 60). */
+    trialDays: { type: Number, min: 0, max: 60, default: 0 },
+    /** Where a seller can reach the platform (shown next to the payment instructions). */
+    supportEmail: { type: String, maxlength: 254 },
+    supportPhone: { type: String, maxlength: 30 },
+    /** Sprint 8 (S8-B5, D-118): free months a referrer earns per rewarded referral; 0 turns referrals off. */
+    referralRewardMonths: { type: Number, min: 0, max: 12, default: 1 },
+    /** The most referrals one referrer can be rewarded for in a month. */
+    referralMonthlyCap: { type: Number, min: 0, max: 100, default: 5 },
   },
   { timestamps: true, collection: 'globals' },
 );

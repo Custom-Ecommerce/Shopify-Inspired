@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const query = readQuery(request, customerExportQuerySchema);
     assertCan(ctx.actor, 'read', 'customers');
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'customers.export');
     const file = await exportCustomers(String(store._id), query);
     return new Response(file.csv, {
       headers: {

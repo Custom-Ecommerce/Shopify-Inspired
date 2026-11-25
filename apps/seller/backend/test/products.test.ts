@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server';
 import { ArchivedReview, Category, Media, Product, Review, StockMovement, Store, assertCan, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { publishProblem } from '@/lib/product-lifecycle';
+import { setPlanLoader, type EffectivePlan } from '@/lib/plan';
 import { purgeExpiredProducts, retentionCutoff, toArchivedReview, trashDaysLeft, type PurgeableProduct } from '@/lib/trash';
 
 const SECRET = 'x'.repeat(40);
@@ -1292,4 +1293,180 @@ test('a trashed product keeps its slug and SKU, so restoring it can never clash,
   const skuError = ((await sku.json()) as { errors: Array<{ code: string; message: string }> }).errors[0];
   assert.equal(skuError.code, 'SKU_TAKEN');
   assert.match(skuError.message, /trash/);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Sprint 6 EP-14.US02 (D-118): the plan's product limit on POST and restore (and publish, which adds nothing). The plan of each seller is
+// installed through setPlanLoader; the models are the stubs above. Edits and deletes are never refused for a plan.
+
+const planOf = (products: number | null, stores: number | null = 3, key = 'free'): EffectivePlan => ({
+  key,
+  name: key === 'free' ? 'Free' : 'Growth',
+  status: 'none',
+  subscribedPlanKey: null,
+  limits: { stores, products, staffSeats: 0, apiKeys: 0, customDomain: false, premiumThemes: false },
+  periodEnd: null,
+  graceUntil: null,
+  daysLeft: null,
+  fallbackLimits: false,
+});
+
+/** Installs the plan of each seller and gives the store lookup an owner, as the real Store has. Cleaned up by the caller with setPlanLoader(null). */
+function withPlans(byOwner: Record<string, EffectivePlan>): void {
+  const owners: Record<string, string> = { [STORE_A]: SELLER_A, [STORE_B]: SELLER_B };
+  setPlanLoader(async (ownerId) => byOwner[ownerId] ?? planOf(null, null, 'growth'));
+  StoreStub.findById = (id: string) => {
+    const q = { select: () => q, lean: async () => ({ status: 'active', owner: owners[String(id)] }) };
+    return q as unknown as StubQuery;
+  };
+}
+
+const usedIn = (store: string): number => products.filter((p) => p.store === store && !p.deletedAt && !p.isDemo).length;
+const trashed = (id: string, store: string, overrides: Partial<ProductRow> = {}): ProductRow =>
+  product(id, store, [variant('65a0000000000000000000d9')], { deletedAt: new Date('2026-10-02T00:00:00.000Z'), deletedBy: { role: 'seller' } as never, ...overrides });
+
+test('plan: POST over the product limit is 403 PLAN_LIMIT_REACHED with the limit, the use, the plan and an upgrade hint, and nothing is created', async () => {
+  const used = usedIn(STORE_A);
+  withPlans({ [SELLER_A]: planOf(used) });
+  try {
+    const before = products.length;
+    const res = await create(validCreate);
+    assert.equal(res.status, 403);
+    const body = (await res.json()) as { code: string; limitKind: string; limit: number; used: number; plan: string; upgradeHint: string; errors: Array<{ message: string }> };
+    assert.deepEqual([body.code, body.limitKind, body.limit, body.used, body.plan], ['PLAN_LIMIT_REACHED', 'products', used, used, 'free']);
+    assert.equal(typeof body.upgradeHint, 'string');
+    assert.ok(body.upgradeHint.length > 0);
+    assert.match(body.errors[0]!.message, /Free plan allows/);
+    assert.equal(products.length, before);
+    assert.equal(writes, 0);
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: under the limit, and with an unlimited plan, a product is created', async () => {
+  const used = usedIn(STORE_A);
+  withPlans({ [SELLER_A]: planOf(used + 1) });
+  try {
+    assert.equal((await create(validCreate)).status, 201);
+  } finally {
+    setPlanLoader(null);
+  }
+  withPlans({ [SELLER_A]: planOf(null, null, 'growth') });
+  try {
+    assert.equal((await create({ ...validCreate, title: 'Another suit' })).status, 201);
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: only the store\'s own, not-in-trash, non-sample products count', async () => {
+  products.push(trashed('65a0000000000000000000b9', STORE_A), product('65a0000000000000000000ba', STORE_B, [variant('65a0000000000000000000da')]));
+  const used = usedIn(STORE_A);
+  assert.ok(products.some((p) => p.store === STORE_A && p.isDemo), 'the store has a sample product');
+  withPlans({ [SELLER_A]: planOf(used) });
+  try {
+    const body = (await (await create(validCreate)).json()) as { used: number };
+    assert.equal(body.used, used, 'the trashed product, the sample product and the other store\'s product are not counted');
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: edits, deletes, unpublish and publish are NEVER refused for a plan, and a seller over the limit keeps everything', async () => {
+  withPlans({ [SELLER_A]: planOf(0) });
+  try {
+    const before = products.length;
+    assert.equal((await patch(PRODUCT_A, { title: 'Edited at the limit' })).status, 200);
+    assert.equal(row(PRODUCT_A).title, 'Edited at the limit');
+    assert.equal((await publishPOST(request('POST', '/api/products/' + PRODUCT_A + '/publish'), ctx(PRODUCT_A))).status, 200, 'publish adds no product to the count');
+    assert.equal((await unpublishPOST(request('POST', '/api/products/' + PRODUCT_A + '/unpublish'), ctx(PRODUCT_A))).status, 200);
+    assert.equal((await itemDELETE(request('DELETE', '/api/products/' + PRODUCT_A), ctx(PRODUCT_A))).status, 200);
+    assert.equal((await listGET(request('GET', '/api/products'))).status, 200);
+    assert.ok(products.length >= before - 1, 'nothing else was removed');
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: Seller B\'s usage never counts for Seller A, and each seller has their own plan', async () => {
+  for (let i = 0; i < 6; i += 1) products.push(product('65a0000000000000000001' + i + '0', STORE_B, [variant('65a0000000000000000002' + i + '0')], { slug: 'b-' + i }));
+  const usedA = usedIn(STORE_A);
+  withPlans({ [SELLER_A]: planOf(usedA + 1), [SELLER_B]: planOf(2) });
+  try {
+    assert.equal((await create(validCreate)).status, 201, 'A has room: B\'s six products are not A\'s');
+    const refusedB = await create({ ...validCreate, categories: [CAT_B] }, { token: tokenB, storeHeader: STORE_B });
+    assert.equal(refusedB.status, 403, 'B is over their own limit of 2');
+    const body = (await refusedB.json()) as { limit: number; used: number };
+    assert.deepEqual([body.limit, body.used], [2, usedIn(STORE_B)]);
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: the 400/403/404/422 checks come first: a foreign store is 403, a foreign product 404, a bad body 422, an admin 403, all without a plan message', async () => {
+  withPlans({ [SELLER_A]: planOf(0), [SELLER_B]: planOf(0) });
+  try {
+    const notPlan = async (res: Response, status: number) => {
+      assert.equal(res.status, status);
+      assert.notEqual(((await res.json()) as { code?: string }).code, 'PLAN_LIMIT_REACHED');
+    };
+    await notPlan(await create(validCreate, { storeHeader: STORE_B }), 403);
+    await notPlan(await restorePOST(request('POST', '/api/products/' + PRODUCT_B + '/restore'), ctx(PRODUCT_B)), 404);
+    await notPlan(await create({ title: '' }), 422);
+    await notPlan(await create(validCreate, { token: adminToken }), 403);
+    assert.equal(writes, 0);
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+test('plan: restoring a product from trash is an add (403 at the limit, 200 under it), and restoring the sample product adds nothing', async () => {
+  products.push(trashed('65a0000000000000000000b9', STORE_A), trashed('65a0000000000000000000bb', STORE_A, { isDemo: true, slug: 'sample-2' }));
+  const used = usedIn(STORE_A);
+  withPlans({ [SELLER_A]: planOf(used) });
+  try {
+    const refused = await restorePOST(request('POST', '/api/products/65a0000000000000000000b9/restore'), ctx('65a0000000000000000000b9'));
+    assert.equal(refused.status, 403);
+    assert.equal(((await refused.json()) as { code: string }).code, 'PLAN_LIMIT_REACHED');
+    assert.ok(row('65a0000000000000000000b9').deletedAt, 'it stays in trash');
+    assert.equal((await restorePOST(request('POST', '/api/products/65a0000000000000000000bb/restore'), ctx('65a0000000000000000000bb'))).status, 200);
+  } finally {
+    setPlanLoader(null);
+  }
+  withPlans({ [SELLER_A]: planOf(used + 1) });
+  try {
+    assert.equal((await restorePOST(request('POST', '/api/products/65a0000000000000000000b9/restore'), ctx('65a0000000000000000000b9'))).status, 200);
+  } finally {
+    setPlanLoader(null);
+  }
+});
+
+// ------------------------------------------------------------------------------------------------------------------ CO-72
+
+const bare = (method: string, path: string, body?: unknown): NextRequest =>
+  new NextRequest('http://seller.test' + path, {
+    method,
+    headers: { authorization: 'Bearer ' + tokenA, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+test('CO-72: a write that names no store is 400 STORE_ID_REQUIRED with the field, and nothing is read or written (no fall back to the first store)', async () => {
+  const check = async (res: Response) => {
+    assert.equal(res.status, 400);
+    const body = (await res.json()) as { code: string; field: string };
+    assert.deepEqual([body.code, body.field], ['STORE_ID_REQUIRED', 'x-store-id']);
+  };
+  const count = products.length;
+  await check(await createPOST(bare('POST', '/api/products', validCreate)));
+  await check(await publishPOST(bare('POST', '/api/products/' + PRODUCT_A + '/publish'), ctx(PRODUCT_A)));
+  await check(await restorePOST(bare('POST', '/api/products/' + PRODUCT_A + '/restore'), ctx(PRODUCT_A)));
+  assert.equal(writes, 0);
+  assert.equal(products.length, count);
+});
+
+test('CO-72: a read route keeps the documented fall back to the first owned store, and a named store is still checked against its owner', async () => {
+  assert.equal((await listGET(bare('GET', '/api/products'))).status, 200, 'the product LIST has no store in the request and answers for the first store');
+  const named = await createPOST(request('POST', '/api/products', { body: validCreate, storeHeader: STORE_B }));
+  assert.equal(named.status, 403, 'a store that is not the seller\'s is still 403');
 });

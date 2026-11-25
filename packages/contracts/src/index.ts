@@ -9,6 +9,8 @@ export * from './order-flow';
 // EP-02 OB-5a: the order timeline.
 export * from './order-timeline';
 export * from './store-article';
+export * from './store-page';
+export * from './support';
 export * from './workspace';
 export * from './sync-envelope';
 export * from './auth';
@@ -58,6 +60,13 @@ export * from './notifications';
 export * from './account';
 // Sprint 4 EP-04: store settings, delivery, payments, payout, readiness and go-live.
 export * from './store-settings';
+export * from './theme-config';
+// Sprint 8 (S8-B1, D-118): store tax (settings group, the one rounding rule, the order snapshot).
+export * from './tax';
+// Sprint 8 (S8-B2, D-118): a store's team: staff roles, invites and the team routes.
+export * from './team';
+// Sprint 8 (S8-B4, D-118): the API keys of a store.
+export * from './api-keys';
 // Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
 export * from './payouts';
 // Sprint 4 EP-07.US04: customers and email broadcasts.
@@ -69,3 +78,34 @@ export * from './fraud';
 
 // Sprint 5 EP-28: abandoned carts (the capture request, the seller's list).
 export * from './abandoned-cart';
+
+// Sprint 6 EP-14 (D-118): subscription plans are data (admin requests, the admin view, the public view a seller reads).
+export * from './plans';
+
+// Sprint 6 EP-14 (D-118): a seller's subscription, the plan they are effectively on, plan usage and the expiry job.
+export * from './subscription';
+
+// Sprint 6 (S6-B4, D-118): manual subscription payments, downgrade and cancel.
+export * from './subscription-payments';
+
+// Sprint 6 (S6-B5): the admin's read-only orders view (safe fields only).
+export * from './admin-orders';
+
+// Sprint 6 (S6-B6): admin users and levels.
+export * from './admin-users';
+
+// Sprint 6 (S6-B7): retries and retention.
+export * from './admin-retries';
+
+// Sprint 8 (S8-B5, D-118): the frozen response shapes of the read-only public API v1.
+export * from './api-v1';
+
+// Sprint 8 (S8-B6): the admin's read-only view of referrals and the rewards export.
+export * from './admin-referrals';
+
+// Sprint 8 (S8-B6): the anonymous storefront counters.
+export * from './storefront-events';
+
+// Sprint 8 (S8-B7): the sales report and the admin's platform traffic.
+export * from './sales-report';
+export * from './admin-traffic';

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { readAccountBody } from '@/lib/account-support';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { BLOCKLIST_MAX, blockedContactRequestSchema } from '@/lib/contracts';
 import { toBlockedContactRow } from '@/lib/fraud';
 import { HttpError, handleRouteError, isDuplicateKeyError } from '@/lib/http';
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     requireSellerActor(ctx);
     assertCan(ctx.actor, 'read', 'blockedContacts');
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'blocklist.manage');
     const rows = (await BlockedContact.find({ store: oid(String(store._id)) })
       .sort({ createdAt: -1, _id: -1 })
       .limit(BLOCKLIST_MAX)
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const input = await readAccountBody(request, blockedContactRequestSchema);
     assertCan(ctx.actor, 'create', 'blockedContacts', input.reason === '' ? ['kind', 'value'] : ['kind', 'value', 'reason']);
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'blocklist.manage');
     const storeId = String(store._id);
 
     if ((await BlockedContact.countDocuments({ store: oid(storeId) })) >= BLOCKLIST_MAX) {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     try {
-      await writeAuditLog('blocklist.add', 'store', storeId, 'seller:' + ctx.userId, { storeId, kind: input.kind, at: new Date().toISOString() });
+      await writeAuditLog('blocklist.add', 'store', storeId, auditActorOf(ctx), { storeId, kind: input.kind, at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the blocklist audit entry', err instanceof Error ? err.name : 'unknown');
     }

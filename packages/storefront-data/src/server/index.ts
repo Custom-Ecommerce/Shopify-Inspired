@@ -14,6 +14,8 @@ export { createMockTransport } from "../transport/mock";
 export { loadProductPage } from "./product";
 export type { ProductPageData } from "./product";
 export { loadSearchPage } from "./search";
+export { loadBlogList, loadArticlePage, loadContentPage, loadContentFooterLinks, loadSitemapData } from "./content";
+export type { BlogListData, ArticlePageData, ContentPageData, SitemapData } from "./content";
 export type { SearchPageData } from "./search";
 export { createRemoteTransport, normalizeBaseUrl, STOREFRONT_API_PREFIX, DEFAULT_REMOTE_TIMEOUT_MS } from "../transport/remote";
 export type { RemoteMode, RemoteTransportOptions } from "../transport/remote";

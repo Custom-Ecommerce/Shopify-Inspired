@@ -9,6 +9,7 @@ import { Surface } from "@/components/shared/Surface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { nextAfterAuth } from "@/lib/invite-view";
 import { tooManyAttemptsMessage } from "@/lib/retry-after";
 
 function LoginForm() {
@@ -51,7 +52,8 @@ function LoginForm() {
       }
 
       // ── API contract unchanged ──
-      router.push("/");
+      // S8-B2: an invitee who came from the accept-invite page returns to it; anything else goes to the dashboard.
+      router.push(nextAfterAuth(window.location.search));
       router.refresh();
     } catch {
       setErrorMessage("Could not reach the backend. Please try again.");

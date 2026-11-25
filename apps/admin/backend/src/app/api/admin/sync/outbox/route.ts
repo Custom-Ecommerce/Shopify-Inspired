@@ -16,7 +16,7 @@ const EVENT_FIELDS = 'eventId target entity entityId group revision status attem
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'sync.read');
     requirePolicy(() => assertCan('admin', 'read', 'sync-outbox'));
 
     const parsed = parseSyncQuery(new URL(request.url).searchParams);

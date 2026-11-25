@@ -9,14 +9,17 @@ const auth = unwrapCjs(authNs);
 const db = unwrapCjs(dbNs);
 const sync = unwrapCjs(syncNs);
 
-export const { assertCan, PolicyDeniedError, writeAuditLog, hashPassword, verifyPassword, signSession, verifySession, isLocked, recordFailedAttempt, SESSION_MIN_SECRET_LENGTH } = auth;
+export const { adminCan, adminCapabilities, effectiveAdminLevel, ADMIN_LEVELS, ADMIN_CAPABILITIES, assertCan, PolicyDeniedError, writeAuditLog, hashPassword, verifyPassword, signSession, verifySession, isLocked, recordFailedAttempt, SESSION_MIN_SECRET_LENGTH } = auth;
 export const { CommissionRateHistory } = db;
-export const { AuditLog, CommissionLedgerModel, PlatformSettingsModel, Store, SubscriptionPlanModel, SyncOutbox, User } = db;
+export const { StoreSyncRevision } = db;
+export const { AuditLog, CommissionLedgerModel, PlatformSettingsModel, Store, Subscription, SubscriptionPayment, SubscriptionPlanModel, SyncOutbox, User } = db;
 export const { enqueueSyncEvent, registerSyncOutboxModel } = sync;
 export type { SyncOutboxModelPort } from '@markaz/sync-core';
 
 // Sprint 4 EP-08: the account guard, limits and flows, and the models they use (EP-07 outbox for the account emails).
 export const { AuthToken, NotificationOutbox, RateLimitCounter } = db;
+// Sprint 8 (S8-B3): the members of a store (read only here: the sellers list shows how many each store has).
+export const { StoreMember } = db;
 export const {
   createSessionGuard,
   toSessionUserRecord,

@@ -42,7 +42,11 @@ export interface BillingPorts {
   upsertSubscription(input: SubscriptionUpsert): Promise<void>;
   findSaleByPaymentIntent(paymentIntentId: string): Promise<SaleRef | null>;
   findPlanByPriceId(priceId: string): Promise<PlanRef | null>;
-  findSellerStoreForActor(actorId: string): Promise<SellerStoreRef | null>;
+  /**
+   * The store a seller acts on. With storeId: that store, only if the actor owns it (Store.owner), else null. Without it: the actor's oldest
+   * owned store. A seller can own several stores, so a user's own `store` field is only a fallback for old data (CO-73).
+   */
+  findSellerStoreForActor(actorId: string, storeId?: string): Promise<SellerStoreRef | null>;
   saveStoreBilling(storeId: string, patch: { stripeCustomerId?: string; stripeAccountId?: string }): Promise<void>;
 }
 

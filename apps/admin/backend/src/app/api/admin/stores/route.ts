@@ -7,7 +7,7 @@ import { assertCan, Store } from '@/lib/workspace';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const LIST_FIELDS = 'name slug status domain isThemeDemo commissionRate commissionMode owner statusChangedAt goLiveRequestedAt createdAt';
+const LIST_FIELDS = 'name slug status domain customDomainStatus isThemeDemo commissionRate commissionMode owner statusChangedAt goLiveRequestedAt createdAt';
 
 /**
  * GET /api/admin/stores. The store list for the operator console: search (name, slug, domain, or id), a status
@@ -15,7 +15,7 @@ const LIST_FIELDS = 'name slug status domain isThemeDemo commissionRate commissi
  */
 export async function GET(request: Request): Promise<Response> {
   try {
-    await authorizeAdmin(request);
+    await authorizeAdmin(request, 'stores.read');
     requirePolicy(() => {
       assertCan('admin', 'read', 'stores');
       assertCan('admin', 'read', 'users', ['name', 'email']);

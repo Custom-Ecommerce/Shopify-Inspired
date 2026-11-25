@@ -267,6 +267,13 @@ export const storefrontQuoteTotalsSchema = z.object({
   deliveryCharges: rupees,
   /** Comes off the item subtotal only (D-080). Defaulted so a storefront deployed before the backend can still read a quote. */
   discount: rupees.default(0),
+  /**
+   * Sprint 8 (S8-B1, D-118): the store's tax, whole rupees, 0 when the store has tax off (and for a server from before it). Exclusive: it is part of
+   * `total`. Inclusive: it is already inside the prices and `total` is unchanged. Delivery is never taxed. taxMode and taxLabel are absent when tax is off.
+   */
+  taxAmount: rupees.default(0),
+  taxMode: z.enum(['exclusive', 'inclusive']).nullish(),
+  taxLabel: z.string().max(40).nullish(),
   total: rupees,
 });
 

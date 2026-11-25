@@ -23,7 +23,11 @@ export { useReviewRequest } from "./use-review-request";
 export type { ReviewRequestStatus, UseReviewRequestResult } from "./use-review-request";
 export { useProductReviews } from "./use-product-reviews";
 export type { UseProductReviewsResult } from "./use-product-reviews";
+export { useContactForm } from "./use-contact-form";
+export type { ContactFormStatus, UseContactFormResult } from "./use-contact-form";
 export { StorefrontProvider } from "./provider";
 export { useCardAvailable, useCodAvailable, useOrderTransport } from "./context";
 export type { CartQuoteLineVM, CartQuoteVM } from "../view-models/cart-quote";
 /* @theme-integration-patch:client-index */
+// Sprint 8 (S8-B6): the anonymous counters a theme's pages ask for.
+export { useCheckoutStartEvent, useProductViewEvent } from "./use-store-events";

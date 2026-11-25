@@ -53,3 +53,41 @@ test('subscription plans carry the tier counts and refuse an unknown tier', () =
   assert.equal(adminSubscriptionPlanListSchema.safeParse({ docs: [{ ...plan, tier: 'gold' }], ...meta, counts }).success, false);
   assert.equal(adminSubscriptionPlanListSchema.safeParse({ docs: [plan], ...meta }).success, false);
 });
+
+// Sprint 6 EP-14 (D-118): the plan row carries the new fields, and an old row still parses with defaults.
+
+const counts = { basic: 0, pro: 0, premium: 0 };
+
+test('Sprint 6: an old plan row (name, price id, tier) parses with no key, price or limits', () => {
+  const old = { id: OID, name: 'Pro monthly', tier: 'pro', stripePriceId: 'price_123', createdAt: NOW, updatedAt: NOW };
+  const parsed = adminSubscriptionPlanListSchema.parse({ docs: [old], ...meta, counts });
+  assert.equal(parsed.docs[0]!.key, null);
+  assert.equal(parsed.docs[0]!.priceRs, null);
+  assert.equal(parsed.docs[0]!.limits, null);
+  assert.equal(parsed.docs[0]!.isActive, true);
+  assert.deepEqual(parsed.docs[0]!.features, []);
+  assert.equal(parsed.docs[0]!.revision, 0);
+});
+
+test('Sprint 6: a new plan row has no tier and no Stripe price, and keeps its limits with null for unlimited', () => {
+  const plan = {
+    id: OID,
+    name: 'Growth',
+    key: 'growth',
+    priceRs: 2500,
+    limits: { stores: 3, products: null, staffSeats: 3, apiKeys: 3, customDomain: true, premiumThemes: true },
+    features: ['Unlimited products'],
+    isActive: true,
+    sortOrder: 2,
+    revision: 4,
+    archivedAt: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+  const parsed = adminSubscriptionPlanListSchema.parse({ docs: [plan], ...meta, counts });
+  assert.equal(parsed.docs[0]!.tier, null);
+  assert.equal(parsed.docs[0]!.stripePriceId, null);
+  assert.equal(parsed.docs[0]!.limits!.products, null);
+  assert.equal(adminSubscriptionPlanListSchema.safeParse({ docs: [{ ...plan, priceRs: 2500.5 }], ...meta, counts }).success, false);
+  assert.equal(adminSubscriptionPlanListSchema.safeParse({ docs: [{ ...plan, limits: { ...plan.limits, stores: -1 } }], ...meta, counts }).success, false);
+});

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'categories');
     await requireDatabase();
-    const storeId = await resolveCategoryStoreId(request, ctx);
+    const storeId = await resolveCategoryStoreId(request, ctx, 'categories.read');
 
     const doc = await Category.findOne({ _id: id, store: storeId }).lean();
     if (!doc) throw categoryNotFound();
@@ -54,7 +54,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     if (!body.ok) return body.response;
     assertCan(ctx.actor, 'update', 'categories', Object.keys(body.data));
     await requireDatabase();
-    const storeId = await resolveCategoryStoreId(request, ctx);
+    const storeId = await resolveCategoryStoreId(request, ctx, 'categories.write');
     const reorderOnly = Object.keys(body.data).every((field) => field === 'order');
 
     try {
@@ -87,7 +87,7 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'delete', 'categories');
     await requireDatabase();
-    const storeId = await resolveCategoryStoreId(request, ctx);
+    const storeId = await resolveCategoryStoreId(request, ctx, 'categories.write');
 
     const existing = await Category.findOne({ _id: id, store: storeId }).select('_id').lean();
     if (!existing) throw categoryNotFound();
