@@ -18,7 +18,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'analytics.read' });
 
     const params = request.nextUrl.searchParams;
     const page = parseIntParam(params.get('page'), 1, 1, 100000);

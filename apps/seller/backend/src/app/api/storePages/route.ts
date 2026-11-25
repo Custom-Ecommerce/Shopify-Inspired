@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { PAGE_INVALID, PAGE_SLUG_TAKEN, pageCreateSchema } from '@/lib/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { articleSlugFromTitle } from '@/lib/articles';
 import { assertPageSlugAllowed, pageToWire, parsePageBody, resolvePageMedia, templateCatalog } from '@/lib/pages';
 import { HttpError, handleRouteError, isDuplicateKeyError } from '@/lib/http';
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     if (ctx.actor !== 'seller') throw new HttpError(403, 'Only the store owner can manage pages');
     assertCan(ctx.actor, 'read', 'storePages');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'content.read' });
 
     const rows = (await StorePage.find({ store: storeId }).sort({ sortOrder: 1, title: 1 }).limit(200).lean()) as unknown as Array<Record<string, unknown>>;
     const docs = rows.map((row) => pageToWire(row, { withBody: false }));
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const body = await parsePageBody(request, pageCreateSchema);
     assertCan(ctx.actor, 'create', 'storePages', Object.keys(body));
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'content.write' });
 
     const slug = body.slug ?? articleSlugFromTitle(body.title);
     if (slug === '') throw new HttpError(400, 'Enter a web address for the page.', PAGE_INVALID, 'slug');
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
     const wire = pageToWire(plainDoc(created));
     try {
-      await writeAuditLog('page.create', 'storePage', String(wire.id), 'seller:' + ctx.userId, { storeId, slug, status, at: now.toISOString() });
+      await writeAuditLog('page.create', 'storePage', String(wire.id), auditActorOf(ctx), { storeId, slug, status, at: now.toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the page create audit entry', err instanceof Error ? err.message : 'unknown');
     }

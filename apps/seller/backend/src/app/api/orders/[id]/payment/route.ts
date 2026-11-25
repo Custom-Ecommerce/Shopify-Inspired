@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
-import { authenticate, type AuthContext } from '@/lib/auth';
+import { authenticate, type AuthContext, auditActorOf } from '@/lib/auth';
 import { nextStatuses, orderPaymentRequestSchema, paymentRefusal } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
@@ -36,7 +36,7 @@ const inHundredths = (value: number): number => Math.round(value * 100);
 
 async function audit(ctx: AuthContext, storeId: string, row: StoredOrder, amount: number, status: string): Promise<void> {
   try {
-    await writeAuditLog('order.payment', 'order', String(row._id), 'seller:' + ctx.userId, {
+    await writeAuditLog('order.payment', 'order', String(row._id), auditActorOf(ctx), {
       storeId,
       orderId: row.orderId ?? null,
       amount,
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       throw new HttpError(503, 'Seller database unavailable');
     });
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'orders.write' });
 
     const current = await readOrder(id, storeId);
     if (!current) throw notFound();

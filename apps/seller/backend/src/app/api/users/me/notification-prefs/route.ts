@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { notificationPrefsUpdateSchema, readNotificationPrefs } from '@/lib/contracts';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -79,7 +79,7 @@ export async function PATCH(request: NextRequest): Promise<Response> {
 
     const prefs = readNotificationPrefs(updated.notificationPrefs);
     try {
-      await writeAuditLog('user.notification_prefs', 'user', ctx.userId, 'seller:' + ctx.userId, { changes, at: new Date().toISOString() });
+      await writeAuditLog('user.notification_prefs', 'user', ctx.userId, auditActorOf(ctx), { changes, at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the notification prefs audit entry', err instanceof Error ? err.message : 'unknown error');
     }

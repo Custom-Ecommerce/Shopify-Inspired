@@ -41,7 +41,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'products.write' });
     const report = await runProductImport(storeId, await file.text(), form?.get('dryRun') === 'true');
     return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {

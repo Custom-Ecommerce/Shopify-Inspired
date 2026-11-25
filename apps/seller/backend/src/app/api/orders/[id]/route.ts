@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     });
     if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Order not found');
 
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'orders.read' });
     const row = await Order.findOne({ _id: id, store: storeId }).lean();
     if (!row) throw new HttpError(404, 'Order not found');
 

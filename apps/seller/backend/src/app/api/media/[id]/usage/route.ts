@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       throw new HttpError(503, 'Seller database unavailable');
     });
     if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Media not found');
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'media.read' });
 
     const row = await Media.findOne({ _id: id, store: storeId }).select('_id').lean();
     if (!row) throw new HttpError(404, 'Media not found');

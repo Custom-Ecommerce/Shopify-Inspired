@@ -33,6 +33,8 @@ const taken = (): HttpError => new HttpError(409, 'This domain is already connec
  * Sending the same host again changes nothing. A different host resets the status to pending with a NEW token (and takes the old one
  * off Vercel first when it was verified).
  */
+// S8-B3 (D-118): OWNER-ONLY ON PURPOSE. The capability below (settings.domain) is held by the owner alone, so loadOwnedStore refuses every member; the compare-and-set that follows names the
+// owner (owner: ctx.userObjectId) deliberately, as it always did.
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
     const ctx = await authenticate(request);
@@ -43,7 +45,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const host = checked.host;
     assertCan(ctx.actor, 'update', 'stores', ['domain']);
     const { id } = await context.params;
-    const current = (await loadOwnedStore(request, ctx, id, DOMAIN_SELECT)) as unknown as DomainStoreDoc;
+    const current = (await loadOwnedStore(request, ctx, id, DOMAIN_SELECT, 'settings.domain')) as unknown as DomainStoreDoc;
     const storeId = String(current._id);
 
     await assertCustomDomainAllowed(ctx.userId);

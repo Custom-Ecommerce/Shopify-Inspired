@@ -51,7 +51,7 @@ export function buildAuditFilter(query: AuditListQuery): Doc {
   if (query.action !== null) clauses.push({ action: query.action });
   if (query.q !== null) {
     // CO-11: the seller backend writes actor ids with a prefix, so the actor matches the bare id and both prefixed forms.
-    if (isObjectId(query.q)) clauses.push({ $or: [{ entityId: query.q }, { actorId: { $in: [query.q, 'admin:' + query.q, 'seller:' + query.q] } }] });
+    if (isObjectId(query.q)) clauses.push({ $or: [{ entityId: query.q }, { actorId: { $in: [query.q, 'admin:' + query.q, 'seller:' + query.q, 'seller:' + query.q + ':manager', 'seller:' + query.q + ':staff', 'seller:' + query.q + ':support'] } }] });
     else clauses.push({ action: { $regex: escapeRegex(query.q), $options: 'i' } });
   }
   if (clauses.length === 0) return {};

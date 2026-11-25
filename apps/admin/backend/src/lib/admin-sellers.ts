@@ -63,7 +63,28 @@ export function groupStoresByOwner(stores: Doc[]): Map<string, Doc[]> {
   return grouped;
 }
 
-export function toSellerItem(doc: Doc, stores: Doc[]) {
+/** How many team members a store has: active ones and open invitations (a disabled member is not counted). */
+export interface MemberCounts {
+  active: number;
+  invited: number;
+}
+
+/** Sprint 8 (S8-B3): { storeId -> counts } from the rows of a $group on { store, status }. A status other than active or invited is ignored. */
+export function memberCountsByStore(rows: ReadonlyArray<{ _id?: { store?: unknown; status?: unknown }; n?: unknown }>): Map<string, MemberCounts> {
+  const counts = new Map<string, MemberCounts>();
+  for (const row of rows) {
+    const store = row._id?.store === undefined || row._id.store === null ? '' : String(row._id.store);
+    const status = row._id?.status;
+    const n = typeof row.n === 'number' && Number.isFinite(row.n) ? Math.max(0, Math.round(row.n)) : 0;
+    if (store === '' || (status !== 'active' && status !== 'invited')) continue;
+    const entry = counts.get(store) ?? { active: 0, invited: 0 };
+    entry[status] += n;
+    counts.set(store, entry);
+  }
+  return counts;
+}
+
+export function toSellerItem(doc: Doc, stores: Doc[], members: ReadonlyMap<string, MemberCounts> = new Map()) {
   return {
     id: String(doc._id),
     name: typeof doc.name === 'string' ? doc.name : '',
@@ -72,6 +93,8 @@ export function toSellerItem(doc: Doc, stores: Doc[]) {
       id: String(store._id),
       name: typeof store.name === 'string' ? store.name : '',
       status: store.status as StoreStatus,
+      // Sprint 8 (S8-B3): the store's team, read only.
+      members: members.get(String(store._id)) ?? { active: 0, invited: 0 },
     })),
     storeCount: stores.length,
     createdAt: toIso(doc.createdAt) ?? new Date(0).toISOString(),

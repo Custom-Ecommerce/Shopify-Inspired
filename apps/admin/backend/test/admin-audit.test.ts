@@ -87,7 +87,7 @@ test('parseAuditQuery applies defaults and refuses a malformed action, page, or 
 test('the audit filter matches an id exactly, other text literally, and combines with an action', () => {
   assert.deepEqual(buildAuditFilter({ page: 1, limit: 20, q: null, action: null }), {});
   assert.deepEqual(buildAuditFilter({ page: 1, limit: 20, q: null, action: 'store.suspend' }), { action: 'store.suspend' });
-  assert.deepEqual(buildAuditFilter({ page: 1, limit: 20, q: STORE_ID, action: null }), { $or: [{ entityId: STORE_ID }, { actorId: { $in: [STORE_ID, 'admin:' + STORE_ID, 'seller:' + STORE_ID] } }] });
+  assert.deepEqual(buildAuditFilter({ page: 1, limit: 20, q: STORE_ID, action: null }), { $or: [{ entityId: STORE_ID }, { actorId: { $in: [STORE_ID, 'admin:' + STORE_ID, 'seller:' + STORE_ID, 'seller:' + STORE_ID + ':manager', 'seller:' + STORE_ID + ':staff', 'seller:' + STORE_ID + ':support'] } }] });
   const text = buildAuditFilter({ page: 1, limit: 20, q: 'a.b', action: null }) as any;
   assert.equal(text.action.$regex, 'a\\.b');
   const both = buildAuditFilter({ page: 1, limit: 20, q: 'sus', action: 'store.suspend' }) as any;

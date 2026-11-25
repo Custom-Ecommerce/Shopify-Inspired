@@ -1,3 +1,4 @@
+import { auditActorOf } from '@/lib/auth';
 import mongoose from 'mongoose';
 import { resolveClientIp } from '@markaz/platform-kit/client-ip';
 import { verifiedClientAddress } from '@markaz/platform-kit/signed-client-address';
@@ -196,7 +197,7 @@ export async function bumpTokenVersion(ctx: AuthContext, set: Record<string, unk
 /** Best-effort audit entry for an account change: a failure is logged, never answered. */
 export async function auditAccount(ctx: AuthContext, action: string, details: Record<string, unknown>): Promise<void> {
   try {
-    await writeAuditLog(action, 'user', ctx.userId, 'seller:' + ctx.userId, { ...details, at: new Date().toISOString() });
+    await writeAuditLog(action, 'user', ctx.userId, auditActorOf(ctx), { ...details, at: new Date().toISOString() });
   } catch (err) {
     console.error('[seller-backend] could not write the account audit entry', { action, error: err instanceof Error ? err.message : 'unknown' });
   }

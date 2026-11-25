@@ -18,6 +18,8 @@ export type { SyncOutboxModelPort } from '@markaz/sync-core';
 
 // Sprint 4 EP-08: the account guard, limits and flows, and the models they use (EP-07 outbox for the account emails).
 export const { AuthToken, NotificationOutbox, RateLimitCounter } = db;
+// Sprint 8 (S8-B3): the members of a store (read only here: the sellers list shows how many each store has).
+export const { StoreMember } = db;
 export const {
   createSessionGuard,
   toSessionUserRecord,

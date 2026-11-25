@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     requireSellerActor(ctx);
     assertCan(ctx.actor, 'read', 'stores', ['name']);
     const { id } = await context.params;
-    const doc = await loadOwnedStore(request, ctx, id, 'name owner commissionMode commissionRate');
+    const doc = await loadOwnedStore(request, ctx, id, 'name owner commissionMode commissionRate', 'commission.read');
     const { rate, source } = await commissionRateAndSource(doc as unknown as { commissionMode?: unknown; commissionRate?: unknown });
     const codRate = await codCommissionRate();
     return NextResponse.json({ gatewayRate: rate, codRate, rate, source }, { headers: { 'Cache-Control': 'no-store' } });

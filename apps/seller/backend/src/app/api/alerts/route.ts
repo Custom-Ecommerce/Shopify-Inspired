@@ -4,7 +4,7 @@ import { authenticate } from '@/lib/auth';
 import { SELLER_ALERT_PAGE_DEFAULT, SELLER_ALERT_PAGE_MAX } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { handleRouteError, parseIntParam } from '@/lib/http';
-import { NO_STORE, requireDatabase, toAlertWire, unreadCount } from '@/lib/seller-alerts';
+import { alertFilterFor, NO_STORE, requireDatabase, toAlertWire, unreadCount } from '@/lib/seller-alerts';
 import { assertCan, SellerAlert } from '@/lib/services';
 
 export const runtime = 'nodejs';
@@ -24,13 +24,13 @@ export async function GET(request: NextRequest): Promise<Response> {
     const page = parseIntParam(params.get('page'), 1, 1, 100000);
     const limit = parseIntParam(params.get('limit'), SELLER_ALERT_PAGE_DEFAULT, 1, SELLER_ALERT_PAGE_MAX);
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'alerts.read' });
 
-    const filter = { store: storeId };
+    const filter = alertFilterFor(storeId, ctx.storeRole);
     const [rows, totalDocs, unread] = await Promise.all([
       SellerAlert.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       SellerAlert.countDocuments(filter),
-      unreadCount(storeId),
+      unreadCount(storeId, ctx.storeRole),
     ]);
     const docs = (rows as unknown[]).map(toAlertWire);
     return NextResponse.json({ docs, totalDocs, page, limit, unread }, { headers: NO_STORE });

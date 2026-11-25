@@ -35,7 +35,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const query = await readAccountBody(new Request('http://query.invalid', { method: 'POST', body: JSON.stringify(raw) }), returnListQuerySchema);
     assertCan(ctx.actor, 'read', 'returns');
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'returns.read');
     const storeId = String(store._id);
 
     const filter: Row = { store: oid(storeId) };

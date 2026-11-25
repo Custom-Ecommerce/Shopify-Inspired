@@ -790,7 +790,7 @@ test('the tax group: the owner and a manager may change it; staff and support ma
   const manager = await patch({ tax: { ratePercent: 5 } }, 'manager');
   assert.equal(manager.status, 200);
   assert.equal(stores[STORE_A]!.storefront.tax.ratePercent, 5);
-  assert.equal(audits.at(-1)!.actorId, 'seller:' + MANAGER);
+  assert.equal(audits.at(-1)!.actorId, 'seller:' + MANAGER + ':manager', 'S8-B3: a member action records the user id AND the role');
   assert.equal(audits.at(-1)!.details.actorRole, 'manager');
   assert.deepEqual(audits.at(-1)!.details.groups, ['tax']);
   for (const who of ['staff', 'support']) {
@@ -898,4 +898,85 @@ test('an accepted manager works end to end: accepts, changes the tax, cannot cal
   assert.equal((await member('disable', id, { revision: row.revision })).status, 200);
   assert.equal((await patch({ tax: { enabled: false } }, 'invitee')).status, 403);
   assert.equal(stores[STORE_A]!.storefront.tax.enabled, true);
+});
+
+// ============================================================================================================ S8-B3: the settings by role
+
+const readSettings = async (who: string, store = STORE_A) => call(settingsGET, 'GET', '/api/stores/' + store + '/settings', { token: tokens[who], store });
+
+test('S8-B3 GET settings: every role that works in the store reads it (capability store.view), each its own view; the Tax tab data reaches a manager', async () => {
+  seedMember(MANAGER, 'manager');
+  seedMember(STAFF, 'staff');
+  seedMember(SUPPORT, 'support');
+  stores[STORE_A]!.payoutDetails = { method: 'bank', accountTitle: 'Zara Lawn', accountNumber: '12345678901234', bankName: 'HBL' };
+  stores[STORE_A]!.paymentSettings = { codEnabled: false, cardEnabled: true, fraud: { codConfirmation: 'all', riskRules: { flaggedCities: ['Karachi'] } } };
+  stores[STORE_A]!.storefront = { deliveryRate: 250, tax: { enabled: true, ratePercent: 17, mode: 'inclusive', label: 'GST' } };
+
+  const owner = await json(await readSettings('owner'));
+  assert.equal(owner.settings.payout.accountNumberMasked, '••••1234');
+  assert.equal(owner.settings.payments.codEnabled, false);
+
+  const manager = await json(await readSettings('manager'));
+  assert.equal(manager.settings.payout, null, 'payouts are owner-only: not even masked');
+  assert.equal(manager.settings.payments.codEnabled, false, 'a manager sees the payment switches (read only)');
+  assert.deepEqual(manager.settings.tax, { enabled: true, ratePercent: 17, mode: 'inclusive', label: 'GST' });
+
+  for (const who of ['staff', 'support']) {
+    const res = await readSettings(who);
+    assert.equal(res.status, 200, who);
+    const body = await json(res);
+    const text = JSON.stringify(body);
+    assert.equal(body.settings.payout, null, who);
+    assert.deepEqual(body.settings.payments, { codEnabled: true, cardEnabled: false, cardAvailable: false }, who + ': neutral defaults, not the stored switches');
+    assert.equal(text.includes('Karachi'), false, who + ': no fraud details');
+    assert.equal(text.includes('HBL') || text.includes('1234'), false, who + ': no bank data');
+    assert.equal(body.settings.delivery.defaultRate, 250, who + ': the store basics stay');
+  }
+});
+
+test('S8-B3 GET settings: an invited or disabled member and a stranger are refused, and the stored data is not changed by reading', async () => {
+  seedMember(MANAGER, 'manager', 'disabled');
+  seedMember(SUPPORT, 'support', 'invited', { user: undefined });
+  const before = JSON.stringify(stores);
+  for (const who of ['manager', 'support', 'stranger', 'ownerB']) assert.equal((await readSettings(who)).status, 403, who);
+  assert.equal(JSON.stringify(stores), before);
+});
+
+test('S8-B3 GET /api/stores/:id: a member reads the store WITHOUT the payment and courier settings; the owner reads them as always', async () => {
+  seedMember(STAFF, 'staff');
+  const selects: Array<{ filter: any; select: string }> = [];
+  const original = StoreModel.findOne;
+  StoreModel.findOne = (filter: any) => {
+    const q: any = { select: (fields: string) => (selects.push({ filter, select: fields }), q), sort: () => q, lean: async () => clone(stores[STORE_A]!) };
+    return q;
+  };
+  const storeGET = (await import('../src/app/api/stores/[id]/route')).GET as Handler;
+  const asOwner = await call(storeGET, 'GET', '/api/stores/' + STORE_A, { token: tokens.owner });
+  const asStaff = await call(storeGET, 'GET', '/api/stores/' + STORE_A, { token: tokens.staff });
+  StoreModel.findOne = original;
+  assert.equal(asOwner.status, 200);
+  assert.equal(asStaff.status, 200);
+  assert.match(selects[0]!.select, /paymentSettings/);
+  assert.equal(String(selects[0]!.filter.owner), OWNER, 'the owner is read through the owner filter');
+  assert.doesNotMatch(selects[1]!.select, /paymentSettings|courierSettings/);
+  assert.match(selects[1]!.select, /name/);
+  assert.equal(selects[1]!.filter.owner, undefined);
+  const stranger = await call(storeGET, 'GET', '/api/stores/' + STORE_A, { token: tokens.stranger });
+  assert.equal(stranger.status, 403);
+});
+
+test('S8-B3 a branding upload needs settings.write: staff and a stranger are refused before anything is uploaded or written', async () => {
+  seedMember(STAFF, 'staff');
+  const brandingPOST = (await import('../src/app/api/stores/[id]/branding/[kind]/route')).POST as Handler;
+  const send = (who: string) => {
+    const form = new FormData();
+    form.set('file', new Blob([new Uint8Array(8)], { type: 'image/png' }), 'logo.png');
+    return brandingPOST(new NextRequest('http://seller.test/api/stores/' + STORE_A + '/branding/logo', { method: 'POST', headers: { authorization: 'Bearer ' + tokens[who] }, body: form }), { params: Promise.resolve({ id: STORE_A, kind: 'logo' }) });
+  };
+  const staff = await send('staff');
+  assert.equal(staff.status, 403);
+  assert.equal((await json(staff)).code, 'CAPABILITY_DENIED');
+  const stranger = await send('stranger');
+  assert.equal(stranger.status, 403);
+  assert.equal(stores[STORE_A]!.storefront.logo, undefined);
 });

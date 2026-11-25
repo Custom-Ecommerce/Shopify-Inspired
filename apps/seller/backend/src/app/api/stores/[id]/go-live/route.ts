@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { loadOwnedStore, requireSellerActor, SETTINGS_SELECT } from '@/lib/owned-store';
 import { notifyAdminStoreGoLive } from '@/lib/admin-go-live';
@@ -25,13 +25,15 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
  *       and the store stays pending until an admin activates it (POST /api/admin/stores/:id/status, unchanged)
  *   200 the same answer for a store that is already active   409 the status changed meanwhile, or the store is suspended
  */
+// S8-B3 (D-118): OWNER-ONLY ON PURPOSE. The capability below (go_live) is held by the owner alone, so loadOwnedStore refuses every member; the compare-and-set that follows names the
+// owner (owner: ctx.userObjectId) deliberately, as it always did.
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
     const ctx = await authenticate(request);
     requireSellerActor(ctx);
     assertCan(ctx.actor, 'read', 'stores', ['name', 'storefront', 'paymentSettings', 'status']);
     const { id } = await context.params;
-    const doc = await loadOwnedStore(request, ctx, id, SETTINGS_SELECT);
+    const doc = await loadOwnedStore(request, ctx, id, SETTINGS_SELECT, 'go_live');
     const storeId = String(doc._id);
 
     if (doc.status === 'active') {
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
     notifyAdminStoreGoLive({ storeId, status: waiting ? 'pending' : 'active', goLiveRequestedAt: now.toISOString() });
     try {
-      await writeAuditLog(waiting ? 'store.go_live_requested' : 'store.go_live', 'store', storeId, 'seller:' + ctx.userId, { at: now.toISOString() });
+      await writeAuditLog(waiting ? 'store.go_live_requested' : 'store.go_live', 'store', storeId, auditActorOf(ctx), { at: now.toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the go-live audit entry', err instanceof Error ? err.message : 'unknown');
     }

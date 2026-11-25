@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'reviews');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'reviews.read' });
 
     const doc = (await Review.findOne({ _id: id, store: storeId }).lean()) as unknown as Record<string, unknown> | null;
     if (!doc) throw new HttpError(404, 'Review not found');
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
 export async function PATCH(request: NextRequest, context: Ctx): Promise<Response> {
   try {
     const { id } = await context.params;
-    return NextResponse.json(await saveReply(request, id, 'edit'), { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(await saveReply(request, id, 'edit', 'reviews.reply'), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
   }

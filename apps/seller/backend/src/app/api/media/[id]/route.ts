@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { deleteAsset } from '@/lib/cloudinary';
 import { mediaRenameRequestSchema } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
@@ -58,7 +58,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const { id } = await context.params;
     await requireDatabase();
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'media.write' });
 
     const before = (await Media.findOne({ _id: id, store: storeId }).select('name alt').lean()) as { name?: unknown } | null;
     if (!before) throw notFound();
@@ -69,7 +69,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const after = await Media.findOne({ _id: id, store: storeId }).lean();
     if (!after) throw notFound();
     try {
-      await writeAuditLog('media.rename', 'media', id, 'seller:' + ctx.userId, {
+      await writeAuditLog('media.rename', 'media', id, auditActorOf(ctx), {
         storeId,
         fields: ['name'],
         from: typeof before.name === 'string' ? before.name : null,
@@ -103,7 +103,7 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     const { id } = await context.params;
     await requireDatabase();
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'media.write' });
 
     const row = (await Media.findOne({ _id: id, store: storeId }).select('cloudinaryPublicId resourceType').lean()) as {
       cloudinaryPublicId?: unknown;
@@ -131,7 +131,7 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
       await deleteAsset(row.cloudinaryPublicId, row.resourceType === 'video' ? 'video' : 'image');
     }
     try {
-      await writeAuditLog('media.delete', 'media', id, 'seller:' + ctx.userId, { storeId, at: new Date().toISOString() });
+      await writeAuditLog('media.delete', 'media', id, auditActorOf(ctx), { storeId, at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the media delete audit entry', err instanceof Error ? err.message : 'unknown');
     }

@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     assertCan(ctx.actor, 'read', 'stores', ['name']);
     assertCan(ctx.actor, 'read', 'subscriptions', ['planKey', 'status']);
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'billing.manage');
     return NextResponse.json(await buildPlanUsage(ctx.userId, String((store as unknown as { _id: unknown })._id)), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);

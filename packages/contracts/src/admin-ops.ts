@@ -27,6 +27,8 @@ export const adminSellerStoreSchema = z.object({
   id: objectIdSchema,
   name: z.string(),
   status: z.enum(STORE_STATUSES),
+  /** Sprint 8 (S8-B3): the people who work in the store: active members and open invitations (read only). Absent from an older backend. */
+  members: z.object({ active: z.number().int().min(0), invited: z.number().int().min(0) }).optional(),
 });
 
 export const adminSellerListItemSchema = z.object({

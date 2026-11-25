@@ -1,3 +1,4 @@
+import { auditActorOf } from '@/lib/auth';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type {
   BroadcastCounts,
@@ -201,7 +202,7 @@ export async function createBroadcast(ctx: AuthContext, store: BroadcastStore, i
 
   try {
     // The count only: never an email address, never the message.
-    await writeAuditLog('broadcast.create', 'broadcast', id, 'seller:' + ctx.userId, { storeId: store.id, recipientCount: recipients.length, queueErrors, at: now.toISOString() });
+    await writeAuditLog('broadcast.create', 'broadcast', id, auditActorOf(ctx), { storeId: store.id, recipientCount: recipients.length, queueErrors, at: now.toISOString() });
   } catch (err) {
     console.error('[seller-backend] could not write the broadcast audit entry', err instanceof Error ? err.name : 'unknown');
   }

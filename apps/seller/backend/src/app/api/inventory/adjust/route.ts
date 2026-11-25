@@ -30,7 +30,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'inventory.write' });
 
     const outcome = await adjustInventory(storeId, ctx.userObjectId, body.data.lines);
 

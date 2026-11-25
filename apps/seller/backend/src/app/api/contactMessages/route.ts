@@ -30,7 +30,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'contact.read' });
     const filter: Record<string, unknown> = { scope: 'store', store: storeId };
     if (status !== null) filter.status = status;
 

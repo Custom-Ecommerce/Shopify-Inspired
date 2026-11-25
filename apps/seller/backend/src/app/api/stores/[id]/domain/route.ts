@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     requireSellerActor(ctx);
     assertCan(ctx.actor, 'read', 'stores', ['domain', 'customDomainStatus']);
     const { id } = await context.params;
-    const doc = (await loadOwnedStore(request, ctx, id, DOMAIN_SELECT)) as unknown as DomainStoreDoc;
+    const doc = (await loadOwnedStore(request, ctx, id, DOMAIN_SELECT, 'settings.domain')) as unknown as DomainStoreDoc;
     return NextResponse.json(await domainStateOf(doc, ctx), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);

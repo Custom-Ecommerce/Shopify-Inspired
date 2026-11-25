@@ -43,8 +43,32 @@ export function toAlertWire(doc: unknown): {
   };
 }
 
-export async function unreadCount(storeId: string): Promise<number> {
-  return SellerAlert.countDocuments({ store: storeId, readAt: null });
+/**
+ * Sprint 8 (S8-B3, D-118): the bell shows each person the alerts their role can act on. The owner and a manager see every alert. Staff see the order and stock alerts (new order, unconfirmed
+ * order, low stock, out of stock). Support sees the new order (to view it), the return request, the review and the contact message. An alert of another kind is not in their list, count or
+ * read-all, and its id is a 404 for them. (An alert row belongs to the store, so reading it marks it read for everyone: the read state is the store's.)
+ */
+export const ALERT_KINDS_BY_ROLE: Readonly<Record<string, readonly string[] | null>> = Object.freeze({
+  owner: null,
+  manager: null,
+  staff: ['new_order', 'unconfirmed_order', 'low_stock', 'out_of_stock'],
+  support: ['new_order', 'return_requested', 'review_received', 'contact_message'],
+});
+
+/** The kinds a role may see: null for all of them, [] for an unknown or missing role (it sees none: fail closed). */
+export function alertKindsFor(role: unknown): readonly string[] | null {
+  if (typeof role !== 'string' || !(role in ALERT_KINDS_BY_ROLE)) return [];
+  return ALERT_KINDS_BY_ROLE[role] ?? null;
+}
+
+/** The query of the alerts a role may see in a store (the store alone for the owner and a manager: the same query as before). */
+export function alertFilterFor(storeId: string, role: unknown): Record<string, unknown> {
+  const kinds = alertKindsFor(role);
+  return kinds === null ? { store: storeId } : { store: storeId, kind: { $in: [...kinds] } };
+}
+
+export async function unreadCount(storeId: string, role: unknown = 'owner'): Promise<number> {
+  return SellerAlert.countDocuments({ ...alertFilterFor(storeId, role), readAt: null });
 }
 
 export const NO_STORE = { 'Cache-Control': 'no-store' };

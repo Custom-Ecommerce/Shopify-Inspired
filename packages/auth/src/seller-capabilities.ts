@@ -22,6 +22,9 @@ export const STAFF_ROLES = ['manager', 'staff', 'support'] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
 
 export const SELLER_CAPABILITIES = [
+  // Everyone who works in the store (S8-B3): the bell (only the alerts of their role) and the safe subset of the store's settings
+  'alerts.read',
+  'store.view',
   // Orders
   'orders.read',
   'orders.write',
@@ -38,8 +41,11 @@ export const SELLER_CAPABILITIES = [
   // After sale
   'returns.read',
   'returns.write',
+  // S8-B3: recording a refund is not the same as marking a return received (support marks, never refunds)
+  'returns.refund',
   'customers.read',
   'customers.write',
+  'customers.export',
   'reviews.read',
   'reviews.reply',
   'contact.read',
@@ -94,8 +100,11 @@ const ownerOnly: ReadonlySet<string> = new Set(OWNER_ONLY_CAPABILITIES);
 const MANAGER: readonly SellerCapability[] = SELLER_CAPABILITIES.filter((capability) => !ownerOnly.has(capability));
 
 const STAFF: readonly SellerCapability[] = [
+  'alerts.read',
+  'store.view',
   'orders.read',
   'orders.write',
+  'orders.notes',
   'products.read',
   'products.write',
   'categories.read',
@@ -107,6 +116,8 @@ const STAFF: readonly SellerCapability[] = [
 ];
 
 const SUPPORT: readonly SellerCapability[] = [
+  'alerts.read',
+  'store.view',
   'orders.read',
   'orders.notes',
   'returns.read',

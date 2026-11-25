@@ -23,6 +23,7 @@ import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { useDashboard, useStoreHref } from "@/lib/dashboard-context";
 import { storeBasePath } from "@/lib/store-routes";
+import { roleSeesMenu } from "@/lib/role-menu";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import { fetchUnreadCount, unreadBadge } from "@/lib/support";
 import {
@@ -172,7 +173,10 @@ export function DashboardSidebar() {
       </div>
 
       <SidebarContent>
-        {NAV_GROUPS.map((group) => (
+        {NAV_GROUPS.map((group) => ({ group, links: group.links.filter((link) => roleSeesMenu(activeStore?.role, link.href)) }))
+          // S8-B3: the menu shows only what the role may use (the backend is what enforces it); a group left empty is not shown.
+          .filter(({ links }) => links.length > 0)
+          .map(({ group, links }) => (
           <SidebarGroup key={group.label}>
             {/* Group labels hidden in icon mode by the sidebar primitive */}
             <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -180,7 +184,7 @@ export function DashboardSidebar() {
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {group.links.map((link) => {
+                {links.map((link) => {
                   const active = isActive(link.href, "exact" in link ? link.exact : false);
                   const Icon = link.icon;
                   return (

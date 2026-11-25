@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth';
 import { objectIdSchema } from '@/lib/contracts';
+import type { SellerCapability } from '@markaz/auth';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError, jsonError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -55,14 +56,14 @@ export function publishProblem(row: PublishableProduct): ProductRequestError | n
  * is not undone, and a takedown that lands in between holds too. Unpublishing has no rules. Both tell the storefront to
  * drop its cache.
  */
-export async function changePublished(request: NextRequest, context: ProductRouteContext, published: boolean): Promise<Response> {
+export async function changePublished(request: NextRequest, context: ProductRouteContext, published: boolean, capability: SellerCapability): Promise<Response> {
   try {
     const { id } = await context.params;
     if (!objectIdSchema.safeParse(id).success) return jsonError(422, 'id must be a 24-character ObjectId');
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'update', 'productLifecycle', ['isPublished']);
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability });
     // Sprint 6 EP-14 (D-118): publishing adds no product to the count (every product that is not in trash counts, a draft included), so it is
     // never refused for the plan: assertProductSlot(storeId, 0) is a no-op by design. A seller over the limit can still publish what they have.
     await assertProductSlot(storeId, 0);
@@ -102,14 +103,14 @@ interface TrashState {
  * POST /api/products/:id/restore. The product comes back as a draft, whatever it was before. What an admin deleted stays
  * deleted (403 PRODUCT_ADMIN_DELETED), and the same condition sits in the write's filter.
  */
-export async function restoreProduct(request: NextRequest, context: ProductRouteContext): Promise<Response> {
+export async function restoreProduct(request: NextRequest, context: ProductRouteContext, capability: SellerCapability): Promise<Response> {
   try {
     const { id } = await context.params;
     if (!objectIdSchema.safeParse(id).success) return jsonError(422, 'id must be a 24-character ObjectId');
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'update', 'productLifecycle', ['deletedAt']);
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability });
 
     const row = (await Product.findOne({ _id: id, store: storeId }).select('deletedAt deletedBy isDemo').lean()) as unknown as TrashState | null;
     if (!row) throw productNotFound();

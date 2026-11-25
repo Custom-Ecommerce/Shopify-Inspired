@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     requireSellerActor(ctx);
     assertCan(ctx.actor, 'read', 'returns');
     const params = await context.params;
-    const store = await loadOwnedStore(request, ctx, params.id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, params.id, 'name owner', 'returns.read');
     if (!mongoose.isValidObjectId(params.returnId)) throw returnNotFound();
     const doc = await readReturn(String(store._id), params.returnId);
     if (!doc) throw returnNotFound();

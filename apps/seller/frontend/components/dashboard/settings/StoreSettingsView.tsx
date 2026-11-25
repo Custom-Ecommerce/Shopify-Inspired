@@ -6,7 +6,8 @@ import { Loader2 } from "lucide-react";
 import { FormAlert } from "@/components/auth/AccountCard";
 import { PageHeader } from "@/components/dashboard/shared/PageHeader";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useActiveStoreId } from "@/lib/dashboard-context";
+import { useActiveStoreId, useDashboard } from "@/lib/dashboard-context";
+import { settingsTabsFor } from "@/lib/role-menu";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import type { StoreSettings } from "@markaz/contracts/store-settings";
 import { DeliveryTab } from "./DeliveryTab";
@@ -50,10 +51,14 @@ function isTab(value: string | null): value is TabValue {
  */
 export function StoreSettingsView() {
   const storeId = useActiveStoreId();
+  // S8-B3: the owner sees every tab; a manager every tab but Payments and Fraud (owner-only: the backend refuses them anyway).
+  const { activeStore } = useDashboard();
+  const allowedTabs = settingsTabsFor(activeStore?.role, SETTINGS_TABS.map((item) => item.value));
+  const visibleTabs = SETTINGS_TABS.filter((item) => allowedTabs.includes(item.value));
   const storeFetch = useStoreFetch();
   const params = useSearchParams();
   const requested = params.get("tab");
-  const [tab, setTab] = useState<TabValue>(isTab(requested) ? requested : "profile");
+  const [tab, setTab] = useState<TabValue>(isTab(requested) && allowedTabs.includes(requested) ? requested : "profile");
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const dirtyRef = useRef(false);
@@ -118,7 +123,7 @@ export function StoreSettingsView() {
   }, []);
 
   function changeTab(next: string) {
-    if (!isTab(next) || next === tab) return;
+    if (!isTab(next) || next === tab || !allowedTabs.includes(next)) return;
     if (dirtyRef.current && !window.confirm(UNSAVED)) return;
     dirtyRef.current = false;
     setTab(next);
@@ -143,7 +148,7 @@ export function StoreSettingsView() {
         <>
           <Tabs value={tab} onValueChange={(value) => changeTab(String(value))}>
             <TabsList className="w-full justify-start" aria-label="Settings sections">
-              {SETTINGS_TABS.map((item) => (
+              {visibleTabs.map((item) => (
                 <TabsTrigger key={item.value} value={item.value} className="min-h-9 whitespace-nowrap">
                   {item.label}
                 </TabsTrigger>

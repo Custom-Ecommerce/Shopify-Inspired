@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
-import { authenticate, type AuthContext } from '@/lib/auth';
+import { authenticate, type AuthContext, auditActorOf } from '@/lib/auth';
 import { orderNoteRequestSchema } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
@@ -17,7 +17,7 @@ const notFound = (): HttpError => new HttpError(404, 'Order not found');
 /** The note's text stays out of the audit log: only its length is recorded. */
 async function audit(ctx: AuthContext, storeId: string, id: string, orderId: unknown, length: number): Promise<void> {
   try {
-    await writeAuditLog('order.note', 'order', id, 'seller:' + ctx.userId, {
+    await writeAuditLog('order.note', 'order', id, auditActorOf(ctx), {
       storeId,
       orderId: orderId ?? null,
       length,
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       throw new HttpError(503, 'Seller database unavailable');
     });
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'orders.notes' });
 
     const current = (await Order.findOne({ _id: id, store: storeId }).lean()) as unknown as { orderId?: string } | null;
     if (!current) throw notFound();

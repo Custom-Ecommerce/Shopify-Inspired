@@ -30,7 +30,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const query = readQuery(request, customerListQuerySchema);
     assertCan(ctx.actor, 'read', 'customers');
     const { id } = await context.params;
-    const store = await loadOwnedStore(request, ctx, id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, id, 'name owner', 'customers.read');
     return NextResponse.json(await listCustomers(String(store._id), query), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);

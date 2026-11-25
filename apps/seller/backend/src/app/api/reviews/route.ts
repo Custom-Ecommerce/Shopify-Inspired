@@ -45,7 +45,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const limit = parseIntParam(params.get('limit'), 20, 1, 100);
 
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'reviews.read' });
     const filter: Record<string, unknown> = { store: storeId };
     if (status !== null) filter.status = status;
     if (unanswered === '1') filter.reply = null;

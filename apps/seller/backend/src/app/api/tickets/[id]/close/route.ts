@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { TICKET_INVALID, ticketCloseSchema } from '@/lib/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { parseSupportBody, ticketToWire } from '@/lib/support';
 import { setTicketStatus, ticketOrRefusal } from '@/lib/tickets';
 import { HttpError, handleRouteError } from '@/lib/http';
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const result = ticketOrRefusal(await setTicketStatus({ seller: ctx.userId }, id, body.revision, 'closed'));
     if (result instanceof NextResponse) return result;
     try {
-      await writeAuditLog('ticket.close', 'ticket', id, 'seller:' + ctx.userId, { at: new Date().toISOString() });
+      await writeAuditLog('ticket.close', 'ticket', id, auditActorOf(ctx), { at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the ticket audit entry', err instanceof Error ? err.message : 'unknown');
     }

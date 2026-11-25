@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import type { OrderTransitionRequest } from '@markaz/contracts';
-import { authenticate, type AuthContext } from '@/lib/auth';
+import { authenticate, type AuthContext, auditActorOf } from '@/lib/auth';
 import { canTransition, cardPaymentPending, nextStatuses, orderTransitionRequestSchema, transitionRefusal, ORDER_NOT_CONFIRMED, ORDER_NOT_CONFIRMED_MESSAGE, ORDER_TRANSITION_REFUSAL_MESSAGES } from '@/lib/contracts';
 import { confirmationStatusOf } from '@/lib/fraud';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
@@ -57,7 +57,7 @@ const unchanged = (row: unknown): Response =>
  */
 async function audit(ctx: AuthContext, storeId: string, row: StoredOrder, from: string, body: OrderTransitionRequest): Promise<void> {
   try {
-    await writeAuditLog('order.transition', 'order', String(row._id), 'seller:' + ctx.userId, {
+    await writeAuditLog('order.transition', 'order', String(row._id), auditActorOf(ctx), {
       storeId,
       orderId: row.orderId ?? null,
       from,
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       throw new HttpError(503, 'Seller database unavailable');
     });
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'orders.write' });
 
     const current = await readOrder(id, storeId);
     if (!current) throw notFound();

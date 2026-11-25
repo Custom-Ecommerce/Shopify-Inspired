@@ -4,6 +4,7 @@ import { SESSION_COOKIE_NAME, SESSION_MIN_SECRET_LENGTH, sessionTokenVersion, ve
 import type { Actor } from '@markaz/auth';
 import { HttpError } from '@/lib/http';
 import { checkSellerSession } from '@/lib/session-user';
+import type { SellerRole } from '@markaz/auth';
 
 /** Sessions for this backend are bound to this audience (see packages/auth/src/session.ts). */
 export const SELLER_SESSION_AUDIENCE = 'seller-backend';
@@ -21,6 +22,11 @@ export interface AuthContext {
    * could not read the account (unit tests with a stubbed connection): requireVerifiedEmail then reads it itself.
    */
   emailVerified?: boolean;
+  /**
+   * Sprint 8 (S8-B3): the role this user holds in the store the request is about, set by resolveStoreAccess (owner, manager, staff or support; null for an admin). Undefined until a
+   * route has resolved its store. The audit entries of member actions carry it (auditActorOf).
+   */
+  storeRole?: SellerRole | null;
 }
 
 function extractToken(request: NextRequest): string | null {
@@ -69,4 +75,13 @@ export async function authenticate(request: NextRequest): Promise<AuthContext> {
     tokenVersion: sessionTokenVersion(claims),
     ...(account ? { emailVerified: account.emailVerifiedAt !== null } : {}),
   };
+}
+
+/**
+ * The actor string of an audit entry for a seller session: "seller:<userId>" for the owner (as it always was) and "seller:<userId>:<role>" for a member, so an entry records the member's user id AND
+ * role. A route that has not resolved a store (the account routes) has no role and is the plain form.
+ */
+export function auditActorOf(ctx: Pick<AuthContext, 'userId' | 'storeRole'>): string {
+  const base = 'seller:' + ctx.userId;
+  return ctx.storeRole === 'manager' || ctx.storeRole === 'staff' || ctx.storeRole === 'support' ? base + ':' + ctx.storeRole : base;
 }

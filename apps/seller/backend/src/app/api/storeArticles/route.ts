@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ARTICLE_INVALID, ARTICLE_SLUG_TAKEN, ARTICLE_STATUSES, ARTICLE_TYPES, articleCreateSchema } from '@/lib/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { articleSlugFromTitle, articleToWire, parseArticleBody, resolveArticleMedia } from '@/lib/articles';
 import { HttpError, handleRouteError, isDuplicateKeyError, jsonError, parseIntParam } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const limit = parseIntParam(params.get('limit'), 20, 1, 100);
 
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'content.read' });
     const filter: Record<string, unknown> = { store: storeId };
     if (status !== null) filter.status = status;
     if (type !== null) filter.type = type;
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const body = await parseArticleBody(request, articleCreateSchema);
     assertCan(ctx.actor, 'create', 'storeArticles', Object.keys(body));
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'content.write' });
 
     const slug = body.slug ?? articleSlugFromTitle(body.title);
     if (slug === '') throw new HttpError(400, 'Enter a web address for the article.', ARTICLE_INVALID, 'slug');
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     const wire = articleToWire(plainDoc(created));
     try {
-      await writeAuditLog('article.create', 'storeArticle', String(wire.id), 'seller:' + ctx.userId, { storeId, status, fields: Object.keys(body), at: now.toISOString() });
+      await writeAuditLog('article.create', 'storeArticle', String(wire.id), auditActorOf(ctx), { storeId, status, fields: Object.keys(body), at: now.toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the article create audit entry', err instanceof Error ? err.message : 'unknown');
     }

@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
     const { id } = await context.params;
-    const { storeId } = await prepareTeamRoute<undefined>(request, id, null);
+    const { storeId } = await prepareTeamRoute<undefined>(request, id, null, 'team.manage');
     const ownerId = (await ownerOfStore(storeId)) ?? '';
     return json(await listTeam(storeId, ownerId));
   } catch (err) {

@@ -29,6 +29,8 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
  *   the status stays verified and only checkedAt and failureReason are recorded.
  *   A domain becomes verified only after the Vercel add succeeded (or the stub is active); otherwise failed / vercel_failed.
  */
+// S8-B3 (D-118): OWNER-ONLY ON PURPOSE. The capability below (settings.domain) is held by the owner alone, so loadOwnedStore refuses every member; the compare-and-set that follows names the
+// owner (owner: ctx.userObjectId) deliberately, as it always did.
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
     const ctx = await authenticate(request);
@@ -36,7 +38,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     await readAccountBody(request, domainVerifyRequestSchema);
     assertCan(ctx.actor, 'update', 'stores', ['domain']);
     const { id } = await context.params;
-    const current = (await loadOwnedStore(request, ctx, id, DOMAIN_SELECT)) as unknown as DomainStoreDoc;
+    const current = (await loadOwnedStore(request, ctx, id, DOMAIN_SELECT, 'settings.domain')) as unknown as DomainStoreDoc;
     const storeId = String(current._id);
 
     const host = typeof current.domain === 'string' && current.domain !== '' ? current.domain : null;

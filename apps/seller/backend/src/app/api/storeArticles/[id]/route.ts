@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { ARTICLE_REVISION_CONFLICT, ARTICLE_SLUG_TAKEN, articleUpdateSchema, objectIdSchema } from '@/lib/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { articleContentText, articleToWire, parseArticleBody, resolveArticleMedia } from '@/lib/articles';
 import { HttpError, handleRouteError, isDuplicateKeyError, jsonError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'storeArticles');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'content.read' });
 
     const doc = await StoreArticle.findOne({ _id: id, store: storeId }).lean();
     if (!doc) throw notFound();
@@ -78,7 +78,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const { id } = await context.params;
     await requireDatabase();
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'content.write' });
 
     const before = (await StoreArticle.findOne({ _id: id, store: storeId }).lean()) as unknown as StoredArticle | null;
     if (!before) throw notFound();
@@ -141,7 +141,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const isPublished = after.status === 'published';
     const action = changes.status !== undefined && changes.status !== before.status ? (isPublished ? 'article.publish' : 'article.unpublish') : 'article.update';
     try {
-      await writeAuditLog(action, 'storeArticle', id, 'seller:' + ctx.userId, { storeId, fields: Object.keys(changes), revision: revision + 1, at: new Date().toISOString() });
+      await writeAuditLog(action, 'storeArticle', id, auditActorOf(ctx), { storeId, fields: Object.keys(changes), revision: revision + 1, at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the article audit entry', err instanceof Error ? err.message : 'unknown');
     }
@@ -164,7 +164,7 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     const { id } = await context.params;
     await requireDatabase();
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'content.write' });
 
     const before = (await StoreArticle.findOne({ _id: id, store: storeId }).select('status').lean()) as unknown as StoredArticle | null;
     if (!before) throw notFound();
@@ -172,7 +172,7 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     if ((removed.deletedCount ?? 0) === 0) throw notFound();
 
     try {
-      await writeAuditLog('article.delete', 'storeArticle', id, 'seller:' + ctx.userId, { storeId, wasPublished: before.status === 'published', at: new Date().toISOString() });
+      await writeAuditLog('article.delete', 'storeArticle', id, auditActorOf(ctx), { storeId, wasPublished: before.status === 'published', at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the article delete audit entry', err instanceof Error ? err.message : 'unknown');
     }

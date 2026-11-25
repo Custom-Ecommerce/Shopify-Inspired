@@ -45,6 +45,12 @@ const COLUMNS: Array<Column<AdminSellerListItem>> = [
                 {store.name}
               </Link>
               <StatusBadge status={store.status} />
+              {store.members && store.members.active + store.members.invited > 0 ? (
+                <span className="shrink-0 text-xs text-muted-foreground" title={store.members.active + " active, " + store.members.invited + " invited"}>
+                  {store.members.active} {store.members.active === 1 ? "member" : "members"}
+                  {store.members.invited > 0 ? ", " + store.members.invited + " invited" : ""}
+                </span>
+              ) : null}
             </li>
           ))}
           {seller.storeCount > seller.stores.length ? <li className="text-xs text-muted-foreground">+{seller.storeCount - seller.stores.length} more</li> : null}

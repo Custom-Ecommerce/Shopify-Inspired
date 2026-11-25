@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import * as templatesNs from '@markaz/platform-kit/page-templates';
 import { unwrapCjs } from '@/lib/cjs';
 import { PAGE_SLUG_TAKEN, PAGE_TEMPLATE_UNKNOWN, pageFromTemplateSchema } from '@/lib/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { pageToWire, parsePageBody } from '@/lib/pages';
 import { HttpError, handleRouteError, isDuplicateKeyError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'content.write' });
 
     const template = templates.getPageTemplate(body.template);
     if (template === undefined) throw new HttpError(400, 'There is no template called "' + body.template.slice(0, 40) + '".', PAGE_TEMPLATE_UNKNOWN, 'template');
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
     const wire = pageToWire(plainDoc(created));
     try {
-      await writeAuditLog('page.create', 'storePage', String(wire.id), 'seller:' + ctx.userId, { storeId, slug: template.slug, template: template.key, status: 'draft', at: new Date().toISOString() });
+      await writeAuditLog('page.create', 'storePage', String(wire.id), auditActorOf(ctx), { storeId, slug: template.slug, template: template.key, status: 'draft', at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the page create audit entry', err instanceof Error ? err.message : 'unknown');
     }

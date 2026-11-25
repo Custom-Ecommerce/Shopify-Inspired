@@ -22,13 +22,15 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
  *   200 the empty domain state (also for a store with no domain: nothing is written)
  *   502 DOMAIN_REMOVE_FAILED  Vercel refused the removal; the store keeps its domain so the seller can try again
  */
+// S8-B3 (D-118): OWNER-ONLY ON PURPOSE. The capability below (settings.domain) is held by the owner alone, so loadOwnedStore refuses every member; the compare-and-set that follows names the
+// owner (owner: ctx.userObjectId) deliberately, as it always did.
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
     const ctx = await authenticate(request);
     requireSellerActor(ctx);
     assertCan(ctx.actor, 'update', 'stores', ['domain']);
     const { id } = await context.params;
-    const current = (await loadOwnedStore(request, ctx, id, DOMAIN_SELECT)) as unknown as DomainStoreDoc;
+    const current = (await loadOwnedStore(request, ctx, id, DOMAIN_SELECT, 'settings.domain')) as unknown as DomainStoreDoc;
     const storeId = String(current._id);
 
     const host = typeof current.domain === 'string' && current.domain !== '' ? current.domain : null;

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import type { SellerCapability } from '@markaz/auth';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth';
@@ -28,6 +29,7 @@ export async function prepareTeamRoute<T>(
   request: NextRequest,
   storeParam: string,
   schema: BodySchema<T> | null,
+  capability: SellerCapability,
 ): Promise<TeamRouteContext & { body: T }> {
   const ctx = await authenticate(request);
   requireSellerActor(ctx);
@@ -36,7 +38,7 @@ export async function prepareTeamRoute<T>(
     throw new HttpError(503, 'Seller database unavailable');
   });
   if (!mongoose.isValidObjectId(storeParam)) throw new HttpError(404, 'Store not found');
-  const access = await resolveStoreAccess(request, ctx, { store: { equals: storeParam } }, { capability: 'team.manage' });
+  const access = await resolveStoreAccess(request, ctx, { store: { equals: storeParam } }, { capability });
   return { storeId: access.storeId, actor: { userId: ctx.userId, userObjectId: ctx.userObjectId, role: access.role ?? 'owner' }, body };
 }
 

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { CONTACT_REVISION_CONFLICT, CONTACT_INVALID, contactStatusUpdateSchema } from '@/lib/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { contactToWire, parseSupportBody } from '@/lib/support';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     const { id } = await context.params;
     await requireDatabase();
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'contact.read' });
     const doc = await ContactMessage.findOne({ _id: id, scope: 'store', store: storeId }).lean();
     if (!doc) throw notFound();
     return NextResponse.json(contactToWire(doc), { headers: { 'Cache-Control': 'no-store' } });
@@ -62,7 +62,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const { id } = await context.params;
     await requireDatabase();
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'contact.write' });
 
     const before = (await ContactMessage.findOne({ _id: id, scope: 'store', store: storeId }).lean()) as unknown as StoredContact | null;
     if (!before) throw notFound();
@@ -83,7 +83,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     }
     if (!after) throw notFound();
     try {
-      await writeAuditLog('contact.' + body.status, 'contactMessage', id, 'seller:' + ctx.userId, { storeId, at: new Date().toISOString() });
+      await writeAuditLog('contact.' + body.status, 'contactMessage', id, auditActorOf(ctx), { storeId, at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the contact audit entry', err instanceof Error ? err.message : 'unknown');
     }

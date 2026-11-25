@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string; memberId: string }> }): Promise<Response> {
   try {
     const { id, memberId } = await context.params;
-    const { storeId, actor, body } = await prepareTeamRoute<{ revision: number }>(request, id, teamMemberActionRequestSchema);
+    const { storeId, actor, body } = await prepareTeamRoute<{ revision: number }>(request, id, teamMemberActionRequestSchema, 'team.manage');
     return json({ member: await resendInvite(storeId, actor, memberId, body.revision) });
   } catch (err) {
     return handleRouteError(err);

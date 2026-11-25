@@ -18,6 +18,8 @@ export type DashboardUser = Omit<PayloadUserDoc, "store"> & {
   emailVerified?: boolean | null;
   phone?: string | null;
   pendingEmail?: string | null;
+  /** Sprint 8 (S8-B3): every store the user can work in with the role they hold (owned: owner; others: manager, staff or support). Missing from an older backend. */
+  storeAccess?: { id: string; role: "owner" | "manager" | "staff" | "support" }[] | null;
 };
 export type DashboardStore = PayloadStoreDoc;
 

@@ -28,8 +28,8 @@ const OWNER_ONLY: readonly SellerCapability[] = [
 const EXPECTED: Record<SellerRole, readonly SellerCapability[]> = {
   owner: [...SELLER_CAPABILITIES],
   manager: SELLER_CAPABILITIES.filter((capability) => !OWNER_ONLY.includes(capability)),
-  staff: ['orders.read', 'orders.write', 'products.read', 'products.write', 'categories.read', 'categories.write', 'media.read', 'media.write', 'inventory.read', 'inventory.write'],
-  support: ['orders.read', 'orders.notes', 'returns.read', 'returns.write', 'customers.read', 'customers.write', 'reviews.read', 'reviews.reply', 'contact.read', 'contact.write', 'tickets.read', 'tickets.write'],
+  staff: ['alerts.read', 'store.view', 'orders.read', 'orders.write', 'orders.notes', 'products.read', 'products.write', 'categories.read', 'categories.write', 'media.read', 'media.write', 'inventory.read', 'inventory.write'],
+  support: ['alerts.read', 'store.view', 'orders.read', 'orders.notes', 'returns.read', 'returns.write', 'customers.read', 'customers.write', 'reviews.read', 'reviews.reply', 'contact.read', 'contact.write', 'tickets.read', 'tickets.write'],
 };
 
 test('the roles are owner and the three staff roles; a member row can only be a staff role', () => {
@@ -125,4 +125,23 @@ test('a settings update needs one capability per group it sends; groups the map 
   assert.deepEqual(settingsGroupCapabilities(['profile', 'seo', 'delivery', 'themeConfig']), ['settings.write']);
   assert.deepEqual(settingsGroupCapabilities(['domain', 'payout']).sort(), ['settings.domain', 'settings.payout']);
   assert.deepEqual(settingsGroupCapabilities(['somethingNew']), ['settings.write']);
+});
+
+test('S8-B3: the bell and the safe settings subset are for every role; refunds and customer export are owner and manager only', () => {
+  for (const role of SELLER_ROLES) {
+    assert.equal(sellerCan(role, 'alerts.read'), true, role);
+    assert.equal(sellerCan(role, 'store.view'), true, role);
+  }
+  for (const capability of ['returns.refund', 'customers.export'] as const) {
+    assert.equal(sellerCan('owner', capability), true, capability);
+    assert.equal(sellerCan('manager', capability), true, capability);
+    assert.equal(sellerCan('staff', capability), false, capability);
+    assert.equal(sellerCan('support', capability), false, capability);
+  }
+  assert.equal(sellerCan('support', 'returns.write'), true, 'support marks a return received');
+  assert.equal(sellerCan('support', 'returns.refund'), false, 'but never refunds it');
+  assert.equal(sellerCan('support', 'customers.read'), true);
+  assert.equal(sellerCan('support', 'reviews.reply'), true);
+  assert.equal(sellerCan('staff', 'reviews.read'), false);
+  assert.equal(sellerCan('staff', 'customers.read'), false);
 });

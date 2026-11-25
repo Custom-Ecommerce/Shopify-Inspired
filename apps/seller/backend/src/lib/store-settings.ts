@@ -1,5 +1,6 @@
 import * as themesNs from '@markaz/platform-kit/themes';
 import type { StoreSettings, StoreSettingsUpdate } from '@markaz/contracts';
+import type { SellerRole } from '@markaz/auth';
 import { unwrapCjs } from '@/lib/cjs';
 import {
   CARD_CHECKOUT_UNSUPPORTED_BY_THEME,
@@ -11,6 +12,7 @@ import {
   RETURN_WINDOW_DAYS_DEFAULT,
   NO_USABLE_PAYMENT_METHOD_MESSAGE,
   THEME_CONFIG_KEYS,
+  DEFAULT_FRAUD_SETTINGS,
   TAX_KEYS,
   TAX_RATE_REQUIRED_MESSAGE,
   isValidTaxRate,
@@ -278,6 +280,25 @@ export async function toStoreSettings(doc: StoreDoc): Promise<StoreSettings> {
     themeConfig: { ...themeConfig, heroImage },
     tax: readTax(sf),
     updatedAt: iso(doc.updatedAt),
+  };
+}
+
+/**
+ * Sprint 8 (S8-B3, D-118): the settings a ROLE may see. The owner reads everything. A manager reads everything except the payout account (payouts are owner-only, not even
+ * masked). Staff and support get the SAFE SUBSET only: no payment or fraud details, no payout, no domain, no message templates: those fields come back as neutral
+ * defaults (cash on delivery shown on, card off, the fraud defaults), never the stored values.
+ */
+export function settingsForRole(settings: StoreSettings, role: SellerRole | null): StoreSettings {
+  if (role === 'owner') return settings;
+  const manager: StoreSettings = { ...settings, payout: null };
+  if (role === 'manager') return manager;
+  const { domain: _domain, ...rest } = manager;
+  void _domain;
+  return {
+    ...rest,
+    payments: { codEnabled: true, cardEnabled: false, cardAvailable: false },
+    fraud: DEFAULT_FRAUD_SETTINGS as StoreSettings['fraud'],
+    messages: { whatsappTemplate: null, emailFooter: null, abandonedCartEmail: false },
   };
 }
 

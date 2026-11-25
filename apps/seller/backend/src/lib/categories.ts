@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import type { AuthContext } from '@/lib/auth';
 import { CATEGORY_ORDER_MAX, CATEGORY_SLUG_MAX } from '@/lib/contracts';
+import type { SellerCapability } from '@markaz/auth';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { Category, Product } from '@/lib/services';
 
@@ -26,9 +27,9 @@ export const slugTaken = (): NextResponse =>
  * the dashboard's x-store-id decides, then a ?storeId= query, then the seller's first store. A store the seller does
  * not own is refused with 403. A store named in the body is never read: the request contracts refuse the field.
  */
-export async function resolveCategoryStoreId(request: NextRequest, ctx: AuthContext): Promise<string> {
+export async function resolveCategoryStoreId(request: NextRequest, ctx: AuthContext, capability: SellerCapability): Promise<string> {
   const requested = request.nextUrl.searchParams.get('storeId')?.trim();
-  return resolveOwnedStoreId(request, ctx, requested ? { store: { equals: requested } } : null);
+  return resolveOwnedStoreId(request, ctx, requested ? { store: { equals: requested } } : null, { capability });
 }
 
 /** A slug from free text, or '' when it holds no Latin letter or digit, as in an Urdu name. */

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'categories');
     await requireDatabase();
-    const storeId = await resolveCategoryStoreId(request, ctx);
+    const storeId = await resolveCategoryStoreId(request, ctx, 'categories.read');
 
     const params = request.nextUrl.searchParams;
     const page = parseIntParam(params.get('page'), 1, 1, 100000);
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (!body.ok) return body.response;
     assertCan(ctx.actor, 'create', 'categories', Object.keys(body.data));
     await requireDatabase();
-    const storeId = await resolveCategoryStoreId(request, ctx);
+    const storeId = await resolveCategoryStoreId(request, ctx, 'categories.write');
 
     const slug = body.data.slug ?? categorySlugFromName(body.data.name);
     if (slug === '') {

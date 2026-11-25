@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const params = await context.params;
     const key = requireCustomerKey(params.key);
     assertCan(ctx.actor, 'read', 'customers');
-    const store = await loadOwnedStore(request, ctx, params.id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, params.id, 'name owner', 'customers.read');
     const detail = await getCustomerDetail(String(store._id), key);
     if (detail === null) throw new HttpError(404, 'Customer not found');
     return NextResponse.json(detail, { headers: { 'Cache-Control': 'no-store' } });

@@ -5,5 +5,5 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export function POST(request: NextRequest, context: ProductRouteContext): Promise<Response> {
-  return changePublished(request, context, false);
+  return changePublished(request, context, false, 'products.write');
 }

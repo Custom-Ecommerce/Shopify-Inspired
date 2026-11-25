@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { oid } from '@/lib/ledger-aggregates';
 import { loadOwnedStore, requireSellerActor } from '@/lib/owned-store';
@@ -25,7 +25,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     requireSellerActor(ctx);
     assertCan(ctx.actor, 'delete', 'blockedContacts');
     const params = await context.params;
-    const store = await loadOwnedStore(request, ctx, params.id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, params.id, 'name owner', 'blocklist.manage');
     const storeId = String(store._id);
     if (!mongoose.isValidObjectId(params.contactId)) throw new HttpError(404, 'Contact not found');
 
@@ -33,7 +33,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     if (!removed) throw new HttpError(404, 'Contact not found');
 
     try {
-      await writeAuditLog('blocklist.remove', 'store', storeId, 'seller:' + ctx.userId, { storeId, kind: removed.kind ?? null, at: new Date().toISOString() });
+      await writeAuditLog('blocklist.remove', 'store', storeId, auditActorOf(ctx), { storeId, kind: removed.kind ?? null, at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the blocklist audit entry', err instanceof Error ? err.name : 'unknown');
     }

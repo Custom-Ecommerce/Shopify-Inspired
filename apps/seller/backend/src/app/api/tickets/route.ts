@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { TICKET_INVALID, ticketCreateSchema } from '@/lib/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { pageOf, parseSupportBody, ticketToWire } from '@/lib/support';
 import { limitTicketWrites, sellerOwnsStore } from '@/lib/tickets';
 import { HttpError, handleRouteError, jsonError } from '@/lib/http';
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     })) as unknown;
     const wire = ticketToWire(created);
     try {
-      await writeAuditLog('ticket.create', 'ticket', String(wire.id), 'seller:' + ctx.userId, { at: now.toISOString() });
+      await writeAuditLog('ticket.create', 'ticket', String(wire.id), auditActorOf(ctx), { at: now.toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the ticket audit entry', err instanceof Error ? err.message : 'unknown');
     }

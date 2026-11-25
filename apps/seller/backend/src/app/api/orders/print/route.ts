@@ -34,7 +34,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'orders.read' });
 
     const [rows, store] = await Promise.all([
       Order.find({ _id: { $in: ids }, store: storeId }).select(ORDER_PRINT_PROJECTION).lean(),

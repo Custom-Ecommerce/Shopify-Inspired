@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { CONTACT_INVALID, CONTACT_REVISION_CONFLICT, contactReplySchema } from '@/lib/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { notifyContactReply } from '@/lib/contact';
 import { contactToWire, parseSupportBody, whatsappLink } from '@/lib/support';
 import { HttpError, handleRouteError } from '@/lib/http';
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       throw new HttpError(503, 'Seller database unavailable');
     });
     if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Message not found');
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'contact.write' });
 
     const before = (await ContactMessage.findOne({ _id: id, scope: 'store', store: storeId }).lean()) as unknown as StoredContact | null;
     if (!before) throw new HttpError(404, 'Message not found');
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (!after) throw new HttpError(404, 'Message not found');
 
     try {
-      await writeAuditLog('contact.reply', 'contactMessage', id, 'seller:' + ctx.userId, { storeId, channel, at: new Date().toISOString() });
+      await writeAuditLog('contact.reply', 'contactMessage', id, auditActorOf(ctx), { storeId, channel, at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the contact audit entry', err instanceof Error ? err.message : 'unknown');
     }

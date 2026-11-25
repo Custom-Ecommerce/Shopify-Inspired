@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { readAccountBody } from '@/lib/account-support';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { ORDER_CONFIRMATION_DECIDED, orderConfirmationRequestSchema } from '@/lib/contracts';
 import { HttpError } from '@/lib/http';
 import { auditConfirmation, decideConfirmation } from '@/lib/order-confirmation';
@@ -41,14 +41,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const body = await readAccountBody(request, orderConfirmationRequestSchema);
     assertCan(ctx.actor, 'update', 'orderConfirmation', body.note === null ? ['result'] : ['result', 'note']);
 
-    const store = await loadOwnedStore(request, ctx, params.id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, params.id, 'name owner', 'orders.write');
     const storeId = String(store._id);
     if (!mongoose.isValidObjectId(params.orderId)) throw new HttpError(404, 'Order not found');
 
     const input = {
       storeId,
       orderId: params.orderId,
-      actor: { userObjectId: ctx.userObjectId, auditActor: 'seller:' + ctx.userId },
+      actor: { userObjectId: ctx.userObjectId, auditActor: auditActorOf(ctx) },
       request: body,
     };
     const decision = await decideConfirmation(input);

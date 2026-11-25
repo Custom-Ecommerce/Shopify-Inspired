@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import type { NextRequest } from 'next/server';
 import type { AuthContext } from '@/lib/auth';
 import type { SellerCapability, SellerRole } from '@markaz/auth';
-import { resolveOwnedStoreId, resolveStoreAccess } from '@/lib/data-plane';
+import { resolveStoreAccess } from '@/lib/data-plane';
 import { TEAM_ERROR_CODES } from '@/lib/contracts';
 import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -18,15 +18,9 @@ export function requireSellerActor(ctx: AuthContext): void {
   if (ctx.actor !== 'seller') throw new HttpError(403, 'Only the store owner can change its settings');
 }
 
-export async function loadOwnedStore(request: NextRequest, ctx: AuthContext, id: string, select: string): Promise<StoreDoc> {
-  await connectSellerDb().catch(() => {
-    throw new HttpError(503, 'Seller database unavailable');
-  });
-  if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Store not found');
-  const storeId = await resolveOwnedStoreId(request, ctx, { store: { equals: id } });
-  const doc = (await Store.findOne({ _id: storeId, owner: ctx.userObjectId }).select(select).lean()) as unknown as StoreDoc | null;
-  if (!doc) throw new HttpError(404, 'Store not found');
-  return doc;
+export async function loadOwnedStore(request: NextRequest, ctx: AuthContext, id: string, select: string, capability?: SellerCapability): Promise<StoreDoc> {
+  // S8-B3: with a capability the OWNER and an ACTIVE member whose role has it pass; without one the route is owner-only (a member is refused 403 NOT_OWNER_YET).
+  return (await loadStoreFor(request, ctx, id, select, capability === undefined ? [] : [capability])).doc;
 }
 
 /**
@@ -50,9 +44,13 @@ export async function loadStoreFor(
   for (const capability of rest) {
     if (!sellerCan(access.role, capability)) throw new HttpError(403, 'Your role in this store cannot do that.', TEAM_ERROR_CODES.CAPABILITY_DENIED);
   }
-  const doc = (await Store.findOne({ _id: access.storeId }).select(select).lean()) as unknown as StoreDoc | null;
+  // An admin session names no role: it never reads a seller's store through here (as before: the owner filter found nothing).
+  if (access.role === null) throw new HttpError(404, 'Store not found');
+  // The owner is read through the owner filter as always; a member (access already checked above) by the store id alone.
+  const filter = access.isOwner ? { _id: access.storeId, owner: ctx.userObjectId } : { _id: access.storeId };
+  const doc = (await Store.findOne(filter).select(select).lean()) as unknown as StoreDoc | null;
   if (!doc) throw new HttpError(404, 'Store not found');
-  return { doc, role: access.role ?? 'owner' };
+  return { doc, role: access.role };
 }
 
 export const SETTINGS_SELECT = 'name slug status owner storefront paymentSettings +payoutDetails goLiveRequestedAt domain customDomainStatus updatedAt';

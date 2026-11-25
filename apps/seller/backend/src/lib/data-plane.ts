@@ -146,14 +146,17 @@ export async function resolveStoreAccess(
     if (ctx.actor !== 'seller') throw new HttpError(400, 'A store is required');
     const first = (await Store.findOne({ owner: ctx.userObjectId }).sort({ createdAt: 1 }).select('_id').lean()) as unknown as { _id: unknown } | null;
     if (!first) throw new HttpError(404, 'No store is linked to this account');
-    return ownerAccess(String(first._id), options);
+    return ownerAccess(String(first._id), ctx, options);
   }
 
   if (!mongoose.isValidObjectId(candidate)) throw notYours();
-  if (ctx.actor !== 'seller') return { storeId: candidate, role: null, isOwner: false };
+  if (ctx.actor !== 'seller') {
+    ctx.storeRole = null;
+    return { storeId: candidate, role: null, isOwner: false };
+  }
 
   const owned = await Store.exists({ _id: candidate, owner: ctx.userObjectId });
-  if (owned) return ownerAccess(candidate, options);
+  if (owned) return ownerAccess(candidate, ctx, options);
 
   const member = await activeMember(candidate, ctx);
   if (!member) throw notYours();
@@ -166,14 +169,16 @@ export async function resolveStoreAccess(
   if (!sellerCan(role, options.capability)) {
     throw new HttpError(403, 'Your role in this store cannot do that.', TEAM_ERROR_CODES.CAPABILITY_DENIED);
   }
+  ctx.storeRole = role;
   return { storeId: candidate, role, isOwner: false };
 }
 
 /** The owner passes any capability that exists; a capability this code does not know is denied even to the owner (a typo must not pass). */
-function ownerAccess(storeId: string, options: StoreAccessOptions): StoreAccess {
+function ownerAccess(storeId: string, ctx: AuthContext, options: StoreAccessOptions): StoreAccess {
   if (options.capability !== undefined && !sellerCan('owner', options.capability)) {
     throw new HttpError(403, 'Your role in this store cannot do that.', TEAM_ERROR_CODES.CAPABILITY_DENIED);
   }
+  ctx.storeRole = 'owner';
   return { storeId, role: 'owner', isOwner: true };
 }
 

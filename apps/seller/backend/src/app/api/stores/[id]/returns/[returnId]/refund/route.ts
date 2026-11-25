@@ -21,7 +21,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const { route, body } = await prepareReturnRoute(request, await context.params, {
       schema: returnRefundRequestSchema,
       fields: (value) => (value.reference === null ? ['amount', 'method'] : ['amount', 'method', 'reference']),
-    });
+    }, 'returns.refund');
     const result = await recordRefund(route.storeId, route.returnId, route.actor, body);
     return json({
       return: await sellerReturnView(route.storeId, result.doc),

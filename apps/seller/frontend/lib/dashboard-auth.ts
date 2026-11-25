@@ -39,6 +39,29 @@ export function extractStoreIds(user: Pick<DashboardUser, "stores"> | null | und
 }
 
 /**
+ * Sprint 8 (S8-B3): every store id the user may reach: the stores they own (`stores`) and the stores they are an ACTIVE member of (`storeAccess`, which also lists the owned ones).
+ * The proxy checks the requested store against this list; the backend checks the membership and the role again on every call.
+ */
+export function extractAccessibleStoreIds(user: Pick<DashboardUser, "stores" | "storeAccess"> | null | undefined): string[] {
+  const ids = extractStoreIds(user);
+  const access = user?.storeAccess;
+  if (Array.isArray(access)) {
+    for (const entry of access) {
+      const id = entry && typeof entry === "object" ? String(entry.id ?? "") : "";
+      if (id !== "" && !ids.includes(id)) ids.push(id);
+    }
+  }
+  return ids;
+}
+
+/** The role of the user in one store, or null when they have none there. A store they own is "owner". */
+export function storeRoleOf(user: Pick<DashboardUser, "stores" | "storeAccess"> | null | undefined, storeId: string): "owner" | "manager" | "staff" | "support" | null {
+  if (extractStoreIds(user).includes(storeId)) return "owner";
+  const entry = Array.isArray(user?.storeAccess) ? user!.storeAccess.find((item) => item && String(item.id) === storeId) : undefined;
+  return entry?.role ?? null;
+}
+
+/**
  * Resolves the logged-in seller from the `markaz-session` cookie value via
  * `GET /api/users/me`. Memoised per server render with React `cache`.
  *

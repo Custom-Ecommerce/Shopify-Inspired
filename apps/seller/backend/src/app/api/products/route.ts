@@ -88,7 +88,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'products');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'products.read' });
 
     const params = request.nextUrl.searchParams;
     const page = parseIntParam(params.get('page'), 1, 1, 100000);
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const data = body.data;
     assertCan(ctx.actor, 'create', 'products', createdFields(data));
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'products.write' });
     // Sprint 6 EP-14 (D-118): after the checks of who and which store, before the write. Over the limit: 403 PLAN_LIMIT_REACHED.
     await assertProductSlot(storeId);
 

@@ -15,8 +15,8 @@ export async function GET(request: NextRequest): Promise<Response> {
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'sellerAlerts');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
-    return NextResponse.json({ unread: await unreadCount(storeId) }, { headers: NO_STORE });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'alerts.read' });
+    return NextResponse.json({ unread: await unreadCount(storeId, ctx.storeRole) }, { headers: NO_STORE });
   } catch (err) {
     return handleRouteError(err);
   }

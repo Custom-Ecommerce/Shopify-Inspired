@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
 import { PAGE_REVISION_CONFLICT, PAGE_SLUG_TAKEN, objectIdSchema, pageUpdateSchema } from '@/lib/contracts';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { assertPageSlugAllowed, pageToWire, parsePageBody, resolvePageMedia } from '@/lib/pages';
 import { HttpError, handleRouteError, isDuplicateKeyError, jsonError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, context: Ctx): Promise<Response>
     if (ctx.actor !== 'seller') throw new HttpError(403, 'Only the store owner can manage pages');
     assertCan(ctx.actor, 'read', 'storePages');
     await requireDatabase();
-    const storeId = await resolveOwnedStoreId(request, ctx, null);
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'content.read' });
 
     const doc = await StorePage.findOne({ _id: id, store: storeId }).lean();
     if (!doc) throw notFound();
@@ -71,7 +71,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const { id } = await context.params;
     await requireDatabase();
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'content.write' });
 
     const before = (await StorePage.findOne({ _id: id, store: storeId }).lean()) as unknown as StoredPage | null;
     if (!before) throw notFound();
@@ -123,7 +123,7 @@ export async function PATCH(request: NextRequest, context: Ctx): Promise<Respons
     const isPublished = after.status === 'published';
     const action = changes.status !== undefined && changes.status !== before.status ? (isPublished ? 'page.publish' : 'page.unpublish') : 'page.update';
     try {
-      await writeAuditLog(action, 'storePage', id, 'seller:' + ctx.userId, { storeId, fields: Object.keys(changes), revision: revision + 1, at: new Date().toISOString() });
+      await writeAuditLog(action, 'storePage', id, auditActorOf(ctx), { storeId, fields: Object.keys(changes), revision: revision + 1, at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the page audit entry', err instanceof Error ? err.message : 'unknown');
     }
@@ -143,14 +143,14 @@ export async function DELETE(request: NextRequest, context: Ctx): Promise<Respon
     const { id } = await context.params;
     await requireDatabase();
     if (!mongoose.isValidObjectId(id)) throw notFound();
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true });
+    const storeId = await resolveOwnedStoreId(request, ctx, null, { requireStore: true, capability: 'content.write' });
 
     const before = (await StorePage.findOne({ _id: id, store: storeId }).select('status').lean()) as unknown as StoredPage | null;
     if (!before) throw notFound();
     const removed = (await StorePage.deleteOne({ _id: id, store: storeId })) as { deletedCount?: number };
     if ((removed.deletedCount ?? 0) === 0) throw notFound();
     try {
-      await writeAuditLog('page.delete', 'storePage', id, 'seller:' + ctx.userId, { storeId, wasPublished: before.status === 'published', at: new Date().toISOString() });
+      await writeAuditLog('page.delete', 'storePage', id, auditActorOf(ctx), { storeId, wasPublished: before.status === 'published', at: new Date().toISOString() });
     } catch (err) {
       console.error('[seller-backend] could not write the page delete audit entry', err instanceof Error ? err.message : 'unknown');
     }

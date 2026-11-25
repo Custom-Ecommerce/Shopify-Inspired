@@ -14,7 +14,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { extractStoreIds, getDashboardUser, isImplicitDefaultEnabled } from "@/lib/dashboard-auth";
+import { extractAccessibleStoreIds, getDashboardUser, isImplicitDefaultEnabled } from "@/lib/dashboard-auth";
 import { ERROR_STATUS, type ApiErrorBody, type ErrorCode } from "@/lib/error-codes";
 import { clientAddressHeaders } from "@/lib/client-address";
 
@@ -245,7 +245,8 @@ export async function resolveDashboardAuth(
   }
 
   // 3. owned
-  const owned = extractStoreIds(user);
+  // S8-B3: the stores the user owns AND the stores they are an active member of (the backend decides what their role may do there).
+  const owned = extractAccessibleStoreIds(user);
   const scope: StoreScope = opts.storeScope ?? "required";
   if (scope === "none") return { auth: { token, user, stores: owned } };
 

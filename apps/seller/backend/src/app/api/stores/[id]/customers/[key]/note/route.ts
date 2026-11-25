@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { readAccountBody } from '@/lib/account-support';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { customerNoteRequestSchema } from '@/lib/contracts';
 import { customerExists, requireCustomerKey, saveCustomerNote } from '@/lib/customers';
 import { HttpError, handleRouteError } from '@/lib/http';
@@ -35,14 +35,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       'customerNotes',
       Object.keys(input).filter((field) => (input as Record<string, unknown>)[field] !== undefined),
     );
-    const store = await loadOwnedStore(request, ctx, params.id, 'name owner');
+    const store = await loadOwnedStore(request, ctx, params.id, 'name owner', 'customers.write');
     const storeId = String(store._id);
     if (!(await customerExists(storeId, key))) throw new HttpError(404, 'Customer not found');
 
     const saved = await saveCustomerNote(ctx, storeId, key, input);
 
     try {
-      await writeAuditLog('customer.note', 'store', storeId, 'seller:' + ctx.userId, {
+      await writeAuditLog('customer.note', 'store', storeId, auditActorOf(ctx), {
         storeId,
         noteChanged: input.note !== undefined,
         tagCount: saved.tags.length,

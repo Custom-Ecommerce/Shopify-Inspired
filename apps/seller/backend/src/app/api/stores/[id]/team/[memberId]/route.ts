@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string; memberId: string }> }): Promise<Response> {
   try {
     const { id, memberId } = await context.params;
-    const { storeId, actor, body } = await prepareTeamRoute<{ role: string; revision: number }>(request, id, teamRoleChangeRequestSchema);
+    const { storeId, actor, body } = await prepareTeamRoute<{ role: string; revision: number }>(request, id, teamRoleChangeRequestSchema, 'team.manage');
     return json({ member: await changeMemberRole(storeId, actor, memberId, body.role, body.revision) });
   } catch (err) {
     return handleRouteError(err);

@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
-import { authenticate } from '@/lib/auth';
+import { authenticate, auditActorOf } from '@/lib/auth';
 import { HttpError, handleRouteError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, Media, SELLER_STORE_READABLE_FIELDS, settingsGroupCapabilities, Store, writeAuditLog } from '@/lib/services';
@@ -12,7 +12,8 @@ import { storeSettingsUpdateSchema } from '@/lib/contracts';
 import { loadStoreFor, requireSellerActor, SETTINGS_SELECT } from '@/lib/owned-store';
 import { revalidateStore } from '@/lib/revalidate';
 import { assertThemeAllowedByPlan } from '@/lib/theme-plan';
-import { buildSettingsWrite, effectiveTheme, referencedMedia, settingsFieldsOf, SETTINGS_ERROR_CODE, toStoreSettings } from '@/lib/store-settings';
+import { buildSettingsWrite, effectiveTheme, referencedMedia, settingsFieldsOf, settingsForRole, SETTINGS_ERROR_CODE, toStoreSettings } from '@/lib/store-settings';
+import { resolveStoreAccess } from '@/lib/data-plane';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,9 +35,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     });
     if (!mongoose.isValidObjectId(id)) throw new HttpError(404, 'Store not found');
 
-    const filter = ctx.actor === 'seller' ? { _id: id, owner: ctx.userObjectId } : { _id: id };
+    // S8-B3: the owner as always (the owner filter, the whole seller projection); an ACTIVE member of any role (capability store.view) reads the same store WITHOUT the payment and
+    // courier settings (paymentSettings holds the fraud rules and the payment switches: owner business only). An admin reads the full document.
+    let readable = projection;
+    let filter: Record<string, unknown> = { _id: id };
+    if (ctx.actor === 'seller') {
+      const access = await resolveStoreAccess(request, ctx, { store: { equals: id } }, { capability: 'store.view' });
+      filter = access.isOwner ? { _id: id, owner: ctx.userObjectId } : { _id: id };
+      if (!access.isOwner) readable = (projection ?? []).filter((field) => field !== 'paymentSettings' && field !== 'courierSettings') as typeof projection;
+    }
     const query = Store.findOne(filter);
-    if (projection) query.select(projection.join(' '));
+    if (readable) query.select(readable.join(' '));
     const doc = await query.lean();
     if (!doc) throw new HttpError(404, 'Store not found');
 
@@ -96,7 +105,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     revalidateStore(storeId);
     try {
-      await writeAuditLog('store.settings', 'store', storeId, 'seller:' + ctx.userId, {
+      await writeAuditLog('store.settings', 'store', storeId, auditActorOf(ctx), {
         groups: write.groups,
         // S8-B2: who saved and in what role (the owner or a manager).
         actorRole: role,
@@ -108,9 +117,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     } catch (err) {
       console.error('[seller-backend] could not write the store settings audit entry', err instanceof Error ? err.message : 'unknown');
     }
-    const settings = await toStoreSettings(updated as never);
-    // The payout account is owner-only (payouts): a manager who saved another group never reads it back, not even masked.
-    return NextResponse.json({ settings: role === 'owner' ? settings : { ...settings, payout: null } }, { headers: { 'Cache-Control': 'no-store' } });
+    // What the role may see of the saved settings: a manager never reads the payout account back, not even masked (settingsForRole).
+    return NextResponse.json({ settings: settingsForRole(await toStoreSettings(updated as never), role) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
   }
