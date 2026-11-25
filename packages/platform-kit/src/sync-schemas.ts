@@ -161,6 +161,9 @@ export const SETTINGS_ALLOWLIST = [
   "trialDays",
   "supportEmail",
   "supportPhone",
+  // Sprint 8 (S8-B5, D-118): referrals.
+  "referralRewardMonths",
+  "referralMonthlyCap",
 ] as const;
 
 export const SYNC_GROUP_ALLOWLISTS = {

@@ -8,6 +8,10 @@ import {
   ADMIN_SETTINGS_RATE_MAX,
   ADMIN_SETTINGS_RATE_MIN,
   ADMIN_SETTINGS_REASON_MAX,
+  ADMIN_SETTINGS_REFERRAL_CAP_MAX,
+  ADMIN_SETTINGS_REFERRAL_CAP_MIN,
+  ADMIN_SETTINGS_REFERRAL_MONTHS_MAX,
+  ADMIN_SETTINGS_REFERRAL_MONTHS_MIN,
   ADMIN_SETTINGS_SUPPORT_EMAIL_MAX,
   ADMIN_SETTINGS_SUPPORT_PHONE_MAX,
   ADMIN_SETTINGS_TRIAL_DAYS_MAX,
@@ -28,6 +32,9 @@ export const SETTINGS_SETTING_FIELDS = [
   "trialDays",
   "supportEmail",
   "supportPhone",
+  // Sprint 8 (S8-B5).
+  "referralRewardMonths",
+  "referralMonthlyCap",
 ] as const;
 export type SettingsSettingField = (typeof SETTINGS_SETTING_FIELDS)[number];
 
@@ -44,6 +51,9 @@ export interface SettingsFormValues {
   trialDays: string;
   supportEmail: string;
   supportPhone: string;
+  /** Sprint 8 (S8-B5): free months per rewarded referral (0 turns referrals off) and the rewards a referrer can earn a month. */
+  referralRewardMonths: string;
+  referralMonthlyCap: string;
   reason: string;
 }
 
@@ -61,6 +71,8 @@ export function formFromSettings(settings: AdminPlatformSettings): SettingsFormV
     trialDays: String(settings.trialDays ?? 0),
     supportEmail: settings.supportEmail ?? "",
     supportPhone: settings.supportPhone ?? "",
+    referralRewardMonths: String(settings.referralRewardMonths ?? 1),
+    referralMonthlyCap: String(settings.referralMonthlyCap ?? 5),
     reason: "",
   };
 }
@@ -68,6 +80,7 @@ export function formFromSettings(settings: AdminPlatformSettings): SettingsFormV
 const RATE_TEXT = /^\d{1,3}(\.\d+)?$/;
 const STORES_TEXT = /^\d{1,4}$/;
 const DAYS_TEXT = /^\d{1,2}$/;
+const COUNT_TEXT = /^\d{1,3}$/;
 const EMAIL_TEXT = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const PHONE_TEXT = /^[0-9+\-() ]+$/;
 
@@ -91,6 +104,14 @@ export function parseStoreLimit(text: string): number | null {
 export function parseDays(text: string, min: number, max: number): number | null {
   const trimmed = text.trim();
   if (!DAYS_TEXT.test(trimmed)) return null;
+  const value = Number(trimmed);
+  return value >= min && value <= max ? value : null;
+}
+
+/** A whole number from min to max, or null. Used for the referral settings. */
+export function parseCount(text: string, min: number, max: number): number | null {
+  const trimmed = text.trim();
+  if (!COUNT_TEXT.test(trimmed)) return null;
   const value = Number(trimmed);
   return value >= min && value <= max ? value : null;
 }
@@ -146,6 +167,13 @@ export function validateSettingsForm(values: SettingsFormValues): SettingsFormEr
     errors.supportPhone = "Use digits, spaces, + - and brackets only, at most " + ADMIN_SETTINGS_SUPPORT_PHONE_MAX + " characters.";
   }
 
+  if (parseCount(values.referralRewardMonths, ADMIN_SETTINGS_REFERRAL_MONTHS_MIN, ADMIN_SETTINGS_REFERRAL_MONTHS_MAX) === null) {
+    errors.referralRewardMonths = "Enter a whole number of months from " + ADMIN_SETTINGS_REFERRAL_MONTHS_MIN + " to " + ADMIN_SETTINGS_REFERRAL_MONTHS_MAX + " (0 turns referrals off).";
+  }
+  if (parseCount(values.referralMonthlyCap, ADMIN_SETTINGS_REFERRAL_CAP_MIN, ADMIN_SETTINGS_REFERRAL_CAP_MAX) === null) {
+    errors.referralMonthlyCap = "Enter a whole number from " + ADMIN_SETTINGS_REFERRAL_CAP_MIN + " to " + ADMIN_SETTINGS_REFERRAL_CAP_MAX + ".";
+  }
+
   const reason = values.reason.trim();
   if (reason === "") errors.reason = "Enter a reason for the change.";
   else if (reason.length > ADMIN_SETTINGS_REASON_MAX) errors.reason = "The reason can be at most " + ADMIN_SETTINGS_REASON_MAX + " characters.";
@@ -172,6 +200,10 @@ export function changedSettingFields(values: SettingsFormValues, original: Admin
   if (trial === null || trial !== (original.trialDays ?? 0)) changed.push("trialDays");
   if (noteOf(values.supportEmail) !== (original.supportEmail ?? null)) changed.push("supportEmail");
   if (noteOf(values.supportPhone) !== (original.supportPhone ?? null)) changed.push("supportPhone");
+  const months = parseCount(values.referralRewardMonths, ADMIN_SETTINGS_REFERRAL_MONTHS_MIN, ADMIN_SETTINGS_REFERRAL_MONTHS_MAX);
+  if (months === null || months !== (original.referralRewardMonths ?? 1)) changed.push("referralRewardMonths");
+  const cap = parseCount(values.referralMonthlyCap, ADMIN_SETTINGS_REFERRAL_CAP_MIN, ADMIN_SETTINGS_REFERRAL_CAP_MAX);
+  if (cap === null || cap !== (original.referralMonthlyCap ?? 5)) changed.push("referralMonthlyCap");
   return changed;
 }
 
@@ -199,6 +231,10 @@ export function toUpdateRequest(values: SettingsFormValues, original: AdminPlatf
   if (email !== (original.supportEmail ?? null)) request.supportEmail = email;
   const phone = noteOf(values.supportPhone);
   if (phone !== (original.supportPhone ?? null)) request.supportPhone = phone;
+  const months = parseCount(values.referralRewardMonths, ADMIN_SETTINGS_REFERRAL_MONTHS_MIN, ADMIN_SETTINGS_REFERRAL_MONTHS_MAX);
+  if (months !== null && months !== (original.referralRewardMonths ?? 1)) request.referralRewardMonths = months;
+  const cap = parseCount(values.referralMonthlyCap, ADMIN_SETTINGS_REFERRAL_CAP_MIN, ADMIN_SETTINGS_REFERRAL_CAP_MAX);
+  if (cap !== null && cap !== (original.referralMonthlyCap ?? 5)) request.referralMonthlyCap = cap;
   const reason = values.reason.trim();
   if (reason !== "") request.reason = reason;
   return request;

@@ -24,6 +24,13 @@ export const ADMIN_SETTINGS_TRIAL_DAYS_MAX = 60;
 export const ADMIN_SETTINGS_TRIAL_DAYS_DEFAULT = 0;
 export const ADMIN_SETTINGS_SUPPORT_EMAIL_MAX = 254;
 export const ADMIN_SETTINGS_SUPPORT_PHONE_MAX = 30;
+/** Sprint 8 (S8-B5, D-118): referrals. Reward months 0 turns them off. */
+export const ADMIN_SETTINGS_REFERRAL_MONTHS_MIN = 0;
+export const ADMIN_SETTINGS_REFERRAL_MONTHS_MAX = 12;
+export const ADMIN_SETTINGS_REFERRAL_MONTHS_DEFAULT = 1;
+export const ADMIN_SETTINGS_REFERRAL_CAP_MIN = 0;
+export const ADMIN_SETTINGS_REFERRAL_CAP_MAX = 100;
+export const ADMIN_SETTINGS_REFERRAL_CAP_DEFAULT = 5;
 
 /** The fields an operator may change, in the order the console lists them. */
 export const ADMIN_SETTINGS_FIELDS = [
@@ -38,6 +45,9 @@ export const ADMIN_SETTINGS_FIELDS = [
   'trialDays',
   'supportEmail',
   'supportPhone',
+  // Sprint 8 (S8-B5).
+  'referralRewardMonths',
+  'referralMonthlyCap',
 ] as const;
 export type AdminSettingsField = (typeof ADMIN_SETTINGS_FIELDS)[number];
 
@@ -71,6 +81,18 @@ const trialDaysSchema = z
   .int('The trial must be a whole number of days.')
   .min(ADMIN_SETTINGS_TRIAL_DAYS_MIN, 'The trial cannot be negative.')
   .max(ADMIN_SETTINGS_TRIAL_DAYS_MAX, 'The trial can be at most ' + ADMIN_SETTINGS_TRIAL_DAYS_MAX + ' days.');
+
+const referralMonthsSchema = z
+  .number()
+  .int('The reward must be a whole number of months.')
+  .min(ADMIN_SETTINGS_REFERRAL_MONTHS_MIN, 'The reward cannot be negative.')
+  .max(ADMIN_SETTINGS_REFERRAL_MONTHS_MAX, 'The reward can be at most ' + ADMIN_SETTINGS_REFERRAL_MONTHS_MAX + ' months.');
+
+const referralCapSchema = z
+  .number()
+  .int('The monthly cap must be a whole number.')
+  .min(ADMIN_SETTINGS_REFERRAL_CAP_MIN, 'The monthly cap cannot be negative.')
+  .max(ADMIN_SETTINGS_REFERRAL_CAP_MAX, 'The monthly cap can be at most ' + ADMIN_SETTINGS_REFERRAL_CAP_MAX + '.');
 
 /** Plain text; blank clears it (null). Shown to sellers and escaped on output. */
 const paymentInstructionsSchema = z
@@ -114,7 +136,10 @@ export const adminPlatformSettingsSchema = z.object({
   trialDays: z.number().int().min(ADMIN_SETTINGS_TRIAL_DAYS_MIN).max(ADMIN_SETTINGS_TRIAL_DAYS_MAX).default(ADMIN_SETTINGS_TRIAL_DAYS_DEFAULT),
   supportEmail: z.string().max(ADMIN_SETTINGS_SUPPORT_EMAIL_MAX).nullable().default(null),
   supportPhone: z.string().max(ADMIN_SETTINGS_SUPPORT_PHONE_MAX).nullable().default(null),
-  /** Advanced by the server on every change; never writable. */
+  /** Sprint 8 (S8-B5). An older backend sends none: the defaults. */
+  referralRewardMonths: z.number().int().min(ADMIN_SETTINGS_REFERRAL_MONTHS_MIN).max(ADMIN_SETTINGS_REFERRAL_MONTHS_MAX).default(ADMIN_SETTINGS_REFERRAL_MONTHS_DEFAULT),
+  referralMonthlyCap: z.number().int().min(ADMIN_SETTINGS_REFERRAL_CAP_MIN).max(ADMIN_SETTINGS_REFERRAL_CAP_MAX).default(ADMIN_SETTINGS_REFERRAL_CAP_DEFAULT),
+  /** Advanced by the server on every change; never writable. */
   settingsRevision: z.number().int().min(0),
   updatedAt: isoDate.nullable(),
 });
@@ -137,6 +162,8 @@ export const adminSettingsUpdateRequestSchema = z
     trialDays: trialDaysSchema.optional(),
     supportEmail: supportEmailSchema.optional(),
     supportPhone: supportPhoneSchema.optional(),
+    referralRewardMonths: referralMonthsSchema.optional(),
+    referralMonthlyCap: referralCapSchema.optional(),
     reason: reasonSchema.optional(),
   })
   .strict()

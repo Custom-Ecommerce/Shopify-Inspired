@@ -115,10 +115,17 @@ export async function findApiKeyByPrefix(prefix: string): Promise<ApiKeyRow | nu
   return (await ApiKey.findOne({ prefix } as never).select('store scopes revokedAt +hash').lean()) as unknown as ApiKeyRow | null;
 }
 
-/** Notes that a key was used (the owner sees it). Best effort: a failure never fails the request. */
+/** How often lastUsedAt moves: a busy key writes at most once a minute. */
+export const API_KEY_TOUCH_MS = 60_000;
+
+/**
+ * Notes that a key was used (the owner sees it). Best effort: a failure never fails the request. The filter holds the once-a-minute rule, so concurrent requests
+ * cannot write more often.
+ */
 export async function touchApiKey(keyId: string, now: Date = new Date()): Promise<void> {
   try {
-    await ApiKey.updateOne({ _id: keyId, revokedAt: null } as never, { $set: { lastUsedAt: now } } as never);
+    const stale = new Date(now.getTime() - API_KEY_TOUCH_MS);
+    await ApiKey.updateOne({ _id: keyId, revokedAt: null, $or: [{ lastUsedAt: null }, { lastUsedAt: { $lte: stale } }] } as never, { $set: { lastUsedAt: now } } as never);
   } catch (err) {
     console.error('[seller-backend] could not note the use of an API key', err instanceof Error ? err.name : 'unknown');
   }

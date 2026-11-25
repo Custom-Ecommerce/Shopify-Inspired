@@ -21,6 +21,11 @@ export const SETTINGS_TRIAL_DAYS_MIN = 0;
 export const SETTINGS_TRIAL_DAYS_MAX = 60;
 export const SETTINGS_SUPPORT_EMAIL_MAX = 254;
 export const SETTINGS_SUPPORT_PHONE_MAX = 30;
+/** Sprint 8 (S8-B5): referrals; the same as ADMIN_SETTINGS_REFERRAL_* in @markaz/contracts. */
+export const SETTINGS_REFERRAL_MONTHS_MIN = 0;
+export const SETTINGS_REFERRAL_MONTHS_MAX = 12;
+export const SETTINGS_REFERRAL_CAP_MIN = 0;
+export const SETTINGS_REFERRAL_CAP_MAX = 100;
 
 /**
  * The fields an operator may write (ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS in the policy matrix). Passed to the
@@ -38,6 +43,9 @@ export const SETTINGS_FIELDS = [
   'trialDays',
   'supportEmail',
   'supportPhone',
+  // Sprint 8 (S8-B5).
+  'referralRewardMonths',
+  'referralMonthlyCap',
 ] as const;
 export type SettingsField = (typeof SETTINGS_FIELDS)[number];
 
@@ -52,6 +60,8 @@ export const SYNCED_SETTINGS_FIELDS: readonly SettingsField[] = [
   'trialDays',
   'supportEmail',
   'supportPhone',
+  'referralRewardMonths',
+  'referralMonthlyCap',
 ];
 
 /** The text settings: a blank value clears them (the field is removed from the document), and the row shows null. */
@@ -64,6 +74,8 @@ export const DEFAULT_MAX_STORES_PER_SELLER = 3;
 export const DEFAULT_COD_COMMISSION_PERCENT = 0;
 export const DEFAULT_GRACE_DAYS = 7;
 export const DEFAULT_TRIAL_DAYS = 0;
+export const DEFAULT_REFERRAL_REWARD_MONTHS = 1;
+export const DEFAULT_REFERRAL_MONTHLY_CAP = 5;
 
 export const CONFLICT_MESSAGE = 'The settings were changed by someone else. Reload and try again.';
 export const NOT_SET_UP_MESSAGE = 'Platform settings have not been set up';
@@ -82,6 +94,9 @@ export interface SettingsChange {
   trialDays?: number;
   supportEmail?: string | null;
   supportPhone?: string | null;
+  /** Sprint 8 (S8-B5): referrals; 0 reward months turns them off. */
+  referralRewardMonths?: number;
+  referralMonthlyCap?: number;
 }
 
 export interface SettingsUpdate {
@@ -193,6 +208,20 @@ export function parseSettingsUpdate(input: unknown): ParsedSettingsUpdate {
     }
   }
 
+  if ('referralRewardMonths' in record) {
+    const value = record.referralRewardMonths;
+    if (!isDays(value, SETTINGS_REFERRAL_MONTHS_MIN, SETTINGS_REFERRAL_MONTHS_MAX)) {
+      issues.push({ path: 'referralRewardMonths', message: 'must be a whole number from ' + SETTINGS_REFERRAL_MONTHS_MIN + ' to ' + SETTINGS_REFERRAL_MONTHS_MAX });
+    } else changes.referralRewardMonths = value;
+  }
+
+  if ('referralMonthlyCap' in record) {
+    const value = record.referralMonthlyCap;
+    if (!isDays(value, SETTINGS_REFERRAL_CAP_MIN, SETTINGS_REFERRAL_CAP_MAX)) {
+      issues.push({ path: 'referralMonthlyCap', message: 'must be a whole number from ' + SETTINGS_REFERRAL_CAP_MIN + ' to ' + SETTINGS_REFERRAL_CAP_MAX });
+    } else changes.referralMonthlyCap = value;
+  }
+
   if ('reason' in record) {
     const value = record.reason;
     const text = typeof value === 'string' ? value.trim() : '';
@@ -238,6 +267,8 @@ export function toSettingsRow(doc: Doc) {
     trialDays: isDays(doc.trialDays, SETTINGS_TRIAL_DAYS_MIN, SETTINGS_TRIAL_DAYS_MAX) ? doc.trialDays : DEFAULT_TRIAL_DAYS,
     supportEmail: textOrNull(doc.supportEmail),
     supportPhone: textOrNull(doc.supportPhone),
+    referralRewardMonths: isDays(doc.referralRewardMonths, SETTINGS_REFERRAL_MONTHS_MIN, SETTINGS_REFERRAL_MONTHS_MAX) ? doc.referralRewardMonths : DEFAULT_REFERRAL_REWARD_MONTHS,
+    referralMonthlyCap: isDays(doc.referralMonthlyCap, SETTINGS_REFERRAL_CAP_MIN, SETTINGS_REFERRAL_CAP_MAX) ? doc.referralMonthlyCap : DEFAULT_REFERRAL_MONTHLY_CAP,
     settingsRevision: typeof revision === 'number' && Number.isInteger(revision) && revision >= 0 ? revision : 0,
     updatedAt: toIso(doc.updatedAt),
   };
@@ -258,6 +289,8 @@ export function settingsSnapshot(row: SettingsRow): Required<SettingsChange> {
     trialDays: row.trialDays,
     supportEmail: row.supportEmail,
     supportPhone: row.supportPhone,
+    referralRewardMonths: row.referralRewardMonths,
+    referralMonthlyCap: row.referralMonthlyCap,
   };
 }
 
@@ -276,6 +309,8 @@ export function syncPayload(row: SettingsRow): Record<string, string | number | 
     trialDays: row.trialDays,
     supportEmail: row.supportEmail ?? '',
     supportPhone: row.supportPhone ?? '',
+    referralRewardMonths: row.referralRewardMonths,
+    referralMonthlyCap: row.referralMonthlyCap,
   };
 }
 

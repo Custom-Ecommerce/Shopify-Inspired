@@ -9,7 +9,7 @@ export { API_KEY_NAME_MAX, API_KEY_SCOPES };
 
 export const SCOPE_COPY: Record<ApiKeyScope, { name: string; help: string }> = {
   "products:read": { name: "Read products", help: "List and read the store's products." },
-  "orders:read": { name: "Read orders", help: "List and read the store's orders, with customer contact details." },
+  "orders:read": { name: "Read orders", help: "List and read the store's orders. Of the customer, only the city: no name, phone, email or address." },
 };
 
 /** Where the portal serves the API documentation (public/docs/api-v1.md, a copy of docs/api-v1.md). */

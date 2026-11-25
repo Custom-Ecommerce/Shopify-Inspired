@@ -29,7 +29,7 @@ export const dynamic = 'force-dynamic';
 
 registerSyncOutboxModel(SyncOutbox as unknown as SyncOutboxModelPort);
 
-const SELECT = 'defaultCommissionRate maxStoresPerSeller storeApprovalRequired codCommissionPercent paymentInstructions graceDays trialDays supportEmail supportPhone settingsRevision updatedAt';
+const SELECT = 'defaultCommissionRate maxStoresPerSeller storeApprovalRequired codCommissionPercent paymentInstructions graceDays trialDays supportEmail supportPhone referralRewardMonths referralMonthlyCap settingsRevision updatedAt';
 const FIELD = ['defaultCommissionRate'] as const;
 /** The platform settings are one document; the sync outbox addresses it by this id (see /api/admin/settings). */
 const SYNC_ENTITY_ID = 'platform';

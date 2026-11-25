@@ -396,3 +396,9 @@ export const {
   internalTicketStatusSchema,
   internalSupportListSchema,
 } = contracts;
+
+// Sprint 8 (S8-B5): the paging bounds of the public API v1.
+export const { API_V1_LIMIT_DEFAULT, API_V1_LIMIT_MAX } = contracts;
+
+// Sprint 8 (S8-B5): referral codes.
+export const { normalizeReferralCode, REFERRAL_CODE_ALPHABET, REFERRAL_CODE_LENGTH } = contracts;

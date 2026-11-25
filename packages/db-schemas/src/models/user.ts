@@ -36,6 +36,10 @@ pendingEmail?: string | null;
  */
 storeLimitOverride?: number | null;
 adminLevel?: AdminUserLevel | null;
+/** Sprint 8 (S8-B5, D-118): the seller's own referral code, made once, on first need. Absent until then (never null: the unique index is partial). */
+referralCode?: string;
+/** The seller whose code this account signed up with. Set only together with a referrals row. */
+referredBy?: Types.ObjectId | null;
 createdAt: Date;
 updatedAt: Date;
 }
@@ -67,6 +71,8 @@ emailVerifiedAt: { type: Date, default: null },
 phone: { type: String, default: null, maxlength: 20 },
 pendingEmail: { type: String, default: null, lowercase: true, trim: true, maxlength: 254 },
 adminLevel: { type: String, enum: [...ADMIN_USER_LEVELS], default: undefined },
+referralCode: { type: String, maxlength: 16 },
+referredBy: { type: Schema.Types.ObjectId, ref: 'User' },
 storeLimitOverride: { type: Number, default: null, min: 1, validate: { validator: (value: unknown) => value === null || value === undefined || Number.isInteger(value), message: 'storeLimitOverride must be a whole number' } },
 },
 { timestamps: true, collection: 'users' },
@@ -74,6 +80,8 @@ storeLimitOverride: { type: Number, default: null, min: 1, validate: { validator
 
 // The sellers list filters by role and sorts by join date.
 UserSchema.index({ role: 1, createdAt: -1 });
+// Sprint 8 (S8-B5): a code names one seller. Partial: most accounts have none.
+UserSchema.index({ referralCode: 1 }, { unique: true, name: 'referralCode_unique', partialFilterExpression: { referralCode: { $type: 'string' } } });
 
 export const User: Model<IUser> =
 (mongoose.models.User as Model<IUser> | undefined) ?? mongoose.model<IUser>('User', UserSchema, 'users');

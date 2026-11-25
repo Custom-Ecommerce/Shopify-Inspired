@@ -39,6 +39,9 @@ export const SETTINGS_DEFAULTS = Object.freeze({
   codCommissionPercent: 0,
   graceDays: 7,
   trialDays: 0,
+  // Sprint 8 (S8-B5): one free month per rewarded referral, at most five a month.
+  referralRewardMonths: 1,
+  referralMonthlyCap: 5,
 });
 
 /**

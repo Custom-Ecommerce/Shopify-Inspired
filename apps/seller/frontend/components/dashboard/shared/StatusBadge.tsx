@@ -31,6 +31,8 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   completed: "success",
   published: "success",
   in_stock: "success",
+  // S8-B5: a referral that earned its reward.
+  rewarded: "success",
   // warning
   pending: "warning",
   processing: "warning",

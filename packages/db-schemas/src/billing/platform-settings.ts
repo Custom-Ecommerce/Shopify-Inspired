@@ -34,6 +34,10 @@ const platformSettingsSchema = new Schema(
     /** Where a seller can reach the platform (shown next to the payment instructions). */
     supportEmail: { type: String, maxlength: 254 },
     supportPhone: { type: String, maxlength: 30 },
+    /** Sprint 8 (S8-B5, D-118): free months a referrer earns per rewarded referral; 0 turns referrals off. */
+    referralRewardMonths: { type: Number, min: 0, max: 12, default: 1 },
+    /** The most referrals one referrer can be rewarded for in a month. */
+    referralMonthlyCap: { type: Number, min: 0, max: 100, default: 5 },
   },
   { timestamps: true, collection: 'globals' },
 );

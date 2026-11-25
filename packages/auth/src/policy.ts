@@ -71,6 +71,8 @@ export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
 'defaultCommissionRate', 'maxStoresPerSeller', 'stripeCommissionNote', 'storeApprovalRequired',
 // Sprint 6 (D-116, D-118): the COD commission percent and the plan settings.
 'codCommissionPercent', 'paymentInstructions', 'graceDays', 'trialDays', 'supportEmail', 'supportPhone',
+// Sprint 8 (S8-B5): referrals.
+'referralRewardMonths', 'referralMonthlyCap',
 ] as const;
 
 // Sprint 6 EP-14 (D-118): subscription plans are data. What a seller (or the public) may read of a plan: the plan facts, never the Stripe

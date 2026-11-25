@@ -8,7 +8,7 @@
  *   staff     orders, products (with their categories and media) and inventory
  *   support   orders (view, update customer notes), returns, customers, reviews reply, contact inbox and tickets
  *
- * OWNER-ONLY: the store settings groups payments and fraud, go-live, domain, billing and plan, API keys, team, earnings, payouts and commission data.
+ * OWNER-ONLY: the store settings groups payments and fraud, go-live, domain, billing and plan, API keys, team, earnings, payouts, commission data and referrals.
  *
  * Fail closed: an unknown role is denied; a MISSING role (undefined, null) is NOT an owner (unlike an admin account from before levels): it is denied everything. An
  * unknown capability is denied for everyone, the owner included.
@@ -77,6 +77,8 @@ export const SELLER_CAPABILITIES = [
   'earnings.read',
   'payouts.manage',
   'commission.read',
+  // S8-B5: the referral code and the list of referred sellers
+  'referrals.read',
 ] as const;
 export type SellerCapability = (typeof SELLER_CAPABILITIES)[number];
 
@@ -93,6 +95,7 @@ export const OWNER_ONLY_CAPABILITIES: readonly SellerCapability[] = [
   'earnings.read',
   'payouts.manage',
   'commission.read',
+  'referrals.read',
 ];
 
 const ownerOnly: ReadonlySet<string> = new Set(OWNER_ONLY_CAPABILITIES);

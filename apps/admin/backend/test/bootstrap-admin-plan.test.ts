@@ -29,6 +29,8 @@ test('an empty database: settings with the code defaults, no mirrors', () => {
     codCommissionPercent: 0,
     graceDays: 7,
     trialDays: 0,
+    referralRewardMonths: 1,
+    referralMonthlyCap: 5,
   });
   assert.equal(plan.createSettings?.defaultCommissionRate, SETTINGS_DEFAULTS.defaultCommissionRate);
   assert.deepEqual(plan.createMirrors, []);

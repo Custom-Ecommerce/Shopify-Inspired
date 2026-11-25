@@ -96,3 +96,6 @@ export * from './admin-users';
 
 // Sprint 6 (S6-B7): retries and retention.
 export * from './admin-retries';
+
+// Sprint 8 (S8-B5, D-118): the frozen response shapes of the read-only public API v1.
+export * from './api-v1';

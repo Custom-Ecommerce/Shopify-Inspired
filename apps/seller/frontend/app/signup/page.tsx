@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Mail, Lock, User, Loader2 } from "lucide-react";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { nextAfterAuth } from "@/lib/invite-view";
+import { refCookie, refFromSearch, signupRef } from "@/lib/referral-cookie";
 
 /** Simple advisory strength: 0 = weak, 1 = fair, 2 = strong. */
 function passwordStrength(pw: string): 0 | 1 | 2 {
@@ -38,16 +39,23 @@ export default function SignupPage() {
 
   const strength = useMemo(() => passwordStrength(password), [password]);
 
+  // S8-B5: remember ?ref= for 7 days, so it survives a detour through email. The server clears it once the account is made.
+  useEffect(() => {
+    const code = refFromSearch(window.location.search);
+    if (code !== null) document.cookie = refCookie(code, window.location.protocol === "https:");
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
     setErrorMessage(null);
     try {
       // Account only — the first store is created after login at /stores/new.
+      const ref = signupRef(window.location.search, document.cookie);
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password, name, ...(ref === null ? {} : { ref }) }),
       });
       const data = await res.json();
       if (!res.ok) {

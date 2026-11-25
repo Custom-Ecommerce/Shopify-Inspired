@@ -144,7 +144,7 @@ export const ROUTE_CAPABILITIES: Readonly<Record<string, RouteAccess>> = Object.
   'products/import POST': 'products.write',
 
   // referrals
-  'referrals GET': 'analytics.read',
+  'referrals GET': 'referrals.read',
 
   // returns
   'returns GET': 'returns.read',
@@ -280,6 +280,12 @@ export const ROUTE_CAPABILITIES: Readonly<Record<string, RouteAccess>> = Object.
   'users/me/notification-prefs PATCH': 'account',
   'users/me/password POST': 'account',
   'users/me/sessions/revoke-others POST': 'account',
+
+  // v1: the read-only public API (S8-B5). No session by design: each route checks an API key itself (lib/api-v1.ts) and serves that key's store only.
+  'v1/orders GET': 'public',
+  'v1/orders/[id] GET': 'public',
+  'v1/products GET': 'public',
+  'v1/products/[id] GET': 'public',
 
   // webhooks
   'webhooks/stripe-orders POST': 'public',

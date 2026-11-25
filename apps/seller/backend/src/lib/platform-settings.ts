@@ -26,6 +26,8 @@ export const DEFAULT_COMMISSION_RATE = 4;
 export const DEFAULT_COD_COMMISSION_PERCENT = 0;
 export const DEFAULT_GRACE_DAYS = 7;
 export const DEFAULT_TRIAL_DAYS = 0;
+export const DEFAULT_REFERRAL_REWARD_MONTHS = 1;
+export const DEFAULT_REFERRAL_MONTHLY_CAP = 5;
 
 function validRate(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
@@ -94,5 +96,22 @@ export async function readPlanSettings(): Promise<PlanSettingsView> {
     trialDays: validDays(doc?.trialDays, 60) ? doc.trialDays : DEFAULT_TRIAL_DAYS,
     supportEmail: textOrNull(doc?.supportEmail),
     supportPhone: textOrNull(doc?.supportPhone),
+  };
+}
+
+/** Sprint 8 (S8-B5, D-118): the referral settings. */
+export interface ReferralSettingsView {
+  /** Free months per rewarded referral; 0 means referrals are off. */
+  rewardMonths: number;
+  /** The most referrals one referrer can be rewarded for in a month. */
+  monthlyCap: number;
+}
+
+/** The document first, then the defaults (1 month, cap 5). Never throws. */
+export async function readReferralSettings(): Promise<ReferralSettingsView> {
+  const doc = await readSettingsDoc('referralRewardMonths referralMonthlyCap');
+  return {
+    rewardMonths: validDays(doc?.referralRewardMonths, 12) ? doc.referralRewardMonths : DEFAULT_REFERRAL_REWARD_MONTHS,
+    monthlyCap: validDays(doc?.referralMonthlyCap, 100) ? doc.referralMonthlyCap : DEFAULT_REFERRAL_MONTHLY_CAP,
   };
 }

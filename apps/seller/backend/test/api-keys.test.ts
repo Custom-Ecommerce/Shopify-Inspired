@@ -165,7 +165,7 @@ test('the counter of a key does not name the key', async () => {
   assert.equal(seen[0]!.includes('65a000000000000000000099'), false);
 });
 
-test('docs/api-v1.md states the header, the scopes, the error bodies of this library, the rate limit and what is only planned', () => {
+test('docs/api-v1.md states the header, the scopes, the error bodies of this library, the rate limit and that the endpoints are live', () => {
   // The tests of this workspace run with the workspace as the working directory.
   const docs = readFileSync(join(process.cwd(), '..', '..', '..', 'docs', 'api-v1.md'), 'utf8');
   assert.ok(docs.includes('Authorization: Bearer'));
@@ -177,6 +177,7 @@ test('docs/api-v1.md states the header, the scopes, the error bodies of this lib
   assert.ok(docs.includes('Retry-After'));
   assert.match(docs, /read-only/);
   for (const path of ['/api/v1/products', '/api/v1/products/{id}', '/api/v1/orders', '/api/v1/orders/{id}']) {
-    assert.ok(docs.split('\n').some((line) => line.includes('`GET ' + path + '`') && line.includes('planned')), path);
+    assert.ok(docs.split('\n').some((line) => line.includes('`GET ' + path + '`') && line.includes('live')), path);
   }
+  assert.doesNotMatch(docs, /planned/);
 });

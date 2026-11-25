@@ -1,8 +1,8 @@
 import type { AdminSellerPlan, EffectivePlanStatus } from "@/lib/contracts";
 
 /**
- * Sprint 6 EP-14.US02.T08 (D-118): the wording of the sellers page's plan column. Pure: no I/O. null is unlimited. Staff seats and API keys
- * count 0 until Sprint 8, so only stores and products are shown.
+ * Sprint 6 EP-14.US02.T08 (D-118): the wording of the sellers page's plan column. Pure: no I/O. null is unlimited.
+ * Sprint 8 (S8-B5): the live API keys are shown too (the store of the seller with the most of them, against the per-store limit).
  */
 
 export const PLAN_STATUS_TEXT: Record<EffectivePlanStatus, string> = {
@@ -33,6 +33,11 @@ export function usageText(used: number, limit: number | null): string {
 /** True when the seller has reached (or passed) a limit: the page marks it. */
 export function atLimit(used: number, limit: number | null): boolean {
   return limit !== null && used >= limit;
+}
+
+/** S8-B5: "API keys 1 of 2". The count is the seller's store with the most live keys: the limit is per store. */
+export function apiKeysText(plan: Pick<AdminSellerPlan, "used" | "limits">): string {
+  return "API keys " + usageText(plan.used.apiKeys, plan.limits.apiKeys);
 }
 
 /** "5 days left" / "ends today" / "" without a date. */

@@ -22,7 +22,7 @@ import {
 // change to the matrix must change this test too.
 
 const OWNER_ONLY: readonly SellerCapability[] = [
-  'settings.payments', 'settings.fraud', 'settings.domain', 'settings.payout', 'go_live', 'billing.manage', 'api_keys.manage', 'team.manage', 'earnings.read', 'payouts.manage', 'commission.read',
+  'settings.payments', 'settings.fraud', 'settings.domain', 'settings.payout', 'go_live', 'billing.manage', 'api_keys.manage', 'team.manage', 'earnings.read', 'payouts.manage', 'commission.read', 'referrals.read',
 ];
 
 const EXPECTED: Record<SellerRole, readonly SellerCapability[]> = {

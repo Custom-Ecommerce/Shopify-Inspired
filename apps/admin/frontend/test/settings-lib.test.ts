@@ -24,6 +24,8 @@ const settings = {
   trialDays: 0,
   supportEmail: null,
   supportPhone: null,
+  referralRewardMonths: 1,
+  referralMonthlyCap: 5,
   settingsRevision: 2,
   updatedAt: NOW,
 };
@@ -40,6 +42,8 @@ test("the form starts from the settings, with a blank note for none and no reaso
     trialDays: "0",
     supportEmail: "",
     supportPhone: "",
+    referralRewardMonths: "1",
+    referralMonthlyCap: "5",
     reason: "",
   });
   assert.deepEqual(formFromSettings({ ...withNote, defaultCommissionRate: 7.5 }), {
@@ -52,6 +56,8 @@ test("the form starts from the settings, with a blank note for none and no reaso
     trialDays: "0",
     supportEmail: "",
     supportPhone: "",
+    referralRewardMonths: "1",
+    referralMonthlyCap: "5",
     reason: "",
   });
 });
@@ -230,4 +236,13 @@ test("Sprint 6: the backend's issues land on the new fields too", () => {
     graceDays: "Must be a whole number from 0 to 30.",
     supportEmail: "Must be an email address.",
   });
+});
+
+test("S8-B5: the referral settings: 0 months is allowed (referrals off), out-of-range values are refused, only changes are sent", () => {
+  const base = { ...formFromSettings(settings), reason: "Referrals" };
+  assert.deepEqual(validateSettingsForm({ ...base, referralRewardMonths: "0", referralMonthlyCap: "100" }), {});
+  for (const bad of ["", "13", "-1", "1.5"]) assert.ok(validateSettingsForm({ ...base, referralRewardMonths: bad }).referralRewardMonths, bad);
+  for (const bad of ["", "101", "two"]) assert.ok(validateSettingsForm({ ...base, referralMonthlyCap: bad }).referralMonthlyCap, bad);
+  assert.deepEqual(toUpdateRequest({ ...base, referralRewardMonths: "0" }, settings), { referralRewardMonths: 0, reason: "Referrals" });
+  assert.deepEqual(changedSettingFields({ ...base, referralMonthlyCap: "6" }, settings), ["referralMonthlyCap"]);
 });

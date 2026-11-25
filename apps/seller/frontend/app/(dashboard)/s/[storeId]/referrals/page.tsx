@@ -1,115 +1,118 @@
 "use client";
 
-import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
-import { useEffect, useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { useDashboard } from "@/lib/dashboard-context";
+import { useCallback, useEffect, useState } from "react";
+import { Copy, Loader2 } from "lucide-react";
+import type { ReferralOverview } from "@markaz/contracts/referral";
+import { FormAlert } from "@/components/auth/AccountCard";
 import { PageHeader } from "@/components/dashboard/shared/PageHeader";
 import { SectionCard } from "@/components/dashboard/shared/SectionCard";
 import { StatusBadge } from "@/components/dashboard/shared/StatusBadge";
-import { DataTable } from "@/components/dashboard/shared/DataTable";
-import { LoadingState } from "@/components/dashboard/shared/LoadingState";
-import { EmptyState } from "@/components/dashboard/shared/EmptyState";
+import { Button } from "@/components/ui/button";
+import { useDashboard } from "@/lib/dashboard-context";
+import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
+import { NO_LINK_TEXT, OWNER_ONLY_TEXT, earnedText, howItWorksText, joinedText, rewardText, shareText, statusText } from "@/lib/referrals-view";
+import { roleCan } from "@/lib/role-access";
 
-interface ReferralDoc {
-  id: string;
-  referred: string | { name?: string; slug?: string };
-  status: "pending" | "rewarded";
-  rewardType?: string;
-  rewardValue?: number;
-  createdAt: string;
-}
-
-export default function DashboardReferralsPage() {
+/**
+ * Sprint 8 (S8-B5, D-118): the owner's referrals, read only: the code, the share link, the referred sellers (masked names, never an email) and what they earned.
+ */
+export default function ReferralsPage() {
+  const { activeStore } = useDashboard();
+  const owner = roleCan(activeStore.role, "referrals.read");
   const storeFetch = useStoreFetch();
-  const { store } = useDashboard();
-  const [referrals, setReferrals] = useState<ReferralDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [data, setData] = useState<ReferralOverview | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
 
-  useEffect(() => {
-    storeFetch("/api/dashboard/referrals")
-      .then((res) => res.json())
-      .then((data) => setReferrals(data.docs ?? []))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoadError(null);
+    try {
+      const res = await storeFetch("/api/dashboard/referrals", { cache: "no-store" });
+      const body = (await res.json().catch(() => null)) as (ReferralOverview & { error?: string }) | null;
+      if (!res.ok || !body?.code) {
+        setLoadError(body?.error ?? "Your referrals could not be loaded.");
+        return;
+      }
+      setData(body);
+    } catch {
+      setLoadError("Could not reach the server. Please try again.");
+    }
   }, [storeFetch]);
 
-  const referralLink =
-    store?.referralCode && typeof window !== "undefined" ? `${window.location.origin}/signup?ref=${store.referralCode}` : "";
+  useEffect(() => {
+    if (owner) void load();
+  }, [owner, load]);
 
-  function handleCopy() {
-    navigator.clipboard.writeText(referralLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function copy() {
+    if (data === null) return;
+    try {
+      await navigator.clipboard.writeText(shareText(data));
+      setCopied("yes");
+    } catch {
+      setCopied("failed");
+    }
   }
-
-  if (!store) {
-    return (
-      <div className="p-6 sm:p-8">
-        <h1 className="font-heading text-2xl mb-2">Referrals</h1>
-        <p className="text-sm text-muted-foreground">Store details could not be loaded. Try refreshing the page.</p>
-      </div>
-    );
-  }
-
-  const columns = [
-    {
-      header: "Store",
-      render: (r: ReferralDoc) => typeof r.referred === "object" ? r.referred?.name : r.referred,
-    },
-    {
-      header: "Status",
-      render: (r: ReferralDoc) => <StatusBadge status={r.status} />,
-    },
-    {
-      header: "Reward",
-      render: (r: ReferralDoc) => (
-        <span className="text-xs">
-          {r.rewardType ? `${r.rewardType} (${r.rewardValue})` : "—"}
-        </span>
-      ),
-    },
-    {
-      header: "Date",
-      render: (r: ReferralDoc) => (
-        <span className="text-xs text-muted-foreground">
-          {new Date(r.createdAt).toLocaleDateString()}
-        </span>
-      ),
-    },
-  ];
 
   return (
-    <div className="p-6 sm:p-8">
-      <PageHeader title="Referrals" />
+    <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-5 p-4 sm:p-6">
+      <PageHeader title="Referrals" description="Invite other sellers to Markazify." className="mb-0" />
 
-      <SectionCard title="Your referral link" className="mb-8 max-w-xl">
-        <div className="flex gap-2">
-          <Input readOnly value={referralLink} className="font-mono" />
-          <Button variant="outline" onClick={handleCopy}>
-            {copied ? "Copied!" : "Copy"}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          Share this with other sellers — when they sign up and complete their first delivered order, you both
-          get rewarded.
+      {!owner ? (
+        <p className="text-sm text-muted-foreground">{OWNER_ONLY_TEXT}</p>
+      ) : loadError ? (
+        <FormAlert tone="error">
+          {loadError}{" "}
+          <button type="button" className="font-medium underline" onClick={() => void load()}>
+            Try again
+          </button>
+        </FormAlert>
+      ) : data === null ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Loading…
         </p>
-      </SectionCard>
-
-      <h2 className="font-heading text-lg mb-3">Your Referrals</h2>
-      {loading ? (
-        <LoadingState />
-      ) : referrals.length === 0 ? (
-        <EmptyState title="No referrals yet" description="Share your link to get started." />
       ) : (
-        <SectionCard noPadding>
-          <DataTable
-            data={referrals}
-            columns={columns}
-            keyExtractor={(r) => r.id}
-          />
-        </SectionCard>
+        <>
+          <SectionCard title="Your referral link">
+            <div className="flex min-w-0 flex-col gap-3">
+              <p className="text-sm">{howItWorksText(data)}</p>
+              <p className="text-sm text-muted-foreground">
+                Your code: <span className="font-mono font-medium text-foreground">{data.code}</span>
+              </p>
+              {data.shareLink !== null ? (
+                <code className="block break-all rounded-lg border bg-muted/50 p-3 text-xs" data-testid="referral-link">
+                  {data.shareLink}
+                </code>
+              ) : (
+                <p className="text-sm text-muted-foreground">{NO_LINK_TEXT}</p>
+              )}
+              <Button type="button" className="min-h-11 w-full sm:w-auto sm:self-start" onClick={() => void copy()}>
+                <Copy className="size-4" aria-hidden="true" />
+                {copied === "yes" ? "Copied" : data.shareLink !== null ? "Copy link" : "Copy code"}
+              </Button>
+              {copied === "failed" ? <p className="text-sm text-destructive">Copying did not work. Select it above and copy it by hand.</p> : null}
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Your referrals" description={earnedText(data.totals)}>
+            {data.referrals.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No referrals yet. Share your link to get started.</p>
+            ) : (
+              <ul className="flex flex-col divide-y">
+                {data.referrals.map((row) => (
+                  <li key={row.id} className="flex min-w-0 flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="break-words font-medium">{row.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {joinedText(row)}. {rewardText(row)}.
+                      </p>
+                    </div>
+                    <StatusBadge status={row.status} label={statusText(row)} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+        </>
       )}
     </div>
   );

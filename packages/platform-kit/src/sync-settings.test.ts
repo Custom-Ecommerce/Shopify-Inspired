@@ -20,3 +20,7 @@ test("the settings allowlist never lets the revision or the note cross", () => {
   assert.deepEqual(result.data, { codCommissionPercent: 2, graceDays: 7 });
   assert.deepEqual([...result.strays].sort(), ["settingsRevision", "stripeCommissionNote"]);
 });
+
+test("S8-B5: the referral settings are sent to the seller", () => {
+  for (const field of ["referralRewardMonths", "referralMonthlyCap"]) assert.ok((SETTINGS_ALLOWLIST as readonly string[]).includes(field), field);
+});

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalizeReferralCode } from "@markaz/contracts/referral";
+import { REFERRAL_COOKIE } from "@/lib/referral-cookie";
 
 // The seller backend (port 4001) owns the signup endpoint (apps/seller/backend/src/endpoints/signup.ts).
 // The admin backend has no /api/signup route — pointing there was the root cause (RCA §6.1).
 const SELLER_BACKEND_API_URL = process.env.SELLER_BACKEND_API_URL || "http://localhost:4001";
 
 export async function POST(req: NextRequest) {
-  let body: { email?: unknown; password?: unknown; name?: unknown };
+  let body: { email?: unknown; password?: unknown; name?: unknown; ref?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -13,13 +15,15 @@ export async function POST(req: NextRequest) {
   }
 
   const { email, password, name } = body;
+  // S8-B5: the code the page sent, else the remembered one. Only a well-formed code is forwarded.
+  const ref = normalizeReferralCode(body.ref) ?? normalizeReferralCode(req.cookies.get(REFERRAL_COOKIE)?.value);
 
   let res: Response;
   try {
     res = await fetch(`${SELLER_BACKEND_API_URL}/api/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, ...(ref === null ? {} : { ref }) }),
       cache: "no-store",
     });
   } catch (err) {
@@ -48,6 +52,8 @@ export async function POST(req: NextRequest) {
     maxAge: 60 * 60 * 8,
     ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
   });
+  // S8-B5: signup is complete, so the remembered code is spent. The page set it for this host only (no domain).
+  response.cookies.set(REFERRAL_COOKIE, "", { path: "/", maxAge: 0, sameSite: "lax" });
   return response;
 }
 

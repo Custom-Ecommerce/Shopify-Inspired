@@ -136,6 +136,7 @@ test('the storefront API is public, the internal API is system, and nothing else
     const access = ROUTE_CAPABILITIES[route.key];
     if (route.path.startsWith('storefront/')) assert.equal(access, 'public', route.key);
     else if (route.path.startsWith('internal/')) assert.equal(access, 'system', route.key);
+    else if (route.path.startsWith('v1/')) assert.equal(access, 'public', route.key);
     else {
       assert.notEqual(access, 'system', route.key);
       if (access === 'public') assert.ok(['auth/forgot-password', 'auth/reset-password', 'auth/verify-email', 'health', 'signup', 'unsubscribe', 'users/login', 'webhooks/stripe-orders', 'team/invite'].includes(route.path), route.key);
@@ -172,6 +173,20 @@ test('the owner-only routes: earnings, commission, domain, go-live, billing and 
   }
   for (const route of ownerOnlyRoutes) assert.deepEqual(rolesForRoute(route.key), ['owner'], route.key);
   assert.equal(ROUTE_CAPABILITIES['billing/checkout POST'], 'owner-only');
+});
+
+test('the public API v1 (S8-B5): GET only, every route goes through the API key check, none reads a session, a cookie or x-store-id', () => {
+  const v1 = ROUTES.filter((route) => route.path.startsWith('v1/'));
+  assert.deepEqual(v1.map((route) => route.key).sort(), ['v1/orders GET', 'v1/orders/[id] GET', 'v1/products GET', 'v1/products/[id] GET']);
+  for (const route of v1) {
+    assert.match(route.segment, /v1Read\(request, '(products|orders):read'/, route.key);
+    assert.doesNotMatch(route.whole, /authenticate\(|cookies|x-store-id|resolveOwnedStoreId|resolveStoreAccess/, route.key);
+    assert.doesNotMatch(route.whole, /export (const|async function|function) (POST|PUT|PATCH|DELETE)\b/, route.key + ': an unexported method is answered 405 by Next');
+  }
+  for (const file of ['api-v1.ts', 'api-v1-read.ts']) {
+    const source = readFileSync(join(process.cwd(), 'src', 'lib', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.doesNotMatch(source, /authenticate\(|cookies|x-store-id|resolveOwnedStoreId|resolveStoreAccess/, file);
+  }
 });
 
 // ---------------------------------------------------------------------------------------------------- per-role tables, generated from the map

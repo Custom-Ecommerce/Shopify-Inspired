@@ -22,6 +22,9 @@ export const signupRequestSchema = z.object({
   email: z.string().email(),
   // Sprint 4 EP-08: the one shared rule (account.ts), the same 8-character minimum as before plus a 128 maximum.
   password: passwordSchema,
+  // Sprint 8 (S8-B5): a referral code (?ref=) and a phone for the self-referral check. Deliberately unchecked here: a bad value is ignored, never a 400.
+  ref: z.unknown().optional(),
+  phone: z.unknown().optional(),
 });
 
 export const authResponseSchema = z.object({

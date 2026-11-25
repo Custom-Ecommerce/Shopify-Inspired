@@ -1,38 +1,29 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { authenticate } from '@/lib/auth';
-import { handleRouteError, parseIntParam, HttpError } from '@/lib/http';
-import { connectSellerDb } from '@/lib/mongo';
-import { assertCan, listEnvelope, Referral } from '@/lib/services';
-import { plainDoc, toWire } from '@/lib/seller-scope';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
+import { handleRouteError, HttpError } from '@/lib/http';
+import { connectSellerDb } from '@/lib/mongo';
+import { buildReferralOverview } from '@/lib/referrals';
+import { assertCan } from '@/lib/services';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** GET /api/referrals. The referrals where the seller's store is the referrer, in the list envelope. */
+/**
+ * GET /api/referrals (S8-B5). The signed-in owner's own referral code (made on first read), share link and referrals. Owner only (referrals.read): the store named
+ * is only the proof of the role; the data is the account's. A referred seller sees nothing here about having been referred. Read only.
+ */
 export async function GET(request: NextRequest): Promise<Response> {
   try {
     const ctx = await authenticate(request);
     assertCan(ctx.actor, 'read', 'referrals');
+    if (ctx.actor !== 'seller') throw new HttpError(403, 'Only a seller has referrals');
     await connectSellerDb().catch(() => {
       throw new HttpError(503, 'Seller database unavailable');
     });
-    const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'analytics.read' });
-
-    const params = request.nextUrl.searchParams;
-    const page = parseIntParam(params.get('page'), 1, 1, 100000);
-    const limit = parseIntParam(params.get('limit'), 20, 1, 100);
-    const filter = { referrer: storeId };
-
-    const [rows, totalDocs] = await Promise.all([
-      Referral.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-      Referral.countDocuments(filter),
-    ]);
-    const docs = (rows as unknown as Record<string, unknown>[]).map((row) => toWire(plainDoc(row)));
-    return NextResponse.json(listEnvelope(docs, { page, limit, totalDocs }), {
-      headers: { 'Cache-Control': 'no-store' },
-    });
+    await resolveOwnedStoreId(request, ctx, null, { capability: 'referrals.read' });
+    return NextResponse.json(await buildReferralOverview(ctx.userObjectId), { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);
   }

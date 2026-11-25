@@ -1,9 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { adminSellerPlansResponseSchema } from "../lib/contracts";
 import {
   PLAN_STATUS_TEXT,
   PLAN_STATUS_TONE,
+  apiKeysText,
   atLimit,
   daysLeftText,
   planSummaryLine,
@@ -76,4 +79,10 @@ test("the contract the page reads: an answer parses, a bad status or a fractiona
   assert.equal(adminSellerPlansResponseSchema.safeParse({ plans: [{ ...row(A, "active", 9), status: "paused" }] }).success, false);
   assert.equal(adminSellerPlansResponseSchema.safeParse({ plans: [{ ...row(A, "active", 9), used: { ...used, stores: 1.5 } }] }).success, false);
   assert.equal(adminSellerPlansResponseSchema.safeParse({ plans: [] }).success, true);
+});
+
+test("S8-B5: the API key count per seller, read from the usage of the same signed call", () => {
+  assert.equal(apiKeysText({ used: { ...used, apiKeys: 2 }, limits }), "API keys 2 of 3");
+  assert.equal(apiKeysText({ used, limits: { ...limits, apiKeys: null } }), "API keys 0 of unlimited");
+  assert.match(readFileSync(join(process.cwd(), "components", "sellers", "sellers-view.tsx"), "utf8"), /apiKeysText\(plan\)/);
 });

@@ -24,7 +24,7 @@ const MENU_CAPABILITY: Record<string, string> = {
   "/reviews": "reviews.read",
   "/abandoned-carts": "abandoned_carts.manage",
   "/discounts": "discounts.read",
-  "/referrals": "analytics.read",
+  "/referrals": "referrals.read",
   "/broadcast": "broadcast.manage",
   "/blog": "content.read",
   "/pages": "content.read",
@@ -56,10 +56,10 @@ test("the account pages are for everyone, and every link of the sidebar has a ro
   for (const href of Object.keys(MENU_ROLES)) assert.ok(hrefs.includes(href), href + " is a link of the sidebar");
 });
 
-test("the owner sees every item; a manager every item but the owner-only ones (earnings, billing, domain, team, API keys); staff the order, catalog and stock items; support the customer care items", () => {
+test("the owner sees every item; a manager every item but the owner-only ones (earnings, billing, domain, team, API keys, referrals); staff the order, catalog and stock items; support the customer care items", () => {
   const all = Object.keys(MENU_ROLES);
   assert.deepEqual(all.filter((href) => roleSeesMenu("owner", href)), all);
-  assert.deepEqual(all.filter((href) => !roleSeesMenu("manager", href)).sort(), ["/api-keys", "/billing", "/domain", "/earnings", "/team"]);
+  assert.deepEqual(all.filter((href) => !roleSeesMenu("manager", href)).sort(), ["/api-keys", "/billing", "/domain", "/earnings", "/referrals", "/team"]);
   assert.deepEqual(all.filter((href) => roleSeesMenu("staff", href)).sort(), ["/", "/account", "/categories", "/inventory", "/media", "/orders", "/products", "/support"]);
   assert.deepEqual(all.filter((href) => roleSeesMenu("support", href)).sort(), ["/", "/account", "/customers", "/inbox", "/orders", "/returns", "/reviews", "/support"]);
 });

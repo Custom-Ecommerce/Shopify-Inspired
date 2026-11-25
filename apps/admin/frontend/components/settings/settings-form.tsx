@@ -19,6 +19,10 @@ import {
   ADMIN_SETTINGS_RATE_MAX,
   ADMIN_SETTINGS_RATE_MIN,
   ADMIN_SETTINGS_REASON_MAX,
+  ADMIN_SETTINGS_REFERRAL_CAP_MAX,
+  ADMIN_SETTINGS_REFERRAL_CAP_MIN,
+  ADMIN_SETTINGS_REFERRAL_MONTHS_MAX,
+  ADMIN_SETTINGS_REFERRAL_MONTHS_MIN,
   ADMIN_SETTINGS_SUPPORT_EMAIL_MAX,
   ADMIN_SETTINGS_SUPPORT_PHONE_MAX,
   ADMIN_SETTINGS_TRIAL_DAYS_MAX,
@@ -270,6 +274,49 @@ export function SettingsForm({ settings, onReload }: { settings: AdminPlatformSe
               </div>
             </div>
             <p className="text-xs text-muted-foreground">Where sellers can reach the platform about a subscription payment. Sent to sellers.</p>
+          </fieldset>
+
+          <fieldset className="flex min-w-0 flex-col gap-5 rounded-xl border border-border p-4">
+            <legend className="px-1 text-sm font-medium">Referrals</legend>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="settings-referral-months">Reward (free months)</Label>
+                <Input
+                  id="settings-referral-months"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={2}
+                  value={values.referralRewardMonths}
+                  aria-invalid={shown.referralRewardMonths !== undefined}
+                  aria-describedby={"settings-referral-months-hint" + (shown.referralRewardMonths !== undefined ? " settings-referral-months-error" : "")}
+                  className="w-40 max-w-full tabular-nums aria-[invalid=true]:border-destructive"
+                  onChange={(event) => change("referralRewardMonths", event.target.value)}
+                />
+                <p id="settings-referral-months-hint" className="text-xs text-muted-foreground">
+                  Free months a referrer earns per referral: {ADMIN_SETTINGS_REFERRAL_MONTHS_MIN} to {ADMIN_SETTINGS_REFERRAL_MONTHS_MAX}. 0 turns referrals off: no new referrals are recorded. Sent to sellers.
+                </p>
+                <FieldError id="settings-referral-months-error" message={shown.referralRewardMonths} />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="settings-referral-cap">Monthly cap per referrer</Label>
+                <Input
+                  id="settings-referral-cap"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={3}
+                  value={values.referralMonthlyCap}
+                  aria-invalid={shown.referralMonthlyCap !== undefined}
+                  aria-describedby={"settings-referral-cap-hint" + (shown.referralMonthlyCap !== undefined ? " settings-referral-cap-error" : "")}
+                  className="w-40 max-w-full tabular-nums aria-[invalid=true]:border-destructive"
+                  onChange={(event) => change("referralMonthlyCap", event.target.value)}
+                />
+                <p id="settings-referral-cap-hint" className="text-xs text-muted-foreground">
+                  Most rewards one referrer can earn in a month: {ADMIN_SETTINGS_REFERRAL_CAP_MIN} to {ADMIN_SETTINGS_REFERRAL_CAP_MAX}. It also limits how many new referrals one referrer can get in a day. Sent to sellers.
+                </p>
+                <FieldError id="settings-referral-cap-error" message={shown.referralMonthlyCap} />
+              </div>
+            </div>
           </fieldset>
 
           <div className="flex flex-col gap-1.5">

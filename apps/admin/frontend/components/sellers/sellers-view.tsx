@@ -17,7 +17,7 @@ import { parseSellerListState, sellerStateToQuery, type SellerListState } from "
 import { SellerStatusDialog } from "@/components/sellers/seller-status-dialog";
 import { StoreLimitDialog } from "@/components/sellers/store-limit-dialog";
 import { Badge } from "@/components/ui/badge";
-import { PLAN_STATUS_TONE, atLimit, plansBySeller, planSummaryLine, sellerIdsOf, usageText } from "@/lib/seller-plans";
+import { PLAN_STATUS_TONE, apiKeysText, atLimit, plansBySeller, planSummaryLine, sellerIdsOf, usageText } from "@/lib/seller-plans";
 import type { AdminSellerPlan } from "@/lib/contracts";
 
 const COLUMNS: Array<Column<AdminSellerListItem>> = [
@@ -203,7 +203,7 @@ export function SellersView() {
   );
 }
 
-/** Sprint 6 EP-14.US02.T08: the plan name and status, and the usage against the stores and products limits (a dash while it loads or if it failed). */
+/** Sprint 6 EP-14.US02.T08: the plan name and status, the usage against the stores and products limits, and the API key count (S8-B5). A dash while it loads or if it failed. */
 function PlanCell({ plan, unavailable }: { plan: AdminSellerPlan | null; unavailable: boolean }) {
   if (plan === null) return <span className="text-muted-foreground" title={unavailable ? "The plan could not be loaded" : undefined}>-</span>;
   return (
@@ -218,6 +218,7 @@ function PlanCell({ plan, unavailable }: { plan: AdminSellerPlan | null; unavail
       <span className={"text-xs " + (atLimit(plan.used.products, plan.limits.products) ? "font-medium text-foreground" : "text-muted-foreground")}>
         Products {usageText(plan.used.products, plan.limits.products)}
       </span>
+      <span className="text-xs text-muted-foreground">{apiKeysText(plan)}</span>
     </div>
   );
 }

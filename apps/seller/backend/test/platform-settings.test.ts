@@ -4,7 +4,7 @@ import * as syncCoreNs from '@markaz/sync-core';
 import { unwrapCjs } from '@/lib/cjs';
 import type { SyncEnvelope } from '@markaz/sync-core';
 import { PlatformSettingsModel } from '@/lib/services';
-import { readPlanSettings, readPlatformSettings } from '../src/lib/platform-settings';
+import { readPlanSettings, readPlatformSettings, readReferralSettings } from '../src/lib/platform-settings';
 import { quoteDelivery } from '@/lib/contracts';
 import { computeTotals } from '../src/lib/storefront/pricing';
 
@@ -181,4 +181,12 @@ test('Sprint 6: readPlanSettings ignores unusable numbers', async () => {
   const view = await readPlanSettings();
   assert.equal(view.graceDays, 7);
   assert.equal(view.trialDays, 0);
+});
+
+test('S8-B5: the referral settings default to 1 month and a cap of 5; 0 months is kept (referrals off); unusable values fall back', async () => {
+  assert.deepEqual(await readReferralSettings(), { rewardMonths: 1, monthlyCap: 5 });
+  docs.push({ referralRewardMonths: 0, referralMonthlyCap: 12 });
+  assert.deepEqual(await readReferralSettings(), { rewardMonths: 0, monthlyCap: 12 });
+  docs[0] = { referralRewardMonths: 99, referralMonthlyCap: -1 };
+  assert.deepEqual(await readReferralSettings(), { rewardMonths: 1, monthlyCap: 5 });
 });

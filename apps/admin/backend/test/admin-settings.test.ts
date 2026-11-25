@@ -204,9 +204,9 @@ test('parseSettingsUpdate refuses bad values, unknown fields, and an empty chang
 
 test('toSettingsRow uses the model defaults for what is missing, and ISO dates', () => {
   const row = toSettingsRow(stored);
-  assert.deepEqual(row, { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, settingsRevision: 2, updatedAt: T1.toISOString() });
+  assert.deepEqual(row, { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, referralRewardMonths: 1, referralMonthlyCap: 5, settingsRevision: 2, updatedAt: T1.toISOString() });
   assert.equal('_id' in row, false);
-  assert.deepEqual(toSettingsRow({ _id: SETTINGS_ID }), { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, settingsRevision: 0, updatedAt: null });
+  assert.deepEqual(toSettingsRow({ _id: SETTINGS_ID }), { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, referralRewardMonths: 1, referralMonthlyCap: 5, settingsRevision: 0, updatedAt: null });
   const unusable = toSettingsRow({ _id: SETTINGS_ID, defaultCommissionRate: -3, maxStoresPerSeller: 0, stripeCommissionNote: '', settingsRevision: -1 });
   assert.equal(unusable.defaultCommissionRate, 4);
   assert.equal(unusable.maxStoresPerSeller, 3);
@@ -267,7 +267,7 @@ test('GET answers the settings in the wire shape, with no store header and no _i
     assert.equal(response.headers.get('cache-control'), 'no-store');
     const body = (await response.json()) as any;
     assert.deepEqual(body, {
-      settings: { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, settingsRevision: 2, updatedAt: T1.toISOString() },
+      settings: { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, referralRewardMonths: 1, referralMonthlyCap: 5, settingsRevision: 2, updatedAt: T1.toISOString() },
     });
     assert.deepEqual(calls.finds, [{ globalType: 'platformSettings' }]);
   } finally {
@@ -328,6 +328,8 @@ test('PATCH changes the default rate, audits before and after with the reason, a
       trialDays: 0,
       supportEmail: '',
       supportPhone: '',
+      referralRewardMonths: 1,
+      referralMonthlyCap: 5,
     });
     assert.equal(calls.reverts.length, 0);
   } finally {
@@ -637,6 +639,33 @@ test('Sprint 6: a COD percent change that cannot be audited is put back, as for 
     assert.equal(calls.reverts.length, 1);
     assert.deepEqual(calls.reverts[0].filter, { _id: SETTINGS_ID, settingsRevision: 3 });
     assert.deepEqual(calls.reverts[0].update, { $set: { settingsRevision: 2 }, $unset: { codCommissionPercent: 1 } });
+  } finally {
+    restore();
+  }
+});
+
+test('S8-B5: only the owner level may write platform settings, the referral settings included', () => {
+  const matrix = (unwrapCjs(authNs) as any).ADMIN_CAPABILITY_MATRIX as Record<string, readonly string[]>;
+  for (const [level, capabilities] of Object.entries(matrix)) assert.equal(capabilities.includes('settings.write'), level === 'owner', level);
+});
+
+test('S8-B5: the referral settings are read, bounded, audited with before and after, and sent to sellers', async () => {
+  assert.deepEqual(parseSettingsUpdate({ referralRewardMonths: 0, referralMonthlyCap: 100 }), { ok: true, data: { changes: { referralRewardMonths: 0, referralMonthlyCap: 100 }, reason: null } });
+  const bad = [[{ referralRewardMonths: 13 }, 'referralRewardMonths'], [{ referralRewardMonths: -1 }, 'referralRewardMonths'], [{ referralRewardMonths: '1' }, 'referralRewardMonths'], [{ referralMonthlyCap: 101 }, 'referralMonthlyCap'], [{ referralMonthlyCap: 1.5 }, 'referralMonthlyCap']] as const;
+  for (const [body, path] of bad) {
+    const parsed = parseSettingsUpdate(body);
+    assert.equal(parsed.ok, false, JSON.stringify(body));
+    if (!parsed.ok) assert.equal(parsed.issues[0]!.path, path);
+  }
+  assert.equal(syncPayload(toSettingsRow({ ...stored, referralRewardMonths: 0 })).referralRewardMonths, 0);
+  const restore = install();
+  try {
+    const response = await route.PATCH(await send('PATCH', { referralRewardMonths: 2, reason: 'Referral launch' }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls.audits[0]!.details.changed, ['referralRewardMonths']);
+    assert.equal(calls.audits[0]!.details.before.referralRewardMonths, 1);
+    assert.equal(calls.audits[0]!.details.after.referralRewardMonths, 2);
+    assert.equal(calls.outbox[0]!.payload.referralRewardMonths, 2);
   } finally {
     restore();
   }

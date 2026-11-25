@@ -2,7 +2,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
-import { assertCan, signSession, User, Return, Referral, Store } from '@/lib/services';
+import { assertCan, signSession, User, Return, Referral, Store, PlatformSettingsModel } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 
 const SECRET = 'x'.repeat(40);
@@ -58,8 +58,9 @@ function installStubs(): () => void {
     rFindOne: ReturnModel.findOne,
     rUpdate: ReturnModel.findOneAndUpdate,
     fFind: ReferralModel.find,
-    fCount: ReferralModel.countDocuments,
+    uFind: UserModel.find,
     uFindById: UserModel.findById,
+    settings: (PlatformSettingsModel as any).findOne,
     sFindOne: StoreModel.findOne,
     sExists: StoreModel.exists,
   };
@@ -74,8 +75,9 @@ function installStubs(): () => void {
     return query([row], true);
   };
   ReferralModel.find = (filter: any) => query(referrals.filter((r) => matches(r, filter)));
-  ReferralModel.countDocuments = async (filter: any) => referrals.filter((r) => matches(r, filter)).length;
-  UserModel.findById = () => ({ select: () => ({ lean: async () => ({ store: STORE }) }) });
+  UserModel.findById = () => ({ select: () => ({ lean: async () => ({ store: STORE, referralCode: 'ABCD2345' }) }) });
+  UserModel.find = () => query([]);
+  (PlatformSettingsModel as any).findOne = () => query([], true);
   /* CO-57: the store comes from resolveOwnedStoreId (x-store-id checked against Store.owner, else the first owned store). */
   StoreModel.findOne = () => query([{ _id: STORE }], true);
   StoreModel.exists = async (filter: any) => (String(filter._id) === STORE && String(filter.owner) === USER ? { _id: STORE } : null);
@@ -86,8 +88,9 @@ function installStubs(): () => void {
     ReturnModel.findOne = originals.rFindOne;
     ReturnModel.findOneAndUpdate = originals.rUpdate;
     ReferralModel.find = originals.fFind;
-    ReferralModel.countDocuments = originals.fCount;
+    UserModel.find = originals.uFind;
     UserModel.findById = originals.uFindById;
+    (PlatformSettingsModel as any).findOne = originals.settings;
     StoreModel.findOne = originals.sFindOne;
     StoreModel.exists = originals.sExists;
   };
@@ -100,8 +103,8 @@ function seed() {
     { _id: RET_OTHER, order: '65a0000000000000000000c2', store: OTHER_STORE, reason: 'other', images: [], status: 'requested', createdAt: now, updatedAt: now },
   ];
   referrals = [
-    { _id: REF1, referrer: STORE, referred: '65a0000000000000000000d9', status: 'pending', createdAt: now, updatedAt: now },
-    { _id: '65a0000000000000000000b2', referrer: OTHER_STORE, referred: '65a0000000000000000000d8', status: 'pending', createdAt: now, updatedAt: now },
+    { _id: REF1, referrer: USER, referred: '65a0000000000000000000d9', status: 'pending', createdAt: now, updatedAt: now },
+    { _id: '65a0000000000000000000b2', referrer: '65a0000000000000000000d7', referred: '65a0000000000000000000d8', status: 'pending', createdAt: now, updatedAt: now },
   ];
 }
 
@@ -199,15 +202,16 @@ test("another store's return is answered with 404 and not changed", async () => 
   }
 });
 
-test('the referral list returns only referrals where the seller store is the referrer', async () => {
+test('the referral page returns only the referrals where the signed-in seller is the referrer', async () => {
   seed();
   const restore = installStubs();
   try {
     const response = await referralsGET(authed('GET', 'http://seller.test/api/referrals'));
     assert.equal(response.status, 200);
-    const body = (await response.json()) as { docs: Array<Record<string, unknown>>; totalDocs: number };
-    assert.equal(body.totalDocs, 1);
-    assert.equal(body.docs[0].id, REF1);
+    const body = (await response.json()) as { code: string; referrals: Array<Record<string, unknown>>; totals: { referred: number } };
+    assert.equal(body.code, 'ABCD2345');
+    assert.equal(body.totals.referred, 1);
+    assert.equal(body.referrals[0].id, REF1);
   } finally {
     restore();
   }

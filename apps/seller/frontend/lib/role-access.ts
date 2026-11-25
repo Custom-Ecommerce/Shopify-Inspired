@@ -45,7 +45,7 @@ export const MENU_CAPABILITY: Readonly<Record<string, SellerCapability | null>> 
   "/reviews": "reviews.read",
   "/abandoned-carts": "abandoned_carts.manage",
   "/discounts": "discounts.read",
-  "/referrals": "analytics.read",
+  "/referrals": "referrals.read",
   "/broadcast": "broadcast.manage",
   "/blog": "content.read",
   "/pages": "content.read",

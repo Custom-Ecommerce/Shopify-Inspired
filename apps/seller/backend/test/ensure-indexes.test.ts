@@ -368,3 +368,24 @@ test('Sprint 8 (S8-B4, CO-115): the API key model declares the unique {prefix} a
   const plain = plan.planAll([{ model: 'ApiKey', collection: 'apikeys', declared }], { apikeys: [ID, { name: 'prefix_unique', key: { prefix: 1 } }] });
   assert.ok(plain.totals.missing + plain.totals.conflicts >= 1);
 });
+
+test('Sprint 8 (S8-B5, CO-115): the referral indexes: one code per seller (unique PARTIAL on users), one referral per referred seller (unique), and the referrer list', () => {
+  const ns = (dbSchemas as any).User ? (dbSchemas as any) : (dbSchemas as any).default;
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const named = (declared: Declared) =>
+    declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  type Missing = Array<{ name: string; unique: boolean; partial: boolean }>;
+
+  const userDeclared = ns.User.schema.indexes() as Declared;
+  const freshUsers = plan.planAll([{ model: 'User', collection: 'users', declared: userDeclared }], {});
+  const userMissing = (freshUsers.models[0] as unknown as { missing: Missing }).missing;
+  assert.ok(userMissing.some((m) => m.name === 'referralCode_unique' && m.unique && m.partial), 'the code is a unique PARTIAL index');
+  assert.equal(plan.planAll([{ model: 'User', collection: 'users', declared: userDeclared }], { users: [ID, ...named(userDeclared)] }).totals.missing, 0);
+
+  const declared = ns.Referral.schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'Referral', collection: 'referrals', declared }], {});
+  const missing = (fresh.models[0] as unknown as { missing: Missing }).missing;
+  assert.ok(missing.some((m) => m.name === 'referred_1' && m.unique), 'one referral per referred seller');
+  assert.ok(missing.some((m) => m.name === 'referrer_1' && !m.unique));
+  assert.equal(plan.planAll([{ model: 'Referral', collection: 'referrals', declared }], { referrals: [ID, ...named(declared)] }).totals.missing, 0);
+});
