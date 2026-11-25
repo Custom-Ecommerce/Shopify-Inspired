@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
 import { AuditLog, NotificationOutbox, signSession, Store, StoreMember, User } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
-import { setMembershipListLoader, setMembershipLoader } from '../src/lib/data-plane';
+import { resolveStoreAccess, setMembershipListLoader, setMembershipLoader } from '../src/lib/data-plane';
 import { setPlanLoader } from '../src/lib/plan';
 import { setSessionUserLoader } from '../src/lib/session-user';
 
@@ -858,11 +858,20 @@ test('the plan check of a settings save is the OWNER plan, whoever saves, and th
 
 // ============================================================================================================ the safe default for routes not swept yet
 
-test('a member is refused 403 NOT_OWNER_YET by a route that names no capability (the settings read): an owner is unchanged', async () => {
+test('a member is refused 403 NOT_OWNER_YET by a route that names no capability (the resolver default): an owner is unchanged', async () => {
   seedMember(MANAGER, 'manager');
+  // S8-B3 gave the settings read the capability store.view, so the default is asked of the resolver itself, with no capability.
+  const ask = (userId: string) =>
+    resolveStoreAccess(
+      new NextRequest('http://seller.test/api/x', { headers: { 'x-store-id': STORE_A } }),
+      { userId, userObjectId: new mongoose.Types.ObjectId(userId), role: 'seller', actor: 'seller', tokenVersion: 0 },
+      null,
+    );
+  await assert.rejects(ask(MANAGER), (err: any) => err.status === 403 && err.errorCode === 'NOT_OWNER_YET');
+  assert.equal((await ask(OWNER)).isOwner, true);
+  await assert.rejects(ask(STRANGER), (err: any) => err.status === 403 && err.errorCode === undefined);
   const asMember = await call(settingsGET, 'GET', '/api/stores/' + STORE_A + '/settings', { token: tokens.manager });
-  assert.equal(asMember.status, 403);
-  assert.equal((await json(asMember)).code, 'NOT_OWNER_YET');
+  assert.equal(asMember.status, 200, 'a manager reads the settings through store.view');
   const asOwner = await call(settingsGET, 'GET', '/api/stores/' + STORE_A + '/settings', { token: tokens.owner });
   assert.equal(asOwner.status, 200);
   const stranger = await call(settingsGET, 'GET', '/api/stores/' + STORE_A + '/settings', { token: tokens.stranger });

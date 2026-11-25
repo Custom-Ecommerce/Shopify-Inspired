@@ -20,7 +20,8 @@ export function PlanBanner({ compact = false }: { compact?: boolean }) {
   const [usage, setUsage] = useState<PlanUsageData | null>(null);
 
   // S8-B4: the plan and billing are the owner's: no other role sees the banner or asks for the usage.
-  const showsBilling = canUse(useDashboard().activeStore.role, "billing");
+  const { activeStore } = useDashboard();
+  const showsBilling = canUse(activeStore.role, "billing");
 
   useEffect(() => {
     if (!showsBilling) return;

@@ -221,7 +221,7 @@ test('a double confirm and two confirms at once reward once', async () => {
   const first = payment(REFERRED);
   const results = await Promise.allSettled([confirm(first), confirm(first)]);
   assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
-  await assert.rejects(() => confirm(first), (err: any) => err.code === 'PAYMENT_NOT_CLAIMED');
+  await assert.rejects(() => confirm(first), (err: any) => err.errorCode === 'PAYMENT_NOT_CLAIMED');
   assert.equal(credits.length, 1);
   assert.equal(subOf(REFERRER).currentPeriodEnd.getTime(), addMonthsUtc(at(20), 1).getTime());
 });

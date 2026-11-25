@@ -43,7 +43,7 @@ test('a rate with 3 decimals, a negative rate, a rate over 100 and a rate that i
   for (const ratePercent of [17.555, 0.001, 0.005, -1, -0.01, 100.01, 101, 1000, '17', null, Number.NaN, Number.POSITIVE_INFINITY]) {
     const result = parse({ ratePercent });
     assert.equal(result.success, false, String(ratePercent));
-    if (!result.success) assert.deepEqual(failingPaths(result.error).includes('ratePercent'), true, String(ratePercent));
+    if (!result.success) assert.deepEqual(failingPaths(result).includes('ratePercent'), true, String(ratePercent));
   }
 });
 

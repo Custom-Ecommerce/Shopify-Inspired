@@ -227,7 +227,7 @@ test('the range: at most 366 days, defaults that fit, and a bad value is 400 wit
   assert.deepEqual(resolveReportRange({ from: '2024-01-01' }, now), { from: '2024-01-01', to: '2024-12-31' });
   assert.deepEqual(resolveReportRange({ from: '2026-11-01' }, now), { from: '2026-11-01', to: '2026-11-25' });
   assert.deepEqual(resolveReportRange({ from: '2024-01-01', to: '2024-12-31' }, now), { from: '2024-01-01', to: '2024-12-31' }, '366 days of a leap year');
-  assert.throws(() => resolveReportRange({ from: '2025-01-01', to: '2026-01-02' }, now), (err: any) => err.status === 400 && err.field === 'to');
+  assert.throws(() => resolveReportRange({ from: '2025-01-01', to: '2026-01-02' }, now), (err: any) => err.status === 400 && err.errorField === 'to');
   for (const [query, field] of [['?from=2026-02-30', 'from'], ['?to=yesterday', 'to'], ['?status=paid', 'status'], ['?method=bank', 'method'], ['?store=' + STORE_B, 'store'], ['?from=2026-11-30&to=2026-11-01', 'from']]) {
     const res = await download(query);
     assert.equal(res.status, 400, query);
