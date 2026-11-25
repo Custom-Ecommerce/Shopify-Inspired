@@ -7,7 +7,8 @@ import { Surface } from "@/components/shared/Surface";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { useActiveStoreId, useStoreHref } from "@/lib/dashboard-context";
+import { useActiveStoreId, useDashboard, useStoreHref } from "@/lib/dashboard-context";
+import { canFixReadiness, canUse, roleCan } from "@/lib/role-access";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
 import type { StoreReadiness } from "@markaz/contracts/store-settings";
 
@@ -44,6 +45,8 @@ export function OnboardingChecklist() {
   const storeId = useActiveStoreId();
   const href = useStoreHref();
   const storeFetch = useStoreFetch();
+  // S8-B4: the checklist is for the owner and a manager (readiness is a settings read); Go live and the owner-only steps are the owner's.
+  const role = useDashboard().activeStore.role;
   const [readiness, setReadiness] = useState<StoreReadiness | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -61,10 +64,10 @@ export function OnboardingChecklist() {
   }, [storeFetch, storeId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (roleCan(role, "settings.read")) void load();
+  }, [load, role]);
 
-  if (readiness === null || readiness.status === "active") return null;
+  if (!roleCan(role, "settings.read") || readiness === null || readiness.status === "active") return null;
 
   const items = readiness.items;
   // S7-B6: the custom domain step is optional and never blocks go-live, so it is shown but not counted in the progress.
@@ -130,7 +133,7 @@ export function OnboardingChecklist() {
               <p className={cn("text-sm", item.ok ? "text-muted-foreground line-through" : "font-medium text-foreground")}>{item.label}</p>
               {item.key === "email" && !item.ok && resend ? <p className="text-xs text-muted-foreground">{resend}</p> : null}
             </div>
-            {!item.ok ? (
+            {!item.ok && canFixReadiness(role, item.tab) ? (
               item.key === "email" ? (
                 <Button size="sm" variant="clay-soft" className="min-h-9 shrink-0" onClick={() => void resendLink()}>
                   Send link
@@ -164,13 +167,17 @@ export function OnboardingChecklist() {
         </p>
       ) : null}
 
-      <div className="mt-5">
-        <Button className="min-h-11 w-full sm:w-auto" disabled={busy || !readiness.ready || waiting} aria-busy={busy} onClick={() => void goLive()}>
-          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-          {waiting ? "Waiting for approval" : "Go live"}
-        </Button>
-        {!readiness.ready ? <p className="mt-2 text-xs text-muted-foreground">Finish every step above to go live.</p> : null}
-      </div>
+      {canUse(role, "goLive") ? (
+        <div className="mt-5">
+          <Button className="min-h-11 w-full sm:w-auto" disabled={busy || !readiness.ready || waiting} aria-busy={busy} onClick={() => void goLive()}>
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            {waiting ? "Waiting for approval" : "Go live"}
+          </Button>
+          {!readiness.ready ? <p className="mt-2 text-xs text-muted-foreground">Finish every step above to go live.</p> : null}
+        </div>
+      ) : (
+        <p className="mt-5 text-sm text-muted-foreground">The store owner puts the store live.</p>
+      )}
     </Surface>
   );
 }

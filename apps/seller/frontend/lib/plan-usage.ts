@@ -111,7 +111,7 @@ export function bannerNeedsAction(status: PlanStatus): boolean {
 // The upgrade hint: a refused add (403 PLAN_LIMIT_REACHED)
 
 export interface PlanLimitInfo {
-  limitKind: "products" | "stores" | null;
+  limitKind: "products" | "stores" | "staffSeats" | "apiKeys" | null;
   limit: number | null;
   used: number | null;
   plan: string | null;
@@ -131,7 +131,7 @@ export function planLimitFrom(body: unknown): PlanLimitInfo | null {
   const number = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
   const message = typeof r.error === "string" ? r.error : typeof r.errors?.[0]?.message === "string" ? r.errors[0].message : "You have reached your plan's limit.";
   return {
-    limitKind: d.limitKind === "products" || d.limitKind === "stores" ? d.limitKind : null,
+    limitKind: d.limitKind === "products" || d.limitKind === "stores" || d.limitKind === "staffSeats" || d.limitKind === "apiKeys" ? d.limitKind : null,
     limit: number(d.limit),
     used: number(d.used),
     plan: typeof d.plan === "string" ? d.plan : null,
@@ -155,12 +155,23 @@ export function announcePlanLimit(body: unknown): boolean {
 
 /** The title of the dialog. */
 export function upgradeTitle(info: Pick<PlanLimitInfo, "limitKind">): string {
-  return info.limitKind === "stores" ? "You have reached your store limit" : info.limitKind === "products" ? "You have reached your product limit" : "You have reached your plan limit";
+  if (info.limitKind === "stores") return "You have reached your store limit";
+  if (info.limitKind === "products") return "You have reached your product limit";
+  if (info.limitKind === "staffSeats") return "All your team seats are in use";
+  if (info.limitKind === "apiKeys") return "You have reached your API key limit";
+  return "You have reached your plan limit";
 }
 
 /** "You have 10 of 10 products on the Free plan." */
 export function upgradeSummary(info: Pick<PlanLimitInfo, "limitKind" | "limit" | "used" | "plan"> & { message?: string }): string {
   if (info.limit === null || info.used === null) return info.message ?? "";
-  const noun = info.limitKind === "stores" ? "stores" : "products";
+  const noun = info.limitKind === "stores" ? "stores" : info.limitKind === "staffSeats" ? "team seats" : info.limitKind === "apiKeys" ? "API keys" : "products";
   return "You have " + info.used + " of " + info.limit + " " + noun + (info.plan ? " on the " + info.plan + " plan" : "") + ".";
+}
+
+/** S8-B4: the line under the upgrade hint that says nothing was lost, by what hit the limit. */
+export function upgradeSafeNote(info: Pick<PlanLimitInfo, "limitKind">): string {
+  if (info.limitKind === "staffSeats") return "Your team is safe: everyone who has access keeps it.";
+  if (info.limitKind === "apiKeys") return "Your existing keys keep working. Revoking a key frees its slot.";
+  return "Your existing " + (info.limitKind === "stores" ? "stores" : "products") + " are safe: you can still edit and delete them.";
 }

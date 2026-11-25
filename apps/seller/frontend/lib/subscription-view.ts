@@ -322,7 +322,7 @@ export interface ProxyProblem {
   exceeds: string[];
 }
 
-const EXCEEDS_LABELS: Record<string, string> = { stores: "Stores", products: "Products in a store", staffSeats: "Staff seats", apiKeys: "API keys" };
+const EXCEEDS_LABELS: Record<string, string> = { stores: "Stores", products: "Products in a store", staffSeats: "Staff seats in a store", apiKeys: "API keys in a store" };
 
 /** Reads a proxy error ({ error, code, field?, details? }) into what the page shows. */
 export function readProblem(body: unknown, fallback: string): ProxyProblem {

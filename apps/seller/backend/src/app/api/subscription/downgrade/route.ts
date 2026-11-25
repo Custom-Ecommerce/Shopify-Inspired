@@ -22,8 +22,8 @@ export const dynamic = 'force-dynamic';
  *   400 the body   401 no session   403 an admin session   404 PLAN_NOT_FOUND
  *   409 NOTHING_TO_CHANGE   there is no paid plan in force    409 SUBSCRIPTION_CHANGED   it moved meanwhile
  *   422 NOT_A_DOWNGRADE   the plan is not cheaper
- *   422 DOWNGRADE_EXCEEDS_LIMITS { exceeds: [{ limit, allowed, used }] }   the use does not fit the cheaper plan: stores, products (the busiest
- *       store), staff seats, API keys. The seller's own store-limit override wins over the plan's store limit.
+ *   422 DOWNGRADE_EXCEEDS_LIMITS { exceeds: [{ limit, allowed, used }] }   the use does not fit the cheaper plan: stores; products, staff seats and
+ *       API keys of the store that uses the most of each. The seller's own store-limit override wins over the plan's store limit.
  *   429 RATE_LIMITED   20 per hour per seller
  */
 export async function POST(request: NextRequest): Promise<Response> {

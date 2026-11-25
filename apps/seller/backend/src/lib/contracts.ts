@@ -203,6 +203,9 @@ export const {
   isValidTaxRate,
 } = contracts;
 
+// Sprint 8 (S8-B4, D-118): API keys.
+export const { API_KEY_SCOPES, API_KEY_ERROR_CODES, apiKeyCreateRequestSchema, apiKeySchema, apiKeyListResponseSchema, apiKeyCreateResponseSchema, apiKeyResponseSchema } = contracts;
+
 // Sprint 8 (S8-B2, D-118): a store's team.
 export const {
   TEAM_ROLES,

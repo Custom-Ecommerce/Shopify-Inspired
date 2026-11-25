@@ -29,6 +29,7 @@ import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { AlertBell } from "@/components/dashboard/AlertBell";
 import { VerifyEmailBanner } from "@/components/dashboard/VerifyEmailBanner";
 import { UpgradeDialogHost } from "@/components/dashboard/UpgradeDialog";
+import { canUse } from "@/lib/role-access";
 import { storeHref } from "@/lib/store-routes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
@@ -121,7 +122,7 @@ export default async function StoreDashboardLayout({
               {user.emailVerified === false ? <VerifyEmailBanner email={user.email} /> : null}
               <DashboardDataProvider key={activeStore.id}>{children}</DashboardDataProvider>
               {/* Sprint 6 EP-14: opens when any add is refused with PLAN_LIMIT_REACHED (product form, duplicate, restore). */}
-              <UpgradeDialogHost billingHref={storeHref(activeStore.id, "/billing")} />
+              <UpgradeDialogHost billingHref={canUse(activeStore.role, "billing") ? storeHref(activeStore.id, "/billing") : null} />
             </div>
           </SidebarInset>
         </SidebarProvider>

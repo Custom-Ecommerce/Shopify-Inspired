@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, Sparkles } from "lucide-react";
+import { useDashboard } from "@/lib/dashboard-context";
 import { useStoreFetch } from "@/lib/hooks/use-store-fetch";
+import { canUse } from "@/lib/role-access";
 import { bannerNeedsAction, bannerText, readPlanUsage, usageBars, type BarTone, type PlanUsageData } from "@/lib/plan-usage";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +19,11 @@ export function PlanBanner({ compact = false }: { compact?: boolean }) {
   const storeFetch = useStoreFetch();
   const [usage, setUsage] = useState<PlanUsageData | null>(null);
 
+  // S8-B4: the plan and billing are the owner's: no other role sees the banner or asks for the usage.
+  const showsBilling = canUse(useDashboard().activeStore.role, "billing");
+
   useEffect(() => {
+    if (!showsBilling) return;
     let cancelled = false;
     storeFetch("/api/dashboard/plan-usage")
       .then((res) => (res.ok ? res.json() : null))
@@ -28,9 +34,9 @@ export function PlanBanner({ compact = false }: { compact?: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [storeFetch]);
+  }, [storeFetch, showsBilling]);
 
-  if (usage === null) return null;
+  if (!showsBilling || usage === null) return null;
   const text = bannerText(usage);
   const attention = bannerNeedsAction(usage.status);
   const bars = usageBars(usage);

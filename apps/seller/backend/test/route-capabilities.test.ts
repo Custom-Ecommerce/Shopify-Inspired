@@ -158,6 +158,8 @@ test('the owner-only routes: earnings, commission, domain, go-live, billing and 
     'stores/[id]/domain/verify',
     'stores/[id]/go-live',
     'stores/[id]/plan-usage',
+    'stores/[id]/api-keys',
+    'stores/[id]/api-keys/[keyId]/revoke',
     'stores/[id]/team',
     'stores/[id]/team/invite',
     'stores/[id]/team/[memberId]',

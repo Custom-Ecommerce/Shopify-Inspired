@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
 import { internalRequestHeaders } from '@markaz/platform-kit/internal-signature';
-import { AuditLog, PlatformSettingsModel, Product, Store, Subscription, SubscriptionPayment, SubscriptionPlanModel, User, signSession } from '@/lib/services';
+import { ApiKey, AuditLog, PlatformSettingsModel, Product, Store, StoreMember, Subscription, SubscriptionPayment, SubscriptionPlanModel, User, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { useMemoryAuthLimits } from '@/lib/account-support';
 import { setSessionUserLoader } from '@/lib/session-user';
@@ -47,6 +47,8 @@ const PlanModel = SubscriptionPlanModel as any;
 const UserModel = User as any;
 const StoreModel = Store as any;
 const ProductModel = Product as any;
+const MemberModel = StoreMember as any;
+const ApiKeyModel = ApiKey as any;
 const SettingsModel = PlatformSettingsModel as any;
 const AuditModel = AuditLog as any;
 
@@ -56,6 +58,9 @@ let plans: Row[];
 let users: Record<string, Row>;
 let storeRows: Array<{ _id: string; owner: string }>;
 let productCounts: Record<string, number>;
+/** Seats held and live keys, by store id (S8-B4). */
+let seatCounts: Record<string, number>;
+let keyCounts: Record<string, number>;
 let settingsDoc: Row | null;
 let audits: Row[];
 let seq = 0;
@@ -164,6 +169,8 @@ beforeEach(() => {
   users = { [A]: { _id: A, name: 'Ayesha Khan', email: 'ayesha@example.com' }, [B]: { _id: B, name: 'Bilal Raza', email: 'bilal@example.com' } };
   storeRows = [{ _id: STORE_A, owner: A }];
   productCounts = { [STORE_A]: 4, [STORE_A2]: 2 };
+  seatCounts = {};
+  keyCounts = {};
   settingsDoc = { paymentInstructions: 'Pay to Markazify, IBAN PK00 TEST 0000 0000.', graceDays: 7, trialDays: 0, supportEmail: 'billing@markazify.test', supportPhone: '+92 300 0000000' };
   audits = [];
   failSubscriptionUpdate = false;
@@ -187,6 +194,8 @@ beforeEach(() => {
     user: { findById: UserModel.findById, find: UserModel.find },
     store: { find: StoreModel.find, findOne: StoreModel.findOne },
     productAggregate: ProductModel.aggregate,
+    memberAggregate: MemberModel.aggregate,
+    keyAggregate: ApiKeyModel.aggregate,
     settings: SettingsModel.findOne,
     audit: AuditModel.create,
   };
@@ -243,6 +252,10 @@ beforeEach(() => {
   UserModel.find = (filter: Row) => chain(() => filter._id.$in.map((id: string) => users[id]).filter(Boolean));
   StoreModel.find = (filter: Row) => chain(() => storeRows.filter((row) => row.owner === String(filter.owner)));
   StoreModel.findOne = (filter: Row) => chain(() => storeRows.find((row) => row.owner === String(filter.owner)) ?? null);
+  const groupedFrom = (counts: () => Record<string, number>) => async (pipeline: any[]) =>
+    pipeline[0].$match.store.$in.map(String).flatMap((id: string) => (counts()[id] ? [{ _id: id, n: counts()[id] }] : []));
+  MemberModel.aggregate = groupedFrom(() => seatCounts);
+  ApiKeyModel.aggregate = groupedFrom(() => keyCounts);
   ProductModel.aggregate = async (pipeline: any[]) => {
     const ids: string[] = pipeline[0].$match.store.$in.map(String);
     return ids.map((id) => ({ _id: id, n: productCounts[id] ?? 0 })).filter((row) => row.n > 0);
@@ -264,6 +277,8 @@ beforeEach(() => {
     StoreModel.find = saved.store.find;
     StoreModel.findOne = saved.store.findOne;
     ProductModel.aggregate = saved.productAggregate;
+    MemberModel.aggregate = saved.memberAggregate;
+    ApiKeyModel.aggregate = saved.keyAggregate;
     SettingsModel.findOne = saved.settings;
     AuditModel.create = saved.audit;
     setPlanLoader(null);
@@ -593,6 +608,27 @@ test('a downgrade that does not fit is a 422 listing what exceeds, per limit', a
   assert.match(body.errors[0].message, /stores: the Starter plan allows 2 and you have 3/);
   assert.equal(subs[0]!.pendingPlanKey, null);
   assert.equal(audits.length, 0);
+});
+
+test('a downgrade that would leave too many team seats or API keys in a store is refused, counting the busiest store of each (S8-B4)', async () => {
+  subs = [sub()];
+  storeRows = [{ _id: STORE_A, owner: A }, { _id: STORE_A2, owner: A }];
+  seatCounts = { [STORE_A]: 3, [STORE_A2]: 1 };
+  keyCounts = { [STORE_A2]: 2 };
+  const res = await downgradePOST(sellerReq('POST', '/api/subscription/downgrade', tokenA, { planKey: 'starter' }));
+  assert.equal(res.status, 422);
+  const body = await json(res);
+  assert.equal(body.code, 'DOWNGRADE_EXCEEDS_LIMITS');
+  assert.deepEqual(body.exceeds, [{ limit: 'staffSeats', allowed: 1, used: 3 }, { limit: 'apiKeys', allowed: 1, used: 2 }]);
+  assert.match(body.errors[0].message, /staff seats in a store: the Starter plan allows 1 and you have 3/);
+  assert.match(body.errors[0].message, /API keys in a store: the Starter plan allows 1 and you have 2/);
+  assert.equal(subs[0]!.pendingPlanKey, null);
+
+  // The limits are per store: one seat and one key in EACH store fit a plan that allows one.
+  seatCounts = { [STORE_A]: 1, [STORE_A2]: 1 };
+  keyCounts = { [STORE_A]: 1, [STORE_A2]: 1 };
+  assert.equal((await downgradePOST(sellerReq('POST', '/api/subscription/downgrade', tokenA, { planKey: 'starter' }))).status, 200);
+  assert.equal(subs[0]!.pendingPlanKey, 'starter');
 });
 
 test('Free as the target: its own limits count (1 store, 10 products in a store)', async () => {

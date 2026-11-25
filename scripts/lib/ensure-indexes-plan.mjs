@@ -13,6 +13,9 @@
 // invited, {tokenHash} for rows with a hash) and {user,status}. They are declared on the model, so the plan picks them up like every other index; a test
 // (ensure-indexes.test.ts) pins all four.
 //
+// Sprint 8 (S8-B4, D-118): the ApiKey model (apikeys) declares a unique {prefix} and {store, revokedAt}. Both are declared on the model, so the plan picks them up; a
+// test (ensure-indexes.test.ts) pins them.
+//
 // The seller backend connects with bufferCommands false, so Mongoose builds no index by itself at runtime. This plan compares the indexes every
 // model DECLARES (schema.indexes()) with the indexes a collection HAS (collection.indexes()) and says which are missing. The script then calls
 // createIndexes() for the models that miss one: it never calls syncIndexes and never drops anything, so an index nobody declares stays.

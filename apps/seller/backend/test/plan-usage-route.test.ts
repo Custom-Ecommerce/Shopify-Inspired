@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
 import { internalRequestHeaders } from '@markaz/platform-kit/internal-signature';
-import { PlatformSettingsModel, Product, Store, Subscription, SubscriptionPlanModel, User, signSession } from '@/lib/services';
+import { ApiKey, PlatformSettingsModel, Product, Store, StoreMember, Subscription, SubscriptionPlanModel, User, signSession } from '@/lib/services';
 import { SELLER_AUDIENCE } from '@/lib/accounts';
 import { setSessionUserLoader } from '@/lib/session-user';
 import { planUsageSchema, adminSellerPlansResponseSchema } from '../../../../packages/contracts/src/subscription';
@@ -35,11 +35,15 @@ const UserModel = User as any;
 const SubModel = Subscription as any;
 const PlanModel = SubscriptionPlanModel as any;
 const SettingsModel = PlatformSettingsModel as any;
+const MemberModel = StoreMember as any;
+const ApiKeyModel = ApiKey as any;
 
 let subs: Array<Record<string, any>>;
 let storeRows: Array<{ _id: string; owner: string }>;
 let productRows: Array<{ store: string; deleted?: boolean; demo?: boolean }>;
 let userRows: Record<string, Record<string, any>>;
+let memberRows: Array<{ store: string; status: string }>;
+let keyRows: Array<{ store: string; revokedAt: Date | null }>;
 let writes: number;
 let tokenA = '';
 let tokenB = '';
@@ -81,6 +85,8 @@ beforeEach(() => {
     ...Array.from({ length: 30 }, () => ({ store: STORE_B })),
   ];
   userRows = { [A]: {}, [B]: {}, [C]: {} };
+  memberRows = [];
+  keyRows = [];
   writes = 0;
   setSessionUserLoader(async (id) => ({ role: id === ADMIN ? 'admin' : 'seller', accountStatus: 'active', tokenVersion: 0, emailVerified: true, emailVerifiedAt: new Date() }) as any);
   const saved = {
@@ -99,7 +105,19 @@ beforeEach(() => {
     subCreate: SubModel.create,
     planFind: PlanModel.find,
     settings: SettingsModel.findOne,
+    memberCount: MemberModel.countDocuments,
+    memberAggregate: MemberModel.aggregate,
+    keyCount: ApiKeyModel.countDocuments,
+    keyAggregate: ApiKeyModel.aggregate,
   };
+  // The two counters of S8-B4, filtering as the database would: a seat is an invited or active member, a slot a key that is not revoked.
+  const seatsOf = (stores: string[], statuses: string[]) => memberRows.filter((m) => stores.includes(m.store) && statuses.includes(m.status));
+  const keysOf = (stores: string[], revokedAt: null) => keyRows.filter((k) => stores.includes(k.store) && k.revokedAt === revokedAt);
+  const grouped = (rows: Array<{ store: string }>) => [...new Set(rows.map((r) => r.store))].map((store) => ({ _id: store, n: rows.filter((r) => r.store === store).length }));
+  MemberModel.countDocuments = async (filter: any) => seatsOf([String(filter.store)], filter.status.$in).length;
+  MemberModel.aggregate = async (pipeline: any[]) => grouped(seatsOf(pipeline[0].$match.store.$in.map(String), pipeline[0].$match.status.$in));
+  ApiKeyModel.countDocuments = async (filter: any) => keysOf([String(filter.store)], filter.revokedAt).length;
+  ApiKeyModel.aggregate = async (pipeline: any[]) => grouped(keysOf(pipeline[0].$match.store.$in.map(String), pipeline[0].$match.revokedAt));
   (mongoose as any).connect = async () => mongoose;
   StoreModel.exists = async (filter: any) => (storeRows.some((s) => s._id === String(filter._id) && s.owner === String(filter.owner)) ? { _id: filter._id } : null);
   StoreModel.findOne = (filter: any) => chain(() => storeRows.find((s) => s._id === String(filter._id) && s.owner === String(filter.owner)) ?? null);
@@ -138,6 +156,10 @@ beforeEach(() => {
     SubModel.create = saved.subCreate;
     PlanModel.find = saved.planFind;
     SettingsModel.findOne = saved.settings;
+    MemberModel.countDocuments = saved.memberCount;
+    MemberModel.aggregate = saved.memberAggregate;
+    ApiKeyModel.countDocuments = saved.keyCount;
+    ApiKeyModel.aggregate = saved.keyAggregate;
     setPlanLoader(null);
     setSessionUserLoader(null);
     delete process.env.MODERATION_API_SECRET;
@@ -335,7 +357,41 @@ test('the signed call is only for the admin backend: unsigned, wrongly signed an
 
 test('toPlanUsage is pure: an override replaces only the store limit', () => {
   const plan = resolveEffectivePlan({ subscription: null, plans: { free: FREE }, now: NOW });
-  const usage = toPlanUsage({ plan, storeLimitOverride: 4, used: { stores: 1, products: 2 } });
+  const used = { stores: 1, products: 2, staffSeats: 0, apiKeys: 0 };
+  const usage = toPlanUsage({ plan, storeLimitOverride: 4, used });
   assert.deepEqual([usage.limits.stores, usage.limits.products, usage.storeLimitOverridden], [4, 10, true]);
-  assert.equal(toPlanUsage({ plan, storeLimitOverride: 0, used: { stores: 1, products: 2 } }).storeLimitOverridden, false, '0 is not an override');
+  assert.equal(toPlanUsage({ plan, storeLimitOverride: 0, used }).storeLimitOverridden, false, '0 is not an override');
+  assert.deepEqual(toPlanUsage({ plan, storeLimitOverride: null, used: { stores: 1, products: 2, staffSeats: 3, apiKeys: 4 } }).used, { stores: 1, products: 2, staffSeats: 3, apiKeys: 4 });
+});
+
+/** Store A: two seats (one invited, one active; a disabled one holds none) and one live key. Store A2: one seat and two live keys. */
+function teamsAndKeys(): void {
+  memberRows = [
+    { store: STORE_A, status: 'active' },
+    { store: STORE_A, status: 'invited' },
+    { store: STORE_A, status: 'disabled' },
+    { store: STORE_A2, status: 'active' },
+    { store: STORE_B, status: 'active' },
+  ];
+  keyRows = [
+    { store: STORE_A, revokedAt: null },
+    { store: STORE_A, revokedAt: NOW },
+    { store: STORE_A2, revokedAt: null },
+    { store: STORE_A2, revokedAt: null },
+  ];
+}
+
+test('staff seats and API keys are those of THIS store: invited and active members, keys not revoked (S8-B4)', async () => {
+  teamsAndKeys();
+  realResolverFor();
+  const first = ((await (await get(STORE_A, tokenA)).json()) as Usage).used;
+  assert.deepEqual([first.staffSeats, first.apiKeys], [2, 1]);
+  const second = ((await (await get(STORE_A2, tokenA)).json()) as Usage).used;
+  assert.deepEqual([second.staffSeats, second.apiKeys], [1, 2]);
+});
+
+test('the sellers page counts the store with the most of each, and never another seller\'s store (S8-B4)', async () => {
+  teamsAndKeys();
+  const plans = await buildSellerPlans([A, B, C], NOW);
+  assert.deepEqual(plans.map((p) => [p.used.staffSeats, p.used.apiKeys]), [[2, 2], [1, 0], [0, 0]]);
 });

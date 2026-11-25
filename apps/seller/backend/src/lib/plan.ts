@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import type { EffectivePlanLimits, EffectivePlanStatus } from '@markaz/contracts';
 import { PlanLimitError, type PlanLimitBody } from '@/lib/http';
 import { readPlanSettings, DEFAULT_GRACE_DAYS } from '@/lib/platform-settings';
-import { Product, Store, StoreMember, Subscription, SubscriptionPlanModel } from '@/lib/services';
+import { ApiKey, Product, Store, StoreMember, Subscription, SubscriptionPlanModel } from '@/lib/services';
 
 /**
  * Sprint 6 EP-14.US02 (D-118): the plan a seller is EFFECTIVELY on, and what is in use against its limits.
@@ -232,7 +232,7 @@ export async function ownerOfStore(storeId: string): Promise<string | null> {
 // Usage
 
 /** staffSeats (S8-B2): the members of ONE store in status invited or active (a disabled member holds no seat). */
-export type PlanLimitKind = 'products' | 'stores' | 'staffSeats';
+export type PlanLimitKind = 'products' | 'stores' | 'staffSeats' | 'apiKeys';
 
 /** The products that count against a plan: the store's own, not in trash, and not the sample (demo) product. */
 export function productCountFilter(storeId: string): Record<string, unknown> {
@@ -243,9 +243,35 @@ export async function countProducts(storeId: string): Promise<number> {
   return Product.countDocuments(productCountFilter(storeId) as never);
 }
 
+/** The members that hold a seat, and the API keys that hold a slot: the one definition, for one store or for many. */
+const HOLDS_SEAT = { status: { $in: ['invited', 'active'] } };
+const HOLDS_KEY_SLOT = { revokedAt: null };
+
 /** The seats of a store's team in use: members that are invited or active. A disabled member holds no seat. */
 export async function countStaffSeats(storeId: string): Promise<number> {
-  return StoreMember.countDocuments({ store: storeId, status: { $in: ['invited', 'active'] } } as never);
+  return StoreMember.countDocuments({ store: storeId, ...HOLDS_SEAT } as never);
+}
+
+/** S8-B4: the live (not revoked) API keys of one store. A revoked key holds no slot. */
+export async function countApiKeys(storeId: string): Promise<number> {
+  return ApiKey.countDocuments({ store: storeId, ...HOLDS_KEY_SLOT } as never);
+}
+
+type Grouped = Array<{ _id: unknown; n: number }>;
+
+const byStore = (rows: Grouped): Map<string, number> => new Map(rows.map((row) => [String(row._id), row.n]));
+
+/**
+ * countStaffSeats for many stores in one query, keyed by store id; a store with none has no entry. Pass the ids as the store rows hold them:
+ * an aggregate does not cast.
+ */
+export async function countStaffSeatsByStore(storeIds: readonly unknown[]): Promise<Map<string, number>> {
+  return byStore((await StoreMember.aggregate([{ $match: { store: { $in: storeIds }, ...HOLDS_SEAT } }, { $group: { _id: '$store', n: { $sum: 1 } } }] as never)) as Grouped);
+}
+
+/** countApiKeys for many stores in one query, as countStaffSeatsByStore. */
+export async function countApiKeysByStore(storeIds: readonly unknown[]): Promise<Map<string, number>> {
+  return byStore((await ApiKey.aggregate([{ $match: { store: { $in: storeIds }, ...HOLDS_KEY_SLOT } }, { $group: { _id: '$store', n: { $sum: 1 } } }] as never)) as Grouped);
 }
 
 /** All the stores a seller owns, whatever their status: the store limit counts them as provisionStore always has. */
@@ -267,7 +293,7 @@ export interface UpgradeCandidate {
 
 /** The words of the upgrade hint: the cheapest plan that allows more, or a plain line when there is none. */
 export function upgradeHintFor(kind: PlanLimitKind, plan: string, used: number, candidates: readonly UpgradeCandidate[]): string {
-  const noun = kind === 'products' ? 'products' : kind === 'staffSeats' ? 'staff seats' : 'stores';
+  const noun = kind === 'products' ? 'products' : kind === 'staffSeats' ? 'staff seats' : kind === 'apiKeys' ? 'API keys' : 'stores';
   const better = candidates
     .filter((candidate) => candidate.key !== plan && (candidate.limit === null || candidate.limit > used))
     .sort((a, b) => (a.priceRs ?? Number.MAX_SAFE_INTEGER) - (b.priceRs ?? Number.MAX_SAFE_INTEGER))[0];
@@ -336,10 +362,17 @@ export async function assertWithinPlan(input: AssertWithinPlanInput): Promise<vo
   const plan = await loadEffectivePlan(input.ownerId, input.now ?? new Date());
   const limit = input.kind === 'stores' && input.limitOverride !== undefined && input.limitOverride !== null ? input.limitOverride : plan.limits[input.kind];
   if (limit === null) return;
-  const used = input.kind === 'products' ? await countProducts(input.storeId ?? '') : input.kind === 'staffSeats' ? await countStaffSeats(input.storeId ?? '') : await countStores(input.ownerId);
+  const used =
+    input.kind === 'products'
+      ? await countProducts(input.storeId ?? '')
+      : input.kind === 'staffSeats'
+        ? await countStaffSeats(input.storeId ?? '')
+        : input.kind === 'apiKeys'
+          ? await countApiKeys(input.storeId ?? '')
+          : await countStores(input.ownerId);
   if (!planLimitExceeded({ kind: input.kind, limit, used, adding })) return;
   const upgradeHint = upgradeHintFor(input.kind, plan.key, used, await upgradeCandidates(input.kind));
-  const noun = input.kind === 'staffSeats' ? 'staff seats' : input.kind;
+  const noun = input.kind === 'staffSeats' ? 'staff seats' : input.kind === 'apiKeys' ? 'API keys' : input.kind;
   throw new PlanLimitError(
     { code: 'PLAN_LIMIT_REACHED', limitKind: input.kind, limit, used, plan: plan.key, upgradeHint },
     'Your ' + plan.name + ' plan allows ' + limit + ' ' + noun + ' and you have ' + used + '. ' + upgradeHint,

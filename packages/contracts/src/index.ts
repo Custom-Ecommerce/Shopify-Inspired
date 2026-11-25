@@ -65,6 +65,8 @@ export * from './theme-config';
 export * from './tax';
 // Sprint 8 (S8-B2, D-118): a store's team: staff roles, invites and the team routes.
 export * from './team';
+// Sprint 8 (S8-B4, D-118): the API keys of a store.
+export * from './api-keys';
 // Sprint 4 EP-05.US03, US04, US06: earnings, payouts and the commission report.
 export * from './payouts';
 // Sprint 4 EP-07.US04: customers and email broadcasts.

@@ -16,7 +16,8 @@ export const dynamic = 'force-dynamic';
  *
  *   200 { plan, status, subscribedPlanKey, limits, used, periodEnd, graceUntil, daysLeft, storeLimitOverridden, fallbackLimits }
  *       status: trial | active | grace | expired | cancelled | none (no subscription). Expired, cancelled past its period and none show the Free
- *       limits; limits.stores is the admin's override when there is one. used.staffSeats and used.apiKeys are 0 until Sprint 8.
+ *       limits; limits.stores is the admin's override when there is one.
+ *       used.products, used.staffSeats (invited and active members) and used.apiKeys (not revoked) are those of THIS store.
  *   401 no session   403 an admin session, or a store that is not this seller's   404 unknown store
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<Response> {

@@ -1,7 +1,15 @@
 import type { DowngradeExceeds, OwnSubscriptionResponse } from '@markaz/contracts';
 import { positiveWhole } from '@/lib/effective-limits';
 import { DowngradeExceedsError, HttpError } from '@/lib/http';
-import { FREE_PLAN_KEY, limitsOfPlan, loadEffectivePlan, productCountFilter, type PlanDoc } from '@/lib/plan';
+import {
+  FREE_PLAN_KEY,
+  countApiKeysByStore,
+  countStaffSeatsByStore,
+  limitsOfPlan,
+  loadEffectivePlan,
+  productCountFilter,
+  type PlanDoc,
+} from '@/lib/plan';
 import { Product, Store, Subscription, SubscriptionPlanModel, User } from '@/lib/services';
 import { auditBestEffort, readOwnSubscription, revisionFilter, type SubscriptionRow } from '@/lib/subscription-payments';
 
@@ -19,20 +27,27 @@ interface PlanWithPrice extends PlanDoc {
   archivedAt?: Date | string | null;
 }
 
-const LIMIT_LABELS: Record<DowngradeExceeds[number]['limit'], string> = { stores: 'stores', products: 'products in a store', staffSeats: 'staff seats', apiKeys: 'API keys' };
+const LIMIT_LABELS: Record<DowngradeExceeds[number]['limit'], string> = { stores: 'stores', products: 'products in a store', staffSeats: 'staff seats in a store', apiKeys: 'API keys in a store' };
 
-/** What the seller uses against a plan's limits: stores, the products of the busiest store (the limit is per store), staff seats and API keys (0 until Sprint 8). */
+/**
+ * What the seller uses against a plan's limits: stores, and for each per-store limit (products, staff seats, API keys) the count of the store
+ * that uses the most of it. The three may come from different stores.
+ */
 export async function usageOfSeller(sellerId: string): Promise<{ stores: number; products: number; staffSeats: number; apiKeys: number }> {
   const stores = (await Store.find({ owner: sellerId } as never).select('_id').lean()) as unknown as Array<{ _id: unknown }>;
-  let busiest = 0;
-  if (stores.length > 0) {
-    const rows = (await Product.aggregate([
-      { $match: { ...productCountFilter(''), store: { $in: stores.map((store) => store._id) } } },
-      { $group: { _id: '$store', n: { $sum: 1 } } },
-    ])) as Array<{ n: number }>;
-    busiest = Math.max(0, ...rows.map((row) => row.n));
-  }
-  return { stores: stores.length, products: busiest, staffSeats: 0, apiKeys: 0 };
+  if (stores.length === 0) return { stores: 0, products: 0, staffSeats: 0, apiKeys: 0 };
+  const ids = stores.map((store) => store._id);
+  const [products, seats, keys] = await Promise.all([
+    Product.aggregate([{ $match: { ...productCountFilter(''), store: { $in: ids } } }, { $group: { _id: '$store', n: { $sum: 1 } } }] as never) as unknown as Promise<Array<{ n: number }>>,
+    countStaffSeatsByStore(ids),
+    countApiKeysByStore(ids),
+  ]);
+  return {
+    stores: stores.length,
+    products: Math.max(0, ...products.map((row) => row.n)),
+    staffSeats: Math.max(0, ...seats.values()),
+    apiKeys: Math.max(0, ...keys.values()),
+  };
 }
 
 /** Pure: which limits of the target plan the use passes. null is unlimited. The seller's own store override wins over the plan's store limit. */

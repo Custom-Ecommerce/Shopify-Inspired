@@ -350,3 +350,21 @@ test('Sprint 8 (S8-B2, CO-115): the member model declares its three partial uniq
   const plain = plan.planAll([{ model: 'StoreMember', collection: 'storemembers', declared }], { storemembers: [ID, { name: 'store_email_invited_unique', key: { store: 1, email: 1 } }] });
   assert.ok(plain.totals.missing + plain.totals.conflicts >= 1);
 });
+
+test('Sprint 8 (S8-B4, CO-115): the API key model declares the unique {prefix} and {store, revokedAt}; a fresh database misses both, and once they exist nothing is missing', () => {
+  const model = (dbSchemas as any).ApiKey ?? (dbSchemas as any).default?.ApiKey;
+  const declared = model.schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'ApiKey', collection: 'apikeys', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['ApiKey']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string; unique: boolean }> }).missing;
+  assert.equal(missing.length, 2);
+  assert.ok(missing.some((m) => m.name === 'prefix_unique' && m.unique), 'the unique prefix is planned');
+  assert.ok(missing.some((m) => m.name === 'store_revokedAt' && !m.unique));
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  assert.equal(plan.planAll([{ model: 'ApiKey', collection: 'apikeys', declared }], { apikeys: [ID, ...have] }).totals.missing, 0);
+  // A plain index on prefix is not the unique one.
+  const plain = plan.planAll([{ model: 'ApiKey', collection: 'apikeys', declared }], { apikeys: [ID, { name: 'prefix_unique', key: { prefix: 1 } }] });
+  assert.ok(plain.totals.missing + plain.totals.conflicts >= 1);
+});

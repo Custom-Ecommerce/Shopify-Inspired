@@ -51,6 +51,8 @@ import {
   ShoppingBasket,
   MessageSquare,
   LifeBuoy,
+  KeyRound,
+  UsersRound,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -109,6 +111,9 @@ export const NAV_GROUPS = [
     links: [
       { href: "/store", label: "Store Settings", icon: Settings },
       { href: "/domain", label: "Domain", icon: Globe },
+      // Sprint 8 (S8-B4): the store's staff and its API keys. Owner only (the menu hides them from every other role).
+      { href: "/team", label: "Team", icon: UsersRound },
+      { href: "/api-keys", label: "API keys", icon: KeyRound },
       // Sprint 4 EP-08.US04.T02: the seller's own account (profile, password, email, devices).
       { href: "/account", label: "Account", icon: UserCog },
       // Sprint 7 (S7-B4): the seller's tickets to the Markazify team.

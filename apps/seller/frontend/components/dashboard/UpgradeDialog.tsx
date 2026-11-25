@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PLAN_LIMIT_EVENT, upgradeSummary, upgradeTitle, type PlanLimitInfo } from "@/lib/plan-usage";
+import { PLAN_LIMIT_EVENT, upgradeSafeNote, upgradeSummary, upgradeTitle, type PlanLimitInfo } from "@/lib/plan-usage";
 
 /**
  * Sprint 6 EP-14.US02 (D-118): the upgrade hint, opened when a request answers 403 PLAN_LIMIT_REACHED. Plain text only: the hint comes from the
@@ -23,7 +23,7 @@ export function UpgradeDialog({ info, onClose, billingHref }: { info: PlanLimitI
             <p className="text-sm" data-slot="upgrade-hint">
               {info.upgradeHint}
             </p>
-            <p className="text-xs text-muted-foreground">Your existing {info.limitKind === "stores" ? "stores" : "products"} are safe: you can still edit and delete them.</p>
+            <p className="text-xs text-muted-foreground">{upgradeSafeNote(info)}</p>
             <DialogFooter className="gap-2 sm:gap-2">
               <Button variant="outline" className="min-h-11" onClick={onClose}>
                 Not now
@@ -42,7 +42,7 @@ export function UpgradeDialog({ info, onClose, billingHref }: { info: PlanLimitI
 }
 
 /** Mounted once in the store dashboard layout: listens for a refused add anywhere (product form, duplicate, restore) and opens the dialog. */
-export function UpgradeDialogHost({ billingHref }: { billingHref: string }) {
+export function UpgradeDialogHost({ billingHref }: { billingHref: string | null }) {
   const [info, setInfo] = useState<PlanLimitInfo | null>(null);
   useEffect(() => {
     const listener = (event: Event) => setInfo((event as CustomEvent<PlanLimitInfo>).detail);

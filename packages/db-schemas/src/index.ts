@@ -60,3 +60,5 @@ export * from './models/abandoned-cart';
 export * from './models/store-sync-revision';
 // Sprint 8 (S8-B2, D-118): the people invited to a store's team.
 export * from './models/store-member';
+// Sprint 8 (S8-B4, D-118): the API keys of a store (read-only v1 API). Only the hash of a secret is stored.
+export * from './models/api-key';

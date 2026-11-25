@@ -5,6 +5,7 @@ import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist"
 import { PlanBanner } from "@/components/dashboard/PlanBanner";
 import { resolveStorePage } from "@/lib/resolve-store-page";
 import { storeHref } from "@/lib/store-routes";
+import { canUse } from "@/lib/role-access";
 
 import { MetricTile } from "@/components/dashboard/shared/MetricTile";
 import { SectionCard } from "@/components/dashboard/shared/SectionCard";
@@ -255,6 +256,8 @@ export default async function DashboardOverviewPage({
         data not currently fetched. These are advisory labels (blueprint §5.3 note).
       */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
+        {/* S8-B4: money summaries are the owner's (earnings); the other roles do not see the tile. */}
+        {canUse(store.role, "earnings") ? (
         <MetricTile
           label={`Revenue · ${monthName}`}
           value={revenue > 0 ? `PKR ${revenue.toLocaleString()}` : "—"}
@@ -263,6 +266,7 @@ export default async function DashboardOverviewPage({
           delta={{ value: "8%", label: "vs last month", direction: "up" }}
           href={storeHref(storeId, "/earnings")}
         />
+        ) : null}
         <MetricTile
           label="Orders Today"
           value={ordersToday}

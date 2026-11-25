@@ -76,6 +76,8 @@ export const SyncOutbox = db.SyncOutbox;
 export const SellerAlert = db.SellerAlert;
 // Sprint 8 (S8-B2, D-118): the team of a store (staff roles and invites).
 export const StoreMember = db.StoreMember;
+// Sprint 8 (S8-B4, D-118): the API keys of a store.
+export const ApiKey = db.ApiKey;
 // Sprint 4 EP-05 (D-088): the new commission ledger. The old commissionLedger is never used from the seller backend.
 export const CommissionEntry = db.CommissionEntry;
 // Sprint 4 EP-05.US03 (D-090): payouts to stores, settled against the ledger above.

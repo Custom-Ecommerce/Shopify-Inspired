@@ -33,6 +33,8 @@ const MENU_CAPABILITY: Record<string, string> = {
   "/billing": "billing.manage",
   "/store": "settings.read",
   "/domain": "settings.domain",
+  "/team": "team.manage",
+  "/api-keys": "api_keys.manage",
 };
 
 const ROLES: StoreRole[] = ["owner", "manager", "staff", "support"];
@@ -54,10 +56,10 @@ test("the account pages are for everyone, and every link of the sidebar has a ro
   for (const href of Object.keys(MENU_ROLES)) assert.ok(hrefs.includes(href), href + " is a link of the sidebar");
 });
 
-test("the owner sees every item; a manager every item but earnings, billing and domain; staff the order, catalog and stock items; support the customer care items", () => {
+test("the owner sees every item; a manager every item but the owner-only ones (earnings, billing, domain, team, API keys); staff the order, catalog and stock items; support the customer care items", () => {
   const all = Object.keys(MENU_ROLES);
   assert.deepEqual(all.filter((href) => roleSeesMenu("owner", href)), all);
-  assert.deepEqual(all.filter((href) => !roleSeesMenu("manager", href)).sort(), ["/billing", "/domain", "/earnings"]);
+  assert.deepEqual(all.filter((href) => !roleSeesMenu("manager", href)).sort(), ["/api-keys", "/billing", "/domain", "/earnings", "/team"]);
   assert.deepEqual(all.filter((href) => roleSeesMenu("staff", href)).sort(), ["/", "/account", "/categories", "/inventory", "/media", "/orders", "/products", "/support"]);
   assert.deepEqual(all.filter((href) => roleSeesMenu("support", href)).sort(), ["/", "/account", "/customers", "/inbox", "/orders", "/returns", "/reviews", "/support"]);
 });
@@ -69,7 +71,9 @@ test("a store without a role (an older backend) is the owner's; an unknown role,
   assert.equal(menuRole("admin"), null);
   assert.equal(roleSeesMenu("admin", "/orders"), false);
   assert.equal(roleSeesMenu("", "/account"), false);
-  assert.equal(roleSeesMenu("owner", "/team"), false, "no Team page in this batch");
+  assert.equal(roleSeesMenu("owner", "/team"), true, "the Team page (S8-B4)");
+  assert.equal(roleSeesMenu("manager", "/team"), false);
+  assert.equal(roleSeesMenu("manager", "/api-keys"), false);
   assert.equal(roleSeesMenu("owner", "/nope"), false);
 });
 
