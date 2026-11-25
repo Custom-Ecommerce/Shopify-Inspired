@@ -163,6 +163,7 @@ const SAMPLE: Array<{ name: string; rel: string; method: 'GET' | 'POST'; url: st
   { name: 'referral rewards export', rel: 'referrals/export', method: 'GET', url: '/api/admin/referrals/export', allowed: ['owner', 'finance'] },
   { name: 'commission rates', rel: 'commission/rates', method: 'GET', url: '/api/admin/commission/rates', allowed: ['owner', 'finance'] },
   { name: 'overview', rel: 'overview', method: 'GET', url: '/api/admin/overview', allowed: ['owner', 'finance', 'operations'] },
+  { name: 'overview traffic', rel: 'overview/traffic', method: 'GET', url: '/api/admin/overview/traffic', allowed: ['owner', 'finance', 'operations'] },
 ];
 
 test('LEVELS: every level against a sample of routes: 403 where the level lacks the capability, and past the gate (not 401/403) where it has it', async () => {

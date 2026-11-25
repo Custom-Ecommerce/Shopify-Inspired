@@ -24,6 +24,7 @@ import type { AdminOrderList, AdminOrderDetail } from '../../../../../packages/c
 import type { AdminKpi } from '../../../../../packages/contracts/src/admin-overview';
 import type { RetentionRunResponse } from '../../../../../packages/contracts/src/admin-retries';
 import type { AdminReferralExport, AdminReferralList } from '../../../../../packages/contracts/src/admin-referrals';
+import type { AdminTraffic } from '../../../../../packages/contracts/src/admin-traffic';
 
 const { INTERNAL_SECRET_MIN_LENGTH, internalRequestHeaders } = unwrapCjs(signatureNs) as typeof signatureNs;
 
@@ -239,3 +240,6 @@ export const readPlatformContact = (adminId: string, id: string): Promise<Record
 export const listReferrals = (adminId: string, input: Record<string, unknown>): Promise<AdminReferralList> => send('POST', '/api/internal/referrals', adminId, input, 'Referrals');
 
 export const exportReferralRewards = (adminId: string, input: Record<string, unknown>): Promise<AdminReferralExport> => send('POST', '/api/internal/referrals/export', adminId, input, 'Referrals');
+
+// Sprint 8 (S8-B7): the platform's visits and orders per day, sums only.
+export const readTraffic = (adminId: string): Promise<AdminTraffic> => send('POST', '/api/internal/traffic', adminId, {}, 'Traffic');

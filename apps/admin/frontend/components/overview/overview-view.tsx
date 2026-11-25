@@ -12,6 +12,7 @@ import { getOverview } from "@/lib/api/client";
 import type { AdminOverview } from "@/lib/contracts";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { useAdminFetch } from "@/lib/hooks/use-admin-fetch";
+import { TrafficCard } from "@/components/overview/traffic-card";
 import { KPI_PERIODS, kpiTiles, planRows, topStoreRows, outboxRows, overviewTiles, storeRows, updatedLabel, type KpiPeriodKey, type OverviewRow, type OverviewTile } from "@/lib/overview";
 
 function TileCard({ tile }: { tile: OverviewTile }) {
@@ -174,6 +175,8 @@ function OverviewBody({ overview }: { overview: AdminOverview }) {
           }
         />
       </div>
+      {/* S8-B7: visits and orders per day, a read of its own. */}
+      <TrafficCard />
     </>
   );
 }

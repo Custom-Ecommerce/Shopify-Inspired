@@ -408,3 +408,6 @@ export const { adminReferralListQuerySchema, adminReferralExportQuerySchema, ADM
 
 // Sprint 8 (S8-B6): the anonymous storefront counters.
 export const { storefrontEventRequestSchema, STAT_RETENTION_DAYS, PRODUCT_STAT_SLUGS_PER_DAY } = contracts;
+
+// Sprint 8 (S8-B7): the sales report and the platform traffic.
+export const { salesReportQuerySchema, SALES_REPORT_COLUMNS, SALES_REPORT_MAX_DAYS, SALES_REPORT_ROW_CAP, ADMIN_TRAFFIC_DAYS } = contracts;

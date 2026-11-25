@@ -105,3 +105,7 @@ export * from './admin-referrals';
 
 // Sprint 8 (S8-B6): the anonymous storefront counters.
 export * from './storefront-events';
+
+// Sprint 8 (S8-B7): the sales report and the admin's platform traffic.
+export * from './sales-report';
+export * from './admin-traffic';

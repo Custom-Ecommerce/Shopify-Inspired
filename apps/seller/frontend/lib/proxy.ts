@@ -22,6 +22,9 @@ import type { DashboardUser } from "@/lib/types/dashboard";
 
 export const PAYLOAD_API_URL = (process.env.SELLER_BACKEND_API_URL || "http://localhost:4001").replace(/\/$/, "");
 
+/** Response headers of a file download the browser may read. */
+export const DOWNLOAD_HEADERS = ["x-report-rows", "x-report-row-cap", "x-report-truncated", "x-customers-row-cap", "x-customers-truncated"] as const;
+
 export interface ProxyAuthResult {
   token?: string;
   user?: DashboardUser | null;
@@ -419,6 +422,11 @@ export async function proxyToBackend(req: NextRequest, options: ProxyOptions): P
     if (resContentType) forwardHeaders["content-type"] = resContentType;
     const contentDisposition = res.headers.get("content-disposition");
     if (contentDisposition) forwardHeaders["content-disposition"] = contentDisposition;
+    // S8-B7: what a download says about itself (row count, "this file was cut"). Only these names are passed on.
+    for (const name of DOWNLOAD_HEADERS) {
+      const value = res.headers.get(name);
+      if (value !== null) forwardHeaders[name] = value;
+    }
     return new NextResponse(blob, { status: res.status, headers: forwardHeaders });
   } catch (err) {
     console.error(`${logScope} [${requestId}] Unreadable upstream response from ${url.pathname}:`, err);

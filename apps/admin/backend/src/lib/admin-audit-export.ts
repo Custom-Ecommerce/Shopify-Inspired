@@ -1,4 +1,6 @@
+import * as csvNs from '@markaz/platform-kit/csv';
 import { AdminHttpError } from '@/lib/admin-auth';
+import { unwrapCjs } from '@/lib/cjs';
 import { loadPeople } from '@/lib/admin-people';
 import { buildAuditFilter, parseAuditQuery, toAuditListEntry } from '@/lib/admin-audit';
 import { CSV_BOM } from '@/lib/commission-report-csv';
@@ -20,15 +22,8 @@ export const auditExportSteps = {
   audit: writeAuditLog as unknown as (action: string, entity: string, entityId: string, actorId: string, details: Record<string, unknown>) => Promise<unknown>,
 };
 
-const FORMULA_START = /^[=+\-@\t\r]/;
-const E164 = /^\+[0-9]{7,15}$/;
-
-export function auditCsvCell(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '""';
-  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '""';
-  const guarded = FORMULA_START.test(value) && !E164.test(value) ? "'" + value : value;
-  return '"' + guarded.replace(/"/g, '""') + '"';
-}
+/** The cell guard, shared with the seller's sales report since S8-B7 (@markaz/platform-kit/csv). */
+export const auditCsvCell = (unwrapCjs(csvNs) as typeof csvNs).csvCell;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 

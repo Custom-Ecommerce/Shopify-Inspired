@@ -409,7 +409,7 @@ test('Sprint 8 (S8-B6, CO-115): the counter models, the referral reward slot and
     }
     assert.equal(plan.planAll([{ model, collection, declared }], { [collection]: [ID, ...named(declared)] }).totals.missing, 0);
   };
-  check('DailyStat', 'dailystats', [['store_day_unique', { unique: true }], ['expires_ttl', { ttl: true }]]);
+  check('DailyStat', 'dailystats', [['store_day_unique', { unique: true }], ['expires_ttl', { ttl: true }], ['day', { unique: false }]]);
   check('ProductDailyStat', 'productdailystats', [['store_slug_day_unique', { unique: true }], ['expires_ttl', { ttl: true }], ['store_day', { unique: false }]]);
   check('Referral', 'referrals', [['referrer_month_slot_unique', { unique: true, partial: true }], ['status_createdAt', { unique: false }]]);
   check('SubscriptionCredit', 'subscriptioncredits', [['referral_unique', { unique: true }], ['seller_usedAt', { unique: false }]]);

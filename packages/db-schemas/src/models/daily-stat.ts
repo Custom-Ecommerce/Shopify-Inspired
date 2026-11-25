@@ -52,6 +52,8 @@ const DailyStatSchema = new Schema<IDailyStat>(
   { collection: 'dailystats', bufferCommands: false, versionKey: false },
 );
 DailyStatSchema.index({ store: 1, day: 1 }, { unique: true, name: 'store_day_unique' });
+// S8-B7: the admin overview sums the platform's last days.
+DailyStatSchema.index({ day: 1 }, { name: 'day' });
 DailyStatSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'expires_ttl' });
 
 const ProductDailyStatSchema = new Schema<IProductDailyStat>(

@@ -1,3 +1,4 @@
+import { adminTrafficSchema, type AdminTraffic } from "@markaz/contracts/admin-traffic";
 import { adminReferralListSchema, type AdminReferralList } from "@markaz/contracts/admin-referrals";
 import { referralStateToQuery, type ReferralListState } from "@/lib/referrals";
 import type { ModerationReview, ModerationReviewList } from "@markaz/contracts";
@@ -411,4 +412,9 @@ export function runRetentionNow(apply: boolean): Promise<RetentionRunResponse> {
 // Sprint 8 (S8-B6): the read-only referrals view.
 export function listReferrals(state: ReferralListState, signal?: AbortSignal): Promise<AdminReferralList> {
   return call("/api/referrals?" + referralStateToQuery(state), adminReferralListSchema as Parser<AdminReferralList>, { signal });
+}
+
+// Sprint 8 (S8-B7): the overview's visits and orders per day.
+export function getTraffic(signal?: AbortSignal): Promise<AdminTraffic> {
+  return call("/api/overview/traffic", adminTrafficSchema as Parser<AdminTraffic>, { signal });
 }

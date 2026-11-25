@@ -650,3 +650,30 @@ rules, and the settings screen says so ("Check your own tax rules; Markazify onl
 
 **Deploy:** run `ensure-indexes` (dry run, then `--apply`): without it the TTLs, the one-row-per-day indexes, the referral reward slot and the one-credit-per-referral rule
 do not exist. `users.referralCode_unique` (S8-B5) is built by the same run.
+
+## 13. Analytics and reports (Sprint 8, S8-B7, D-118)
+
+### What is counted
+- **A visit** is one `page_view` per browser session of one store (a `sessionStorage` flag; a new tab is a new visit). Product views, add to cart and started checkouts are
+  counted as they happen; **orders** are counted by the server when a new order is created.
+- These are **counters, not people**. One visitor can view many products or order twice, and an order from a browser with Do Not Track has no counted visit, so a funnel
+  step can be larger than the one before; its percentage is then shown as 100.
+- **Not counted or stored:** no IP address, no cookie, no visitor id, no personal data; nothing from a seller's preview, a demo store, or a browser that sends Do Not Track.
+- **Retention:** `dailystats` and `productdailystats` rows are removed by MongoDB 400 days after their day (TTL index).
+
+### The analytics page (owner and managers)
+- 7, 30 or 90 days (UTC days): the funnel, visits per day, top products by views and by orders, revenue, order status and cities.
+- Orders counted: every status but `cancelled`. Revenue: every status but `cancelled` and `returned`, the order total in whole rupees (`lib/analytics-rules.ts`).
+
+### The sales report (owner and managers; analytics and orders pages)
+- `GET /api/stores/:id/reports/sales?from&to&status&method`. Dates are **Pakistan days**, at most **366** (without dates: the last 366). `method`: `cod` (also an order with no
+  recorded method) or `card`.
+- Columns: Order number, Date (ISO, UTC), Status, Payment method, Subtotal, Discount, Delivery, Tax, Total, Commission. Commission is the ledger's entries for the order net of
+  reversals (0 for cash on delivery at 0%; empty when no entry exists yet). **No customer name, phone, email or address.**
+- At most **10000** rows, newest first. A cut file has the header `X-Report-Truncated: 1` and a first line saying so.
+- CSV in UTF-8 with a BOM; text cells starting `= + - @`, tab or CR are guarded. Each download is audited (`report.sales_exported`: who, role, filters, row count, truncated).
+
+### Admin overview
+- Visits and orders per day for the last 14 days, summed over every store.
+
+**Deploy:** run `ensure-indexes` (new `{day}` index on `dailystats`).

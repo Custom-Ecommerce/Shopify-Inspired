@@ -14,7 +14,10 @@
     "./api-v1": "./src/api-v1.ts",
     "./referral": "./src/referral.ts",
     "./admin-referrals": "./src/admin-referrals.ts",
-    "./storefront-events": "./src/storefront-events.ts"
+    "./storefront-events": "./src/storefront-events.ts",
+    "./sales-report": "./src/sales-report.ts",
+    "./analytics": "./src/analytics.ts",
+    "./admin-traffic": "./src/admin-traffic.ts"
   },
   "scripts": {
     "build": "tsc",

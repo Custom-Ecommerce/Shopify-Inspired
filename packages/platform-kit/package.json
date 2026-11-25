@@ -23,7 +23,8 @@
     "./client-ip": "./src/client-ip.ts",
     "./tenancy-host": "./src/tenancy-host.ts",
     "./signed-client-address": "./src/signed-client-address.ts",
-    "./socket-address": "./src/socket-address.ts"
+    "./socket-address": "./src/socket-address.ts",
+    "./csv": "./src/csv.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit",

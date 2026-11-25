@@ -102,6 +102,8 @@ export const ROUTE_CAPABILITIES: Readonly<Record<string, RouteAccess>> = Object.
   'internal/support/tickets/reply POST': 'system',
   'internal/support/tickets/status POST': 'system',
   'internal/sync/digest POST': 'system',
+  // S8-B7: the platform traffic of the admin overview.
+  'internal/traffic POST': 'system',
   'internal/sync/receive POST': 'system',
 
   // inventory
@@ -235,6 +237,8 @@ export const ROUTE_CAPABILITIES: Readonly<Record<string, RouteAccess>> = Object.
   'stores/[id]/orders/[orderId]/confirmation POST': 'orders.write',
   'stores/[id]/plan-usage GET': 'billing.manage',
   'stores/[id]/readiness GET': 'settings.read',
+  // S8-B7: the sales report CSV (owner and manager).
+  'stores/[id]/reports/sales GET': 'analytics.read',
   'stores/[id]/returns GET': 'returns.read',
   'stores/[id]/returns/[returnId] GET': 'returns.read',
   'stores/[id]/returns/[returnId]/approve POST': 'returns.write',

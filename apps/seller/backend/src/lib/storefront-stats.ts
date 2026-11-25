@@ -82,11 +82,12 @@ export function countOrder(storeId: string, now: Date = new Date()): void {
 }
 
 /** Views per product slug over UTC days from..to (both included), most viewed first. Only this store's rows. */
-export async function productViewsFor(storeId: string, range: { from: string; to: string }): Promise<ProductViews[]> {
+export async function productViewsFor(storeId: string, range: { from: string; to: string }, limit?: number): Promise<ProductViews[]> {
   const rows = (await ProductDailyStat.aggregate([
     { $match: { store: new mongoose.Types.ObjectId(storeId), day: { $gte: range.from, $lte: range.to } } },
     { $group: { _id: '$productSlug', views: { $sum: '$views' } } },
     { $sort: { views: -1, _id: 1 } },
+    ...(limit === undefined ? [] : [{ $limit: limit }]),
   ] as never)) as unknown as Array<{ _id: unknown; views: number }>;
   return rows.map((row) => ({ productSlug: String(row._id), views: row.views }));
 }
