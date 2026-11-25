@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -81,4 +83,10 @@ test("a plan limit refusal carries the upgrade hint; a field refusal carries the
   assert.deepEqual(limit, { message: "Your plan allows 1 team seat.", field: null, upgradeHint: "Upgrade to Pro." });
   assert.deepEqual(refusalFrom({ error: "That is your own address.", code: "OWNER_EMAIL", field: "email" }), { message: "That is your own address.", field: "email", upgradeHint: null });
   assert.deepEqual(refusalFrom(null, "Nope."), { message: "Nope.", field: null, upgradeHint: null });
+});
+
+test("SB-F1: the team page does not print the upgrade hint after a refusal that already says what to do", () => {
+  const page = readFileSync(join(process.cwd(), "app", "(dashboard)", "s", "[storeId]", "team", "page.tsx"), "utf8");
+  assert.doesNotMatch(page, /\{notice\.upgradeHint\}\{" "\}/);
+  assert.doesNotMatch(page, /\{dialogRefusal\.upgradeHint\}/);
 });

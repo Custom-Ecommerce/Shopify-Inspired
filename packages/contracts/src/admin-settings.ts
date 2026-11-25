@@ -13,7 +13,7 @@ export const ADMIN_SETTINGS_RATE_MAX = 100;
 export const ADMIN_SETTINGS_MAX_STORES_MIN = 1;
 export const ADMIN_SETTINGS_MAX_STORES_MAX = 1000;
 export const ADMIN_SETTINGS_NOTE_MAX = 500;
-export const ADMIN_SETTINGS_REASON_MAX = 500;
+export const ADMIN_SETTINGS_REASON_MAX = 300;
 /** Sprint 6 (D-118): the plan settings' limits. */
 export const ADMIN_SETTINGS_PAYMENT_INSTRUCTIONS_MAX = 1000;
 export const ADMIN_SETTINGS_GRACE_DAYS_MIN = 0;
@@ -116,7 +116,7 @@ const supportPhoneSchema = z
   .nullable();
 
 const reasonSchema = z
-  .string()
+  .string({ error: 'Enter a reason.' })
   .trim()
   .min(1, 'Enter a reason.')
   .max(ADMIN_SETTINGS_REASON_MAX, 'The reason can be at most ' + ADMIN_SETTINGS_REASON_MAX + ' characters.');
@@ -147,7 +147,7 @@ export const adminPlatformSettingsSchema = z.object({
 export const adminSettingsResponseSchema = z.object({ settings: adminPlatformSettingsSchema });
 
 /**
- * Update. Only the settings sent change, and at least one must be sent. The reason is optional and is kept in the
+ * Update. Only the settings sent change, and at least one must be sent. The reason is required (SB-F1) and is kept in the
  * audit entry only; it is not a setting.
  */
 export const adminSettingsUpdateRequestSchema = z
@@ -164,7 +164,7 @@ export const adminSettingsUpdateRequestSchema = z
     supportPhone: supportPhoneSchema.optional(),
     referralRewardMonths: referralMonthsSchema.optional(),
     referralMonthlyCap: referralCapSchema.optional(),
-    reason: reasonSchema.optional(),
+    reason: reasonSchema,
   })
   .strict()
   .refine((value) => ADMIN_SETTINGS_FIELDS.some((field) => value[field] !== undefined), { message: 'Change at least one setting.' });

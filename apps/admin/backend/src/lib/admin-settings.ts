@@ -12,7 +12,9 @@ export const SETTINGS_RATE_MAX = 100;
 export const SETTINGS_MAX_STORES_MIN = 1;
 export const SETTINGS_MAX_STORES_MAX = 1000;
 export const SETTINGS_NOTE_MAX = 500;
-export const SETTINGS_REASON_MAX = 500;
+export const SETTINGS_REASON_MAX = 300;
+/** SB-F1: what a change without a usable reason is told (400). */
+export const SETTINGS_REASON_REQUIRED = 'Enter a reason for the change (1 to ' + SETTINGS_REASON_MAX + ' characters).';
 /** Sprint 6 (D-118): the plan settings' limits; the same as ADMIN_SETTINGS_* in @markaz/contracts. */
 export const SETTINGS_PAYMENT_INSTRUCTIONS_MAX = 1000;
 export const SETTINGS_GRACE_DAYS_MIN = 0;

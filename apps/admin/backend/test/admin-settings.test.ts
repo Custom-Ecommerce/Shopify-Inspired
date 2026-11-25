@@ -279,7 +279,7 @@ test('GET and PATCH are 404 when the platform has no settings document, and noth
   const restore = install({ found: null });
   try {
     assert.equal((await route.GET(await send('GET'))).status, 404);
-    assert.equal((await route.PATCH(await send('PATCH', { defaultCommissionRate: 5 }))).status, 404);
+    assert.equal((await route.PATCH(await send('PATCH', { defaultCommissionRate: 5, reason: 'Q4' }))).status, 404);
     assert.equal(calls.updates.length + calls.audits.length + calls.outbox.length, 0);
   } finally {
     restore();
@@ -340,14 +340,14 @@ test('PATCH changes the default rate, audits before and after with the reason, a
 test('PATCH of the note alone is audited and moves the revision, but sends nothing to the seller', async () => {
   const restore = install();
   try {
-    const response = await route.PATCH(await send('PATCH', { stripeCommissionNote: '   ' }));
+    const response = await route.PATCH(await send('PATCH', { stripeCommissionNote: '   ', reason: 'Housekeeping' }));
     assert.equal(response.status, 200);
     const body = (await response.json()) as any;
     assert.equal(body.settings.stripeCommissionNote, null);
     assert.equal(body.queued, null);
     assert.deepEqual(calls.updates[0].update, { $inc: { settingsRevision: 1 }, $unset: { stripeCommissionNote: 1 } });
     assert.equal(calls.audits.length, 1);
-    assert.equal(calls.audits[0].details.reason, null);
+    assert.equal(calls.audits[0].details.reason, 'Housekeeping');
     assert.equal(calls.outbox.length, 0);
   } finally {
     restore();
@@ -358,7 +358,7 @@ test('PATCH of an unbumped document matches revision 0 or missing', async () => 
   const { settingsRevision: _omitted, ...unbumped } = stored;
   const restore = install({ found: unbumped });
   try {
-    const response = await route.PATCH(await send('PATCH', { maxStoresPerSeller: 5 }));
+    const response = await route.PATCH(await send('PATCH', { maxStoresPerSeller: 5, reason: 'Q4' }));
     assert.equal(response.status, 200);
     assert.deepEqual(calls.updates[0].filter, { _id: SETTINGS_ID, settingsRevision: { $in: [0, null] } });
     assert.equal(((await response.json()) as any).settings.settingsRevision, 1);
@@ -370,7 +370,7 @@ test('PATCH of an unbumped document matches revision 0 or missing', async () => 
 test('PATCH with the values already stored changes nothing: no write, no audit entry, no sync event', async () => {
   const restore = install();
   try {
-    const response = await route.PATCH(await send('PATCH', { defaultCommissionRate: 4, maxStoresPerSeller: 3 }));
+    const response = await route.PATCH(await send('PATCH', { defaultCommissionRate: 4, maxStoresPerSeller: 3, reason: 'Q4' }));
     assert.equal(response.status, 200);
     const body = (await response.json()) as any;
     assert.equal(body.queued, null);
@@ -396,10 +396,27 @@ test('PATCH: a non-JSON body is 400; a bad value, an unknown field, and an empty
   }
 });
 
+test('SB-F1: a change without a reason, with a blank one, or with more than 300 characters is a 400 that says so; nothing is read or written', async () => {
+  const restore = install();
+  try {
+    for (const reason of [undefined, '', '   ', 'x'.repeat(301), 5, null]) {
+      const response = await route.PATCH(await send('PATCH', { defaultCommissionRate: 6.5, ...(reason === undefined ? {} : { reason }) }));
+      assert.equal(response.status, 400, JSON.stringify(reason));
+      assert.deepEqual(await response.json(), { error: 'Enter a reason for the change (1 to 300 characters).', issues: [{ path: 'reason', message: 'Enter a reason for the change (1 to 300 characters).' }] });
+    }
+    assert.equal(calls.finds.length + calls.updates.length + calls.audits.length + calls.outbox.length, 0);
+    const longest = await route.PATCH(await send('PATCH', { defaultCommissionRate: 6.5, reason: '  ' + 'x'.repeat(300) + '  ' }));
+    assert.equal(longest.status, 200);
+    assert.equal(calls.audits[0].details.reason, 'x'.repeat(300), 'the trimmed reason is in the audit row');
+  } finally {
+    restore();
+  }
+});
+
 test('PATCH: if someone else changed the settings since they were read, it is 409 and nothing else is written', async () => {
   const restore = install({ updated: null });
   try {
-    const response = await route.PATCH(await send('PATCH', { defaultCommissionRate: 5 }));
+    const response = await route.PATCH(await send('PATCH', { defaultCommissionRate: 5, reason: 'Q4' }));
     assert.equal(response.status, 409);
     assert.equal(calls.audits.length + calls.outbox.length + calls.reverts.length, 0);
   } finally {
@@ -410,7 +427,7 @@ test('PATCH: if someone else changed the settings since they were read, it is 40
 test('PATCH: if the audit entry fails, the old values and revision are put back and the call fails', async () => {
   const restore = install({ auditFails: true });
   try {
-    const response = await route.PATCH(await send('PATCH', { defaultCommissionRate: 6.5, stripeCommissionNote: null }));
+    const response = await route.PATCH(await send('PATCH', { defaultCommissionRate: 6.5, stripeCommissionNote: null, reason: 'Q4' }));
     assert.equal(response.status, 500);
     assert.equal(calls.outbox.length, 0);
     assert.equal(calls.reverts.length, 1);
@@ -424,7 +441,7 @@ test('PATCH: if the audit entry fails, the old values and revision are put back 
 test('PATCH: if the sync event cannot be queued, the old values are put back and the call fails', async () => {
   const restore = install({ outboxFails: true });
   try {
-    const response = await route.PATCH(await send('PATCH', { maxStoresPerSeller: 8 }));
+    const response = await route.PATCH(await send('PATCH', { maxStoresPerSeller: 8, reason: 'Q4' }));
     assert.equal(response.status, 500);
     assert.deepEqual(((await response.json()) as any).error, 'The change could not be recorded and was not applied');
     assert.equal(calls.reverts.length, 1);
@@ -438,7 +455,7 @@ test('PATCH: a field the document never had is removed again when the change is 
   const { stripeCommissionNote: _omitted, ...noNote } = stored;
   const restore = install({ found: noNote, auditFails: true });
   try {
-    const response = await route.PATCH(await send('PATCH', { stripeCommissionNote: 'new note' }));
+    const response = await route.PATCH(await send('PATCH', { stripeCommissionNote: 'new note', reason: 'Q4' }));
     assert.equal(response.status, 500);
     assert.deepEqual(calls.reverts[0].update, { $set: { settingsRevision: 2 }, $unset: { stripeCommissionNote: 1 } });
   } finally {
@@ -607,7 +624,7 @@ test('Sprint 6: PATCH sets the COD percent with a reason, audits before and afte
 test('Sprint 6: PATCH stores the payment instructions as typed (escaped only on output) and clears a blank support phone', async () => {
   const restore = install({ found: { ...stored, supportPhone: '0300-1234567' } });
   try {
-    const response = await route.PATCH(await send('PATCH', { paymentInstructions: 'Pay to <b>Meezan</b> 0123', supportPhone: '' }));
+    const response = await route.PATCH(await send('PATCH', { paymentInstructions: 'Pay to <b>Meezan</b> 0123', supportPhone: '', reason: 'Plans' }));
     assert.equal(response.status, 200);
     assert.equal(calls.updates[0].update.$set.paymentInstructions, 'Pay to <b>Meezan</b> 0123');
     assert.deepEqual(calls.updates[0].update.$unset, { supportPhone: 1 });
@@ -634,7 +651,7 @@ test('Sprint 6: PATCH refuses a COD percent of 101 and a grace period of 31 with
 test('Sprint 6: a COD percent change that cannot be audited is put back, as for every setting', async () => {
   const restore = install({ auditFails: true });
   try {
-    const response = await route.PATCH(await send('PATCH', { codCommissionPercent: 5 }));
+    const response = await route.PATCH(await send('PATCH', { codCommissionPercent: 5, reason: 'Plans' }));
     assert.equal(response.status, 500);
     assert.equal(calls.reverts.length, 1);
     assert.deepEqual(calls.reverts[0].filter, { _id: SETTINGS_ID, settingsRevision: 3 });

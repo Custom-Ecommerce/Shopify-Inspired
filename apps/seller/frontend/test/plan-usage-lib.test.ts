@@ -157,3 +157,9 @@ test("another 403 keeps its own details, untouched by the plan limit rule", asyn
   assert.equal(json.code, "FORBIDDEN");
   assert.deepEqual(json.details, [{ message: "Forbidden" }]);
 });
+
+test("SB-F1: the dialog prints the plan name, not its key", () => {
+  assert.equal(upgradeSummary({ limitKind: "staffSeats", limit: 3, used: 3, plan: "growth", planName: "Growth" }), "You have 3 of 3 team seats on the Growth plan.");
+  const info = planLimitFrom({ code: "PLAN_LIMIT_REACHED", error: "No more.", details: { limitKind: "staffSeats", limit: 3, used: 3, plan: "growth", planName: "Growth" } })!;
+  assert.equal(info.planName, "Growth");
+});

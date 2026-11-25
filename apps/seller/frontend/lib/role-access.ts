@@ -94,6 +94,12 @@ export function roleSeesMenu(role: unknown, href: string): boolean {
   return capability === null || capability === undefined ? true : roleCan(role, capability);
 }
 
+/**
+ * SB-F1: "Verify your email ... to put your store live and receive payouts" is the owner's business. A team member, who can do neither, never sees it in a
+ * store they work in (their own store, if they have one, still shows it).
+ */
+export const showsVerifyEmailBanner = (role: unknown, emailVerified: unknown): boolean => emailVerified === false && dashboardRole(role) === "owner";
+
 /** The word shown next to a store the user works in as a team member (V-05); null for their own store, or a role this code does not know. */
 export function memberRoleLabel(role: unknown): string | null {
   const effective = dashboardRole(role);

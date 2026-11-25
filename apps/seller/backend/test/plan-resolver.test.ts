@@ -17,6 +17,7 @@ import {
   resolveEffectivePlan,
   setPlanLoader,
   upgradeHintFor,
+  seatRefusalMessage,
   type EffectivePlan,
   type PlanDoc,
   type SubscriptionLike,
@@ -405,4 +406,14 @@ test('the connection check: plans are checked once a connection is open or a loa
     if (descriptor) Object.defineProperty(mongoose.connection, 'readyState', descriptor);
     else delete (mongoose.connection as any).readyState;
   }
+});
+
+test('SB-F1: the seat refusal names the plan once, whatever the numbers; the hint uses the plan name, never its key', () => {
+  assert.equal(seatRefusalMessage('Growth', 3, 3), 'Your Growth plan allows 3 staff seats and all 3 are in use. Upgrade your plan to invite more.');
+  assert.equal(seatRefusalMessage('Growth', 1, 1), 'Your Growth plan allows 1 staff seat and it is in use. Upgrade your plan to invite more.');
+  assert.equal(seatRefusalMessage('Growth', 3, 5), 'Your Growth plan allows 3 staff seats and you have 5 in use. Upgrade your plan to invite more.');
+  assert.equal(seatRefusalMessage('Free', 0, 0), 'Your Free plan has no staff seats. Upgrade your plan to invite your team.');
+  const top = [{ key: 'growth', name: 'Growth', priceRs: 2500, limit: 3 }];
+  assert.equal(upgradeHintFor('staffSeats', 'growth', 3, top), 'Contact support to raise the limit.');
+  assert.equal(upgradeHintFor('products', 'growth', 3, top), 'Your Growth plan allows no more products. Contact support to raise the limit.');
 });

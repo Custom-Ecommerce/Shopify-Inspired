@@ -123,9 +123,10 @@ const plural = (count: number, one: string): string => count + " " + one + (coun
 /** The five tiles of one period. The unsettled balance is not a period figure: it is everything not yet settled by a payout. */
 export function kpiTiles(kpi: NonNullable<AdminOverview["kpi"]>, period: KpiPeriodKey): KpiTile[] {
   const p = kpi.periods[period];
+  const cod = p.codCommission ?? 0;
   return [
     { key: "gatewaySales", title: "Card sales", value: money(p.gatewaySales), hint: plural(p.gatewayOrders, "card order") },
-    { key: "commission", title: "Commission earned", value: money(p.commission), hint: "On card orders" },
+    { key: "commission", title: "Commission earned", value: money(p.commission + cod), hint: "Card " + money(p.commission) + " · COD " + money(cod) },
     { key: "codOrderValue", title: "Cash on delivery", value: money(p.codOrderValue), hint: plural(p.codOrders, "order") + ", no commission unless set" },
     { key: "orders", title: "Orders", value: String(kpi.ordersByPeriod[period]), hint: "All statuses" },
     { key: "unsettled", title: "Unsettled balance", value: money(Math.abs(kpi.unsettledBalance)), hint: kpi.unsettledBalance < 0 ? "Owed to the platform" : "Held for sellers" },

@@ -6,11 +6,12 @@ import { hashPassword, sendEmailVerification, User } from '@/lib/services';
 import { requireVerificationLink, sellerAccountDeps } from '@/lib/account-support';
 import { runAfterResponse } from '@/lib/notifications';
 import { captureReferral } from '@/lib/referrals';
+import { enforceSignupLimits } from '@/lib/signup-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** POST /api/signup. Creates a seller account (no store yet) and returns a session token. */
+/** POST /api/signup. Creates a seller account (no store yet) and returns a session token. Limited per client address and per email (lib/signup-limit.ts). */
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = await parseBody(request, signupRequestSchema);
@@ -22,6 +23,8 @@ export async function POST(request: Request): Promise<Response> {
     requireVerificationLink();
 
     const email = body.data.email.toLowerCase();
+    // SB-F1: before the account is looked up or written (429 RATE_LIMITED with Retry-After).
+    await enforceSignupLimits(request.headers, email);
     if (await User.exists({ email })) {
       throw new HttpError(409, 'An account with this email already exists');
     }

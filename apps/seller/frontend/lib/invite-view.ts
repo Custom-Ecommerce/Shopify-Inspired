@@ -21,7 +21,7 @@ export type InviteView =
   | { kind: "sign_in"; storeName: string; role: InviteRole; email: string }
   | { kind: "ready"; storeName: string; role: InviteRole; email: string }
   | { kind: "wrong_account"; storeName: string; role: InviteRole; email: string; signedInAs: string }
-  | { kind: "accepted"; storeName: string; role: InviteRole }
+  | { kind: "accepted"; storeName: string; role: InviteRole; storeId?: string }
   | { kind: "error"; message: string };
 
 export interface InviteInput {
@@ -30,7 +30,7 @@ export interface InviteInput {
   info: InviteInfo | null | "error";
   /** The signed-in account's email, "none" when there is no session, null while it is being asked. */
   account: string | "none" | null;
-  accepted: { storeName: string; role: InviteRole } | null;
+  accepted: { storeName: string; role: InviteRole; storeId?: string } | null;
 }
 
 const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -81,6 +81,33 @@ export function nextAfterAuth(search: string): string {
     return "/";
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------- signing up from an invite (SB-F1)
+
+/** The invite token the signup page was opened with (?next=/accept-invite?token=...), or null for an ordinary signup. */
+export function inviteTokenFromSearch(search: string): string | null {
+  const next = nextAfterAuth(search);
+  return next === "/" ? null : next.slice(next.indexOf("=") + 1);
+}
+
+/** What the signup page takes from the invite lookup: the invited address and the store. Null for anything but a valid invite. */
+export interface SignupInvite {
+  email: string;
+  storeName: string;
+}
+
+export function signupInviteFrom(body: unknown): SignupInvite | null {
+  const info = (typeof body === "object" && body !== null ? body : {}) as { valid?: unknown; email?: unknown; storeName?: unknown };
+  return info.valid === true && typeof info.email === "string" && info.email !== "" && typeof info.storeName === "string" ? { email: info.email, storeName: info.storeName } : null;
+}
+
+export const SIGNUP_TITLE = "Start selling";
+export const SIGNUP_TEXT = "Create your account — you will set up your store next.";
+export const SIGNUP_INVITE_TITLE = "Join the team";
+
+/** A team member is joining someone's store: they are not told they will set one up. */
+export const signupWords = (invite: SignupInvite | null): { title: string; text: string } =>
+  invite === null ? { title: SIGNUP_TITLE, text: SIGNUP_TEXT } : { title: SIGNUP_INVITE_TITLE, text: `Create your account to join ${invite.storeName}.` };
 
 // ---------------------------------------------------------------------------------------------------------- the words
 

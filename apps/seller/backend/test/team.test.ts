@@ -403,7 +403,8 @@ test('the plan seats: an invite is refused with 403 PLAN_LIMIT_REACHED at the li
   assert.equal(body.limitKind, 'staffSeats');
   assert.equal(body.limit, 2);
   assert.equal(body.used, 2);
-  assert.match(body.errors[0].message, /staff seats/);
+  assert.equal(body.errors[0].message, 'Your Growth plan allows 2 staff seats and all 2 are in use. Upgrade your plan to invite more.');
+  assert.equal(body.planName, 'Growth');
   assert.equal(members.length, 2, 'nothing was written');
   members.find((m) => m.user === MANAGER)!.status = 'disabled';
   assert.equal((await invite({ email: 'three@example.pk', role: 'staff' })).status, 201, 'a disabled member released the seat');

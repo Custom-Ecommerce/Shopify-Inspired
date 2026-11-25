@@ -18,6 +18,7 @@ import {
   type InviteInfo,
   type InviteRole,
 } from "@/lib/invite-view";
+import { storeBasePath } from "@/lib/store-routes";
 
 /**
  * Sprint 8 (S8-B2, D-118): the link of the staff invite email. It opens with or without a session and says what to do next:
@@ -32,7 +33,7 @@ function AcceptInvite() {
   const token = useSearchParams().get("token");
   const [info, setInfo] = useState<InviteInfo | null | "error">(null);
   const [account, setAccount] = useState<string | "none" | null>(null);
-  const [accepted, setAccepted] = useState<{ storeName: string; role: InviteRole } | null>(null);
+  const [accepted, setAccepted] = useState<{ storeName: string; role: InviteRole; storeId?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const started = useRef(false);
@@ -68,8 +69,8 @@ function AcceptInvite() {
     try {
       const res = await fetch("/api/team/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
       if (res.ok) {
-        const data = (await res.json().catch(() => null)) as { storeName?: unknown; role?: unknown } | null;
-        setAccepted({ storeName: typeof data?.storeName === "string" ? data.storeName : "the store", role: (data?.role as InviteRole) ?? "staff" });
+        const data = (await res.json().catch(() => null)) as { storeId?: unknown; storeName?: unknown; role?: unknown } | null;
+        setAccepted({ storeName: typeof data?.storeName === "string" ? data.storeName : "the store", role: (data?.role as InviteRole) ?? "staff", ...(typeof data?.storeId === "string" ? { storeId: data.storeId } : {}) });
         return;
       }
       const error = await readApiError(res);
@@ -127,7 +128,8 @@ function AcceptInvite() {
   if (view.kind === "accepted") {
     return (
       <AccountCard title={`You joined ${view.storeName}`} intro={`You are now ${roleName(view.role)} of this store. What you can do depends on your role.`}>
-        <Button render={<Link href="/" />} variant="clay" size="lg" className="w-full">
+        {/* SB-F1: straight into the store they joined, so a new team member is never offered to set up one of their own. */}
+        <Button render={<Link href={view.storeId ? storeBasePath(view.storeId) : "/"} />} variant="clay" size="lg" className="w-full">
           Go to your dashboard
         </Button>
       </AccountCard>

@@ -23,6 +23,8 @@ export interface PlanLimitBody {
   limit: number;
   used: number;
   plan: string;
+  /** SB-F1: the plan's display name, for the words a seller reads (plan is its key). */
+  planName?: string;
   upgradeHint: string;
 }
 

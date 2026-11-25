@@ -86,7 +86,7 @@ test("the form refuses a bad rate, store limit, note, and reason with the backen
   assert.equal(validateSettingsForm({ ...base, stripeCommissionNote: "x".repeat(501) }).stripeCommissionNote, "The note can be at most 500 characters.");
   assert.equal(validateSettingsForm({ ...base, stripeCommissionNote: "x".repeat(500) }).stripeCommissionNote, undefined);
   assert.equal(validateSettingsForm({ ...base, reason: "   " }).reason, "Enter a reason for the change.");
-  assert.equal(validateSettingsForm({ ...base, reason: "x".repeat(501) }).reason, "The reason can be at most 500 characters.");
+  assert.equal(validateSettingsForm({ ...base, reason: "x".repeat(301) }).reason, "The reason can be at most 300 characters.");
 });
 
 test("only a value that differs counts as a change; the same number written differently does not", () => {

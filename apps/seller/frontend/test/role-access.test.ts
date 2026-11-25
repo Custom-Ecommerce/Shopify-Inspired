@@ -17,6 +17,7 @@ import {
   type OwnerAction,
   roleMayOpen,
   memberRoleLabel,
+  showsVerifyEmailBanner,
 } from "../lib/role-access";
 
 // Sprint 8 (S8-B4, D-118): what the dashboard shows to a role, each role against each menu item, settings tab and owner action. The backend is what enforces.
@@ -101,4 +102,13 @@ test("the dashboard home table fits a phone: customer and city columns are for w
   const home = readFileSync(join(process.cwd(), "app", "(dashboard)", "s", "[storeId]", "page.tsx"), "utf8");
   for (const header of ["Customer", "City", "Date"]) assert.match(home, new RegExp("header: \"" + header + "\"[^]{0,300}?hidden sm:table-cell"), header);
   assert.match(home, /sm:hidden">\{o\.customerName\}/);
+});
+
+test("SB-F1: only the store owner is asked to verify their email for going live and payouts", () => {
+  assert.equal(showsVerifyEmailBanner("owner", false), true);
+  assert.equal(showsVerifyEmailBanner(undefined, false), true, "an older backend sends no role: the owner");
+  for (const role of ["manager", "staff", "support", "admin"]) assert.equal(showsVerifyEmailBanner(role, false), false, role);
+  for (const verified of [true, undefined, null]) assert.equal(showsVerifyEmailBanner("owner", verified), false, String(verified));
+  const layout = readFileSync(join(process.cwd(), "app", "(dashboard)", "s", "[storeId]", "layout.tsx"), "utf8");
+  assert.match(layout, /showsVerifyEmailBanner\(activeStore\.role, user\.emailVerified\) \? <VerifyEmailBanner/);
 });

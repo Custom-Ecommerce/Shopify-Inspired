@@ -29,7 +29,7 @@ import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { AlertBell } from "@/components/dashboard/AlertBell";
 import { VerifyEmailBanner } from "@/components/dashboard/VerifyEmailBanner";
 import { UpgradeDialogHost } from "@/components/dashboard/UpgradeDialog";
-import { canUse } from "@/lib/role-access";
+import { canUse, showsVerifyEmailBanner } from "@/lib/role-access";
 import { RoleGate } from "@/components/dashboard/RoleGate";
 import { storeHref } from "@/lib/store-routes";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -120,7 +120,7 @@ export default async function StoreDashboardLayout({
                 Pages stop adding their own p-8 once migrated. */}
             <div className="flex min-w-0 flex-1 flex-col">
               {/* Sprint 4 EP-08.US02.T02: an unverified seller can prepare the store but not go live or be paid. */}
-              {user.emailVerified === false ? <VerifyEmailBanner email={user.email} /> : null}
+              {showsVerifyEmailBanner(activeStore.role, user.emailVerified) ? <VerifyEmailBanner email={user.email} /> : null}
               <DashboardDataProvider key={activeStore.id}>
                 <RoleGate role={activeStore.role}>{children}</RoleGate>
               </DashboardDataProvider>

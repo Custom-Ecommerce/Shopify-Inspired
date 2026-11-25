@@ -57,25 +57,25 @@ test("updateSettings patches the body and returns the settings with the queued e
 
 test("a change nothing needed to send comes back with queued null", async () => {
   stub(200, { settings: { ...settings, stripeCommissionNote: "Fees" }, queued: null });
-  const result = await updateSettings({ stripeCommissionNote: "Fees" });
+  const result = await updateSettings({ stripeCommissionNote: "Fees", reason: "Fees" });
   assert.equal(result.queued, null);
   assert.equal(result.settings.stripeCommissionNote, "Fees");
 });
 
 test("an update answer without the queued field is refused", async () => {
   stub(200, { settings });
-  await assert.rejects(updateSettings({ maxStoresPerSeller: 4 }), (err: unknown) => err instanceof ApiError && err.status === 502);
+  await assert.rejects(updateSettings({ maxStoresPerSeller: 4, reason: "Fees" }), (err: unknown) => err instanceof ApiError && err.status === 502);
 });
 
 test("a failed write carries the status, the message, and the issues", async () => {
   stub(422, { error: "Invalid request", issues: [{ path: "defaultCommissionRate", message: "must be a number from 0 to 100" }] });
   await assert.rejects(
-    updateSettings({ defaultCommissionRate: 5 }),
+    updateSettings({ defaultCommissionRate: 5, reason: "Fees" }),
     (err: unknown) => err instanceof ApiError && err.status === 422 && err.issues[0].path === "defaultCommissionRate",
   );
   stub(409, { error: "The settings were changed by someone else. Reload and try again." });
   await assert.rejects(
-    updateSettings({ defaultCommissionRate: 5 }),
+    updateSettings({ defaultCommissionRate: 5, reason: "Fees" }),
     (err: unknown) => err instanceof ApiError && err.status === 409 && err.message === "The settings were changed by someone else. Reload and try again.",
   );
 });
@@ -84,7 +84,7 @@ test("a missing settings document and a refused permission are told as they are"
   stub(404, { error: "Platform settings have not been set up" });
   await assert.rejects(getSettings(), (err: unknown) => err instanceof ApiError && err.status === 404 && err.message === "Platform settings have not been set up");
   stub(403, {});
-  await assert.rejects(updateSettings({ defaultCommissionRate: 5 }), (err: unknown) => err instanceof ApiError && err.status === 403 && err.message === "You do not have permission to do that.");
+  await assert.rejects(updateSettings({ defaultCommissionRate: 5, reason: "Fees" }), (err: unknown) => err instanceof ApiError && err.status === 403 && err.message === "You do not have permission to do that.");
 });
 
 test("a network failure is an ApiError with status 0", async () => {

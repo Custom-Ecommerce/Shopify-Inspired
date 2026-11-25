@@ -5,6 +5,7 @@ import {
   CONFLICT_MESSAGE,
   NOT_SET_UP_MESSAGE,
   SETTINGS_FIELDS,
+  SETTINGS_REASON_REQUIRED,
   buildRevertUpdate,
   buildSettingsUpdate,
   changedFieldsAgainstStored,
@@ -60,7 +61,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 /**
- * PATCH /api/admin/settings. Changes the settings sent (an optional reason goes to the audit entry). The write is
+ * PATCH /api/admin/settings. Changes the settings sent; a reason (1 to 300 characters) is required and goes to the audit entry. The write is
  * conditional on the revision that was read, so two operators cannot both win (409), and it advances the revision. A
  * change to a setting the seller receives is queued for the seller. The change is audited with the values before and
  * after; if the audit entry or the queue write fails, the settings are put back and the call fails. If the put-back
@@ -83,7 +84,11 @@ export async function PATCH(request: Request): Promise<Response> {
       throw new AdminHttpError(400, 'Body must be JSON');
     }
     const input = parseSettingsUpdate(raw);
-    if (!input.ok) return Response.json({ error: 'Invalid request', issues: input.issues }, { status: 422, headers: NO_STORE });
+    if (!input.ok && input.issues.some((issue) => issue.path !== 'reason')) return Response.json({ error: 'Invalid request', issues: input.issues }, { status: 422, headers: NO_STORE });
+    // SB-F1: every change says why. Missing, blank or too long is a 400 and nothing is read or written.
+    if (!input.ok || input.data.reason === null) {
+      return Response.json({ error: SETTINGS_REASON_REQUIRED, issues: [{ path: 'reason', message: SETTINGS_REASON_REQUIRED }] }, { status: 400, headers: NO_STORE });
+    }
     const { changes, reason } = input.data;
 
     const found = (await PlatformSettingsModel.findOne(settingsFilter()).select(SELECT).lean()) as unknown as Doc | null;

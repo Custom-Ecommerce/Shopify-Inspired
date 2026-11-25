@@ -47,6 +47,9 @@ export const FAVOURITES_LIMIT: RateLimitRule = { name: 'favourites', limit: 30, 
  */
 export const CONTACT_LIMIT: RateLimitRule = { name: 'contact', limit: 5, windowMs: 600_000 };
 export const TICKET_LIMIT: RateLimitRule = { name: 'ticket', limit: 10, windowMs: 600_000 };
+/** SB-F1: POST /api/signup (lib/signup-limit.ts). Every account sends an email, so one address and one email each get a few tries an hour. */
+export const SIGNUP_ADDRESS_LIMIT: RateLimitRule = { name: 'signup-address', limit: 10, windowMs: 3_600_000 };
+export const SIGNUP_EMAIL_LIMIT: RateLimitRule = { name: 'signup-email', limit: 3, windowMs: 3_600_000 };
 export const DISCOUNT_CHECK_LIMIT: RateLimitRule = { name: 'discount-check', limit: 20, windowMs: 60_000 };
 
 export interface RateLimitStore {

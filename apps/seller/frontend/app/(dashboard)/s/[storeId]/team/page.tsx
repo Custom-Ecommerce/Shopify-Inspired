@@ -185,7 +185,6 @@ export default function TeamPage() {
           {notice.upgradeHint ? (
             <>
               {" "}
-              {notice.upgradeHint}{" "}
               <Link href={billingHref} className="font-medium underline">
                 See plans
               </Link>

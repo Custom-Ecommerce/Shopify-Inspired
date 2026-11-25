@@ -20,6 +20,8 @@ const rupees = z.number().int();
 export const adminKpiPeriodSchema = z.object({
   gatewaySales: rupees,
   commission: rupees,
+  /** SB-F1: the commission on COD orders (0 while the COD percent is 0). Absent from an older seller backend. */
+  codCommission: rupees.optional(),
   gatewayOrders: count,
   codOrderValue: rupees,
   codOrders: count,

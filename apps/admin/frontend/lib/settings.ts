@@ -122,7 +122,7 @@ function noteOf(text: string): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
-/** The same rules the backend enforces. The reason is required in the console (the contract leaves it optional). */
+/** The same rules the backend enforces, the required reason included. */
 export function validateSettingsForm(values: SettingsFormValues): SettingsFormErrors {
   const errors: SettingsFormErrors = {};
 
@@ -212,7 +212,8 @@ export function changedSettingFields(values: SettingsFormValues, original: Admin
  * passed validateSettingsForm. The body has no revision: the backend reads the revision itself and refuses a clash (409).
  */
 export function toUpdateRequest(values: SettingsFormValues, original: AdminPlatformSettings): AdminSettingsUpdateRequest {
-  const request: AdminSettingsUpdateRequest = {};
+  // The reason is required by the contract; the form is validated before this is called.
+  const request = {} as AdminSettingsUpdateRequest;
   const rate = parseRate(values.defaultCommissionRate);
   if (rate !== null && rate !== original.defaultCommissionRate) request.defaultCommissionRate = rate;
   const stores = parseStoreLimit(values.maxStoresPerSeller);

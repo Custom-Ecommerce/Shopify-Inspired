@@ -134,3 +134,14 @@ test("S6-B5: the unsettled balance is shown as what is held or owed, and the row
   assert.deepEqual(topStoreRows(overview.kpi!), [{ key: "65a000000000000000000011", name: "Zara Lawn", sales: "Rs. 50,000", href: "/orders?store=65a000000000000000000011" }]);
   assert.deepEqual(topStoreRows({ ...overview.kpi!, topStores: [{ storeId: "65a000000000000000000012", storeName: null, sales: 5 }] })[0]!.name, "Unnamed store");
 });
+
+test("SB-F1: the commission tile holds card and COD commission, with both named: COD is 0 at 0% and visible at 4%", () => {
+  const at = (codCommission: number | undefined) => {
+    const today = { ...overview.kpi!.periods.today, commission: 40, codCommission };
+    return kpiTiles({ ...overview.kpi!, periods: { ...overview.kpi!.periods, today } }, "today")[1]!;
+  };
+  assert.deepEqual([at(0).value, at(0).hint], ["Rs. 40", "Card Rs. 40 · COD Rs. 0"]);
+  // 4% of Rs. 2,000 of cash on delivery.
+  assert.deepEqual([at(80).value, at(80).hint], ["Rs. 120", "Card Rs. 40 · COD Rs. 80"]);
+  assert.deepEqual([at(undefined).value, at(undefined).hint], ["Rs. 40", "Card Rs. 40 · COD Rs. 0"], "an older seller backend");
+});

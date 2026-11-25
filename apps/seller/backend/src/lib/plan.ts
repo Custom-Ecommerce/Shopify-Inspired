@@ -291,13 +291,24 @@ export interface UpgradeCandidate {
   limit: number | null;
 }
 
+/** SB-F1: the refusal of one seat too many: the plan by name and its numbers, once. */
+export function seatRefusalMessage(planName: string, limit: number, used: number): string {
+  if (limit === 0) return 'Your ' + planName + ' plan has no staff seats. Upgrade your plan to invite your team.';
+  const seats = limit + (limit === 1 ? ' staff seat' : ' staff seats');
+  const taken = used > limit ? 'you have ' + used + ' in use' : limit === 1 ? 'it is in use' : 'all ' + limit + ' are in use';
+  return 'Your ' + planName + ' plan allows ' + seats + ' and ' + taken + '. Upgrade your plan to invite more.';
+}
+
 /** The words of the upgrade hint: the cheapest plan that allows more, or a plain line when there is none. */
 export function upgradeHintFor(kind: PlanLimitKind, plan: string, used: number, candidates: readonly UpgradeCandidate[]): string {
   const noun = kind === 'products' ? 'products' : kind === 'staffSeats' ? 'staff seats' : kind === 'apiKeys' ? 'API keys' : 'stores';
   const better = candidates
     .filter((candidate) => candidate.key !== plan && (candidate.limit === null || candidate.limit > used))
     .sort((a, b) => (a.priceRs ?? Number.MAX_SAFE_INTEGER) - (b.priceRs ?? Number.MAX_SAFE_INTEGER))[0];
-  if (!better) return 'Your ' + plan + ' plan allows no more ' + noun + '. Contact support to raise the limit.';
+  // The plan's NAME, never its key, is what a seller reads.
+  const name = candidates.find((candidate) => candidate.key === plan)?.name ?? plan;
+  // For seats the refusal itself already named the plan and the numbers: only the way forward is left to say.
+  if (!better) return kind === 'staffSeats' ? 'Contact support to raise the limit.' : 'Your ' + name + ' plan allows no more ' + noun + '. Contact support to raise the limit.';
   const room = better.limit === null ? 'unlimited ' + noun : 'up to ' + better.limit + ' ' + noun;
   const price = better.priceRs === null ? '' : better.priceRs === 0 ? '' : ' (Rs. ' + better.priceRs.toLocaleString('en-US') + ' / month)';
   return 'Upgrade to ' + better.name + price + ' for ' + room + '.';
@@ -374,8 +385,8 @@ export async function assertWithinPlan(input: AssertWithinPlanInput): Promise<vo
   const upgradeHint = upgradeHintFor(input.kind, plan.key, used, await upgradeCandidates(input.kind));
   const noun = input.kind === 'staffSeats' ? 'staff seats' : input.kind === 'apiKeys' ? 'API keys' : input.kind;
   throw new PlanLimitError(
-    { code: 'PLAN_LIMIT_REACHED', limitKind: input.kind, limit, used, plan: plan.key, upgradeHint },
-    'Your ' + plan.name + ' plan allows ' + limit + ' ' + noun + ' and you have ' + used + '. ' + upgradeHint,
+    { code: 'PLAN_LIMIT_REACHED', limitKind: input.kind, limit, used, plan: plan.key, planName: plan.name, upgradeHint },
+    input.kind === 'staffSeats' ? seatRefusalMessage(plan.name, limit, used) : 'Your ' + plan.name + ' plan allows ' + limit + ' ' + noun + ' and you have ' + used + '. ' + upgradeHint,
   );
 }
 

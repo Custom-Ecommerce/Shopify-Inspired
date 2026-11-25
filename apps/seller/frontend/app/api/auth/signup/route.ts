@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeReferralCode } from "@markaz/contracts/referral";
+import { clientAddressHeaders } from "@/lib/client-address";
 import { REFERRAL_COOKIE } from "@/lib/referral-cookie";
 
 // The seller backend (port 4001) owns the signup endpoint (apps/seller/backend/src/endpoints/signup.ts).
@@ -22,13 +23,23 @@ export async function POST(req: NextRequest) {
   try {
     res = await fetch(`${SELLER_BACKEND_API_URL}/api/signup`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // SB-F1: the browser's address, signed, so the signup limit per address sees the visitor and not this server.
+      headers: { "Content-Type": "application/json", ...clientAddressHeaders(req.headers) },
       body: JSON.stringify({ email, password, name, ...(ref === null ? {} : { ref }) }),
       cache: "no-store",
     });
   } catch (err) {
     console.error("[auth/signup] Failed to reach seller-backend:", err);
     return NextResponse.json({ error: "Could not reach the backend. Please try again." }, { status: 502 });
+  }
+
+  // SB-F1: the throttle's 429 and its Retry-After reach the page, which says how long to wait.
+  if (res.status === 429) {
+    const retryAfter = res.headers.get("retry-after");
+    return NextResponse.json(
+      { error: "Too many attempts. Please wait and try again.", code: "RATE_LIMITED" },
+      { status: 429, headers: { ...(retryAfter ? { "Retry-After": retryAfter } : {}), "Cache-Control": "no-store" } },
+    );
   }
 
   const data = await res.json();

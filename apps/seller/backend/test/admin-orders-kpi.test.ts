@@ -193,7 +193,7 @@ test('the KPI route answers whole rupees from the NEW ledger with aggregations; 
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(adminKpiSchema.safeParse(body).success, true);
-  assert.deepEqual(body.periods.today, { gatewaySales: 20000, commission: 800, gatewayOrders: 5, codOrderValue: 30000, codOrders: 7 });
+  assert.deepEqual(body.periods.today, { gatewaySales: 20000, commission: 800, codCommission: 0, gatewayOrders: 5, codOrderValue: 30000, codOrders: 7 });
   assert.equal(body.unsettledBalance, -1200);
   assert.deepEqual(body.topStores, [{ storeId: STORE_A, storeName: 'Zara Lawn', sales: 50000 }]);
   assert.deepEqual(body.sellersByPlan, [{ planKey: 'free', status: 'none', count: 7 }, { planKey: 'growth', status: 'active', count: 3 }]);
@@ -208,8 +208,18 @@ test('pure helpers: Karachi day starts, period grouping, status counts, sellers 
   const s = periodStarts(new Date('2026-11-20T21:00:00Z'));
   assert.equal(s.today.toISOString(), '2026-11-20T19:00:00.000Z', 'it is already 21 Nov 02:00 in Karachi');
   assert.equal(s.last7.getTime(), s.today.getTime() - 6 * 86_400_000);
-  assert.deepEqual(toKpiPeriod([]), { gatewaySales: 0, commission: 0, gatewayOrders: 0, codOrderValue: 0, codOrders: 0 });
+  assert.deepEqual(toKpiPeriod([]), { gatewaySales: 0, commission: 0, codCommission: 0, gatewayOrders: 0, codOrderValue: 0, codOrders: 0 });
   assert.equal(toKpiPeriod([{ _id: 'cod', sales: 100, effect: 0, orders: -2 }]).codOrders, 0);
   assert.equal(toStatusCounts([{ _id: 'x', count: 5 }]).pending, 0);
   assert.deepEqual(toSellersByPlan([], 2), [{ planKey: 'free', status: 'none', count: 2 }]);
+});
+
+test('SB-F1: COD commission comes from the cod_commission ledger rows: 0 at 0%, the charged rupees at 4% (reversals netted by the sum)', () => {
+  const card = { _id: 'card', sales: 20000, effect: -800, orders: 5 };
+  const at0 = toKpiPeriod([card, { _id: 'cod', sales: 30000, effect: 0, orders: 7 }]);
+  assert.deepEqual([at0.commission, at0.codCommission, at0.codOrderValue], [800, 0, 30000]);
+  // 4% of 30,000 is charged to the seller (a negative balance effect).
+  const at4 = toKpiPeriod([card, { _id: 'cod', sales: 30000, effect: -1200, orders: 7 }]);
+  assert.deepEqual([at4.commission, at4.codCommission, at4.codOrderValue], [800, 1200, 30000]);
+  assert.equal(adminKpiSchema.shape.periods.shape.today.safeParse(at4).success, true);
 });

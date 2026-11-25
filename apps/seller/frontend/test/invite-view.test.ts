@@ -11,6 +11,9 @@ import {
   inviteLoginHref,
   invitePath,
   inviteSignupHref,
+  inviteTokenFromSearch,
+  signupInviteFrom,
+  signupWords,
   isInviteToken,
   nextAfterAuth,
   roleName,
@@ -143,4 +146,27 @@ test("the SB-6 guard still holds: no settings group was added here, and the port
   const shape = (storeSettingsUpdateSchema as unknown as { shape: Record<string, unknown> }).shape;
   assert.deepEqual([...SETTINGS_GROUPS].sort(), Object.keys(shape).sort());
   assert.ok(SETTINGS_GROUPS.includes("tax"));
+});
+
+test("SB-F1: the signup page reads the invite token from ?next= and only from exactly the invite path", () => {
+  const token = "A".repeat(43);
+  assert.equal(inviteTokenFromSearch("?next=" + encodeURIComponent(invitePath(token))), token);
+  assert.equal(inviteTokenFromSearch(inviteSignupHref(token).slice("/signup".length)), token);
+  for (const search of ["", "?next=%2F", "?next=" + encodeURIComponent("https://evil.example/accept-invite?token=" + token), "?token=" + token, "?next=" + encodeURIComponent("/accept-invite?token=short")]) {
+    assert.equal(inviteTokenFromSearch(search), null, search);
+  }
+});
+
+test("SB-F1: only a valid lookup fills the form; a team member is told whose store they join, not to set one up", () => {
+  const found = signupInviteFrom({ valid: true, storeName: "Zara Lawn", role: "staff", email: "new@zara.pk" });
+  assert.deepEqual(found, { email: "new@zara.pk", storeName: "Zara Lawn" });
+  for (const other of [{ valid: false }, null, "x", {}, { valid: true }, { valid: true, email: "", storeName: "Z" }]) assert.equal(signupInviteFrom(other), null, JSON.stringify(other));
+  assert.deepEqual(signupWords(found), { title: "Join the team", text: "Create your account to join Zara Lawn." });
+  assert.equal(signupWords(null).title, "Start selling");
+  assert.match(signupWords(null).text, /set up your store next/);
+  const page = readFileSync(join(process.cwd(), "app", "signup", "page.tsx"), "utf8");
+  assert.match(page, /readOnly=\{invite !== null\}/);
+  assert.match(page, /setEmail\(found\.email\)/);
+  const accepted = readFileSync(join(process.cwd(), "app", "accept-invite", "page.tsx"), "utf8");
+  assert.match(accepted, /storeBasePath\(view\.storeId\)/, "after joining they go into that store");
 });

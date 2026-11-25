@@ -31,7 +31,7 @@ test('the settings answer refuses a rate outside 0 to 100, a bad limit, or a neg
   assert.deepEqual(failingPaths(adminPlatformSettingsSchema.safeParse({ ...settings, maxStoresPerSeller: 0 })), ['maxStoresPerSeller']);
 });
 
-test('update accepts any one setting, or all three, with an optional reason', () => {
+test('update accepts any one setting, or all three, with a reason', () => {
   const good: unknown[] = [
     { defaultCommissionRate: 5 },
     { defaultCommissionRate: 0 },
@@ -42,7 +42,7 @@ test('update accepts any one setting, or all three, with an optional reason', ()
     { stripeCommissionNote: 'Stripe takes its own fee on top.' },
     { defaultCommissionRate: 5, maxStoresPerSeller: 4, stripeCommissionNote: 'x', reason: 'Q4 pricing' },
   ];
-  for (const body of good) assert.equal(adminSettingsUpdateRequestSchema.safeParse(body).success, true, JSON.stringify(body));
+  for (const body of good) assert.equal(adminSettingsUpdateRequestSchema.safeParse({ reason: 'Q4', ...(body as object) }).success, true, JSON.stringify(body));
 });
 
 test('update needs at least one setting: an empty body or a reason alone is refused', () => {
@@ -68,7 +68,7 @@ test('update refuses bad values and unknown fields, settingsRevision and updated
     { defaultCommissionRate: 5, updatedAt: NOW },
     { defaultCommissionRate: 5, _id: '65a000000000000000000001' },
   ];
-  for (const body of bad) assert.equal(adminSettingsUpdateRequestSchema.safeParse(body).success, false, JSON.stringify(body));
+  for (const body of bad) assert.equal(adminSettingsUpdateRequestSchema.safeParse({ reason: 'Q4', ...(body as object) }).success, false, JSON.stringify(body));
 });
 
 test('the update answer carries the settings and the queued event, or null', () => {
@@ -130,7 +130,7 @@ test('update accepts each Sprint 6 setting alone, at its bounds, and a blank tex
     { supportPhone: null },
     { codCommissionPercent: 2, graceDays: 10, reason: 'Plan launch' },
   ];
-  for (const body of good) assert.equal(adminSettingsUpdateRequestSchema.safeParse(body).success, true, JSON.stringify(body));
+  for (const body of good) assert.equal(adminSettingsUpdateRequestSchema.safeParse({ reason: 'Q4', ...(body as object) }).success, true, JSON.stringify(body));
 });
 
 test('update refuses bad Sprint 6 values', () => {
@@ -154,5 +154,13 @@ test('update refuses bad Sprint 6 values', () => {
     { supportPhone: 'call me maybe' },
     { supportPhone: '1'.repeat(31) },
   ];
-  for (const body of bad) assert.equal(adminSettingsUpdateRequestSchema.safeParse(body).success, false, JSON.stringify(body));
+  for (const body of bad) assert.equal(adminSettingsUpdateRequestSchema.safeParse({ reason: 'Q4', ...(body as object) }).success, false, JSON.stringify(body));
+});
+
+test('SB-F1: an update without a reason is refused by the contract; blank and over 300 characters too', () => {
+  const missing = adminSettingsUpdateRequestSchema.safeParse({ defaultCommissionRate: 5 });
+  assert.equal(missing.success, false);
+  assert.equal(missing.success ? '' : missing.error.issues[0]!.message, 'Enter a reason.');
+  for (const reason of ['', '   ', 'x'.repeat(301)]) assert.equal(adminSettingsUpdateRequestSchema.safeParse({ defaultCommissionRate: 5, reason }).success, false, String(reason.length));
+  assert.deepEqual(adminSettingsUpdateRequestSchema.parse({ defaultCommissionRate: 5, reason: '  Q4  ' }), { defaultCommissionRate: 5, reason: 'Q4' });
 });

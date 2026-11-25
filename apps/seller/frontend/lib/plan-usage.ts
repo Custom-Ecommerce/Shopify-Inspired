@@ -115,6 +115,8 @@ export interface PlanLimitInfo {
   limit: number | null;
   used: number | null;
   plan: string | null;
+  /** The plan's display name; absent from an older backend. */
+  planName?: string;
   upgradeHint: string;
   message: string;
 }
@@ -135,6 +137,7 @@ export function planLimitFrom(body: unknown): PlanLimitInfo | null {
     limit: number(d.limit),
     used: number(d.used),
     plan: typeof d.plan === "string" ? d.plan : null,
+    ...(typeof d.planName === "string" && d.planName !== "" ? { planName: d.planName } : {}),
     upgradeHint: typeof d.upgradeHint === "string" ? d.upgradeHint : "Upgrade your plan for a higher limit.",
     message,
   };
@@ -163,10 +166,10 @@ export function upgradeTitle(info: Pick<PlanLimitInfo, "limitKind">): string {
 }
 
 /** "You have 10 of 10 products on the Free plan." */
-export function upgradeSummary(info: Pick<PlanLimitInfo, "limitKind" | "limit" | "used" | "plan"> & { message?: string }): string {
+export function upgradeSummary(info: Pick<PlanLimitInfo, "limitKind" | "limit" | "used" | "plan" | "planName"> & { message?: string }): string {
   if (info.limit === null || info.used === null) return info.message ?? "";
   const noun = info.limitKind === "stores" ? "stores" : info.limitKind === "staffSeats" ? "team seats" : info.limitKind === "apiKeys" ? "API keys" : "products";
-  return "You have " + info.used + " of " + info.limit + " " + noun + (info.plan ? " on the " + info.plan + " plan" : "") + ".";
+  return "You have " + info.used + " of " + info.limit + " " + noun + (info.planName ?? info.plan ? " on the " + (info.planName ?? info.plan) + " plan" : "") + ".";
 }
 
 /** S8-B4: the line under the upgrade hint that says nothing was lost, by what hit the limit. */

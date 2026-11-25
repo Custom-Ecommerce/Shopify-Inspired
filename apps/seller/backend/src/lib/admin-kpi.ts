@@ -8,6 +8,7 @@ import { CommissionEntry, Order, Store, Subscription, User, assertCan } from '@/
  *
  *   gateway (card) sales and commission   card_commission entries and the reversals of them
  *   COD order value and orders            cod_commission entries (written even at rate 0, so a 0% COD order still counts)
+ *   COD commission                        the same entries and their reversals: minus the sum of balanceEffect (0 at a 0% rate)
  *   unsettled balance                     the sum of balanceEffect of the entries with no settledAt
  *   periods                               today, last 7 and last 30 days, in Asia/Karachi calendar days (UTC+5, no daylight saving)
  */
@@ -44,6 +45,7 @@ export function periodPipeline(start: Date, end: Date): Array<Record<string, unk
 export interface KpiPeriod {
   gatewaySales: number;
   commission: number;
+  codCommission: number;
   gatewayOrders: number;
   codOrderValue: number;
   codOrders: number;
@@ -51,7 +53,7 @@ export interface KpiPeriod {
 
 /** Pure: the grouped rows of one period as the wire shape. A group that is missing is zero. */
 export function toKpiPeriod(groups: unknown): KpiPeriod {
-  const out: KpiPeriod = { gatewaySales: 0, commission: 0, gatewayOrders: 0, codOrderValue: 0, codOrders: 0 };
+  const out: KpiPeriod = { gatewaySales: 0, commission: 0, codCommission: 0, gatewayOrders: 0, codOrderValue: 0, codOrders: 0 };
   for (const g of Array.isArray(groups) ? groups : []) {
     const row = g as { _id?: unknown; sales?: unknown; effect?: unknown; orders?: unknown };
     if (row._id === 'card') {
@@ -60,6 +62,7 @@ export function toKpiPeriod(groups: unknown): KpiPeriod {
       out.gatewayOrders = Math.max(0, n(row.orders));
     } else if (row._id === 'cod') {
       out.codOrderValue = n(row.sales);
+      out.codCommission = 0 - n(row.effect);
       out.codOrders = Math.max(0, n(row.orders));
     }
   }
