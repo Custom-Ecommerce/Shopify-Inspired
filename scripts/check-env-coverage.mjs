@@ -12,6 +12,8 @@ const APPS = [
   'apps/seller/frontend',
   'apps/admin/backend',
   'apps/admin/frontend',
+  'apps/seller/mobile',
+  'apps/admin/mobile',
 ];
 
 // S7-B5: names that are read through an env object passed as a parameter (so the scan above cannot see them) and are OPTIONAL. They must still
@@ -24,7 +26,7 @@ export const OPTIONAL_LISTED = {
 const PLATFORM_NAMES = new Set(['NODE_ENV', 'NEXT_RUNTIME', 'CI', 'PORT']);
 const PLATFORM_PREFIXES = ['VERCEL'];
 
-const SKIP_DIRS = new Set(['node_modules', '.next', '.turbo', 'dist', 'build', 'coverage', 'test', 'tests', '__tests__', 'scripts', '.git']);
+const SKIP_DIRS = new Set(['node_modules', '.next', '.turbo', '.expo', 'dist', 'build', 'coverage', 'test', 'tests', '__tests__', 'scripts', '.git']);
 const EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 const TEST_FILE = /\.(test|spec|check)\.[cm]?[tj]sx?$/;
 

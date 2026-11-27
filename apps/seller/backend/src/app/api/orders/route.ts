@@ -7,14 +7,8 @@ import { connectSellerDb } from '@/lib/mongo';
 import { assertCan, listEnvelope, Order, ORDER_ACTIONS } from '@/lib/services';
 import { plainDoc } from '@/lib/seller-scope';
 import { ORDER_FIELDS, ORDER_SORT_FIELDS, publicOrder, resolveOwnedStoreId } from '@/lib/data-plane';
-import {
-  handleOrderError,
-  ORDER_LIST_SORT,
-  orderListFilters,
-  parseOrderListRequest,
-  toDashboardOrderListItem,
-  toOrderCounts,
-} from '@/lib/orders';
+import { handleOrderError, parseOrderListRequest, toDashboardOrderListItem } from '@/lib/orders';
+import { readOrderListPage } from '@/lib/order-list';
 import { buildFilter, parseSort, parseWhereParam } from '@/lib/where';
 
 export const runtime = 'nodejs';
@@ -70,25 +64,12 @@ export async function GET(request: NextRequest): Promise<Response> {
     }
 
     const { query } = mode;
-    const filters = orderListFilters(storeId, query);
-    const [rows, totalDocs, groups, unconfirmedCount] = await Promise.all([
-      Order.find(filters.list)
-        .sort(ORDER_LIST_SORT)
-        .skip((query.page - 1) * query.limit)
-        .limit(query.limit)
-        .lean(),
-      Order.countDocuments(filters.list),
-      Order.aggregate<{ _id: unknown; count: number }>([
-        { $match: filters.counts },
-        { $group: { _id: '$status', count: { $sum: 1 } } },
-      ]),
-      // Sprint 5 EP-11.US01: how many orders wait for the seller's phone confirmation (for the badge and the dashboard).
-      Order.countDocuments({ store: storeId, confirmationStatus: 'unconfirmed', status: { $ne: 'cancelled' } }),
-    ]);
+    // Sprint 9: the reads are in lib/order-list.ts, which the phone list uses too.
+    const { rows, totalDocs, counts, unconfirmedCount } = await readOrderListPage(storeId, query);
 
-    const docs = (rows as unknown[]).map(toDashboardOrderListItem);
+    const docs = rows.map(toDashboardOrderListItem);
     return NextResponse.json(
-      { ...listEnvelope(docs, { page: query.page, limit: query.limit, totalDocs }), counts: toOrderCounts(groups), unconfirmedCount },
+      { ...listEnvelope(docs, { page: query.page, limit: query.limit, totalDocs }), counts, unconfirmedCount },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (err) {

@@ -73,6 +73,8 @@ export const ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS = [
 'codCommissionPercent', 'paymentInstructions', 'graceDays', 'trialDays', 'supportEmail', 'supportPhone',
 // Sprint 8 (S8-B5): referrals.
 'referralRewardMonths', 'referralMonthlyCap',
+// Sprint 9 (EP-31.US01.T08): the app version gate.
+'minSellerAppVersion', 'minAdminAppVersion',
 ] as const;
 
 // Sprint 6 EP-14 (D-118): subscription plans are data. What a seller (or the public) may read of a plan: the plan facts, never the Stripe
@@ -526,7 +528,7 @@ Object.assign(POLICY_MATRIX, {
 // Sprint 4 EP-08: the seller's own account (profile, password, email, sessions) and the single-use account tokens.
 // A seller changes only their own record, and only these fields. Tokens are written and read by the system only.
 // Suspending a seller is the existing sellers row (admin, accountStatus).
-export const SELLER_ACCOUNT_WRITABLE_FIELDS = ['name', 'phone', 'password', 'email', 'sessions'] as const;
+export const SELLER_ACCOUNT_WRITABLE_FIELDS = ['name', 'phone', 'password', 'email', 'sessions', 'pushPrefs'] as const;
 Object.assign(POLICY_MATRIX, {
   sellerAccount: {
     read: { actors: ['seller'], fields: { seller: '*' } },

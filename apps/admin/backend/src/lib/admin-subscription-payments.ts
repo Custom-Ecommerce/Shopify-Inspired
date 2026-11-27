@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
-import { AdminHttpError } from '@/lib/admin-auth';
+import { adminDeviceDetails, AdminHttpError } from '@/lib/admin-auth';
 import { readAdminBody } from '@/lib/admin-account';
 import { adminPaymentListQuerySchema, confirmPaymentBodySchema, decidePaymentBodySchema } from '@/lib/admin-payment-contracts';
 import { NO_STORE, requirePolicy } from '@/lib/admin-session';
 import { confirmSubscriptionPayment, listSubscriptionPayments, rejectSubscriptionPayment, voidSubscriptionPayment } from '@/lib/seller-moderation-client';
-import { assertCan } from '@/lib/workspace';
+import { assertCan, writeAuditLog } from '@/lib/workspace';
 
 /**
  * Sprint 6 EP-14 (S6-B4, D-118, D-093): the admin console's side of manual subscription payments. The routes check the operator's session and the
@@ -27,6 +27,7 @@ export const paymentSteps = {
   confirm: confirmSubscriptionPayment,
   reject: rejectSubscriptionPayment,
   void: voidSubscriptionPayment,
+  audit: writeAuditLog as unknown as (action: string, entity: string, entityId: string, actorId: string, details: Record<string, unknown>) => Promise<unknown>,
 };
 
 const DECISION_FIELDS = ['status', 'decidedBy', 'decidedAt', 'reason', 'periodStart', 'periodEnd'] as const;
@@ -52,10 +53,28 @@ export async function decidePaymentFor(request: Request, context: { params: Prom
   const { id } = await context.params;
   if (!mongoose.isValidObjectId(id)) throw new AdminHttpError(404, 'Payment not found');
 
+  let answer: unknown;
   if (action === 'confirm') {
     const body = await readAdminBody(request, confirmPaymentBodySchema);
-    return Response.json(await paymentSteps.confirm(userId, { paymentId: id, amountRs: body.amountRs, reason: body.reason }), { status: 200, headers: NO_STORE });
+    answer = await paymentSteps.confirm(userId, { paymentId: id, amountRs: body.amountRs, reason: body.reason });
+  } else {
+    const body = await readAdminBody(request, decidePaymentBodySchema);
+    answer = await paymentSteps[action](userId, { paymentId: id, reason: body.reason });
   }
-  const body = await readAdminBody(request, decidePaymentBodySchema);
-  return Response.json(await paymentSteps[action](userId, { paymentId: id, reason: body.reason }), { status: 200, headers: NO_STORE });
+  await auditPhoneDecision(request, action, id, userId);
+  return Response.json(answer, { status: 200, headers: NO_STORE });
+}
+
+/**
+ * Sprint 9 (EP-33.US02.T01): the seller backend audits the decision itself; a decision taken on a phone also names the device here. Best effort: the money
+ * decision has already happened, so a failed entry is logged and the answer is still given.
+ */
+async function auditPhoneDecision(request: Request, action: PaymentAction, paymentId: string, userId: string): Promise<void> {
+  const phone = adminDeviceDetails(request);
+  if (!phone.device) return;
+  try {
+    await paymentSteps.audit('subscription_payment.phone_decision', 'subscriptionPayment', paymentId, userId, { ...phone, decision: action, at: new Date().toISOString() });
+  } catch (err) {
+    console.error('[admin-backend] could not write the phone decision audit entry', { paymentId, error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' });
+  }
 }

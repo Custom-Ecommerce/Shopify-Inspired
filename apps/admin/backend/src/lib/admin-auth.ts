@@ -1,6 +1,19 @@
 import mongoose from 'mongoose';
 import { connectDb } from '@/lib/db';
-import { RateLimitedError, SESSION_MIN_SECRET_LENGTH, SessionRejectedError, hashPassword, sessionTokenVersion, signSession, verifySession } from '@/lib/workspace';
+import { adminMobileDeps, requireAdminAppVersion } from '@/lib/mobile-auth';
+import {
+  MOBILE_ADMIN_AUDIENCE,
+  RateLimitedError,
+  SESSION_MIN_SECRET_LENGTH,
+  SessionRejectedError,
+  UpgradeRequiredError,
+  hashPassword,
+  liveMobileDevice,
+  sessionTokenVersion,
+  signSession,
+  verifyMobileAccessToken,
+  verifySession,
+} from '@/lib/workspace';
 
 /** Sessions for the admin backend are bound to this audience. A seller token is refused here, and the reverse. */
 export const ADMIN_AUDIENCE = 'admin-backend';
@@ -31,6 +44,10 @@ export function errorResponse(err: unknown): Response {
   // Sprint 4 EP-08 (D-093): a verified token whose account is suspended, gone, or on an older tokenVersion.
   if (err instanceof SessionRejectedError) {
     return Response.json({ error: err.message, code: err.code }, { status: 401, headers: NO_STORE });
+  }
+  // Sprint 9 (EP-31.US01.T08): a phone app older than the platform's minimum.
+  if (err instanceof UpgradeRequiredError) {
+    return Response.json({ error: err.message, code: err.code, minVersion: err.minVersion, storeUrl: err.storeUrl }, { status: 426, headers: NO_STORE });
   }
   if (err instanceof RateLimitedError) {
     return Response.json(
@@ -92,7 +109,42 @@ export function extractBearer(request: Request): string | null {
   return token === '' ? null : token;
 }
 
-/** Verifies signature, expiry, and audience, and that the token was minted for an admin. No database access. */
+const mobileRequests = new WeakMap<Request, { deviceId: string }>();
+
+/** The phone a request came from (Sprint 9), or undefined for the web console. For the audit lines of actions taken on a phone (adminDeviceDetails). */
+export function adminDeviceOf(request: Request): { deviceId: string } | undefined {
+  return mobileRequests.get(request);
+}
+
+/** What an audit entry says about the phone: { device } for a request from the app, nothing for the web console. */
+export function adminDeviceDetails(request: Request): { device?: string } {
+  const phone = mobileRequests.get(request);
+  return phone ? { device: phone.deviceId } : {};
+}
+
+/**
+ * Sprint 9 (EP-31.US01.T06): a phone's access token (audience admin-mobile). Its device must still be live; the account itself, its status, tokenVersion and
+ * level are read by authorizeAdmin on every request, exactly as for a console session.
+ */
+async function authenticateAdminPhone(request: Request, token: string, secret: string): Promise<{ userId: string; tokenVersion: number }> {
+  let claims: Awaited<ReturnType<typeof verifyMobileAccessToken>>;
+  try {
+    claims = await verifyMobileAccessToken(token, secret, MOBILE_ADMIN_AUDIENCE);
+  } catch {
+    throw new AdminHttpError(401, 'Invalid or expired session');
+  }
+  if (claims.role !== 'admin' || !mongoose.isValidObjectId(claims.sub)) throw new AdminHttpError(401, 'Invalid or expired session');
+  await requireAdminAppVersion(request.headers);
+  const device = await liveMobileDevice(await adminMobileDeps(), claims);
+  if (!device) throw new SessionRejectedError('SESSION_REVOKED');
+  mobileRequests.set(request, { deviceId: device.id });
+  return { userId: claims.sub, tokenVersion: claims.tv };
+}
+
+/**
+ * Verifies signature, expiry, and audience, and that the token was minted for an admin. A console session needs no database access; a phone token also
+ * has its device looked up.
+ */
 export async function authenticateAdmin(request: Request): Promise<{ userId: string; tokenVersion: number }> {
   const secret = requireAdminSecret();
   const token = extractBearer(request);
@@ -102,7 +154,7 @@ export async function authenticateAdmin(request: Request): Promise<{ userId: str
   try {
     claims = await verifySession(token, secret, ADMIN_AUDIENCE);
   } catch {
-    throw new AdminHttpError(401, 'Invalid or expired session');
+    return authenticateAdminPhone(request, token, secret);
   }
   if (claims.role !== 'admin' || !mongoose.isValidObjectId(claims.sub)) {
     throw new AdminHttpError(401, 'Invalid or expired session');

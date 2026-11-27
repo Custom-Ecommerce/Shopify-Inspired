@@ -1,6 +1,7 @@
 import { errorText, recipientDomain } from './errors';
 import { providerFromEnv } from './providers/select';
 import { renderTemplate, type TemplateName, type TemplateVars } from './templates';
+import { redactPushTokens, type PushApp, type PushChannel } from './push';
 import type { EmailProvider, OutboxStatus, SendResult } from './types';
 
 /**
@@ -56,6 +57,9 @@ export interface OutboxRow {
   status: OutboxStatus;
   attempts: number;
   nextAttemptAt: Date | null;
+  /** Missing on rows from before: email. */
+  channel?: string;
+  payload?: { data?: Record<string, string> };
 }
 
 export type OutboxLog = (line: string, detail?: Record<string, unknown>) => void;
@@ -81,6 +85,8 @@ export interface OutboxOptions {
   /** Injected by tests. */
   now?: () => Date;
   log?: OutboxLog;
+  /** Sprint 9: how push rows are sent. Without it a push row is left untouched for a sender that has one. */
+  push?: PushChannel;
 }
 
 export interface EnqueueOptions extends OutboxOptions {
@@ -177,6 +183,75 @@ export async function enqueueNotification(model: NotificationOutboxModel, input:
   }
 }
 
+export interface EnqueuePushInput {
+  /** The push token of one phone. */
+  to: string;
+  title: string;
+  body: string;
+  data: Record<string, string>;
+  app: PushApp;
+  kind: string;
+  dedupeKey: string;
+  store?: string | null;
+  order?: string | null;
+}
+
+/**
+ * Sprint 9 (EP-31.US02.T02): writes one push as an outbox row (channel 'push') and schedules its first send, exactly like an email: the same claim, the
+ * same retries, one row per dedupeKey. Never throws.
+ */
+export async function enqueuePush(model: NotificationOutboxModel, input: EnqueuePushInput, options: EnqueueOptions & { push: PushChannel }): Promise<EnqueueResult> {
+  const log = options.log ?? defaultLog;
+  try {
+    if (input.to === '' || input.to.length > 254) return { outcome: 'no_recipient' };
+    const now = (options.now ?? (() => new Date()))();
+    const text = input.body.slice(0, 200);
+    let id: string;
+    try {
+      const created = await model.create({
+        channel: 'push',
+        to: input.to,
+        template: 'push_' + input.kind,
+        payload: { app: input.app, kind: input.kind, data: input.data },
+        subject: input.title.slice(0, 80),
+        bodyText: text,
+        bodyHtml: text,
+        status: 'queued',
+        attempts: 0,
+        nextAttemptAt: now,
+        lastError: null,
+        store: input.store ?? null,
+        order: input.order ?? null,
+        dedupeKey: input.dedupeKey.slice(0, 200),
+      });
+      id = idOf(created);
+    } catch (err) {
+      if (isDuplicateKeyError(err)) {
+        const existing = await model.findOne({ dedupeKey: input.dedupeKey.slice(0, 200) }).lean();
+        return { outcome: 'duplicate', id: existing ? idOf(existing) : null };
+      }
+      throw err;
+    }
+    if (options.sendNow !== false && id !== '') {
+      const provider = options.provider ?? providerFromEnv();
+      const guarded = (): Promise<void> =>
+        sendOutboxRow(model, id, provider, { now: options.now, log, push: options.push }).then(
+          () => undefined,
+          (err: unknown) => log('[notifications] scheduled send failed', { id, error: redactPushTokens(errorText(err)) }),
+        );
+      try {
+        (options.schedule ?? ((run: () => Promise<void>) => void run()))(guarded);
+      } catch (err) {
+        log('[notifications] could not schedule the first send; the flush will send it', { id, error: errorText(err) });
+      }
+    }
+    return { outcome: 'queued', id };
+  } catch (err) {
+    log('[notifications] could not queue a push', { kind: input.kind, error: redactPushTokens(errorText(err)) });
+    return { outcome: 'error' };
+  }
+}
+
 /**
  * Claims one row (the compare-and-set above), asks the provider to send it and records the result. A failure is
  * retried with a doubling delay until OUTBOX_MAX_ATTEMPTS tries; a refusal the provider calls permanent is final at once.
@@ -201,11 +276,38 @@ export async function sendOutboxRow(model: NotificationOutboxModel, id: string, 
   }
   if (!row) return 'not_claimed';
 
+  const isPush = row.channel === 'push';
+  if (isPush && !options.push) {
+    // Nobody here can send a push: give the claim back, so a sender with a push channel finds the row due and unspent.
+    try {
+      await model.findOneAndUpdate({ _id: id, attempts: row.attempts }, { $set: { nextAttemptAt: clock() }, $inc: { attempts: -1 } }, { new: true }).lean();
+    } catch (err) {
+      log('[notifications] could not release a push row', { id, error: errorText(err) });
+    }
+    return 'not_claimed';
+  }
+
   let result: SendResult;
+  let deadToken = false;
+  const providerName = isPush ? options.push!.client.name : provider.name;
   try {
-    result = await provider.send({ to: row.to, subject: row.subject, text: row.bodyText, html: row.bodyHtml });
+    if (isPush) {
+      const sent = await options.push!.client.send({ to: row.to, title: row.subject, body: row.bodyText, data: row.payload?.data ?? {} });
+      deadToken = !sent.ok && sent.deadToken === true;
+      result = sent.ok ? { ok: true, status: 'sent', providerMessageId: sent.ticketId ?? null } : { ok: false, error: redactPushTokens(sent.error), retryable: sent.retryable && !deadToken };
+    } else {
+      result = await provider.send({ to: row.to, subject: row.subject, text: row.bodyText, html: row.bodyHtml });
+    }
   } catch (err) {
-    result = { ok: false, error: errorText(err), retryable: true };
+    result = { ok: false, error: redactPushTokens(errorText(err)), retryable: true };
+  }
+  if (deadToken) {
+    // The token is removed from its phone; the row is final and never retried.
+    try {
+      await options.push!.onDeadToken(row.to);
+    } catch (err) {
+      log('[notifications] could not remove a dead push token', { id, error: redactPushTokens(errorText(err)) });
+    }
   }
 
   const attempts = Number(row.attempts) || 1;
@@ -218,7 +320,7 @@ export async function sendOutboxRow(model: NotificationOutboxModel, id: string, 
       status: result.status,
       nextAttemptAt: null,
       lastError: null,
-      provider: provider.name,
+      provider: providerName,
       sentAt: result.status === 'sent' ? finishedAt : null,
       providerMessageId: result.status === 'sent' ? result.providerMessageId ?? null : null,
     };
@@ -228,10 +330,10 @@ export async function sendOutboxRow(model: NotificationOutboxModel, id: string, 
     set = {
       status: 'failed',
       lastError: errorText(result.error),
-      provider: provider.name,
+      provider: providerName,
       nextAttemptAt: final ? null : new Date(finishedAt.getTime() + retryDelayMs(attempts)),
     };
-    log('[notifications] email not sent', { id, template: row.template, provider: provider.name, attempts, final, error: errorText(result.error) });
+    log(isPush ? '[notifications] push not sent' : '[notifications] email not sent', { id, template: row.template, provider: providerName, attempts, final, error: errorText(result.error) });
   }
 
   try {
@@ -262,11 +364,12 @@ export async function flushOutbox(model: NotificationOutboxModel, options: Outbo
   const provider = options.provider ?? providerFromEnv();
   const now = (options.now ?? (() => new Date()))();
   const batch = Math.min(Math.max(1, Math.floor(options.batch ?? OUTBOX_FLUSH_BATCH)), OUTBOX_FLUSH_BATCH);
-  const rows = await model
+  const due = await model
     .find({ status: { $in: ['queued', 'failed'] }, attempts: { $lt: OUTBOX_MAX_ATTEMPTS }, nextAttemptAt: { $lte: now } })
     .sort({ nextAttemptAt: 1 })
     .limit(batch)
     .lean();
+  const rows = options.push ? due : due.filter((row) => (row as { channel?: unknown }).channel !== 'push');
 
   const summary: FlushSummary = { picked: rows.length, sent: 0, skipped: 0, retry: 0, failed: 0, notClaimed: 0, errors: 0 };
   for (const row of rows) {

@@ -414,3 +414,56 @@ test('Sprint 8 (S8-B6, CO-115): the counter models, the referral reward slot and
   check('Referral', 'referrals', [['referrer_month_slot_unique', { unique: true, partial: true }], ['status_createdAt', { unique: false }]]);
   check('SubscriptionCredit', 'subscriptioncredits', [['referral_unique', { unique: true }], ['seller_usedAt', { unique: false }]]);
 });
+
+test('Sprint 9 (EP-31.US01.T03): the phone model declares the unique {family}, {app, user, revokedAt} and the partial {revokedAt} and {pushToken}; a fresh database misses all four, and once they exist nothing is missing', () => {
+  const model = (dbSchemas as any).MobileDevice ?? (dbSchemas as any).default?.MobileDevice;
+  const declared = model.schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'MobileDevice', collection: 'mobiledevices', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['MobileDevice']);
+  assert.equal(fresh.totals.conflicts, 0);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string; unique: boolean; partial: boolean }> }).missing;
+  assert.equal(missing.length, 4);
+  assert.ok(missing.some((m) => m.name === 'pushToken_partial' && !m.unique && m.partial), 'only rows with a push token');
+  assert.ok(missing.some((m) => m.name === 'family_unique' && m.unique), 'one row per token family');
+  assert.ok(missing.some((m) => m.name === 'app_user_revokedAt' && !m.unique));
+  assert.ok(missing.some((m) => m.name === 'revokedAt_partial' && !m.unique && m.partial));
+  assert.equal(model.collection.name, 'mobiledevices');
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const have = declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  assert.equal(plan.planAll([{ model: 'MobileDevice', collection: 'mobiledevices', declared }], { mobiledevices: [ID, ...have] }).totals.missing, 0);
+  // A plain index on family is not the unique one.
+  const plain = plan.planAll([{ model: 'MobileDevice', collection: 'mobiledevices', declared }], { mobiledevices: [ID, { name: 'family_unique', key: { family: 1 } }] });
+  assert.ok(plain.totals.missing + plain.totals.conflicts >= 1);
+});
+
+
+test('Sprint 9 (EP-31.US01.T07): one second factor per admin: a fresh database misses the unique {user} index, and once it exists nothing is missing', () => {
+  const model = (dbSchemas as any).AdminSecondFactor ?? (dbSchemas as any).default?.AdminSecondFactor;
+  const declared = model.schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'AdminSecondFactor', collection: 'adminsecondfactors', declared }], {});
+  assert.deepEqual(fresh.toCreate, ['AdminSecondFactor']);
+  const missing = (fresh.models[0] as unknown as { missing: Array<{ name: string; unique: boolean }> }).missing;
+  assert.deepEqual(missing.map((m) => [m.name, m.unique]), [['user_unique', true]]);
+  assert.equal(model.collection.name, 'adminsecondfactors');
+  const ID = { name: '_id_', key: { _id: 1 } };
+  assert.equal(plan.planAll([{ model: 'AdminSecondFactor', collection: 'adminsecondfactors', declared }], { adminsecondfactors: [ID, { name: 'user_unique', key: { user: 1 }, unique: true }] }).totals.missing, 0);
+});
+
+test('Sprint 9 (EP-31.US03): the idempotency records have the unique {user, key} and the TTL, and orders have the two paging indexes', () => {
+  const ns = (dbSchemas as any).IdempotencyRecord ? (dbSchemas as any) : (dbSchemas as any).default;
+  const ID = { name: '_id_', key: { _id: 1 } };
+  const named = (declared: Declared) =>
+    declared.map(([key, options]) => ({ name: (options as { name?: string } | undefined)?.name ?? Object.entries(key).map(([k, d]) => k + '_' + d).join('_'), key, ...(options as object) }));
+  type Missing = Array<{ name: string; unique: boolean; ttl: boolean }>;
+  const records = ns.IdempotencyRecord.schema.indexes() as Declared;
+  const fresh = plan.planAll([{ model: 'IdempotencyRecord', collection: 'idempotencyrecords', declared: records }], {});
+  assert.deepEqual(fresh.toCreate, ['IdempotencyRecord']);
+  const missing = (fresh.models[0] as unknown as { missing: Missing }).missing;
+  assert.deepEqual(missing.map((m) => [m.name, m.unique, m.ttl]), [['user_key_unique', true, false], ['expires_ttl', false, true]]);
+  assert.equal(plan.planAll([{ model: 'IdempotencyRecord', collection: 'idempotencyrecords', declared: records }], { idempotencyrecords: [ID, ...named(records)] }).totals.missing, 0);
+
+  const orders = ns.Order.schema.indexes() as Declared;
+  const orderMissing = (plan.planAll([{ model: 'Order', collection: 'orders', declared: orders }], {}).models[0] as unknown as { missing: Missing }).missing.map((m) => m.name);
+  assert.ok(orderMissing.includes('store_createdAt_id'));
+  assert.ok(orderMissing.includes('store_status_createdAt_id'));
+});

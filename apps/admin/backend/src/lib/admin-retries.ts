@@ -18,12 +18,12 @@ export const retrySteps = {
     return (r.modifiedCount ?? 0) === 1;
   },
   retryEmail: async (id: string, now: Date): Promise<boolean> => {
-    const r = (await NotificationOutbox.updateOne({ _id: id, status: 'failed' } as never, { $set: { status: 'queued', attempts: 0, nextAttemptAt: now, lastError: null } } as never)) as { modifiedCount?: number };
+    const r = (await NotificationOutbox.updateOne({ _id: id, status: 'failed', channel: { $ne: 'push' } } as never, { $set: { status: 'queued', attempts: 0, nextAttemptAt: now, lastError: null } } as never)) as { modifiedCount?: number };
     return (r.modifiedCount ?? 0) === 1;
   },
   listFailed: async (): Promise<Array<Record<string, any>>> =>
-    (await NotificationOutbox.find({ status: 'failed' } as never).select('template to attempts lastError createdAt updatedAt').sort({ updatedAt: -1 }).limit(200).lean()) as unknown as Array<Record<string, any>>,
-  countFailed: async (): Promise<number> => NotificationOutbox.countDocuments({ status: 'failed' } as never),
+    (await NotificationOutbox.find({ status: 'failed', channel: { $ne: 'push' } } as never).select('template to attempts lastError createdAt updatedAt').sort({ updatedAt: -1 }).limit(200).lean()) as unknown as Array<Record<string, any>>,
+  countFailed: async (): Promise<number> => NotificationOutbox.countDocuments({ status: 'failed', channel: { $ne: 'push' } } as never),
 };
 
 /** "ayesha@example.com" -> "a***@e***.com": enough to recognise, not enough to contact. */

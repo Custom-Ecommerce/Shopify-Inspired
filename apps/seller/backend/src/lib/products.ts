@@ -303,9 +303,11 @@ export async function applyProductUpdate(
   productId: string,
   data: ProductUpdateRequest,
   prepared: PreparedProductVariants | null,
+  /** Sprint 9: a further condition of the write (the revision a phone saw). */
+  also: Record<string, unknown> = {},
 ): Promise<void> {
   const updated = await withSkuGuard(() =>
-    Product.findOneAndUpdate(productPatchFilter(storeId, productId, prepared), [{ $set: productPatchSet(data, prepared) }], {
+    Product.findOneAndUpdate({ ...productPatchFilter(storeId, productId, prepared), ...also }, [{ $set: productPatchSet(data, prepared) }], {
       new: true,
     })
       .select('_id')

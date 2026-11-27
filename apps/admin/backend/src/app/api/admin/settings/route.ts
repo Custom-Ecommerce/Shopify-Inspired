@@ -32,7 +32,7 @@ export const dynamic = 'force-dynamic';
 
 registerSyncOutboxModel(SyncOutbox as unknown as SyncOutboxModelPort);
 
-const SELECT = 'defaultCommissionRate maxStoresPerSeller stripeCommissionNote storeApprovalRequired codCommissionPercent paymentInstructions graceDays trialDays supportEmail supportPhone referralRewardMonths referralMonthlyCap settingsRevision createdAt updatedAt';
+const SELECT = 'defaultCommissionRate maxStoresPerSeller stripeCommissionNote storeApprovalRequired codCommissionPercent paymentInstructions graceDays trialDays supportEmail supportPhone referralRewardMonths referralMonthlyCap minSellerAppVersion minAdminAppVersion settingsRevision createdAt updatedAt';
 const NOT_RECORDED = 'The change could not be recorded and was not applied';
 const NOT_UNDONE = 'The settings could not be recorded, and the change could not be put back. Check the settings before doing anything else.';
 /** The platform settings are one document; the sync outbox addresses it by this id (the dispatcher's platform binding). */

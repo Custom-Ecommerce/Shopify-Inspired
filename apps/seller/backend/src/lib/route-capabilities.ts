@@ -118,6 +118,32 @@ export const ROUTE_CAPABILITIES: Readonly<Record<string, RouteAccess>> = Object.
   'media/[id] PATCH': 'media.write',
   'media/[id]/usage GET': 'media.read',
 
+  // mobile (Sprint 9, EP-31.US01): the phone sign-in is public like users/login; the device list is the caller's own account.
+  'mobile/v1/auth/login POST': 'public',
+  'mobile/v1/auth/logout POST': 'public',
+  'mobile/v1/auth/refresh POST': 'public',
+  'mobile/v1/devices GET': 'account',
+  'mobile/v1/devices/[id]/revoke POST': 'account',
+  'mobile/v1/devices/push-token POST': 'account',
+  'mobile/v1/push-settings GET': 'account',
+  'mobile/v1/push-settings PATCH': 'account',
+  // S9-B4: the phone's data. The same capabilities as the portal routes they stand beside.
+  'mobile/v1/alerts GET': 'alerts.read',
+  'mobile/v1/alerts/[id]/read POST': 'alerts.read',
+  'mobile/v1/alerts/read-all POST': 'alerts.read',
+  'mobile/v1/customers GET': 'customers.read',
+  'mobile/v1/customers/[key] GET': 'customers.read',
+  'mobile/v1/dashboard GET': 'orders.read',
+  'mobile/v1/orders GET': 'orders.read',
+  'mobile/v1/orders/[id] GET': 'orders.read',
+  'mobile/v1/orders/[id]/notes POST': 'orders.notes',
+  'mobile/v1/orders/[id]/status POST': 'orders.write',
+  'mobile/v1/products GET': 'products.read',
+  'mobile/v1/products/[id] GET': 'products.read',
+  'mobile/v1/products/[id]/price POST': 'products.write',
+  'mobile/v1/products/[id]/stock POST': 'inventory.write',
+  'mobile/v1/stores GET': 'account',
+
   // orders
   'orders GET': 'orders.read',
   'orders/[id] GET': 'orders.read',

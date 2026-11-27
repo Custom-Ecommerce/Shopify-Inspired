@@ -2,6 +2,7 @@ import * as notificationsNs from '@markaz/notifications';
 import { errorResponse, requireDatabase } from '@/lib/admin-auth';
 import { outboxModel } from '@/lib/admin-account';
 import { unwrapCjs } from '@/lib/cjs';
+import { adminPushChannel } from '@/lib/push';
 
 const notifications: typeof notificationsNs = unwrapCjs(notificationsNs);
 
@@ -19,7 +20,7 @@ async function flush(request: Request): Promise<Response> {
       return Response.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
     }
     await requireDatabase();
-    const summary = await notifications.flushOutbox(outboxModel(), { provider: notifications.providerFromEnv() });
+    const summary = await notifications.flushOutbox(outboxModel(), { provider: notifications.providerFromEnv(), push: adminPushChannel() });
     return Response.json(summary, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return errorResponse(err);

@@ -74,6 +74,26 @@ export const NotificationOutbox = db.NotificationOutbox;
 // Sprint 6 (S6-B7): the retention purge reads the sent sync events.
 export const SyncOutbox = db.SyncOutbox;
 export const SellerAlert = db.SellerAlert;
+// Sprint 9 (EP-31.US03): the answers of phone writes, kept 7 days.
+export const IdempotencyRecord = db.IdempotencyRecord;
+// Sprint 9 (EP-31.US01): one row per signed-in phone.
+export const MobileDevice = db.MobileDevice;
+export const {
+  MOBILE_ACCESS_TTL_SECONDS,
+  MOBILE_SELLER_AUDIENCE,
+  signMobileAccessToken,
+  verifyMobileAccessToken,
+  startMobileSession,
+  refreshMobileSession,
+  endMobileSession,
+  liveMobileDevice,
+  activeMobileDevices,
+  mongoMobileDeviceStore,
+  memoryMobileDeviceStore,
+  assertAppVersion,
+  createMinVersionReader,
+  UpgradeRequiredError,
+} = auth;
 // Sprint 8 (S8-B2, D-118): the team of a store (staff roles and invites).
 export const StoreMember = db.StoreMember;
 // Sprint 8 (S8-B4, D-118): the API keys of a store.

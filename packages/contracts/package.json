@@ -17,7 +17,15 @@
     "./storefront-events": "./src/storefront-events.ts",
     "./sales-report": "./src/sales-report.ts",
     "./analytics": "./src/analytics.ts",
-    "./admin-traffic": "./src/admin-traffic.ts"
+    "./admin-traffic": "./src/admin-traffic.ts",
+    "./mobile": "./src/mobile.ts",
+    "./mobile-data": "./src/mobile-data.ts",
+    "./order": "./src/order.ts",
+    "./order-flow": "./src/order-flow.ts",
+    "./admin-orders": "./src/admin-orders.ts",
+    "./admin-overview": "./src/admin-overview.ts",
+    "./subscription-payments": "./src/subscription-payments.ts",
+    "./support": "./src/support.ts"
   },
   "scripts": {
     "build": "tsc",

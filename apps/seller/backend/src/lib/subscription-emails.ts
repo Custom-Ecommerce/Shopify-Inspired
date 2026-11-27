@@ -4,6 +4,7 @@ import { unwrapCjs } from '@/lib/cjs';
 import { PAYMENT_METHOD_LABELS } from '@/lib/contracts';
 import { enqueueEmail, runAfterResponse, sellerDashboardLink } from '@/lib/notifications';
 import { readPlanSettings } from '@/lib/platform-settings';
+import { pushPaymentClaim, pushSubscriptionPayment } from '@/lib/push';
 import { Store, SubscriptionPlanModel, User } from '@/lib/services';
 
 // The package is CommonJS, read through the default object like lib/notifications.ts.
@@ -169,10 +170,13 @@ export async function guarded(label: string, job: () => Promise<void>): Promise<
 /** After the response, best effort: a failed email never changes the payment. */
 export function notifyPaymentClaimed(payment: PaymentMailFields): void {
   runAfterResponse('payment_claimed', () => sendPaymentClaimed(payment));
+  runAfterResponse('push_payment_claim', async () => void (await pushPaymentClaim(payment.id, payment.amountRs)));
 }
 export function notifyPaymentConfirmed(payment: PaymentMailFields): void {
   runAfterResponse('payment_confirmed', () => sendPaymentConfirmed(payment));
+  runAfterResponse('push_payment_confirmed', async () => void (await pushSubscriptionPayment(payment.seller, payment.id, 'confirmed', payment.amountRs)));
 }
 export function notifyPaymentRejected(payment: PaymentMailFields, kind: 'rejected' | 'voided' = 'rejected'): void {
   runAfterResponse('payment_' + kind, () => sendPaymentRejected(payment, kind));
+  runAfterResponse('push_payment_' + kind, async () => void (await pushSubscriptionPayment(payment.seller, payment.id, kind, payment.amountRs)));
 }

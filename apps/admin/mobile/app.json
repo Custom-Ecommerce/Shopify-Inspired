@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Markazify Admin",
+    "slug": "markazify-admin",
+    "version": "1.0.0",
+    "scheme": "markazify-admin",
+    "platforms": [
+      "android"
+    ],
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.markazify.admin",
+      "versionCode": 1,
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "sitemap": false
+        }
+      ],
+      "expo-secure-store",
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ]
+    ]
+  }
+}

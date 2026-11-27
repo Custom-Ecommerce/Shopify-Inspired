@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PolicyConfigError, PolicyDeniedError, RateLimitedError, SessionRejectedError } from '@/lib/services';
+import { PolicyConfigError, PolicyDeniedError, RateLimitedError, SessionRejectedError, UpgradeRequiredError } from '@/lib/services';
 
 /** An error that maps directly to an HTTP status. Sprint 4: an optional code (ACCOUNT_CODES in contracts) and field. */
 export class HttpError extends Error {
@@ -93,6 +93,10 @@ export function handleRouteError(err: unknown): NextResponse {
     return NextResponse.json({ errors: [{ message: err.message }], code: err.errorCode, exceeds: err.exceeds }, { status: 422, headers: { 'Cache-Control': 'no-store' } });
   }
   if (err instanceof HttpError) return jsonError(err.status, err.message, err.errorCode, err.errorField);
+  // Sprint 9 (EP-31.US01.T08): a phone app older than the platform's minimum.
+  if (err instanceof UpgradeRequiredError) {
+    return NextResponse.json({ errors: [{ message: err.message }], code: err.code, minVersion: err.minVersion, storeUrl: err.storeUrl }, { status: 426, headers: { 'Cache-Control': 'no-store' } });
+  }
   if (err instanceof SessionRejectedError) return jsonError(401, err.message, err.code);
   if (err instanceof RateLimitedError) return tooManyRequests(err.retryAfterSeconds);
   if (err instanceof PolicyDeniedError) return jsonError(403, 'You do not have permission to perform this action');

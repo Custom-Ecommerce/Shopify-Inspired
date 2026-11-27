@@ -32,6 +32,10 @@ export const ADMIN_SETTINGS_REFERRAL_CAP_MIN = 0;
 export const ADMIN_SETTINGS_REFERRAL_CAP_MAX = 100;
 export const ADMIN_SETTINGS_REFERRAL_CAP_DEFAULT = 5;
 
+/** Sprint 9 (EP-31.US01.T08): a minimum app version such as 1.4.0; blank clears it. */
+export const ADMIN_SETTINGS_APP_VERSION_PATTERN = /^\d{1,5}(\.\d{1,5}){0,3}$/;
+export const ADMIN_SETTINGS_APP_VERSION_MAX = 32;
+
 /** The fields an operator may change, in the order the console lists them. */
 export const ADMIN_SETTINGS_FIELDS = [
   'defaultCommissionRate',
@@ -48,6 +52,9 @@ export const ADMIN_SETTINGS_FIELDS = [
   // Sprint 8 (S8-B5).
   'referralRewardMonths',
   'referralMonthlyCap',
+  // Sprint 9 (EP-31.US01.T08).
+  'minSellerAppVersion',
+  'minAdminAppVersion',
 ] as const;
 export type AdminSettingsField = (typeof ADMIN_SETTINGS_FIELDS)[number];
 
@@ -115,6 +122,13 @@ const supportPhoneSchema = z
   .refine((value) => value === '' || /^[0-9+\-() ]+$/.test(value), 'Use digits, spaces, + - and brackets only.')
   .nullable();
 
+const appVersionSchema = z
+  .string()
+  .trim()
+  .max(ADMIN_SETTINGS_APP_VERSION_MAX, 'The version is too long.')
+  .refine((value) => value === '' || ADMIN_SETTINGS_APP_VERSION_PATTERN.test(value), 'Write a version such as 1.4.0.')
+  .nullable();
+
 const reasonSchema = z
   .string({ error: 'Enter a reason.' })
   .trim()
@@ -139,6 +153,9 @@ export const adminPlatformSettingsSchema = z.object({
   /** Sprint 8 (S8-B5). An older backend sends none: the defaults. */
   referralRewardMonths: z.number().int().min(ADMIN_SETTINGS_REFERRAL_MONTHS_MIN).max(ADMIN_SETTINGS_REFERRAL_MONTHS_MAX).default(ADMIN_SETTINGS_REFERRAL_MONTHS_DEFAULT),
   referralMonthlyCap: z.number().int().min(ADMIN_SETTINGS_REFERRAL_CAP_MIN).max(ADMIN_SETTINGS_REFERRAL_CAP_MAX).default(ADMIN_SETTINGS_REFERRAL_CAP_DEFAULT),
+  /** Sprint 9 (EP-31.US01.T08): the app version gate; null means every version is served. An older backend sends none: null. */
+  minSellerAppVersion: z.string().max(ADMIN_SETTINGS_APP_VERSION_MAX).nullable().default(null),
+  minAdminAppVersion: z.string().max(ADMIN_SETTINGS_APP_VERSION_MAX).nullable().default(null),
   /** Advanced by the server on every change; never writable. */
   settingsRevision: z.number().int().min(0),
   updatedAt: isoDate.nullable(),
@@ -164,6 +181,8 @@ export const adminSettingsUpdateRequestSchema = z
     supportPhone: supportPhoneSchema.optional(),
     referralRewardMonths: referralMonthsSchema.optional(),
     referralMonthlyCap: referralCapSchema.optional(),
+    minSellerAppVersion: appVersionSchema.optional(),
+    minAdminAppVersion: appVersionSchema.optional(),
     reason: reasonSchema,
   })
   .strict()

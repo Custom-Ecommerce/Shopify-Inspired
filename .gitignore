@@ -60,3 +60,12 @@ verify/
 _review/
 graphify-out/
 .graphify/
+
+# Expo apps (apps/*/mobile): generated folders and signing keys (the release key is an owner step, never in git)
+.expo/
+expo-env.d.ts
+*.keystore
+*.jks
+
+# Firebase service account key (push for the phone apps): a secret
+*firebase-adminsdk*.json

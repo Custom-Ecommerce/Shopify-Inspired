@@ -13,9 +13,11 @@ export const RETENTION_DAYS = {
   // Sprint 7 (S7-B4): closed tickets and closed contact messages, counted from their last change. Open and answered ones are never purged.
   closedTickets: 730,
   contactMessages: 365,
+  // Sprint 9 (EP-31.US01.T09): signed-out phones (both apps), counted from the day they were revoked. A phone that is still signed in is never purged.
+  revokedMobileDevices: 90,
 } as const;
 
-export const PURGEABLE_TARGETS = ['notification_outbox', 'sync_outbox', 'stock_movements', 'product_trash', 'contact_messages', 'closed_tickets'] as const;
+export const PURGEABLE_TARGETS = ['notification_outbox', 'sync_outbox', 'stock_movements', 'product_trash', 'contact_messages', 'closed_tickets', 'mobile_devices'] as const;
 export type PurgeableTarget = (typeof PURGEABLE_TARGETS)[number];
 
 /** The most rows one run removes per target; `more: true` in the answer says the next run has more to do. */

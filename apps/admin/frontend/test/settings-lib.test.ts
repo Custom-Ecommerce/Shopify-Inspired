@@ -26,6 +26,8 @@ const settings = {
   supportPhone: null,
   referralRewardMonths: 1,
   referralMonthlyCap: 5,
+  minSellerAppVersion: null,
+  minAdminAppVersion: null,
   settingsRevision: 2,
   updatedAt: NOW,
 };
@@ -44,6 +46,8 @@ test("the form starts from the settings, with a blank note for none and no reaso
     supportPhone: "",
     referralRewardMonths: "1",
     referralMonthlyCap: "5",
+    minSellerAppVersion: "",
+    minAdminAppVersion: "",
     reason: "",
   });
   assert.deepEqual(formFromSettings({ ...withNote, defaultCommissionRate: 7.5 }), {
@@ -58,6 +62,8 @@ test("the form starts from the settings, with a blank note for none and no reaso
     supportPhone: "",
     referralRewardMonths: "1",
     referralMonthlyCap: "5",
+    minSellerAppVersion: "",
+    minAdminAppVersion: "",
     reason: "",
   });
 });
@@ -245,4 +251,16 @@ test("S8-B5: the referral settings: 0 months is allowed (referrals off), out-of-
   for (const bad of ["", "101", "two"]) assert.ok(validateSettingsForm({ ...base, referralMonthlyCap: bad }).referralMonthlyCap, bad);
   assert.deepEqual(toUpdateRequest({ ...base, referralRewardMonths: "0" }, settings), { referralRewardMonths: 0, reason: "Referrals" });
   assert.deepEqual(changedSettingFields({ ...base, referralMonthlyCap: "6" }, settings), ["referralMonthlyCap"]);
+});
+
+test("Sprint 9: the minimum app versions are optional, checked, sent only when changed and cleared with a blank", () => {
+  const form = formFromSettings({ ...settings, minSellerAppVersion: "1.2.0" });
+  assert.equal(form.minSellerAppVersion, "1.2.0");
+  assert.equal(form.minAdminAppVersion, "");
+  const original = { ...settings, minSellerAppVersion: "1.2.0" };
+  assert.deepEqual(changedSettingFields(form, original), []);
+  assert.deepEqual(toUpdateRequest({ ...form, minSellerAppVersion: " ", minAdminAppVersion: "2.0", reason: "Old builds break" }, original), { minSellerAppVersion: null, minAdminAppVersion: "2.0", reason: "Old builds break" });
+  const errors = validateSettingsForm({ ...form, minAdminAppVersion: "v2", reason: "x" });
+  assert.ok(errors.minAdminAppVersion);
+  assert.equal(errors.minSellerAppVersion, undefined);
 });

@@ -28,6 +28,9 @@ export const SETTINGS_REFERRAL_MONTHS_MIN = 0;
 export const SETTINGS_REFERRAL_MONTHS_MAX = 12;
 export const SETTINGS_REFERRAL_CAP_MIN = 0;
 export const SETTINGS_REFERRAL_CAP_MAX = 100;
+/** Sprint 9 (EP-31.US01.T08): the app version gate; the same as ADMIN_SETTINGS_APP_VERSION_* in @markaz/contracts. */
+export const SETTINGS_APP_VERSION_MAX = 32;
+const APP_VERSION_SHAPE = /^\d{1,5}(\.\d{1,5}){0,3}$/;
 
 /**
  * The fields an operator may write (ADMIN_PLATFORM_SETTINGS_WRITABLE_FIELDS in the policy matrix). Passed to the
@@ -48,6 +51,9 @@ export const SETTINGS_FIELDS = [
   // Sprint 8 (S8-B5).
   'referralRewardMonths',
   'referralMonthlyCap',
+  // Sprint 9 (EP-31.US01.T08). Not synced: both backends read the one shared settings document (D-106).
+  'minSellerAppVersion',
+  'minAdminAppVersion',
 ] as const;
 export type SettingsField = (typeof SETTINGS_FIELDS)[number];
 
@@ -67,7 +73,7 @@ export const SYNCED_SETTINGS_FIELDS: readonly SettingsField[] = [
 ];
 
 /** The text settings: a blank value clears them (the field is removed from the document), and the row shows null. */
-const TEXT_FIELDS: readonly SettingsField[] = ['stripeCommissionNote', 'paymentInstructions', 'supportEmail', 'supportPhone'];
+const TEXT_FIELDS: readonly SettingsField[] = ['stripeCommissionNote', 'paymentInstructions', 'supportEmail', 'supportPhone', 'minSellerAppVersion', 'minAdminAppVersion'];
 
 /** What the model defaults to (platform-settings.ts), used when the stored document lacks a value. */
 export const DEFAULT_COMMISSION_RATE = 4;
@@ -99,6 +105,9 @@ export interface SettingsChange {
   /** Sprint 8 (S8-B5): referrals; 0 reward months turns them off. */
   referralRewardMonths?: number;
   referralMonthlyCap?: number;
+  /** Sprint 9 (EP-31.US01.T08): null clears the minimum. */
+  minSellerAppVersion?: string | null;
+  minAdminAppVersion?: string | null;
 }
 
 export interface SettingsUpdate {
@@ -224,6 +233,18 @@ export function parseSettingsUpdate(input: unknown): ParsedSettingsUpdate {
     } else changes.referralMonthlyCap = value;
   }
 
+  for (const field of ['minSellerAppVersion', 'minAdminAppVersion'] as const) {
+    if (!(field in record)) continue;
+    const value = record[field];
+    if (value === null) changes[field] = null;
+    else if (typeof value !== 'string') issues.push({ path: field, message: 'must be text or null' });
+    else {
+      const text = value.trim();
+      if (text !== '' && (text.length > SETTINGS_APP_VERSION_MAX || !APP_VERSION_SHAPE.test(text))) issues.push({ path: field, message: 'must be a version such as 1.4.0' });
+      else changes[field] = text === '' ? null : text;
+    }
+  }
+
   if ('reason' in record) {
     const value = record.reason;
     const text = typeof value === 'string' ? value.trim() : '';
@@ -271,6 +292,8 @@ export function toSettingsRow(doc: Doc) {
     supportPhone: textOrNull(doc.supportPhone),
     referralRewardMonths: isDays(doc.referralRewardMonths, SETTINGS_REFERRAL_MONTHS_MIN, SETTINGS_REFERRAL_MONTHS_MAX) ? doc.referralRewardMonths : DEFAULT_REFERRAL_REWARD_MONTHS,
     referralMonthlyCap: isDays(doc.referralMonthlyCap, SETTINGS_REFERRAL_CAP_MIN, SETTINGS_REFERRAL_CAP_MAX) ? doc.referralMonthlyCap : DEFAULT_REFERRAL_MONTHLY_CAP,
+    minSellerAppVersion: textOrNull(doc.minSellerAppVersion),
+    minAdminAppVersion: textOrNull(doc.minAdminAppVersion),
     settingsRevision: typeof revision === 'number' && Number.isInteger(revision) && revision >= 0 ? revision : 0,
     updatedAt: toIso(doc.updatedAt),
   };
@@ -293,6 +316,8 @@ export function settingsSnapshot(row: SettingsRow): Required<SettingsChange> {
     supportPhone: row.supportPhone,
     referralRewardMonths: row.referralRewardMonths,
     referralMonthlyCap: row.referralMonthlyCap,
+    minSellerAppVersion: row.minSellerAppVersion,
+    minAdminAppVersion: row.minAdminAppVersion,
   };
 }
 

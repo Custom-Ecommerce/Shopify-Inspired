@@ -677,3 +677,67 @@ do not exist. `users.referralCode_unique` (S8-B5) is built by the same run.
 - Visits and orders per day for the last 14 days, summed over every store.
 
 **Deploy:** run `ensure-indexes` (new `{day}` index on `dailystats`).
+
+## 14. Mobile apps (Sprint 9, D-123, D-124)
+
+Two Android apps built with React Native and Expo SDK 58 (TypeScript, Hermes, New Architecture): `apps/seller/mobile` and `apps/admin/mobile`.
+What they share lives in `packages/mobile-kit` (API client, sign-in session, cache, offline queue, design tokens). The API is described in
+`docs/mobile-api-v1.md`.
+
+- Node 22.13 or newer on the 22 line, or 24.3 or newer on the 24 line (Expo's tooling needs it).
+- `pnpm install` at the root installs them too. **No pnpm setting was changed** (no `node-linker`, no `.npmrc`): Expo's Metro config resolves the workspace
+  packages with pnpm's normal isolated layout. Do not switch to `node-linker=hoisted`: it would change how the web apps resolve their packages as well.
+- The apps use React 19.3 (React Native's version); the web apps keep their own React. pnpm keeps them apart.
+
+### Run an app on a real phone (Expo Go)
+
+No Android Studio and no emulator are needed.
+
+1. Install Expo Go for **SDK 58** on the phone from https://expo.dev/go (the Play Store build can lag behind a new SDK).
+2. Put the phone and the computer on the same Wi-Fi. If Windows asks, allow Node on private networks.
+3. Start the backend the app talks to: `pnpm dev:seller-backend` (port 4001), or `pnpm dev:admin` (port 4010) for the admin app.
+4. In another terminal: `pnpm --filter @markaz/seller-mobile start` (or `@markaz/admin-mobile`), then scan the QR code with Expo Go.
+
+With no address set, the app talks to the computer Expo Go loaded it from. To point it elsewhere, copy the app's `.env.example` to `.env` in the app's folder
+and set `EXPO_PUBLIC_API_URL` (seller) or `EXPO_PUBLIC_ADMIN_API_URL` (admin). `EXPO_PUBLIC_SELLER_PORTAL_URL` is the website the seller app's
+"Contact support" button opens. These values are built into the app and readable by anyone: never a secret.
+
+### Admin app sign-in
+
+An admin signs in with their password and then a code from an authenticator app (Google Authenticator, Aegis, or similar). The first sign-in on a phone
+sets it up and shows ten recovery codes once. For a lost authenticator with no codes an owner calls `POST /api/admin/users/:id/reset-second-factor` with
+a `reason` (the console has no button for this yet).
+
+### What Expo Go cannot do
+
+- **Remote push notifications.** They need an installed build, made in Expo's cloud with EAS (`npx eas-cli build --profile preview --platform android`
+  from the app's folder; `eas.json` is there). Owner steps first: an Expo account and `npx eas-cli init`, which adds the project id push needs. Everything
+  else works in Expo Go.
+- **Android push also needs Firebase (FCM).** Add each package id to a Firebase project, put its `google-services.json` in the app's folder and name it in
+  `app.json` (`expo.android.googleServicesFile`), then upload the service account key with `npx eas-cli credentials` (Android, FCM V1). The service account key
+  is a secret: never put it in the repository. Steps: `sprint-9-prompts/reports/S9-DEVICE-CHECKLIST.txt`, items 30 to 33.
+- The app's own icon, name and package id appear only in a build, not in Expo Go.
+
+### Checks
+
+```
+pnpm --filter @markaz/mobile-kit --filter @markaz/seller-mobile --filter @markaz/admin-mobile run type-check
+```
+
+The same filters take `lint` and `test` (jest). `pnpm --filter @markaz/seller-mobile run export:android` builds the Hermes bundle into the app's `dist/`
+(not in git). CI runs all of these in the "Mobile apps" job.
+
+### Offline (seller app, D-124)
+
+Screens opened before can be read without a network. Three changes can be made offline and wait on the phone: an order status, an order note and a stock
+count (Settings, "Pending changes"). They are sent once, in order, when the network returns; if the record changed meanwhile the seller chooses which value
+wins. Everything else says it needs the network. Speed and release checks: `docs/mobile-performance.md`.
+
+### Release builds and the signing key (owner steps)
+
+- Build the Play Store bundle with EAS (`eas build --platform android --profile production`). A release build refuses a server address that is not `https`.
+- The **app signing key** is the owner's: let EAS keep it or upload your own, keep a backup outside the repository, and never commit a keystore.
+- Package ids: `com.markazify.seller` and `com.markazify.admin` (the "update the app" screen links to these Play Store pages). Raise `version` and
+  `android.versionCode` in `app.json` for every release. Set the minimum app version in the console settings only after the new build is in the store.
+- On the phone: the refresh token is kept in Android's encrypted storage; cached screens and queued changes are in the app's private storage, are removed on
+  sign-out or when the device is revoked, and are excluded from Android backups (`allowBackup: false`).

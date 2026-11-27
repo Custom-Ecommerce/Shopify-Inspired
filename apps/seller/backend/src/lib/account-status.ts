@@ -1,4 +1,5 @@
 import { HttpError } from '@/lib/http';
+import { revokeSellerMobileDevices } from '@/lib/mobile-auth';
 import { forgetSessionUser } from '@/lib/session-user';
 import { User, writeAuditLog } from '@/lib/services';
 
@@ -21,6 +22,7 @@ export async function applyAccountStatus(input: AccountStatusInput, adminId: str
   const from = typeof current.accountStatus === 'string' ? current.accountStatus : 'active';
   if (from === input.status) {
     forgetSessionUser(input.userId);
+    if (input.status !== 'active') await revokeSellerMobileDevices(input.userId, 'account_disabled');
     return { userId: input.userId, status: input.status, changed: false };
   }
 
@@ -35,6 +37,8 @@ export async function applyAccountStatus(input: AccountStatusInput, adminId: str
     .lean();
   forgetSessionUser(input.userId);
   if (!updated) throw new HttpError(409, 'The account was changed by someone else. Reload and try again.');
+  // Sprint 9 (EP-31.US01.T02): a disabled account loses its phone sessions for good; being enabled again does not bring them back.
+  if (input.status !== 'active') await revokeSellerMobileDevices(input.userId, 'account_disabled');
 
   try {
     await writeAuditLog('user.account_status', 'user', input.userId, 'admin:' + adminId, { from, to: input.status, at: new Date().toISOString() });

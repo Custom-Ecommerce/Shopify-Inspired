@@ -39,6 +39,11 @@ export async function checkSellerSession(claims: { sub: string; role: string; tv
   return guard.check(claims);
 }
 
+/** A fresh read of one account, past the cache (the refresh of a phone session). */
+export async function loadSellerAccount(userId: string): Promise<ReturnType<typeof toSessionUserRecord>> {
+  return loader(userId);
+}
+
 /** Call after every change to an account (password, status, email, revoke). */
 export function forgetSessionUser(userId: string): void {
   guard.forget(userId);

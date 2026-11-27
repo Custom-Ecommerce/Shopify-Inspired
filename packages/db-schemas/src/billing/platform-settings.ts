@@ -38,6 +38,9 @@ const platformSettingsSchema = new Schema(
     referralRewardMonths: { type: Number, min: 0, max: 12, default: 1 },
     /** The most referrals one referrer can be rewarded for in a month. */
     referralMonthlyCap: { type: Number, min: 0, max: 100, default: 5 },
+    /** Sprint 9 (EP-31.US01.T08): the oldest version of each phone app that is still served. Missing means every version. */
+    minSellerAppVersion: { type: String, maxlength: 32 },
+    minAdminAppVersion: { type: String, maxlength: 32 },
   },
   { timestamps: true, collection: 'globals' },
 );

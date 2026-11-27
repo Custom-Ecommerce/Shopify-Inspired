@@ -1,5 +1,7 @@
 import type { InventoryAdjustLine, InventoryAdjustResponse, InventoryAdjustResult, InventoryLineErrorCode } from '@markaz/contracts';
 import { variantAvailability } from '@markaz/platform-kit/commerce';
+import { HttpError } from '@/lib/http';
+import { revisionFilter, revisionOf, RevisionConflictError } from '@/lib/mobile-revision';
 import { Product } from '@/lib/services';
 import { recordMovement } from '@/lib/storefront/stock';
 
@@ -39,9 +41,9 @@ const readProduct = async (storeId: string, productId: string): Promise<ProductS
  * on the variant's current count. The match and the $inc are a single atomic step in MongoDB, so an order's decrement
  * lands either before (the condition sees it) or after (the $inc adds to it), and neither is ever lost.
  */
-const applyDelta = async (storeId: string, line: InventoryAdjustLine, stock: unknown, delta: number): Promise<ProductStock | null> =>
+const applyDelta = async (storeId: string, line: InventoryAdjustLine, stock: unknown, delta: number, also: Record<string, unknown> = {}): Promise<ProductStock | null> =>
   (await Product.findOneAndUpdate(
-    { ...owned(storeId, line.productId), variants: { $elemMatch: { _id: line.variantId, trackQuantity: true, stockQuantity: stock } } },
+    { ...owned(storeId, line.productId), ...also, variants: { $elemMatch: { _id: line.variantId, trackQuantity: true, stockQuantity: stock } } },
     { $inc: { 'variants.$.stockQuantity': delta } },
     { new: true },
   )
@@ -126,4 +128,35 @@ export async function adjustInventory(storeId: string, actorId: unknown, lines: 
   }
   const succeeded = results.filter((result) => result.ok).length;
   return { results, succeeded, failed: results.length - succeeded };
+}
+
+/**
+ * Sprint 9 (EP-31.US03.T03): the phone's stock count. The seller counted the shelf and sends the ABSOLUTE number with the product revision they saw. The
+ * same one conditional write as above, also conditional on that revision: if anything touched the product since (a sale included), nothing is written and
+ * the caller gets a conflict. A count that is already what the database holds changes nothing, whatever the revision.
+ */
+export async function setStockAtRevision(
+  storeId: string,
+  actorId: unknown,
+  input: { productId: string; variantId: string; quantity: number; reason: string },
+  revision: number,
+): Promise<{ changed: boolean }> {
+  const line: InventoryAdjustLine = { productId: input.productId, variantId: input.variantId, setTo: input.quantity, reason: input.reason };
+  const row = (await Product.findOne(owned(storeId, input.productId))
+    .select(STOCK_FIELDS + ' updatedAt')
+    .lean()) as unknown as (ProductStock & { updatedAt?: unknown }) | null;
+  const resolved = resolveLine(line, row);
+  if ('refusal' in resolved) {
+    const refusal = resolved.refusal as Extract<InventoryAdjustResult, { ok: false }>;
+    throw new HttpError(refusal.status, refusal.message, refusal.code);
+  }
+  const current = resolved.variant.stockQuantity;
+  const delta = input.quantity - current;
+  if (delta === 0) return { changed: false };
+  if (revisionOf(row!.updatedAt) !== revision) throw new RevisionConflictError();
+
+  const after = await applyDelta(storeId, line, current, delta, revisionFilter(revision));
+  if (!after) throw new RevisionConflictError();
+  await recorded(storeId, actorId, line, after, delta);
+  return { changed: true };
 }

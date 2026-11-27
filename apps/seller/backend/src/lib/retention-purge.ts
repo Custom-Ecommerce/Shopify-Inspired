@@ -1,4 +1,4 @@
-import { ContactMessage, NotificationOutbox, Product, StockMovement, SupportTicket, SyncOutbox, writeAuditLog } from '@/lib/services';
+import { ContactMessage, MobileDevice, NotificationOutbox, Product, StockMovement, SupportTicket, SyncOutbox, writeAuditLog } from '@/lib/services';
 import { RETENTION_BATCH, RETENTION_DAYS, cutoffFor, type PurgeableTarget } from '@/lib/retention-policy';
 import { purgeExpiredProducts, retentionFilter } from '@/lib/trash';
 
@@ -39,6 +39,8 @@ const specs = (): Spec[] => [
 const supportSpecs = (): Spec[] => [
   { key: 'contact_messages', days: RETENTION_DAYS.contactMessages, model: ContactMessage as never, filter: (c) => ({ status: 'closed', updatedAt: { $lt: c } }) },
   { key: 'closed_tickets', days: RETENTION_DAYS.closedTickets, model: SupportTicket as never, filter: (c) => ({ status: 'closed', updatedAt: { $lt: c } }) },
+  // Sprint 9 (EP-31.US01.T09): only revoked rows ($type date matches the partial index and never a live row, whose revokedAt is null).
+  { key: 'mobile_devices', days: RETENTION_DAYS.revokedMobileDevices, model: MobileDevice as never, filter: (c) => ({ revokedAt: { $type: 'date', $lt: c } }) },
 ];
 
 export const retentionSteps = {

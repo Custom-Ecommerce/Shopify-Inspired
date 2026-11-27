@@ -1,0 +1,46 @@
+import { TICKET_STATUSES } from '@markaz/contracts/support';
+import { Chip, formatDateTime, PagedList, uiStyles, usePagedList } from '@markaz/mobile-kit';
+import { useCallback, useState } from 'react';
+import { View } from 'react-native';
+import { fetchTickets, type TicketRow } from '../api';
+import { ListRow } from '../components/row';
+import { label } from '../labels';
+import { adminKey, useServices, useUserId } from '../services';
+
+export function TicketsScreen({ onOpenTicket }: { onOpenTicket: (id: string) => void }) {
+  const { runtime } = useServices();
+  const userId = useUserId();
+  const [status, setStatus] = useState<string | undefined>('open');
+  const paged = usePagedList(adminKey(userId, 'tickets', status ?? 'all'), (page) => fetchTickets(runtime.client, status, page), userId !== '');
+
+  const renderItem = useCallback(
+    ({ item }: { item: TicketRow }) => (
+      <ListRow
+        id={item.id}
+        title={item.subject}
+        lines={[
+          `${item.sellerName ?? 'Unknown seller'} · ${label(item.status)}`,
+          `${item.messageCount} ${item.messageCount === 1 ? 'message' : 'messages'}, last ${item.lastFrom === 'admin' ? 'from us' : 'from the seller'} ${formatDateTime(item.lastMessageAt)}`,
+        ]}
+        onOpen={onOpenTicket}
+      />
+    ),
+    [onOpenTicket],
+  );
+
+  return (
+    <PagedList
+      paged={paged}
+      renderItem={renderItem}
+      empty={{ title: 'No tickets here' }}
+      header={
+        <View style={uiStyles.wrap}>
+          {TICKET_STATUSES.map((value) => (
+            <Chip key={value} label={label(value)} selected={status === value} onPress={() => setStatus(value)} />
+          ))}
+          <Chip label="All" selected={!status} onPress={() => setStatus(undefined)} />
+        </View>
+      }
+    />
+  );
+}

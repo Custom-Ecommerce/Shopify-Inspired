@@ -5,6 +5,7 @@ import { unwrapCjs } from '@/lib/cjs';
 import { HttpError, handleRouteError, jsonError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { outboxModel } from '@/lib/notifications';
+import { sellerPushChannel } from '@/lib/push';
 import { queueAbandonedCartEmails } from '@/lib/abandoned-cart-email';
 
 const notifications: typeof notificationsNs = unwrapCjs(notificationsNs);
@@ -30,7 +31,7 @@ async function flush(request: NextRequest): Promise<Response> {
     });
     // Sprint 5 EP-28.US01.T05: the optional abandoned cart emails are queued first (never throws, and does nothing for a store that has not switched it on), then the whole outbox is sent.
     await queueAbandonedCartEmails();
-    const summary = await notifications.flushOutbox(outboxModel(), { provider: notifications.providerFromEnv() });
+    const summary = await notifications.flushOutbox(outboxModel(), { provider: notifications.providerFromEnv(), push: sellerPushChannel() });
     return NextResponse.json(summary, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);

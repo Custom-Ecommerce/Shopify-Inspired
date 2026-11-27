@@ -20,6 +20,14 @@
 // expiresAt (400 days); the Referral model declares the unique PARTIAL reward slot {referrer, rewardMonth, rewardSlot}; the SubscriptionCredit model one unique
 // {referral}. All are declared on the models, so the plan picks them up; a test (ensure-indexes.test.ts) pins them.
 //
+// Sprint 9 (EP-31.US01.T03): the MobileDevice model (mobiledevices) declares a unique {family}, {app, user, revokedAt} and a PARTIAL {revokedAt} (revoked rows only,
+// for retention). All are declared on the model, so the plan picks them up; a test (ensure-indexes.test.ts) pins them.
+//
+// Sprint 9 (EP-31.US01.T07): the AdminSecondFactor model (adminsecondfactors) declares a unique {user}; a test (ensure-indexes.test.ts) pins it.
+//
+// Sprint 9 (EP-31.US03): the IdempotencyRecord model (idempotencyrecords) declares a unique {user, key} and a TTL on expiresAt; the Order model adds
+// {store, createdAt, _id} and {store, status, createdAt, _id} for paging. A test (ensure-indexes.test.ts) pins them.
+//
 // The seller backend connects with bufferCommands false, so Mongoose builds no index by itself at runtime. This plan compares the indexes every
 // model DECLARES (schema.indexes()) with the indexes a collection HAS (collection.indexes()) and says which are missing. The script then calls
 // createIndexes() for the models that miss one: it never calls syncIndexes and never drops anything, so an index nobody declares stays.

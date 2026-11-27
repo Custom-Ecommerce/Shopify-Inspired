@@ -1,5 +1,5 @@
 # CI (Sprint 4 SB-9, D-087). Stages, each its own job so a failure is easy to read:
-#   typecheck -> test -> build (the five apps)
+#   typecheck -> test -> build (the five web apps); mobile runs beside test (the two Android apps)
 # No secrets are used. Every value below is a placeholder written inline; nothing here can reach a real service.
 name: CI
 
@@ -50,6 +50,34 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Tests of every workspace (unit tests use stubbed models, no database)
         run: pnpm -r --workspace-concurrency=1 --if-present run test
+
+  # Sprint 9 (EP-31.US04.T04): the two Android apps and packages/mobile-kit. No emulator and no phone: types, lint, jest, and a Hermes bundle of each app
+  # (expo export) to prove that Metro resolves the workspace packages. No secrets; the apps need none to build their bundles.
+  mobile:
+    name: Mobile apps
+    needs: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @markaz/mobile-kit --filter @markaz/seller-mobile --filter @markaz/admin-mobile run type-check
+      - name: Lint
+        run: pnpm --filter @markaz/mobile-kit --filter @markaz/seller-mobile --filter @markaz/admin-mobile run lint
+      - name: Jest
+        run: pnpm --filter @markaz/mobile-kit --filter @markaz/seller-mobile --filter @markaz/admin-mobile run test
+      - name: Android bundles
+        run: pnpm --workspace-concurrency=1 --filter @markaz/seller-mobile --filter @markaz/admin-mobile run export:android
 
   build:
     name: Build ${{ matrix.app.name }}

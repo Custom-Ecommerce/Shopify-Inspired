@@ -109,3 +109,7 @@ export * from './storefront-events';
 // Sprint 8 (S8-B7): the sales report and the admin's platform traffic.
 export * from './sales-report';
 export * from './admin-traffic';
+
+// Sprint 9 (EP-31): the wire shapes of the phone apps.
+export * from './mobile';
+export * from './mobile-data';

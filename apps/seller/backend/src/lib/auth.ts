@@ -3,6 +3,8 @@ import type { NextRequest } from 'next/server';
 import { SESSION_COOKIE_NAME, SESSION_MIN_SECRET_LENGTH, sessionTokenVersion, verifySession } from '@/lib/services';
 import type { Actor } from '@markaz/auth';
 import { HttpError } from '@/lib/http';
+import { requireSellerAppVersion, sellerMobileDeps } from '@/lib/mobile-auth';
+import { MOBILE_SELLER_AUDIENCE, liveMobileDevice, verifyMobileAccessToken } from '@/lib/services';
 import { checkSellerSession } from '@/lib/session-user';
 import type { SellerRole } from '@markaz/auth';
 
@@ -27,6 +29,45 @@ export interface AuthContext {
    * route has resolved its store. The audit entries of member actions carry it (auditActorOf).
    */
   storeRole?: SellerRole | null;
+}
+
+/** What a request signed in by a phone carries besides the context. Kept beside it, so the context of a phone and of the web are the same object shape. */
+const mobileSessions = new WeakMap<object, { deviceId: string }>();
+
+/** The phone session of this request, or undefined for a web session. */
+export function mobileSessionOf(ctx: AuthContext): { deviceId: string } | undefined {
+  return mobileSessions.get(ctx);
+}
+
+/**
+ * Sprint 9 (EP-31.US01.T04): a phone's access token (its own audience, 15 minutes, only ever from the Authorization header). The account is checked like a
+ * web session's, and then the device: a revoked, expired or unknown family is refused at once.
+ */
+async function authenticateMobile(token: string, secret: string, headers: Headers): Promise<AuthContext> {
+  let claims: Awaited<ReturnType<typeof verifyMobileAccessToken>>;
+  try {
+    claims = await verifyMobileAccessToken(token, secret, MOBILE_SELLER_AUDIENCE);
+  } catch {
+    throw new HttpError(401, 'Invalid or expired session');
+  }
+  if (claims.role !== 'seller' || !mongoose.isValidObjectId(claims.sub)) throw new HttpError(401, 'Invalid or expired session');
+  // T08: an app that is too old is told to update, on every route it calls.
+  await requireSellerAppVersion(headers);
+
+  const account = await checkSellerSession({ sub: claims.sub, role: 'seller', tv: claims.tv });
+  const device = await liveMobileDevice(await sellerMobileDeps(), claims);
+  if (!device) throw new HttpError(401, 'This session is no longer valid. Sign in again.', 'SESSION_REVOKED');
+
+  const ctx: AuthContext = {
+    userId: claims.sub,
+    userObjectId: new mongoose.Types.ObjectId(claims.sub),
+    role: 'seller',
+    actor: 'seller',
+    tokenVersion: claims.tv,
+    ...(account ? { emailVerified: account.emailVerifiedAt !== null } : {}),
+  };
+  mobileSessions.set(ctx, { deviceId: device.id });
+  return ctx;
 }
 
 function extractToken(request: NextRequest): string | null {
@@ -55,6 +96,8 @@ export async function authenticate(request: NextRequest): Promise<AuthContext> {
   try {
     claims = await verifySession(token, secret, SELLER_SESSION_AUDIENCE);
   } catch {
+    // Not a web session. A phone token is only looked at when it came in the Authorization header as Bearer, never from a cookie.
+    if (/^bearer\s/i.test(request.headers.get('authorization') ?? '')) return authenticateMobile(token, secret, request.headers);
     throw new HttpError(401, 'Invalid or expired session');
   }
 

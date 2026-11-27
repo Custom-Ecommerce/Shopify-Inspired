@@ -1,6 +1,8 @@
 import type { ConfirmationLogResult, OrderConfirmationRequest } from '@markaz/contracts';
 import { CONFIRMATION_LOG_MAX } from '@/lib/contracts';
 import { confirmationStatusOf } from '@/lib/fraud';
+import { runAfterResponse } from '@/lib/notifications';
+import { pushOrderCancelled } from '@/lib/push';
 import { cancelOrder, type CancelActor } from '@/lib/order-cancel';
 import { Order, writeAuditLog } from '@/lib/services';
 
@@ -76,7 +78,11 @@ export async function decideConfirmation(input: DecisionInput): Promise<Decision
       actor,
       confirmationEntry: entry,
     });
-    if (result.outcome === 'cancelled') return { outcome: 'decided', result: 'cancelled', order: result.order };
+    if (result.outcome === 'cancelled') {
+      // Sprint 9 (EP-31.US02): the shopper cancelled on the call; the rest of the team is told on their phones.
+      runAfterResponse('push_order_cancelled', async () => void (await pushOrderCancelled(storeId, result.order, String(actor.userObjectId))));
+      return { outcome: 'decided', result: 'cancelled', order: result.order };
+    }
     if (result.outcome === 'not_found') return { outcome: 'not_found' };
     // Another decision, a cancel or a dispatch got there first.
     const latest = await readOrder(orderId, storeId);

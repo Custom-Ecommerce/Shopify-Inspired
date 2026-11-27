@@ -64,3 +64,10 @@ export * from './models/store-member';
 export * from './models/api-key';
 // Sprint 8 (S8-B6, D-118): anonymous storefront counters, removed by TTL after 400 days.
 export * from './models/daily-stat';
+// Sprint 9 (EP-31.US01): one row per signed-in phone of the two apps.
+export * from './models/mobile-device';
+
+// Sprint 9 (EP-31.US01.T07): the TOTP second factor of an admin account.
+export * from './models/admin-second-factor';
+// Sprint 9 (EP-31.US03.T02): the stored answers of phone writes (7 day TTL).
+export * from './models/idempotency-record';
