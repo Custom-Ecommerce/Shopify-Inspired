@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { AdminHttpError } from '@/lib/admin-auth';
+import { adminDeviceDetails, AdminHttpError } from '@/lib/admin-auth';
 import { readAdminBody } from '@/lib/admin-account';
 import { contactListQuerySchema, ticketListQuerySchema, ticketReplySchema, ticketStatusUpdateSchema } from '@/lib/admin-support-contracts';
 import { readAdminQuery } from '@/lib/admin-payouts';
@@ -56,7 +56,7 @@ export async function replyTicketFor(request: Request, context: Ctx, userId: str
   if (!mongoose.isValidObjectId(id)) throw notFound('Ticket');
   const body = await readAdminBody(request, ticketReplySchema);
   const answer = await supportSteps.reply(userId, { id, revision: body.revision, text: body.text });
-  await auditQuietly('ticket.reply', 'ticket', id, userId, { revision: body.revision + 1, length: body.text.length });
+  await auditQuietly('ticket.reply', 'ticket', id, userId, { revision: body.revision + 1, length: body.text.length, ...adminDeviceDetails(request) });
   return Response.json(answer, { status: 200, headers: NO_STORE });
 }
 
@@ -66,7 +66,7 @@ export async function statusTicketFor(request: Request, context: Ctx, userId: st
   if (!mongoose.isValidObjectId(id)) throw notFound('Ticket');
   const body = await readAdminBody(request, ticketStatusUpdateSchema);
   const answer = await supportSteps.setStatus(userId, { id, revision: body.revision, status: body.status });
-  await auditQuietly('ticket.status', 'ticket', id, userId, { status: body.status, revision: body.revision + 1 });
+  await auditQuietly('ticket.status', 'ticket', id, userId, { status: body.status, revision: body.revision + 1, ...adminDeviceDetails(request) });
   return Response.json(answer, { status: 200, headers: NO_STORE });
 }
 

@@ -1,5 +1,6 @@
 import { STOCK_WARNING_THRESHOLD } from '@/lib/contracts';
 import { createSellerAlert, enqueueEmail, loadStoreNotifyInfo, runAfterResponse, sellerDashboardLink } from '@/lib/notifications';
+import { pushLowStock } from '@/lib/push';
 import { Product, SellerAlert } from '@/lib/services';
 
 /**
@@ -102,6 +103,9 @@ export async function handleStockLevel(storeId: string, productId: string, varia
   const name = await productName(storeId, productId, variantId);
   const { outcome, alertId } = await applyStockLevel(SellerAlert as unknown as StockAlertModel, { storeId, productId, variantId, quantity, productName: name });
   if ((outcome !== 'low_stock' && outcome !== 'out_of_stock') || alertId === null) return outcome;
+
+  // Sprint 9 (EP-31.US02): once per alert; the seller's low-stock EMAIL switch does not mute the phone (the phone has its own switches).
+  await pushLowStock(storeId, alertId, quantity);
 
   const store = await loadStoreNotifyInfo(storeId);
   if (!store || !store.emailLowStock) return outcome;

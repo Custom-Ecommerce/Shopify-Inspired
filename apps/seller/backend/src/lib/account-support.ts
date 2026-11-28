@@ -1,4 +1,5 @@
-import { auditActorOf } from '@/lib/auth';
+import { auditActorOf, mobileSessionOf } from '@/lib/auth';
+import { revokeSellerMobileDevices } from '@/lib/mobile-auth';
 import mongoose from 'mongoose';
 import { resolveClientIp } from '@markaz/platform-kit/client-ip';
 import { verifiedClientAddress } from '@markaz/platform-kit/signed-client-address';
@@ -182,8 +183,12 @@ export const NO_STORE = { 'Cache-Control': 'no-store' };
  * Bumps the account's tokenVersion in ONE compare-and-set on the version this session carries, so every other session
  * stops working, and returns a fresh token for THIS session. A lost race (another session changed the account first)
  * is 409 SESSION_REVOKED: the caller signs in again. `set` holds the other fields of the same write (a new hash).
+ *
+ * Sprint 9 (EP-31.US01.T02): every phone session of the account is closed too. A request signed in by a phone is refused before anything is written: the
+ * token this answers is a web session, and a 15 minute phone token must never become one.
  */
 export async function bumpTokenVersion(ctx: AuthContext, set: Record<string, unknown> = {}): Promise<{ token: string; tokenVersion: number }> {
+  if (mobileSessionOf(ctx)) throw new HttpError(403, 'Do this on the Markazify website.', 'WEB_SESSION_REQUIRED');
   const current = ctx.tokenVersion;
   const filter = { _id: ctx.userObjectId, role: 'seller', tokenVersion: current === 0 ? { $in: [0, null] } : current };
   const update = Object.keys(set).length > 0 ? { $set: set, $inc: { tokenVersion: 1 } } : { $inc: { tokenVersion: 1 } };
@@ -191,6 +196,7 @@ export async function bumpTokenVersion(ctx: AuthContext, set: Record<string, unk
   forgetSessionUser(ctx.userId);
   if (!updated) throw new HttpError(409, 'Your account was changed in another session. Sign in again.', ACCOUNT_CODES.SESSION_REVOKED);
   const tokenVersion = tokenVersionOf(updated);
+  await revokeSellerMobileDevices(ctx.userId, 'password_changed');
   return { token: await issueToken(ctx.userId, 'seller', tokenVersion), tokenVersion };
 }
 

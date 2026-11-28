@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import type { ProductListSort, ProductListStatus } from '@markaz/contracts';
 import { authenticate } from '@/lib/auth';
-import { PRODUCT_LIST_SORTS, PRODUCT_LIST_STATUSES, productCreateRequestSchema } from '@/lib/contracts';
+import { productCreateRequestSchema } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { assertProductSlot } from '@/lib/plan';
-import { HttpError, parseIntParam } from '@/lib/http';
+import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
 import { parseBody } from '@/lib/placeholder';
 import {
@@ -14,64 +13,19 @@ import {
   loadSellerProduct,
   prepareProductCreate,
   toSellerProductSummary,
-  type SellerProductRow,
 } from '@/lib/products';
+import { readProductListPage } from '@/lib/product-list';
 import { withSkuGuard } from '@/lib/product-variants';
 import { revalidateStoreProduct } from '@/lib/revalidate';
 import { assertCan, listEnvelope, Product } from '@/lib/services';
-import { escapeRegex } from '@/lib/storefront/product-query';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const SEARCH_MAX_LENGTH = 80;
-/** The overview's "low stock" count: a tracked variant at or below this many units. */
-const LOW_STOCK_UNITS = 5;
-
-/** Only what a list row needs. media is cut to its first entry. */
-const LIST_PROJECTION = {
-  title: 1,
-  slug: 1,
-  isPublished: 1,
-  isDemo: 1,
-  isFeatured: 1,
-  hideWhenOutOfStock: 1,
-  deletedAt: 1,
-  deletedBy: 1,
-  moderation: 1,
-  description: 1,
-  highlights: 1,
-  minPrice: 1,
-  'variants.price': 1,
-  'variants.compareAtPrice': 1,
-  'variants.trackQuantity': 1,
-  'variants.stockQuantity': 1,
-  'variants.lowStockThreshold': 1,
-  'variants.position': 1,
-  categories: 1,
-  media: { $slice: 1 },
-  createdAt: 1,
-  updatedAt: 1,
-};
-
-const SORT_SPECS: Record<ProductListSort, Record<string, 1 | -1>> = {
-  newest: { createdAt: -1, _id: -1 },
-  oldest: { createdAt: 1, _id: 1 },
-  title: { title: 1, _id: 1 },
-  price: { minPrice: 1, _id: 1 },
-};
 
 async function requireDatabase(): Promise<void> {
   await connectSellerDb().catch(() => {
     throw new HttpError(503, 'Seller database unavailable');
   });
-}
-
-function oneOf<T extends string>(raw: string | null, allowed: readonly T[], fallback: T, name: string): T {
-  const value = (raw ?? '').trim();
-  if (value === '') return fallback;
-  if (!(allowed as readonly string[]).includes(value)) throw new HttpError(422, name + ' must be one of: ' + allowed.join(', '));
-  return value as T;
 }
 
 /**
@@ -90,32 +44,9 @@ export async function GET(request: NextRequest): Promise<Response> {
     await requireDatabase();
     const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'products.read' });
 
-    const params = request.nextUrl.searchParams;
-    const page = parseIntParam(params.get('page'), 1, 1, 100000);
-    const limit = parseIntParam(params.get('limit'), 20, 1, 1000);
-    const status = oneOf<ProductListStatus>(params.get('status'), PRODUCT_LIST_STATUSES, 'all', 'status');
-    const sort = oneOf<ProductListSort>(params.get('sort'), PRODUCT_LIST_SORTS, 'newest', 'sort');
-    const stock = oneOf(params.get('stock'), ['any', 'low'] as const, 'any', 'stock');
-    const q = (params.get('q') ?? '').trim().slice(0, SEARCH_MAX_LENGTH).trim();
-
-    // $type, not $ne: null. The trash index is partial on $type, and a query only uses it when it matches that condition.
-    const filter: Record<string, unknown> = { store: storeId, deletedAt: status === 'trash' ? { $type: 'date' } : null };
-    if (status === 'draft' || status === 'published') filter.isPublished = status === 'published';
-    if (q !== '') filter.title = { $regex: escapeRegex(q), $options: 'i' };
-    if (stock === 'low') {
-      filter.variants = { $elemMatch: { trackQuantity: true, stockQuantity: { $lte: LOW_STOCK_UNITS } } };
-    }
-
-    const [rows, totalDocs, demo] = await Promise.all([
-      Product.find(filter)
-        .select(LIST_PROJECTION)
-        .sort(SORT_SPECS[sort])
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .populate({ path: 'categories', select: 'name slug' })
-        .populate({ path: 'media', select: 'url alt' })
-        .lean() as unknown as Promise<SellerProductRow[]>,
-      Product.countDocuments(filter),
+    // Sprint 9: the query is in lib/product-list.ts, which the phone list uses too.
+    const [{ rows, totalDocs, page, limit }, demo] = await Promise.all([
+      readProductListPage(storeId, request.nextUrl.searchParams, { defaultLimit: 20, maxLimit: 1000 }),
       Product.exists({ store: storeId, isDemo: true }),
     ]);
 

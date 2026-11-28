@@ -21,6 +21,8 @@ loginAttempts: number;
 lockUntil: Date | null;
 /** EP-07.US03.T03: which alerts the seller also gets by email. In-app alerts are always on. Missing means on. */
 notificationPrefs?: { emailNewOrder: boolean; emailLowStock: boolean } | null;
+/** Sprint 9 (EP-31.US02.T02): the user's own push switches. Missing means every push is on. */
+pushPrefs?: { muted: boolean; mutedKinds: string[]; quietHours?: { start: string; end: string } | null } | null;
 /** Sprint 4 EP-08. Missing on accounts from before: read as active, 0, unverified, none. No migration is needed. */
 accountStatus?: UserAccountStatus;
 suspensionReason?: string | null;
@@ -63,6 +65,17 @@ emailLowStock: { type: Boolean, default: true },
 { _id: false },
 ),
 default: () => ({ emailNewOrder: true, emailLowStock: true }),
+},
+pushPrefs: {
+type: new Schema(
+{
+muted: { type: Boolean, default: false },
+mutedKinds: { type: [String], default: [] },
+quietHours: { type: new Schema({ start: { type: String, maxlength: 5 }, end: { type: String, maxlength: 5 } }, { _id: false }), default: undefined },
+},
+{ _id: false },
+),
+default: undefined,
 },
 accountStatus: { type: String, enum: [...USER_ACCOUNT_STATUSES], default: 'active' },
 suspensionReason: { type: String, default: null, maxlength: 300 },

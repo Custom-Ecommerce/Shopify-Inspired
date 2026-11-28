@@ -338,6 +338,51 @@ export function SettingsForm({ settings, onReload }: { settings: AdminPlatformSe
             <FieldError id="settings-max-stores-error" message={shown.maxStoresPerSeller} />
           </div>
 
+          <fieldset className="flex min-w-0 flex-col gap-5 rounded-xl border border-border p-4">
+            <legend className="px-1 text-sm font-medium">Phone apps</legend>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="settings-min-seller-app">Oldest seller app served</Label>
+                <Input
+                  id="settings-min-seller-app"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  maxLength={32}
+                  placeholder="1.0.0"
+                  value={values.minSellerAppVersion}
+                  aria-invalid={shown.minSellerAppVersion !== undefined}
+                  aria-describedby={"settings-min-seller-app-hint" + (shown.minSellerAppVersion !== undefined ? " settings-min-seller-app-error" : "")}
+                  className="w-40 max-w-full tabular-nums aria-[invalid=true]:border-destructive"
+                  onChange={(event) => change("minSellerAppVersion", event.target.value)}
+                />
+                <p id="settings-min-seller-app-hint" className="text-xs text-muted-foreground">
+                  An older seller app is told to update. Left blank, every version works.
+                </p>
+                <FieldError id="settings-min-seller-app-error" message={shown.minSellerAppVersion} />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="settings-min-admin-app">Oldest admin app served</Label>
+                <Input
+                  id="settings-min-admin-app"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  maxLength={32}
+                  placeholder="1.0.0"
+                  value={values.minAdminAppVersion}
+                  aria-invalid={shown.minAdminAppVersion !== undefined}
+                  aria-describedby={"settings-min-admin-app-hint" + (shown.minAdminAppVersion !== undefined ? " settings-min-admin-app-error" : "")}
+                  className="w-40 max-w-full tabular-nums aria-[invalid=true]:border-destructive"
+                  onChange={(event) => change("minAdminAppVersion", event.target.value)}
+                />
+                <p id="settings-min-admin-app-hint" className="text-xs text-muted-foreground">
+                  An older admin app is told to update. Left blank, every version works.
+                </p>
+                <FieldError id="settings-min-admin-app-error" message={shown.minAdminAppVersion} />
+              </div>
+            </div>
+          </fieldset>
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="settings-note">Stripe commission note (optional)</Label>
             <Textarea

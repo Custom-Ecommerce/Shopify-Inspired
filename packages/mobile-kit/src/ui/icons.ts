@@ -1,0 +1,55 @@
+/*
+ * The lucide icons the apps use: the web's icon set (lucide-react). One file per icon, so only these are in the app, not all of lucide. Add an icon here
+ * and import it from @markaz/mobile-kit.
+ */
+export { default as AlertCircle } from 'lucide-react-native/icons/circle-alert';
+export { default as AlertTriangle } from 'lucide-react-native/icons/triangle-alert';
+export { default as ArrowLeft } from 'lucide-react-native/icons/arrow-left';
+export { default as Banknote } from 'lucide-react-native/icons/banknote';
+export { default as Bell } from 'lucide-react-native/icons/bell';
+export { default as BellOff } from 'lucide-react-native/icons/bell-off';
+export { default as Boxes } from 'lucide-react-native/icons/boxes';
+export { default as CalendarDays } from 'lucide-react-native/icons/calendar-days';
+export { default as Check } from 'lucide-react-native/icons/check';
+export { default as CheckCircle } from 'lucide-react-native/icons/circle-check';
+export { default as ChevronDown } from 'lucide-react-native/icons/chevron-down';
+export { default as ChevronRight } from 'lucide-react-native/icons/chevron-right';
+export { default as Clock } from 'lucide-react-native/icons/clock';
+export { default as Contact } from 'lucide-react-native/icons/contact';
+export { default as CreditCard } from 'lucide-react-native/icons/credit-card';
+export { default as Eye } from 'lucide-react-native/icons/eye';
+export { default as EyeOff } from 'lucide-react-native/icons/eye-off';
+export { default as History } from 'lucide-react-native/icons/history';
+export { default as Inbox } from 'lucide-react-native/icons/inbox';
+export { default as Info } from 'lucide-react-native/icons/info';
+export { default as KeyRound } from 'lucide-react-native/icons/key-round';
+export { default as LayoutDashboard } from 'lucide-react-native/icons/layout-dashboard';
+export { default as LifeBuoy } from 'lucide-react-native/icons/life-buoy';
+export { default as LogOut } from 'lucide-react-native/icons/log-out';
+export { default as Mail } from 'lucide-react-native/icons/mail';
+export { default as MapPin } from 'lucide-react-native/icons/map-pin';
+export { default as MessageSquare } from 'lucide-react-native/icons/message-square';
+export { default as MoreHorizontal } from 'lucide-react-native/icons/ellipsis';
+export { default as Package } from 'lucide-react-native/icons/package';
+export { default as PackageCheck } from 'lucide-react-native/icons/package-check';
+export { default as Pencil } from 'lucide-react-native/icons/pencil';
+export { default as Phone } from 'lucide-react-native/icons/phone';
+export { default as PhoneCall } from 'lucide-react-native/icons/phone-call';
+export { default as Receipt } from 'lucide-react-native/icons/receipt';
+export { default as RefreshCw } from 'lucide-react-native/icons/refresh-cw';
+export { default as Search } from 'lucide-react-native/icons/search';
+export { default as Settings } from 'lucide-react-native/icons/settings';
+export { default as ShieldCheck } from 'lucide-react-native/icons/shield-check';
+export { default as ShoppingCart } from 'lucide-react-native/icons/shopping-cart';
+export { default as Smartphone } from 'lucide-react-native/icons/smartphone';
+export { default as StickyNote } from 'lucide-react-native/icons/sticky-note';
+export { default as Store } from 'lucide-react-native/icons/store';
+export { default as Tag } from 'lucide-react-native/icons/tag';
+export { default as Trash } from 'lucide-react-native/icons/trash-2';
+export { default as TrendingUp } from 'lucide-react-native/icons/trending-up';
+export { default as Truck } from 'lucide-react-native/icons/truck';
+export { default as UserCog } from 'lucide-react-native/icons/user-cog';
+export { default as Users } from 'lucide-react-native/icons/users';
+export { default as Wallet } from 'lucide-react-native/icons/wallet';
+export { default as WifiOff } from 'lucide-react-native/icons/wifi-off';
+export { default as X } from 'lucide-react-native/icons/x';

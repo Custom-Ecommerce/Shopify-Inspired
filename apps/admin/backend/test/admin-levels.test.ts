@@ -109,7 +109,17 @@ const EXCEPTIONS: Record<string, string> = {
   'password/reset/route.ts': 'reset password: the token is the credential',
   'invite/accept/route.ts': 'accept invite: the token is the credential',
   'me/route.ts': 'the console session check: any signed-in admin (ANY_ADMIN)',
+  // Sprint 9 (EP-31.US01.T06): the admin app.
+  'mobile/v1/auth/login/route.ts': 'phone sign-in: password and second factor, no session yet',
+  'mobile/v1/auth/refresh/route.ts': 'phone refresh: the refresh token is the credential',
+  'mobile/v1/auth/logout/route.ts': 'phone sign-out: the refresh token is the credential',
+  'mobile/v1/devices/route.ts': 'own phones: any signed-in admin (ANY_ADMIN)',
+  'mobile/v1/devices/[id]/revoke/route.ts': 'own phones: any signed-in admin (ANY_ADMIN)',
+  'mobile/v1/devices/push-token/route.ts': 'own phone push token: any signed-in admin (ANY_ADMIN)',
+  'mobile/v1/push-settings/route.ts': 'own push switches: any signed-in admin (ANY_ADMIN)',
 };
+/** The exceptions that DO call authorizeAdmin, with ANY_ADMIN: an account's own things, never platform data. */
+const OWN_ACCOUNT_ONLY = ['me/route.ts', 'mobile/v1/devices/route.ts', 'mobile/v1/devices/[id]/revoke/route.ts', 'mobile/v1/devices/push-token/route.ts', 'mobile/v1/push-settings/route.ts'];
 
 test('GUARD: every admin route file declares a capability on every authorizeAdmin call; the exceptions are listed here and nowhere else', () => {
   const files = routeFiles(ROUTES_DIR);
@@ -121,7 +131,7 @@ test('GUARD: every admin route file declares a capability on every authorizeAdmi
     const calls = [...source.matchAll(/authorizeAdmin\(\s*request\s*(?:,\s*([^)]*))?\)/g)];
     if (rel in EXCEPTIONS) {
       seen.add(rel);
-      if (rel === 'me/route.ts') assert.ok(/authorizeAdmin\(request, ANY_ADMIN\)/.test(source), rel);
+      if (OWN_ACCOUNT_ONLY.includes(rel)) assert.ok(/authorizeAdmin\(request, ANY_ADMIN\)/.test(source), rel);
       else assert.equal(calls.length, 0, rel + ' is an exception: it has no session gate');
       continue;
     }

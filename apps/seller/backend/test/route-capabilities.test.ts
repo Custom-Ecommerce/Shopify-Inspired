@@ -139,7 +139,7 @@ test('the storefront API is public, the internal API is system, and nothing else
     else if (route.path.startsWith('v1/')) assert.equal(access, 'public', route.key);
     else {
       assert.notEqual(access, 'system', route.key);
-      if (access === 'public') assert.ok(['auth/forgot-password', 'auth/reset-password', 'auth/verify-email', 'health', 'signup', 'unsubscribe', 'users/login', 'webhooks/stripe-orders', 'team/invite'].includes(route.path), route.key);
+      if (access === 'public') assert.ok(['auth/forgot-password', 'auth/reset-password', 'auth/verify-email', 'health', 'signup', 'unsubscribe', 'users/login', 'webhooks/stripe-orders', 'team/invite', 'mobile/v1/auth/login', 'mobile/v1/auth/refresh', 'mobile/v1/auth/logout'].includes(route.path), route.key);
     }
   }
 });

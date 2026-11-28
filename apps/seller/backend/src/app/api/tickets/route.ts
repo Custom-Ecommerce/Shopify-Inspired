@@ -6,6 +6,8 @@ import { pageOf, parseSupportBody, ticketToWire } from '@/lib/support';
 import { limitTicketWrites, sellerOwnsStore } from '@/lib/tickets';
 import { HttpError, handleRouteError, jsonError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
+import { runAfterResponse } from '@/lib/notifications';
+import { pushTicketNew } from '@/lib/push';
 import { assertCan, listEnvelope, SupportTicket, writeAuditLog } from '@/lib/services';
 
 export const runtime = 'nodejs';
@@ -81,6 +83,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     } catch (err) {
       console.error('[seller-backend] could not write the ticket audit entry', err instanceof Error ? err.message : 'unknown');
     }
+    // Sprint 9 (EP-31.US02): customer support and owners are told on their phones.
+    runAfterResponse('push_ticket_new', async () => void (await pushTicketNew(String(wire.id))));
     return NextResponse.json(wire, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleRouteError(err);

@@ -1,7 +1,9 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import { drainSyncOutbox } from '@markaz/sync-core';
+import { runAfterResponse } from '@/lib/admin-account';
 import { connectDb } from '@/lib/db';
+import { pushSyncFailure } from '@/lib/push';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,6 +21,8 @@ async function handle(request: Request): Promise<Response> {
   }
   await connectDb();
   const summary = await drainSyncOutbox();
+  // Sprint 9 (EP-31.US02): owners and operations are told on their phones when events were given up on.
+  if (summary.dead > 0) runAfterResponse('push_sync_failure', () => pushSyncFailure(summary.dead));
   return Response.json(summary, { status: 200 });
 }
 

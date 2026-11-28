@@ -35,6 +35,9 @@ export const SETTINGS_SETTING_FIELDS = [
   // Sprint 8 (S8-B5).
   "referralRewardMonths",
   "referralMonthlyCap",
+  // Sprint 9 (EP-31.US01.T08).
+  "minSellerAppVersion",
+  "minAdminAppVersion",
 ] as const;
 export type SettingsSettingField = (typeof SETTINGS_SETTING_FIELDS)[number];
 
@@ -54,6 +57,9 @@ export interface SettingsFormValues {
   /** Sprint 8 (S8-B5): free months per rewarded referral (0 turns referrals off) and the rewards a referrer can earn a month. */
   referralRewardMonths: string;
   referralMonthlyCap: string;
+  /** Sprint 9: the oldest phone app version still served; blank means every version. */
+  minSellerAppVersion: string;
+  minAdminAppVersion: string;
   reason: string;
 }
 
@@ -73,6 +79,8 @@ export function formFromSettings(settings: AdminPlatformSettings): SettingsFormV
     supportPhone: settings.supportPhone ?? "",
     referralRewardMonths: String(settings.referralRewardMonths ?? 1),
     referralMonthlyCap: String(settings.referralMonthlyCap ?? 5),
+    minSellerAppVersion: settings.minSellerAppVersion ?? "",
+    minAdminAppVersion: settings.minAdminAppVersion ?? "",
     reason: "",
   };
 }
@@ -83,6 +91,9 @@ const DAYS_TEXT = /^\d{1,2}$/;
 const COUNT_TEXT = /^\d{1,3}$/;
 const EMAIL_TEXT = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const PHONE_TEXT = /^[0-9+\-() ]+$/;
+
+const APP_VERSION_TEXT = /^\d{1,5}(\.\d{1,5}){0,3}$/;
+const APP_VERSION_FIELDS = ["minSellerAppVersion", "minAdminAppVersion"] as const;
 
 /** The rate typed, or null when it is not a number from 0 to 100. Rates are percentages (ID-18). */
 export function parseRate(text: string): number | null {
@@ -174,6 +185,11 @@ export function validateSettingsForm(values: SettingsFormValues): SettingsFormEr
     errors.referralMonthlyCap = "Enter a whole number from " + ADMIN_SETTINGS_REFERRAL_CAP_MIN + " to " + ADMIN_SETTINGS_REFERRAL_CAP_MAX + ".";
   }
 
+  for (const field of APP_VERSION_FIELDS) {
+    const text = values[field].trim();
+    if (text !== "" && !APP_VERSION_TEXT.test(text)) errors[field] = "Write a version such as 1.4.0, or leave it blank.";
+  }
+
   const reason = values.reason.trim();
   if (reason === "") errors.reason = "Enter a reason for the change.";
   else if (reason.length > ADMIN_SETTINGS_REASON_MAX) errors.reason = "The reason can be at most " + ADMIN_SETTINGS_REASON_MAX + " characters.";
@@ -204,6 +220,7 @@ export function changedSettingFields(values: SettingsFormValues, original: Admin
   if (months === null || months !== (original.referralRewardMonths ?? 1)) changed.push("referralRewardMonths");
   const cap = parseCount(values.referralMonthlyCap, ADMIN_SETTINGS_REFERRAL_CAP_MIN, ADMIN_SETTINGS_REFERRAL_CAP_MAX);
   if (cap === null || cap !== (original.referralMonthlyCap ?? 5)) changed.push("referralMonthlyCap");
+  for (const field of APP_VERSION_FIELDS) if (noteOf(values[field]) !== (original[field] ?? null)) changed.push(field);
   return changed;
 }
 
@@ -236,6 +253,10 @@ export function toUpdateRequest(values: SettingsFormValues, original: AdminPlatf
   if (months !== null && months !== (original.referralRewardMonths ?? 1)) request.referralRewardMonths = months;
   const cap = parseCount(values.referralMonthlyCap, ADMIN_SETTINGS_REFERRAL_CAP_MIN, ADMIN_SETTINGS_REFERRAL_CAP_MAX);
   if (cap !== null && cap !== (original.referralMonthlyCap ?? 5)) request.referralMonthlyCap = cap;
+  for (const field of APP_VERSION_FIELDS) {
+    const version = noteOf(values[field]);
+    if (version !== (original[field] ?? null)) request[field] = version;
+  }
   const reason = values.reason.trim();
   if (reason !== "") request.reason = reason;
   return request;

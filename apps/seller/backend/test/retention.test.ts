@@ -5,7 +5,7 @@ import path from 'node:path';
 import mongoose from 'mongoose';
 import { NextRequest } from 'next/server';
 import { internalRequestHeaders } from '@markaz/platform-kit/internal-signature';
-import { ContactMessage, NotificationOutbox, Product, StockMovement, SupportTicket, SyncOutbox } from '@/lib/services';
+import { ContactMessage, MobileDevice, NotificationOutbox, Product, StockMovement, SupportTicket, SyncOutbox } from '@/lib/services';
 import { NEVER_PURGED, PURGEABLE_TARGETS, RETENTION_BATCH, RETENTION_DAYS, cutoffFor } from '../src/lib/retention-policy';
 import { retentionSteps, runRetention } from '../src/lib/retention-purge';
 
@@ -70,6 +70,7 @@ beforeEach(() => {
     stock: [{ _id: 'm-old', changedAt: ago(366) }, { _id: 'm-edge', changedAt: ago(365) }, { _id: 'm-new', changedAt: ago(3) }],
     contact: [],
     tickets: [],
+    phones: [],
   };
   audits = [];
   const saved = {
@@ -79,6 +80,7 @@ beforeEach(() => {
     m: Object.fromEntries(['countDocuments', 'find', 'deleteMany'].map((k) => [k, (StockMovement as any)[k]])),
     c: Object.fromEntries(['countDocuments', 'find', 'deleteMany'].map((k) => [k, (ContactMessage as any)[k]])),
     t: Object.fromEntries(['countDocuments', 'find', 'deleteMany'].map((k) => [k, (SupportTicket as any)[k]])),
+    d: Object.fromEntries(['countDocuments', 'find', 'deleteMany'].map((k) => [k, (MobileDevice as any)[k]])),
     pcount: (Product as any).countDocuments,
     audit: retentionSteps.audit,
   };
@@ -88,6 +90,7 @@ beforeEach(() => {
   Object.assign(StockMovement as any, fake('stock'));
   Object.assign(ContactMessage as any, fake('contact'));
   Object.assign(SupportTicket as any, fake('tickets'));
+  Object.assign(MobileDevice as any, fake('phones'));
   (Product as any).countDocuments = async () => 0;
   retentionSteps.audit = (async (...a: any[]) => audits.push(a)) as any;
   restore = () => {
@@ -97,6 +100,7 @@ beforeEach(() => {
     Object.assign(StockMovement as any, saved.m);
     Object.assign(ContactMessage as any, saved.c);
     Object.assign(SupportTicket as any, saved.t);
+    Object.assign(MobileDevice as any, saved.d);
     (Product as any).countDocuments = saved.pcount;
     retentionSteps.audit = saved.audit;
     delete process.env.RETENTION_CRON_SECRET;
@@ -108,12 +112,12 @@ afterEach(() => restore());
 const ids = (name: string) => stores[name]!.map((r) => r._id);
 
 test('the periods are in ONE place: 90 / 30 / 365 / 365 days, and the Sprint 7 periods are fixed now', () => {
-  assert.deepEqual(RETENTION_DAYS, { notificationOutboxSent: 90, syncOutboxSent: 30, stockMovements: 365, productTrash: 365, closedTickets: 730, contactMessages: 365 });
+  assert.deepEqual(RETENTION_DAYS, { notificationOutboxSent: 90, syncOutboxSent: 30, stockMovements: 365, productTrash: 365, closedTickets: 730, contactMessages: 365, revokedMobileDevices: 90 });
   assert.equal(cutoffFor(NOW, 90).toISOString(), '2026-08-22T10:00:00.000Z');
 });
 
 test('GUARD: the ledger, the audit log and subscription payments are NOT purgeable, and the purge code never references them', () => {
-  assert.deepEqual([...PURGEABLE_TARGETS], ['notification_outbox', 'sync_outbox', 'stock_movements', 'product_trash', 'contact_messages', 'closed_tickets']);
+  assert.deepEqual([...PURGEABLE_TARGETS], ['notification_outbox', 'sync_outbox', 'stock_movements', 'product_trash', 'contact_messages', 'closed_tickets', 'mobile_devices']);
   for (const never of NEVER_PURGED) assert.equal((PURGEABLE_TARGETS as readonly string[]).includes(never), false, never);
   const forbidden = /CommissionEntry|commission-entry|commissionEntries|SubscriptionPayment|subscriptionPayments|subscription-payment|\bAuditLog\b|audit-log|commissionLedger|CommissionLedger/;
   for (const file of ['src/lib/retention-purge.ts', 'src/lib/retention-policy.ts', 'src/app/api/internal/retention/run/route.ts', 'src/app/api/internal/retention/admin/route.ts']) {
@@ -126,13 +130,13 @@ test('GUARD: the ledger, the audit log and subscription payments are NOT purgeab
 test('a DRY RUN counts what is past its period and removes nothing', async () => {
   const run = await runRetention({ apply: false, now: NOW, actorId: 'system:retention' });
   assert.equal(run.dryRun, true);
-  assert.deepEqual(run.targets.map((t) => [t.key, t.eligible, t.purged]), [['notification_outbox', 3, 0], ['sync_outbox', 1, 0], ['stock_movements', 1, 0], ['product_trash', 0, 0], ['contact_messages', 0, 0], ['closed_tickets', 0, 0]]);
+  assert.deepEqual(run.targets.map((t) => [t.key, t.eligible, t.purged]), [['notification_outbox', 3, 0], ['sync_outbox', 1, 0], ['stock_movements', 1, 0], ['product_trash', 0, 0], ['contact_messages', 0, 0], ['closed_tickets', 0, 0], ['mobile_devices', 0, 0]]);
   assert.equal(stores.notif!.length, 7);
 });
 
 test('apply removes only rows PAST the period: a row exactly at the boundary, a newer row, a failed, a queued, a dead and a pending row all stay', async () => {
   const run = await runRetention({ apply: true, now: NOW, actorId: 'system:retention' });
-  assert.deepEqual(run.targets.map((t) => t.purged), [3, 1, 1, 0, 0, 0]);
+  assert.deepEqual(run.targets.map((t) => t.purged), [3, 1, 1, 0, 0, 0, 0]);
   assert.deepEqual(ids('notif'), ['n-edge', 'n-new', 'n-failed-old', 'n-queued-old']);
   assert.deepEqual(ids('sync'), ['s-new', 's-dead', 's-pending']);
   assert.deepEqual(ids('stock'), ['m-edge', 'm-new']);
@@ -141,7 +145,7 @@ test('apply removes only rows PAST the period: a row exactly at the boundary, a 
 test('a second run finds nothing: idempotent', async () => {
   await runRetention({ apply: true, now: NOW, actorId: 'system:retention' });
   const again = await runRetention({ apply: true, now: NOW, actorId: 'system:retention' });
-  assert.deepEqual(again.targets.map((t) => [t.eligible, t.purged, t.more]), [[0, 0, false], [0, 0, false], [0, 0, false], [0, 0, false], [0, 0, false], [0, 0, false]]);
+  assert.deepEqual(again.targets.map((t) => [t.eligible, t.purged, t.more]), [[0, 0, false], [0, 0, false], [0, 0, false], [0, 0, false], [0, 0, false], [0, 0, false], [0, 0, false]]);
   assert.equal(ids('notif').length, 4);
 });
 
@@ -158,7 +162,7 @@ test('a run never removes more than the batch per target, and says there is more
 test('the fake date decides: the same rows a year earlier are all inside the window', async () => {
   const early = new Date(NOW.getTime() - 400 * DAY);
   const run = await runRetention({ apply: true, now: early, actorId: 'system:retention' });
-  assert.deepEqual(run.targets.map((t) => t.purged), [0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(run.targets.map((t) => t.purged), [0, 0, 0, 0, 0, 0, 0]);
 });
 
 test('one audit line per run, with the counts and who ran it', async () => {
@@ -166,7 +170,7 @@ test('one audit line per run, with the counts and who ran it', async () => {
   assert.equal(audits.length, 1);
   const [action, entity, , actor, details] = audits[0];
   assert.deepEqual([action, entity, actor, details.apply], ['retention.run', 'retention', 'admin:65a000000000000000000001', true]);
-  assert.deepEqual(details.targets.map((t: any) => [t.key, t.eligible, t.purged]), [['notification_outbox', 3, 3], ['sync_outbox', 1, 1], ['stock_movements', 1, 1], ['product_trash', 0, 0], ['contact_messages', 0, 0], ['closed_tickets', 0, 0]]);
+  assert.deepEqual(details.targets.map((t: any) => [t.key, t.eligible, t.purged]), [['notification_outbox', 3, 3], ['sync_outbox', 1, 1], ['stock_movements', 1, 1], ['product_trash', 0, 0], ['contact_messages', 0, 0], ['closed_tickets', 0, 0], ['mobile_devices', 0, 0]]);
   await runRetention({ apply: false, now: NOW, actorId: 'system:retention' });
   assert.equal(audits.length, 2, 'a dry run is audited too');
 });
@@ -251,4 +255,20 @@ test('Sprint 7: the support purge is capped at one batch per run and says there 
   assert.equal(contact.purged, RETENTION_BATCH);
   assert.equal(contact.more, true);
   assert.equal(stores.contact!.length, 5);
+});
+
+test('Sprint 9 (EP-31.US01.T09): signed-out phones are purged 90 days after they were revoked; a signed-in phone never is, and a dry run removes nothing', async () => {
+  // The fake matcher knows $lt on a Date and refuses a null, as $type 'date' does.
+  stores.phones = [
+    { _id: 'p-old', revokedAt: ago(91) },
+    { _id: 'p-edge', revokedAt: ago(90) },
+    { _id: 'p-new', revokedAt: ago(5) },
+    { _id: 'p-live', revokedAt: null },
+  ];
+  const dry = await runRetention({ apply: false, now: NOW, actorId: 'system:retention' });
+  assert.deepEqual(dry.targets.filter((t) => t.key === 'mobile_devices').map((t) => [t.days, t.eligible, t.purged]), [[90, 1, 0]]);
+  assert.equal(stores.phones.length, 4);
+  const run = await runRetention({ apply: true, now: NOW, actorId: 'system:retention' });
+  assert.deepEqual(run.targets.filter((t) => t.key === 'mobile_devices').map((t) => t.purged), [1]);
+  assert.deepEqual(ids('phones'), ['p-edge', 'p-new', 'p-live']);
 });

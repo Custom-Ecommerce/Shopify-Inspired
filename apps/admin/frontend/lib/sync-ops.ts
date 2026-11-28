@@ -35,6 +35,9 @@ export const RETENTION_LABELS: Record<RetentionRunResponse["targets"][number]["k
   sync_outbox: "Sent sync events",
   stock_movements: "Stock history",
   product_trash: "Products in trash",
+  contact_messages: "Closed contact messages",
+  closed_tickets: "Closed tickets",
+  mobile_devices: "Signed-out phones",
 };
 
 export interface RetentionLine {

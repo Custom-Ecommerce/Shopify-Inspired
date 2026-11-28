@@ -410,5 +410,25 @@ export const { adminReferralListQuerySchema, adminReferralExportQuerySchema, ADM
 // Sprint 8 (S8-B6): the anonymous storefront counters.
 export const { storefrontEventRequestSchema, STAT_RETENTION_DAYS, PRODUCT_STAT_SLUGS_PER_DAY } = contracts;
 
+// Sprint 9 (EP-31.US01): the phone sign-in.
+export const { mobileLoginRequestSchema, mobileRefreshRequestSchema, mobileLogoutRequestSchema } = contracts;
+// Sprint 9 (EP-31.US03): the phone's reads and writes.
+export const {
+  MOBILE_PAGE_DEFAULT,
+  MOBILE_PAGE_MAX,
+  MOBILE_IDEMPOTENCY_HEADER,
+  MOBILE_IDEMPOTENCY_KEY_PATTERN,
+  MOBILE_IDEMPOTENCY_TTL_DAYS,
+  MOBILE_WRITE_CODES,
+  mobileOrderStatusRevisionSchema,
+  mobileOrderNoteRevisionSchema,
+  mobileStockRequestSchema,
+  mobilePriceRequestSchema,
+  MOBILE_ORDER_PAYMENT_FILTERS,
+} = contracts;
+export type { MobileOrderPaymentFilter } from '@markaz/contracts';
+// Sprint 9 (EP-31.US02): push.
+export const { mobilePushTokenRequestSchema, mobilePushSettingsUpdateSchema, MOBILE_SELLER_PUSH_KINDS } = contracts;
+
 // Sprint 8 (S8-B7): the sales report and the platform traffic.
 export const { salesReportQuerySchema, SALES_REPORT_COLUMNS, SALES_REPORT_MAX_DAYS, SALES_REPORT_ROW_CAP, ADMIN_TRAFFIC_DAYS } = contracts;

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { AdminUser } from '../../../../../packages/contracts/src/admin-users';
 import { AdminHttpError } from '@/lib/admin-auth';
 import { adminConsoleLink, enqueueEmail, passwordProblem } from '@/lib/admin-account';
+import { revokeAdminMobileDevices } from '@/lib/mobile-auth';
 import { AuthToken, User, assertCan, effectiveAdminLevel, hashPassword, writeAuditLog } from '@/lib/workspace';
 import * as authNs from '@markaz/auth';
 import { unwrapCjs } from '@/lib/cjs';
@@ -153,6 +154,8 @@ export async function setAdminStatus(actorId: string, targetId: string, status: 
     await User.findOneAndUpdate({ _id: targetId, role: 'admin', accountStatus: 'suspended' } as never, { $set: { accountStatus: 'active', suspensionReason: null } } as never, { new: true }).select('_id').lean();
     throw new AdminHttpError(409, 'This is the last active owner and cannot be disabled.', 'LAST_OWNER');
   }
+  // Sprint 9 (EP-31.US01.T06): being enabled again does not bring the phones back.
+  if (status === 'suspended') await revokeAdminMobileDevices(targetId, 'account_disabled');
   await audit(status === 'suspended' ? 'admin_user.disabled' : 'admin_user.enabled', targetId, actorId, { from, to: status, reason: input.reason });
   return { user: toAdminUser(updated), changed: true };
 }

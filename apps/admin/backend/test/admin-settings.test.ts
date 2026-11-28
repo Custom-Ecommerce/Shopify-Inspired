@@ -204,9 +204,9 @@ test('parseSettingsUpdate refuses bad values, unknown fields, and an empty chang
 
 test('toSettingsRow uses the model defaults for what is missing, and ISO dates', () => {
   const row = toSettingsRow(stored);
-  assert.deepEqual(row, { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, referralRewardMonths: 1, referralMonthlyCap: 5, settingsRevision: 2, updatedAt: T1.toISOString() });
+  assert.deepEqual(row, { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, referralRewardMonths: 1, referralMonthlyCap: 5, minSellerAppVersion: null, minAdminAppVersion: null, settingsRevision: 2, updatedAt: T1.toISOString() });
   assert.equal('_id' in row, false);
-  assert.deepEqual(toSettingsRow({ _id: SETTINGS_ID }), { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, referralRewardMonths: 1, referralMonthlyCap: 5, settingsRevision: 0, updatedAt: null });
+  assert.deepEqual(toSettingsRow({ _id: SETTINGS_ID }), { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: null, storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, referralRewardMonths: 1, referralMonthlyCap: 5, minSellerAppVersion: null, minAdminAppVersion: null, settingsRevision: 0, updatedAt: null });
   const unusable = toSettingsRow({ _id: SETTINGS_ID, defaultCommissionRate: -3, maxStoresPerSeller: 0, stripeCommissionNote: '', settingsRevision: -1 });
   assert.equal(unusable.defaultCommissionRate, 4);
   assert.equal(unusable.maxStoresPerSeller, 3);
@@ -267,7 +267,7 @@ test('GET answers the settings in the wire shape, with no store header and no _i
     assert.equal(response.headers.get('cache-control'), 'no-store');
     const body = (await response.json()) as any;
     assert.deepEqual(body, {
-      settings: { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, referralRewardMonths: 1, referralMonthlyCap: 5, settingsRevision: 2, updatedAt: T1.toISOString() },
+      settings: { defaultCommissionRate: 4, maxStoresPerSeller: 3, stripeCommissionNote: 'Stripe fees are separate.', storeApprovalRequired: false, codCommissionPercent: 0, paymentInstructions: null, graceDays: 7, trialDays: 0, supportEmail: null, supportPhone: null, referralRewardMonths: 1, referralMonthlyCap: 5, minSellerAppVersion: null, minAdminAppVersion: null, settingsRevision: 2, updatedAt: T1.toISOString() },
     });
     assert.deepEqual(calls.finds, [{ globalType: 'platformSettings' }]);
   } finally {

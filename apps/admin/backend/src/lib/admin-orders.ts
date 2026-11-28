@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import type { AdminOrderDetail, AdminOrderList, AdminOrderListQuery } from '../../../../../packages/contracts/src/admin-orders';
-import { AdminHttpError } from '@/lib/admin-auth';
+import { adminDeviceDetails, AdminHttpError } from '@/lib/admin-auth';
 import { adminOrderListQuerySchema } from '@/lib/admin-payment-contracts';
 import { readAdminQuery } from '@/lib/admin-payouts';
 import { NO_STORE, requirePolicy } from '@/lib/admin-session';
@@ -39,13 +39,13 @@ export async function listOrdersFor(request: Request, userId: string): Promise<R
 }
 
 /** GET /api/admin/orders/:id */
-export async function readOrderFor(_request: Request, context: { params: Promise<{ id: string }> }, userId: string): Promise<Response> {
+export async function readOrderFor(request: Request, context: { params: Promise<{ id: string }> }, userId: string): Promise<Response> {
   requirePolicy(() => assertCan('admin', 'read', 'adminOrdersView', ['orderNumber', 'items', 'totals', 'statusHistory']));
   const { id } = await context.params;
   if (!mongoose.isValidObjectId(id)) throw new AdminHttpError(404, 'Order not found');
   // Fails closed: when the entry cannot be written, the detail is not read.
   try {
-    await orderSteps.audit('order.detail_viewed', 'order', id, userId, { at: new Date().toISOString() });
+    await orderSteps.audit('order.detail_viewed', 'order', id, userId, { at: new Date().toISOString(), ...adminDeviceDetails(request) });
   } catch {
     throw new AdminHttpError(503, 'The order could not be opened because the audit entry could not be written.');
   }

@@ -5,6 +5,7 @@ import type { EnqueueInput, EnqueueResult, NotificationOutboxModel, TemplateName
 import type { SellerAlertKind } from '@markaz/contracts';
 import { unwrapCjs } from '@/lib/cjs';
 import { readConfirmationStatus, readNotificationPrefs, readOrderTax, taxLineLabel } from '@/lib/contracts';
+import { pushOrderPlaced } from '@/lib/push';
 import { NotificationOutbox, SellerAlert, Store, User } from '@/lib/services';
 import { readMessages } from '@/lib/store-settings';
 
@@ -282,6 +283,8 @@ export async function sendOrderPlaced(storeId: string, order: unknown): Promise<
 /** Queues the new-order messages after the response. Call it only once the order is saved and announced (see callers). */
 export function notifyOrderPlaced(storeId: string, order: unknown): void {
   runAfterResponse('order_placed', () => sendOrderPlaced(storeId, order));
+  // Sprint 9 (EP-31.US02): the phones of the owner, managers and staff.
+  runAfterResponse('push_order_new', async () => void (await pushOrderPlaced(storeId, order)));
 }
 
 /** The customer email of each status (EP-07.US01.T04). processing has none. */

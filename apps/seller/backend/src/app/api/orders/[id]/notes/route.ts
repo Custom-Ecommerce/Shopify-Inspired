@@ -1,32 +1,19 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import mongoose from 'mongoose';
-import { authenticate, type AuthContext, auditActorOf } from '@/lib/auth';
+import { authenticate } from '@/lib/auth';
 import { orderNoteRequestSchema } from '@/lib/contracts';
 import { resolveOwnedStoreId } from '@/lib/data-plane';
 import { HttpError } from '@/lib/http';
 import { connectSellerDb } from '@/lib/mongo';
-import { handleOrderError, OrderRequestError, readOrderBody, toDashboardOrderDetail } from '@/lib/orders';
-import { assertCan, Order, ORDER_ACTIONS, writeAuditLog } from '@/lib/services';
+import { addOrderNote } from '@/lib/order-note';
+import { handleOrderError, readOrderBody, toDashboardOrderDetail } from '@/lib/orders';
+import { assertCan, ORDER_ACTIONS } from '@/lib/services';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const notFound = (): HttpError => new HttpError(404, 'Order not found');
-
-/** The note's text stays out of the audit log: only its length is recorded. */
-async function audit(ctx: AuthContext, storeId: string, id: string, orderId: unknown, length: number): Promise<void> {
-  try {
-    await writeAuditLog('order.note', 'order', id, auditActorOf(ctx), {
-      storeId,
-      orderId: orderId ?? null,
-      length,
-      at: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error('[seller-backend] could not write the order note audit entry', { orderId: id }, err);
-  }
-}
 
 /**
  * POST /api/orders/:id/notes   body: { text (1..500) }
@@ -54,22 +41,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (!mongoose.isValidObjectId(id)) throw notFound();
     const storeId = await resolveOwnedStoreId(request, ctx, null, { capability: 'orders.notes' });
 
-    const current = (await Order.findOne({ _id: id, store: storeId }).lean()) as unknown as { orderId?: string } | null;
-    if (!current) throw notFound();
-
-    const updated = await Order.findOneAndUpdate(
-      { _id: id, store: storeId, 'notes.99': { $exists: false } },
-      { $push: { notes: { text: body.text, by: ctx.userObjectId, at: new Date() } } },
-      { new: true, runValidators: true },
-    ).lean();
-
-    if (!updated) {
-      // The order was there a moment ago, so the filter failed on the cap (unless it has since been removed).
-      if (!(await Order.findOne({ _id: id, store: storeId }).lean())) throw notFound();
-      throw new OrderRequestError(422, 'ORDER_NOTES_FULL', 'This order already has the maximum of 100 notes.');
-    }
-
-    await audit(ctx, storeId, id, current.orderId, body.text.length);
+    // Sprint 9: the write is in lib/order-note.ts, which the phone route uses too.
+    const updated = await addOrderNote(ctx, storeId, id, body.text);
     return NextResponse.json({ order: toDashboardOrderDetail(updated) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return handleOrderError(err);

@@ -38,3 +38,27 @@ export const {
   requestPasswordReset,
   resetPassword,
 } = auth;
+
+// Sprint 9 (EP-31.US01): the phone sign-in (shared rules in @markaz/auth), the admin second factor and the app version gate.
+export const { MobileDevice, AdminSecondFactor, PLATFORM_SETTINGS_GLOBAL_TYPE } = db;
+export const {
+  MOBILE_ADMIN_AUDIENCE,
+  startMobileSession,
+  refreshMobileSession,
+  endMobileSession,
+  liveMobileDevice,
+  activeMobileDevices,
+  mongoMobileDeviceStore,
+  memoryMobileDeviceStore,
+  verifyMobileAccessToken,
+  assertAppVersion,
+  createMinVersionReader,
+  UpgradeRequiredError,
+  newTotpSecret,
+  otpauthUri,
+  matchTotpStep,
+  sealSecret,
+  openSecret,
+  newRecoveryCodes,
+  hashRecoveryCode,
+} = auth;

@@ -2,7 +2,8 @@ import mongoose, { Schema, type Model, type Types } from 'mongoose';
 
 /** The same values as OUTBOX_STATUSES in @markaz/notifications (this package depends on mongoose only). */
 export const NOTIFICATION_OUTBOX_STATUSES = ['queued', 'sent', 'failed', 'skipped'] as const;
-export const NOTIFICATION_OUTBOX_CHANNELS = ['email'] as const;
+/** Sprint 9 (EP-31.US02): 'push' rows go to a phone; `to` is then its push token. */
+export const NOTIFICATION_OUTBOX_CHANNELS = ['email', 'push'] as const;
 
 /**
  * Collection: notificationoutbox (EP-07, D-091). One row per message, written after the business action is saved and

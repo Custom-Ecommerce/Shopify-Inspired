@@ -317,6 +317,9 @@ OrderSchema.index(
 // EP-02 seller order list. None of these is unique, so building them on an existing collection cannot fail on data.
 // The "All" tab: one store, newest first.
 OrderSchema.index({ store: 1, createdAt: -1 });
+// Sprint 9 (EP-31.US03.T01): the list sorts by { createdAt, _id }; these two answer that sort from the index, so a store with thousands of orders pages fast.
+OrderSchema.index({ store: 1, createdAt: -1, _id: -1 }, { name: 'store_createdAt_id' });
+OrderSchema.index({ store: 1, status: 1, createdAt: -1, _id: -1 }, { name: 'store_status_createdAt_id' });
 // A status tab: one store, one status, newest first. The per-status counts also read this index.
 OrderSchema.index({ store: 1, status: 1, createdAt: -1 });
 // Search inside one store. Phone is stored in E.164, so an exact or anchored-prefix match is an index range. A name

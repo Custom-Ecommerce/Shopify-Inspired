@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { TICKET_CLOSED, TICKET_REVISION_CONFLICT } from '@/lib/contracts';
 import { HttpError, tooManyRequests } from '@/lib/http';
 import { enqueueEmail, runAfterResponse, sellerDashboardLink } from '@/lib/notifications';
+import { pushSupportReply } from '@/lib/push';
 import { Store, SupportTicket, User } from '@/lib/services';
 import { StorefrontHttpError } from '@/lib/storefront/errors';
 import { TICKET_LIMIT, enforceRateLimitFor } from '@/lib/storefront/rate-limit';
@@ -114,4 +115,5 @@ export async function sendTicketAdminReply(ticket: { id: string; seller: string;
 
 export function notifyTicketAdminReply(ticket: { id: string; seller: string; store: string | null; subject: string; revision: number }, text: string): void {
   runAfterResponse('ticket_admin_reply', () => sendTicketAdminReply(ticket, text));
+  runAfterResponse('push_support_reply', async () => void (await pushSupportReply(ticket.seller, ticket.id, ticket.revision)));
 }

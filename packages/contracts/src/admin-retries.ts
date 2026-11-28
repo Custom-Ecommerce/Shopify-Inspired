@@ -29,7 +29,7 @@ export const failedEmailRowSchema = z
 export const failedEmailListSchema = z.object({ docs: z.array(failedEmailRowSchema), totalDocs: z.number().int().min(0) });
 export type FailedEmailRow = z.output<typeof failedEmailRowSchema>;
 
-export const RETENTION_TARGET_KEYS = ['notification_outbox', 'sync_outbox', 'stock_movements', 'product_trash'] as const;
+export const RETENTION_TARGET_KEYS = ['notification_outbox', 'sync_outbox', 'stock_movements', 'product_trash', 'contact_messages', 'closed_tickets', 'mobile_devices'] as const;
 export const retentionRunRequestSchema = z.object({ apply: z.boolean().optional() }).strict();
 export const retentionRunResponseSchema = z.object({
   dryRun: z.boolean(),
