@@ -7,6 +7,8 @@ import {
   LoadingState,
   phoneStore,
   QueryProvider,
+  ThemeProvider,
+  useTheme,
   UpgradeScreen,
   useSessionState,
   useUpgradeNotice,
@@ -15,7 +17,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { apiUrl, appVersion, portalUrl } from '../src/config';
 import { createPhonePush } from '../src/push';
@@ -51,7 +53,7 @@ function App({ baseUrl }: { baseUrl: string }) {
       .then(() => setRestored(true));
   }, [services]);
 
-  if (!restored) return <LoadingState />;
+  if (!restored) return <LoadingState rows={4} />;
 
   const signedIn = session.status === 'signed_in';
   return (
@@ -72,11 +74,23 @@ function App({ baseUrl }: { baseUrl: string }) {
   );
 }
 
+/** The window behind every screen, in the theme's background (also while the app starts). */
+function Root() {
+  const theme = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
+      {apiUrl.ok ? <App baseUrl={apiUrl.url} /> : <ErrorState message={apiUrl.problem} />}
+    </View>
+  );
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
-      {apiUrl.ok ? <App baseUrl={apiUrl.url} /> : <ErrorState message={apiUrl.problem} />}
+      <ThemeProvider app="seller">
+        <Root />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

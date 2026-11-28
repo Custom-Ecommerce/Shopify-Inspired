@@ -1,6 +1,27 @@
-import { askFirst, Button, Card, DevicesCard, OfflineBanner, Row, ScrollScreen, uiStyles, useSessionState, type Confirm } from '@markaz/mobile-kit';
+import {
+  AppText,
+  askFirst,
+  Bell,
+  Button,
+  Card,
+  Clock,
+  DevicesCard,
+  LifeBuoy,
+  ListRow,
+  LogOut,
+  OfflineBanner,
+  Icon,
+  Row,
+  ScrollScreen,
+  SectionHeader,
+  Store,
+  UserCog,
+  useSessionState,
+  type Confirm,
+  type IconComponent,
+} from '@markaz/mobile-kit';
 import { MOBILE_V1 } from '@markaz/mobile-kit/core';
-import { Linking, Text } from 'react-native';
+import { Linking } from 'react-native';
 import { QueueNotice } from '../components/queue-notice';
 import { roleLabel } from '../labels';
 import { startupMillis } from '../perf';
@@ -37,27 +58,36 @@ export function SettingsScreen({ onOpenNotificationSettings, onSwitchStore, onOp
     <ScrollScreen>
       <OfflineBanner />
       <QueueNotice onOpen={onOpenPending} />
-      <Card title="Account">
+      <Card title="Account" icon={UserCog}>
         <Row label="Name" value={user?.name ?? '-'} />
         <Row label="Email" value={user?.email ?? '-'} />
         {store ? <Row label="Store" value={store.name} /> : null}
         {store ? <Row label="Role" value={roleLabel(store.role)} /> : null}
-        <Button title="Switch store" kind="secondary" onPress={onSwitchStore} />
-        <Button title="Alerts" kind="secondary" onPress={onOpenAlerts} />
-        <Button title="Pending changes" kind="secondary" onPress={onOpenPending} />
-        <Button title="Notification settings" kind="secondary" onPress={onOpenNotificationSettings} />
-        <Text style={uiStyles.muted}>Password, email and store settings are changed on the website.</Text>
+        <AppText variant="caption" tone="muted">
+          Password, email and store settings are changed on the website.
+        </AppText>
       </Card>
+
+      <SectionHeader title="This app" />
+      <MenuRow icon={Store} title="Switch store" onPress={onSwitchStore} />
+      <MenuRow icon={Bell} title="Alerts" onPress={onOpenAlerts} />
+      <MenuRow icon={Clock} title="Pending changes" onPress={onOpenPending} />
+      <MenuRow icon={Bell} title="Notification settings" onPress={onOpenNotificationSettings} />
 
       <DevicesCard client={runtime.client} path={`${MOBILE_V1}/devices`} userId={userId} confirm={confirm} />
 
-      <Card title="Help">
-        {support ? <Button title="Contact support" kind="secondary" onPress={() => openLink(support)} /> : <Text style={uiStyles.body}>Contact support from the website, under Support.</Text>}
+      <Card title="Help" icon={LifeBuoy}>
+        {support ? <Button title="Contact support" kind="outline" icon={LifeBuoy} onPress={() => openLink(support)} /> : <AppText>Contact support from the website, under Support.</AppText>}
         <Row label="App version" value={appVersion} />
         {startup !== null ? <Row label="Last start to first screen" value={`${(startup / 1000).toFixed(1)} s`} /> : null}
       </Card>
 
-      <Button title="Sign out" kind="danger" onPress={signOut} />
+      <Button title="Sign out" kind="destructive" icon={LogOut} onPress={signOut} />
     </ScrollScreen>
   );
+}
+
+/** One entry of the settings menu: an icon, its name, a chevron. */
+function MenuRow({ icon, title, onPress }: { icon: IconComponent; title: string; onPress: () => void }) {
+  return <ListRow leading={<Icon icon={icon} size="md" tone="muted" />} title={title} onPress={onPress} />;
 }

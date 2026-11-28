@@ -16,3 +16,8 @@ export * from './ui/devices-card';
 export * from './ui/notification-settings';
 export * from './ui/paged-list';
 export * from './ui/blocking-screen';
+export * from './ui/theme-provider';
+export * from './ui/icons';
+export * from './ui/navigation';
+export { tapFeedback } from './ui/haptics';
+export * from './ui/brand';

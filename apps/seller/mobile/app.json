@@ -8,7 +8,7 @@
       "android"
     ],
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.markazify.seller",
       "versionCode": 1,

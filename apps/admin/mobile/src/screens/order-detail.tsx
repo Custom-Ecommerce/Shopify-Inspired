@@ -1,7 +1,23 @@
-import { Card, ErrorState, formatDateTime, formatRupees, LoadingState, NoConnection, Row, ScrollScreen, uiStyles, useIsOnline } from '@markaz/mobile-kit';
+import {
+  AppText,
+  Card,
+  ErrorState,
+  formatDateTime,
+  formatRupees,
+  History,
+  LoadingState,
+  NoConnection,
+  ORDER_STATUS_TONES,
+  Package,
+  Row,
+  ScrollScreen,
+  StatusBadge,
+  Store,
+  toneOf,
+  useIsOnline,
+} from '@markaz/mobile-kit';
 import { errorText } from '@markaz/mobile-kit/core';
 import { useQuery } from '@tanstack/react-query';
-import { Text } from 'react-native';
 import { fetchOrder } from '../api';
 import { StaleLabel } from '../components/stale';
 import { label } from '../labels';
@@ -26,17 +42,18 @@ export function OrderDetailScreen({ orderId }: { orderId: string }) {
     <ScrollScreen refreshing={detail.isRefetching} onRefresh={() => void detail.refetch()}>
       <StaleLabel updatedAt={detail.dataUpdatedAt} error={detail.error} />
       <Card>
-        <Text accessibilityRole="header" style={uiStyles.title}>
+        <AppText accessibilityRole="header" variant="title">
           {order.orderNumber}
-        </Text>
-        <Row label="Store" value={order.storeName ?? '-'} />
+        </AppText>
+        <StatusBadge label={label(order.status)} tone={toneOf(ORDER_STATUS_TONES, order.status)} />
+        <Row icon={Store} label="Store" value={order.storeName ?? '-'} />
         <Row label="Status" value={label(order.status)} strong />
         <Row label="Payment" value={`${order.paymentMethod === 'card' ? 'Card' : 'Cash on delivery'}, ${label(order.paymentStatus).toLowerCase()}`} />
         <Row label="Phone confirmation" value={label(order.confirmationStatus)} />
         {order.city ? <Row label="City" value={order.city} /> : null}
         <Row label="Placed" value={formatDateTime(order.createdAt)} />
       </Card>
-      <Card title="Items">
+      <Card title="Items" icon={Package}>
         {order.items.map((item, index) => (
           <Row key={index} label={`${item.quantity} x ${item.name}`} value={formatRupees(item.lineTotal)} />
         ))}
@@ -46,8 +63,8 @@ export function OrderDetailScreen({ orderId }: { orderId: string }) {
         {tax ? <Row label={tax} value={formatRupees(totals.tax)} /> : null}
         <Row label="Total" value={formatRupees(totals.total)} strong />
       </Card>
-      <Card title="History">
-        {order.statusHistory.length === 0 ? <Text style={uiStyles.muted}>No status change yet.</Text> : null}
+      <Card title="History" icon={History}>
+        {order.statusHistory.length === 0 ? <AppText variant="caption" tone="muted">No status change yet.</AppText> : null}
         {order.statusHistory.map((entry, index) => (
           <Row key={index} label={`${label(entry.from)} to ${label(entry.to)}`} value={formatDateTime(entry.at)} />
         ))}

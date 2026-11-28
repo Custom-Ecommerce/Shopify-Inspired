@@ -1,7 +1,20 @@
-import { Card, EmptyState, ErrorState, formatDateTime, LoadingState, OfflineBanner, Row, ScrollScreen, uiStyles } from '@markaz/mobile-kit';
+import {
+  AlertTriangle,
+  AppText,
+  Card,
+  CheckCircle,
+  EmptyState,
+  ErrorState,
+  formatDateTime,
+  Inbox,
+  LoadingState,
+  OfflineBanner,
+  Row,
+  ScrollScreen,
+} from '@markaz/mobile-kit';
 import { errorText } from '@markaz/mobile-kit/core';
 import { useQuery } from '@tanstack/react-query';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { fetchSync } from '../api';
 import { adminKey, useServices, useUserId } from '../services';
 
@@ -17,25 +30,25 @@ export function SyncScreen() {
   return (
     <ScrollScreen refreshing={sync.isRefetching} onRefresh={() => void sync.refetch()}>
       <OfflineBanner updatedAt={sync.dataUpdatedAt} />
-      <Card title="Outbox">
+      <Card title="Outbox" icon={Inbox}>
         <Row label="Waiting" value={String(data.counts.pending)} />
         <Row label="Failed" value={String(data.counts.dead)} strong />
         <Row label="Sent" value={String(data.counts.sent)} />
         <Row label="Oldest waiting" value={formatDateTime(data.oldestPendingAt)} />
         <Row label="Last sent" value={formatDateTime(data.lastSentAt)} />
       </Card>
-      <Card title="Failed events">
-        {data.events.docs.length === 0 ? <EmptyState title="Nothing has failed" /> : null}
+      <Card title="Failed events" icon={AlertTriangle}>
+        {data.events.docs.length === 0 ? <EmptyState icon={CheckCircle} title="Nothing has failed" /> : null}
         {data.events.docs.map((event) => (
           <View key={event.id}>
-            <Text style={uiStyles.body}>
+            <AppText>
               {event.entity} to {event.target}, {event.attempts} tries
-            </Text>
-            <Text style={uiStyles.muted}>{event.lastError ?? 'No error text'}</Text>
-            <Text style={uiStyles.muted}>{formatDateTime(event.createdAt)}</Text>
+            </AppText>
+            <AppText variant="caption" tone="muted">{event.lastError ?? 'No error text'}</AppText>
+            <AppText variant="caption" tone="muted">{formatDateTime(event.createdAt)}</AppText>
           </View>
         ))}
-        <Text style={uiStyles.muted}>Retry them from the console.</Text>
+        <AppText variant="caption" tone="muted">Retry them from the console.</AppText>
       </Card>
     </ScrollScreen>
   );

@@ -1,28 +1,37 @@
 import { sellerCan } from '@markaz/auth/seller-capabilities';
 import {
+  AlertTriangle,
+  AppText,
+  Banknote,
+  Bell,
+  Boxes,
   Button,
-  Card,
-  colors,
+  Clock,
   EmptyState,
   ErrorState,
-  fontSize,
   formatDateTime,
   formatRupees,
   LoadingState,
+  LogOut,
+  makeStyles,
   NoConnection,
-  OfflineBanner,
-  MIN_TAP_TARGET,
   Notice,
-  radius,
+  OfflineBanner,
+  PackageCheck,
+  PhoneCall,
   ScrollScreen,
-  spacing,
-  uiStyles,
+  SectionHeader,
+  ShoppingCart,
+  StatCard,
+  Store,
+  TrendingUp,
   useIsOnline,
+  useSessionState,
 } from '@markaz/mobile-kit';
 import { errorText } from '@markaz/mobile-kit/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { fetchDashboard, fetchUnreadAlerts } from '../api';
 import { OrderRow } from '../components/order-row';
 import { QueueNotice } from '../components/queue-notice';
@@ -39,29 +48,18 @@ export interface DashboardProps {
   onOpenPending: () => void;
 }
 
-function Tile({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
-  const body = (
-    <>
-      <Text style={styles.tileValue}>{value}</Text>
-      <Text style={styles.tileLabel}>{label}</Text>
-    </>
-  );
-  if (!onPress) {
-    return (
-      <View accessible accessibilityLabel={`${label}: ${value}`} style={styles.tile}>
-        {body}
-      </View>
-    );
-  }
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${value}`} onPress={onPress} style={({ pressed }) => [styles.tile, pressed && styles.pressed]}>
-      {body}
-    </Pressable>
-  );
+/** "Good morning" by the phone's clock. */
+export function greeting(name: string | null | undefined, now: Date = new Date()): string {
+  const hour = now.getHours();
+  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `${part}, ${first}` : part;
 }
 
 export function DashboardScreen(props: DashboardProps) {
+  const styles = useStyles();
   const { runtime } = useServices();
+  const user = useSessionState(runtime).user;
   const signOut = () => void runtime.session.signOut();
   const choice = useStoreChoice();
   const store = choice.store;
@@ -89,9 +87,9 @@ export function DashboardScreen(props: DashboardProps) {
         {choice.error ? (
           <ErrorState message={errorText(choice.error)} onRetry={choice.reload} />
         ) : (
-          <EmptyState title="No store yet" text="Create your store on the website, or ask the owner to invite you." />
+          <EmptyState icon={Store} title="No store yet" text="Create your store on the website, or ask the owner to invite you." />
         )}
-        <Button title="Sign out" kind="secondary" onPress={signOut} />
+        <Button title="Sign out" kind="outline" icon={LogOut} onPress={signOut} />
       </ScrollScreen>
     );
   }
@@ -105,15 +103,14 @@ export function DashboardScreen(props: DashboardProps) {
 
   return (
     <ScrollScreen refreshing={numbers.isRefetching} onRefresh={refresh}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Store ${store.name}, change store`} onPress={props.onSwitchStore} style={styles.store}>
-        <View style={styles.storeText}>
-          <Text style={uiStyles.title} numberOfLines={1}>
-            {store.name}
-          </Text>
-          <Text style={uiStyles.muted}>Your role: {roleLabel(store.role)}</Text>
-        </View>
-        <Text style={styles.change}>Change</Text>
-      </Pressable>
+      <View style={styles.greeting}>
+        <AppText variant="title" weight="semibold">
+          {greeting(user?.name)}
+        </AppText>
+        <AppText variant="caption" tone="muted">
+          Your role: {roleLabel(store.role)}
+        </AppText>
+      </View>
 
       <OfflineBanner updatedAt={data ? numbers.dataUpdatedAt : undefined} />
       <QueueNotice onOpen={props.onOpenPending} />
@@ -125,51 +122,46 @@ export function DashboardScreen(props: DashboardProps) {
         ) : numbers.error ? (
           <ErrorState message={errorText(numbers.error)} onRetry={refresh} />
         ) : (
-          <LoadingState />
+          <LoadingState rows={4} />
         )
       ) : (
         <>
           <View style={styles.grid}>
-            {data.salesToday !== null && data.salesToday !== undefined ? <Tile label="Sales today" value={formatRupees(data.salesToday)} /> : null}
-            {data.salesThisWeek !== null && data.salesThisWeek !== undefined ? <Tile label="Sales in 7 days" value={formatRupees(data.salesThisWeek)} /> : null}
-            <Tile label="Orders today" value={String(data.ordersToday)} onPress={() => props.onOpenOrders()} />
-            <Tile label="Pending orders" value={String(data.pendingOrders)} onPress={() => props.onOpenOrders({ status: 'pending' })} />
-            <Tile label="To confirm by phone" value={String(data.unconfirmedOrders)} />
-            {data.lowStockProducts !== null ? <Tile label="Low stock products" value={String(data.lowStockProducts)} onPress={props.onOpenLowStock} /> : null}
-            {alerts.data !== undefined ? <Tile label="Unread alerts" value={String(alerts.data)} onPress={props.onOpenAlerts} /> : null}
-            {data.revenueThisMonth !== null ? <Tile label="Delivered this month" value={formatRupees(data.revenueThisMonth)} /> : null}
+            {data.salesToday !== null && data.salesToday !== undefined ? <StatCard icon={Banknote} label="Sales today" value={formatRupees(data.salesToday)} tone="success" /> : null}
+            {data.salesThisWeek !== null && data.salesThisWeek !== undefined ? <StatCard icon={TrendingUp} label="Sales in 7 days" value={formatRupees(data.salesThisWeek)} /> : null}
+            <StatCard icon={ShoppingCart} label="Orders today" value={String(data.ordersToday)} onPress={() => props.onOpenOrders()} />
+            <StatCard icon={Clock} label="Pending orders" value={String(data.pendingOrders)} tone={data.pendingOrders > 0 ? 'warning' : undefined} onPress={() => props.onOpenOrders({ status: 'pending' })} />
+            <StatCard icon={PhoneCall} label="To confirm by phone" value={String(data.unconfirmedOrders)} tone={data.unconfirmedOrders > 0 ? 'warning' : undefined} />
+            {data.lowStockProducts !== null ? (
+              <StatCard icon={data.lowStockProducts > 0 ? AlertTriangle : Boxes} label="Low stock products" value={String(data.lowStockProducts)} tone={data.lowStockProducts > 0 ? 'warning' : undefined} onPress={props.onOpenLowStock} />
+            ) : null}
+            {alerts.data !== undefined ? <StatCard icon={Bell} label="Unread alerts" value={String(alerts.data)} tone={alerts.data > 0 ? 'info' : undefined} onPress={props.onOpenAlerts} /> : null}
+            {data.revenueThisMonth !== null ? <StatCard icon={PackageCheck} label="Delivered this month" value={formatRupees(data.revenueThisMonth)} tone="success" /> : null}
           </View>
 
-          <Card title="Recent orders">
-            {data.recentOrders.length === 0 ? (
-              <EmptyState title="No orders yet" text="Your first order will appear here." />
-            ) : (
-              data.recentOrders.map((order) => <OrderRow key={order.id} order={order} onOpen={props.onOpenOrder} />)
-            )}
-          </Card>
-          <Text style={uiStyles.muted}>Updated {formatDateTime(numbers.dataUpdatedAt)}</Text>
+          <SectionHeader title="Recent orders" />
+          {data.recentOrders.length === 0 ? (
+            <EmptyState icon={ShoppingCart} title="No orders yet" text="Your first order will appear here." />
+          ) : (
+            <View>
+              {data.recentOrders.map((order) => (
+                <OrderRow key={order.id} order={order} onOpen={props.onOpenOrder} />
+              ))}
+            </View>
+          )}
+          <View style={styles.updated}>
+            <AppText variant="caption" tone="muted">
+              Updated {formatDateTime(numbers.dataUpdatedAt)}
+            </AppText>
+          </View>
         </>
       )}
     </ScrollScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  store: { minHeight: MIN_TAP_TARGET, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  storeText: { flex: 1 },
-  change: { fontSize: fontSize.body, color: colors.primary, fontWeight: '600' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  tile: {
-    flexGrow: 1,
-    flexBasis: '47%',
-    minHeight: 76,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  pressed: { opacity: 0.6 },
-  tileValue: { fontSize: fontSize.heading, fontWeight: '700', color: colors.text },
-  tileLabel: { fontSize: fontSize.caption, color: colors.textMuted },
-});
+const useStyles = makeStyles((t) => ({
+  greeting: { gap: t.space.xxs },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: t.space.sm },
+  updated: { flexDirection: 'row', justifyContent: 'center', gap: t.space.xs },
+}));

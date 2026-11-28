@@ -1,7 +1,6 @@
-import { Button, Card, EmptyState, formatDateTime, Notice, ScrollScreen, uiStyles, useIsOnline } from '@markaz/mobile-kit';
+import { AppText, Button, Card, CheckCircle, Clock, EmptyState, formatDateTime, Notice, RefreshCw, ScrollScreen, StatusBadge, Trash, useIsOnline } from '@markaz/mobile-kit';
 import type { QueuedChange, StopReason } from '@markaz/mobile-kit/core';
 import { useState } from 'react';
-import { Text } from 'react-native';
 import { statusLabel } from '../labels';
 import { usePending } from '../offline';
 import { useServices, useStoreChoice } from '../services';
@@ -59,23 +58,25 @@ export function PendingScreen() {
   if (changes.length === 0) {
     return (
       <ScrollScreen>
-        <EmptyState title="Nothing is waiting" text="Changes made without a network appear here until they are sent." />
+        <EmptyState icon={CheckCircle} title="Nothing is waiting" text="Changes made without a network appear here until they are sent." />
       </ScrollScreen>
     );
   }
 
   return (
     <ScrollScreen>
-      <Text style={uiStyles.muted}>Sent in this order. A change that cannot be sent holds back the ones after it.</Text>
-      {!online ? <Notice text="Offline. These are sent when the network returns." /> : null}
+      <AppText variant="caption" tone="muted">
+        Sent in this order. A change that cannot be sent holds back the ones after it.
+      </AppText>
+      {!online ? <Notice tone="info" text="Offline. These are sent when the network returns." /> : null}
       {notice ? <Notice text={notice} /> : null}
-      <Button title="Send now" onPress={() => void sendNow()} busy={sending} disabled={!online || changes[0]!.state !== 'pending'} />
+      <Button title="Send now" icon={RefreshCw} onPress={() => void sendNow()} busy={sending} disabled={!online || changes[0]!.state !== 'pending'} />
       {changes.map((item) => (
-        <Card key={item.id} title={item.label}>
-          <Text style={uiStyles.muted}>
+        <Card key={item.id} title={item.label} icon={Clock}>
+          <AppText variant="caption" tone="muted">
             {stores.find((store) => store.id === item.storeId)?.name ?? 'Another store'} · made {formatDateTime(item.createdAt)}
-          </Text>
-          <Text style={uiStyles.body}>Yours: {describeMine(item)}</Text>
+          </AppText>
+          <AppText>Yours: {describeMine(item)}</AppText>
           {item.state === 'conflict' ? (
             <>
               <Notice tone="danger" text={`${describeServer(item)}. Which one wins?`} />
@@ -89,7 +90,7 @@ export function PendingScreen() {
                 }}
                 disabled={!online}
               />
-              <Button title="Keep the server's value" kind="secondary" onPress={() => void runtime.queue()?.discard(item.id)} />
+              <Button title="Keep the server's value" kind="outline" onPress={() => void runtime.queue()?.discard(item.id)} />
             </>
           ) : item.state === 'failed' ? (
             <>
@@ -104,12 +105,12 @@ export function PendingScreen() {
                 }}
                 disabled={!online}
               />
-              <Button title="Discard" kind="secondary" onPress={() => void runtime.queue()?.discard(item.id)} />
+              <Button title="Discard" kind="ghost" icon={Trash} onPress={() => void runtime.queue()?.discard(item.id)} />
             </>
           ) : (
             <>
-              <Text style={uiStyles.muted}>Waiting to be sent.</Text>
-              <Button title="Discard" kind="secondary" onPress={() => void runtime.queue()?.discard(item.id)} disabled={sending} />
+              <StatusBadge label="Waiting to be sent" tone="info" icon={RefreshCw} />
+              <Button title="Discard" kind="ghost" icon={Trash} onPress={() => void runtime.queue()?.discard(item.id)} disabled={sending} />
             </>
           )}
         </Card>

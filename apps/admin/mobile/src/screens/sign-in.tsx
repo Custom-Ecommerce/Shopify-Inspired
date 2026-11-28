@@ -1,8 +1,18 @@
 import { MOBILE_TOTP_CODES, mobileAdminLoginRequestSchema, mobileTotpEnrolmentSchema, type MobileTotpEnrolment } from '@markaz/contracts/mobile';
-import { Button, Card, Notice, ScrollScreen, TextField, uiStyles, type SessionEndReason } from '@markaz/mobile-kit';
+import {
+  AppText,
+  BrandMark,
+  Button,
+  Card,
+  Notice,
+  ScrollScreen,
+  ShieldCheck,
+  type SessionEndReason,
+  TextField,
+} from '@markaz/mobile-kit';
 import { ApiError, errorText, type SignInAnswer } from '@markaz/mobile-kit/core';
 import { useState } from 'react';
-import { Linking, Text } from 'react-native';
+import { Linking } from 'react-native';
 import { useServices } from '../services';
 
 const ENDED: Partial<Record<SessionEndReason, string>> = {
@@ -92,27 +102,25 @@ export function SignInScreen({ endedBecause, openLink = (url: string) => Linking
   const notice = endedBecause ? ENDED[endedBecause] : undefined;
   return (
     <ScrollScreen>
-      <Text accessibilityRole="header" style={uiStyles.title}>
-        Markazify admin
-      </Text>
+      <BrandMark tagline="Admin" />
       {notice && step === 'password' ? <Notice text={notice} /> : null}
 
       {step === 'password' ? (
         <>
           <TextField label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" />
-          <TextField label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" onSubmitEditing={() => void submit()} />
+          <TextField label="Password" value={password} onChangeText={setPassword} secureTextEntry revealable autoComplete="current-password" onSubmitEditing={() => void submit()} />
         </>
       ) : null}
 
       {enrolment && step !== 'password' ? (
-        <Card title="Set up your authenticator">
-          <Text style={uiStyles.body}>Add this account to an authenticator app, then type the code it shows. The key is shown only now.</Text>
-          <Text selectable accessibilityLabel="Authenticator key" style={uiStyles.title}>
+        <Card title="Set up your authenticator" icon={ShieldCheck}>
+          <AppText>Add this account to an authenticator app, then type the code it shows. The key is shown only now.</AppText>
+          <AppText selectable accessibilityLabel="Authenticator key" variant="title">
             {enrolment.secret}
-          </Text>
+          </AppText>
           <Button
             title="Open the authenticator app"
-            kind="secondary"
+            kind="outline"
             onPress={() => void openLink(enrolment.otpauthUri).catch(() => setProblem('No authenticator app opened. Type the key into it by hand.'))}
           />
         </Card>
@@ -138,7 +146,7 @@ export function SignInScreen({ endedBecause, openLink = (url: string) => Linking
           {!enrolment ? (
             <Button
               title={step === 'code' ? 'Use a recovery code' : 'Use the authenticator code'}
-              kind="secondary"
+              kind="outline"
               onPress={() => {
                 setStep(step === 'code' ? 'recovery' : 'code');
                 setCode('');
@@ -146,7 +154,7 @@ export function SignInScreen({ endedBecause, openLink = (url: string) => Linking
               }}
             />
           ) : null}
-          <Button title="Back" kind="secondary" onPress={back} />
+          <Button title="Back" kind="ghost" onPress={back} />
         </>
       ) : null}
     </ScrollScreen>

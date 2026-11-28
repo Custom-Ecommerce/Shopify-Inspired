@@ -1,6 +1,12 @@
-import { formatDateTime, PagedList, TextField, uiStyles, usePagedList } from '@markaz/mobile-kit';
+import {
+  AppText,
+  formatDateTime,
+  PagedList,
+  SearchField,
+  usePagedList,
+  Users,
+} from '@markaz/mobile-kit';
 import { useCallback, useState } from 'react';
-import { Text } from 'react-native';
 import { fetchSellers, type SellerRow } from '../api';
 import { ListRow } from '../components/row';
 import { label } from '../labels';
@@ -34,21 +40,20 @@ export function SellersScreen() {
     <PagedList
       paged={paged}
       renderItem={renderItem}
-      empty={{ title: 'No sellers here' }}
+      empty={{ icon: Users, title: 'No sellers here' }}
       header={
         <>
-          <TextField
+          <SearchField
             label="Search name or email"
             value={typed}
             onChangeText={(text) => {
               setTyped(text);
               if (!text) setSearch('');
             }}
-            onSubmitEditing={() => setSearch(typed.trim())}
-            returnKeyType="search"
+            onSubmit={() => setSearch(typed.trim())}
             autoCapitalize="none"
           />
-          <Text style={uiStyles.muted}>Read only. Change a seller on the console.</Text>
+          <AppText variant="caption" tone="muted">Read only. Change a seller on the console.</AppText>
         </>
       }
     />

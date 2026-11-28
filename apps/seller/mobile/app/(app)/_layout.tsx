@@ -1,4 +1,4 @@
-import { useQueueSync } from '@markaz/mobile-kit';
+import { useQueueSync, useStackOptions } from '@markaz/mobile-kit';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useCallback } from 'react';
 import { PushWiring } from '../../src/push-wiring';
@@ -13,11 +13,12 @@ function QueueSync() {
 export default function AppLayout() {
   const router = useRouter();
   const open = useCallback((path: string) => router.push(path as Href), [router]);
+  const stack = useStackOptions();
   return (
     <StoreProvider>
       <PushWiring open={open} />
       <QueueSync />
-      <Stack>
+      <Stack screenOptions={stack}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="orders/[id]" options={{ title: 'Order' }} />
         <Stack.Screen name="products/[id]" options={{ title: 'Product' }} />

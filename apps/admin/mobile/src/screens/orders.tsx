@@ -1,7 +1,18 @@
 import { ADMIN_ORDER_STATUSES, type AdminOrderRow } from '@markaz/contracts/admin-orders';
-import { Chip, formatDateTime, formatRupees, PagedList, spacing, TextField, uiStyles, usePagedList } from '@markaz/mobile-kit';
+import {
+  AppText,
+  Chip,
+  formatDateTime,
+  formatRupees,
+  ORDER_STATUS_TONES,
+  PagedList,
+  SearchField,
+  ShoppingCart,
+  toneOf,
+  usePagedList,
+} from '@markaz/mobile-kit';
 import { useCallback, useState } from 'react';
-import { ScrollView, Text } from 'react-native';
+import { ScrollView } from 'react-native';
 import { fetchOrders } from '../api';
 import { ListRow } from '../components/row';
 import { label } from '../labels';
@@ -24,6 +35,7 @@ export function OrdersScreen({ onOpenOrder }: { onOpenOrder: (id: string) => voi
         title={item.orderNumber}
         value={formatRupees(item.total)}
         lines={[`${item.storeName ?? 'Unknown store'} · ${label(item.status)}`, `${item.paymentMethod === 'card' ? 'Card' : 'COD'} · ${formatDateTime(item.createdAt)}`]}
+        badge={{ label: label(item.status), tone: toneOf(ORDER_STATUS_TONES, item.status) }}
         onOpen={onOpenOrder}
       />
     ),
@@ -34,28 +46,27 @@ export function OrdersScreen({ onOpenOrder }: { onOpenOrder: (id: string) => voi
     <PagedList
       paged={paged}
       renderItem={renderItem}
-      empty={{ title: 'No orders here' }}
+      empty={{ icon: ShoppingCart, title: 'No orders here' }}
       header={
         <>
-          <TextField
+          <SearchField
             label="Search by order number"
             value={typed}
             onChangeText={(text) => {
               setTyped(text);
               if (!text) setSearch('');
             }}
-            onSubmitEditing={() => setSearch(typed.trim())}
-            returnKeyType="search"
+            onSubmit={() => setSearch(typed.trim())}
             autoCapitalize="characters"
             autoCorrect={false}
           />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
             <Chip label="All" selected={!status} onPress={() => setStatus(undefined)} />
             {ADMIN_ORDER_STATUSES.map((value) => (
               <Chip key={value} label={label(value)} selected={status === value} onPress={() => setStatus(value)} />
             ))}
           </ScrollView>
-          <Text style={uiStyles.muted}>Read only. Shoppers&apos; contact details are never shown.</Text>
+          <AppText variant="caption" tone="muted">Read only. Shoppers&apos; contact details are never shown.</AppText>
         </>
       }
     />

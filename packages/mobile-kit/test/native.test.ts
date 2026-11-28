@@ -6,7 +6,7 @@ import { phoneStore } from '../src/native/async-storage';
 import { isConnected } from '../src/native/network';
 import { createQueryClient, persistOptionsFor, shouldRetry } from '../src/native/query';
 import { secureSecretStore } from '../src/native/secure-store';
-import { colors, MIN_TAP_TARGET } from '../src/theme';
+import { MIN_TAP_TARGET, PALETTES } from '../src/theme';
 
 jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(), setItemAsync: jest.fn(), deleteItemAsync: jest.fn(async () => undefined) }));
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- a jest.mock factory cannot use an import
@@ -51,7 +51,10 @@ describe('phone adapters', () => {
   });
 
   it('has the design tokens the screens use', () => {
-    expect(MIN_TAP_TARGET).toBeGreaterThanOrEqual(44);
-    expect(Object.values(colors).every((value) => /^#[0-9a-f]{6}$/.test(value))).toBe(true);
+    expect(MIN_TAP_TARGET).toBeGreaterThanOrEqual(48);
+    // Every colour of every palette is a hex colour (the scrim and "transparent" carry an alpha byte).
+    const values = Object.values(PALETTES).flatMap((set) => [...Object.values(set.light), ...Object.values(set.dark)]);
+    expect(values.length).toBeGreaterThan(50);
+    expect(values.filter((value) => !/^#[0-9a-f]{6}([0-9a-f]{2})?$/.test(value))).toEqual([]);
   });
 });

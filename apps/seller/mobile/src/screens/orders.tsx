@@ -1,9 +1,9 @@
 import { DASHBOARD_ORDER_STATUSES } from '@markaz/contracts/order';
 import type { MobileOrderListItem, MobileOrderPaymentFilter } from '@markaz/contracts/mobile-data';
-import { Chip, spacing, TextField, uiStyles, PagedList, usePagedList } from '@markaz/mobile-kit';
+import { Banknote, Chip, CreditCard, makeStyles, PagedList, SearchField, ShoppingCart, usePagedList, Wrap, type IconComponent } from '@markaz/mobile-kit';
 import { recordKey } from '@markaz/mobile-kit/core';
 import { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView } from 'react-native';
 import { fetchOrders, type OrderFilters } from '../api';
 import { OrderRow } from '../components/order-row';
 import { statusLabel } from '../labels';
@@ -16,13 +16,14 @@ export interface OrdersProps {
   initialStatus?: string;
 }
 
-const PAYMENTS: readonly { value: MobileOrderPaymentFilter | undefined; label: string }[] = [
+const PAYMENTS: readonly { value: MobileOrderPaymentFilter | undefined; label: string; icon?: IconComponent }[] = [
   { value: undefined, label: 'All payments' },
-  { value: 'cod', label: 'COD' },
-  { value: 'paid', label: 'Paid' },
+  { value: 'cod', label: 'COD', icon: Banknote },
+  { value: 'paid', label: 'Paid', icon: CreditCard },
 ];
 
 export function OrdersScreen({ onOpenOrder, initialStatus }: OrdersProps) {
+  const styles = useStyles();
   const { runtime } = useServices();
   const { store } = useStoreChoice();
   const storeId = store?.id ?? '';
@@ -55,18 +56,18 @@ export function OrdersScreen({ onOpenOrder, initialStatus }: OrdersProps) {
     <PagedList
       paged={paged}
       renderItem={renderItem}
-      empty={{ title: 'No orders here', text: status || payment || search ? 'Nothing matches these filters.' : 'Your first order will appear here.' }}
+      empty={{ icon: ShoppingCart, title: 'No orders here', text: status || payment || search ? 'Nothing matches these filters.' : 'Your first order will appear here.' }}
       header={
         <>
-          <TextField
+          <SearchField
             label="Search by order number"
+            placeholder="Order number (ORD-...) or phone"
             value={typed}
             onChangeText={(text) => {
               setTyped(text);
               if (!text) setSearch('');
             }}
-            onSubmitEditing={() => setSearch(typed.trim())}
-            returnKeyType="search"
+            onSubmit={() => setSearch(typed.trim())}
             autoCapitalize="characters"
             autoCorrect={false}
           />
@@ -81,17 +82,17 @@ export function OrdersScreen({ onOpenOrder, initialStatus }: OrdersProps) {
               />
             ))}
           </ScrollView>
-          <View style={uiStyles.wrap}>
+          <Wrap>
             {PAYMENTS.map((option) => (
-              <Chip key={option.label} label={option.label} selected={payment === option.value} onPress={() => setPayment(option.value)} />
+              <Chip key={option.label} label={option.label} icon={option.icon} selected={payment === option.value} onPress={() => setPayment(option.value)} />
             ))}
-          </View>
+          </Wrap>
         </>
       }
     />
   );
 }
 
-const styles = StyleSheet.create({
-  chips: { gap: spacing.sm },
-});
+const useStyles = makeStyles((t) => ({
+  chips: { gap: t.space.sm },
+}));

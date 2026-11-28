@@ -8,6 +8,8 @@ import {
   LoadingState,
   phoneStore,
   QueryProvider,
+  ThemeProvider,
+  useTheme,
   UpgradeScreen,
   useSessionState,
   useUpgradeNotice,
@@ -17,7 +19,7 @@ import { isRunningInExpoGo } from 'expo';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { apiUrl, appVersion } from '../src/config';
 import { RecoveryCodesScreen } from '../src/screens/recovery-codes';
@@ -82,11 +84,23 @@ function App({ baseUrl }: { baseUrl: string }) {
   );
 }
 
+/** The window behind every screen, in the theme's background (also while the app starts). */
+function Root() {
+  const theme = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
+      {apiUrl.ok ? <App baseUrl={apiUrl.url} /> : <ErrorState message={apiUrl.problem} />}
+    </View>
+  );
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
-      {apiUrl.ok ? <App baseUrl={apiUrl.url} /> : <ErrorState message={apiUrl.problem} />}
+      <ThemeProvider app="admin">
+        <Root />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

@@ -83,6 +83,7 @@ describe('offline changing', () => {
     await screen.findByRole('button', { name: 'Confirm order' });
     await goOffline();
     await fireEvent.press(screen.getByRole('button', { name: 'Confirm order' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Yes, confirm order' }));
     expect(await screen.findByText('Set the status to Confirmed')).toBeTruthy();
     expect(screen.getByText('A status change is waiting to be sent. The next one can be made after it.')).toBeTruthy();
     await fireEvent.changeText(screen.getByLabelText('New note (only your team sees it)'), 'Call first');

@@ -1,9 +1,9 @@
 import type { MobileAlert } from '@markaz/contracts/mobile-data';
-import { Button, colors, fontSize, formatDateTime, MIN_TAP_TARGET, Notice, radius, spacing, useIsOnline, PagedList, usePagedList } from '@markaz/mobile-kit';
+import { AppText, Bell, Button, CheckCircle, formatDateTime, Icon, ListRow, makeStyles, Notice, PagedList, useIsOnline, usePagedList } from '@markaz/mobile-kit';
 import { errorText } from '@markaz/mobile-kit/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { memo, useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { View } from 'react-native';
 import { fetchAlerts, markAlertRead, markAllAlertsRead } from '../api';
 import { useServices, useStoreChoice, useStoreKey } from '../services';
 
@@ -17,21 +17,21 @@ export function routeForAlert(link: string | null): string | null {
 }
 
 const AlertRow = memo(function AlertRow({ alert, onPress }: { alert: MobileAlert; onPress: (alert: MobileAlert) => void }) {
+  const styles = useStyles();
   const unread = alert.readAt === null;
   return (
-    <Pressable
-      accessibilityRole="button"
+    <ListRow
       accessibilityLabel={`${unread ? 'Unread: ' : ''}${alert.title}`}
       onPress={() => onPress(alert)}
-      style={({ pressed }) => [styles.row, unread && styles.unread, pressed && styles.pressed]}
-    >
-      <Text style={[styles.title, unread && styles.bold]}>{alert.title}</Text>
-      <Text style={styles.body}>{alert.body}</Text>
-      <Text style={styles.muted}>
-        {formatDateTime(alert.createdAt)}
-        {routeForAlert(alert.link) === null && alert.link ? ' · open on the website' : ''}
-      </Text>
-    </Pressable>
+      leading={
+        <View style={[styles.dot, unread && styles.unread]}>
+          <Icon icon={Bell} size="sm" tone={unread ? 'onPrimary' : 'muted'} />
+        </View>
+      }
+      title={alert.title}
+      subtitle={alert.body}
+      meta={`${formatDateTime(alert.createdAt)}${routeForAlert(alert.link) === null && alert.link ? ' · open on the website' : ''}`}
+    />
   );
 });
 
@@ -74,37 +74,25 @@ export function AlertsScreen({ open }: { open: (path: string) => void }) {
     <PagedList
       paged={paged}
       renderItem={renderItem}
-      empty={{ title: 'No alerts', text: 'New orders and low stock show up here.' }}
+      empty={{ icon: Bell, title: 'No alerts', text: 'New orders and low stock show up here.' }}
       header={
         <>
           {problem ? <Notice tone="danger" text={problem} /> : null}
           {unread > 0 ? (
-            <Button title={`Mark all ${unread} as read`} kind="secondary" onPress={readAll} disabled={!online} />
+            <Button title={`Mark all ${unread} as read`} kind="outline" icon={CheckCircle} onPress={readAll} disabled={!online} />
           ) : (
-            <Text style={styles.muted}>Nothing unread.</Text>
+            <AppText variant="caption" tone="muted">
+              Nothing unread.
+            </AppText>
           )}
-          {!online ? <Text style={styles.muted}>Marking alerts read needs a connection.</Text> : null}
+          {!online ? <Notice tone="info" text="Marking alerts read needs a connection." /> : null}
         </>
       }
     />
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    minHeight: MIN_TAP_TARGET,
-    gap: spacing.xs,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  unread: { borderColor: colors.primary, borderWidth: 2 },
-  pressed: { opacity: 0.6 },
-  title: { fontSize: fontSize.body, color: colors.text },
-  bold: { fontWeight: '700' },
-  body: { fontSize: fontSize.body, color: colors.text },
-  muted: { fontSize: fontSize.caption, color: colors.textMuted },
-});
+const useStyles = makeStyles((t) => ({
+  dot: { width: 36, height: 36, borderRadius: t.radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: t.colors.muted },
+  unread: { backgroundColor: t.colors.primary },
+}));

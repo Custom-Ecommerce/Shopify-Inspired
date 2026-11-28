@@ -1,8 +1,7 @@
 import { mobileLoginRequestSchema } from '@markaz/contracts/mobile';
-import { Button, Notice, ScrollScreen, TextField, uiStyles, type SessionEndReason } from '@markaz/mobile-kit';
+import { AppText, BrandMark, Button, Card, Notice, ScrollScreen, TextField, type SessionEndReason } from '@markaz/mobile-kit';
 import { ApiError, errorText } from '@markaz/mobile-kit/core';
 import { useState } from 'react';
-import { Text } from 'react-native';
 import { useServices } from '../services';
 
 const ENDED: Partial<Record<SessionEndReason, string>> = {
@@ -46,16 +45,40 @@ export function SignInScreen({ endedBecause }: { endedBecause?: SessionEndReason
   const notice = endedBecause ? ENDED[endedBecause] : undefined;
   return (
     <ScrollScreen>
-      <Text accessibilityRole="header" style={uiStyles.title}>
-        Sign in to your shop
-      </Text>
-      <Text style={uiStyles.muted}>Use the email and password of your Markazify seller account.</Text>
-      {notice ? <Notice text={notice} /> : null}
-      <TextField label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" textContentType="emailAddress" />
-      <TextField label="Password" value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" textContentType="password" onSubmitEditing={signIn} />
-      {problem ? <Notice tone="danger" text={problem} /> : null}
-      <Button title="Sign in" onPress={signIn} busy={busy} />
-      <Text style={uiStyles.muted}>New sellers and forgotten passwords are handled on the website.</Text>
+      <BrandMark tagline="Seller" />
+      <Card>
+        <AppText accessibilityRole="header" variant="title">
+          Sign in to your shop
+        </AppText>
+        <AppText tone="muted">Use the email and password of your Markazify seller account.</AppText>
+        {notice ? <Notice text={notice} /> : null}
+        <TextField
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          textContentType="emailAddress"
+          returnKeyType="next"
+        />
+        <TextField
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          revealable
+          autoComplete="current-password"
+          textContentType="password"
+          returnKeyType="go"
+          onSubmitEditing={signIn}
+        />
+        {problem ? <Notice tone="danger" text={problem} /> : null}
+        <Button title="Sign in" onPress={signIn} busy={busy} />
+      </Card>
+      <AppText variant="caption" tone="muted" style={{ textAlign: 'center' }}>
+        New sellers and forgotten passwords are handled on the website.
+      </AppText>
     </ScrollScreen>
   );
 }

@@ -1,19 +1,18 @@
-import { Button, Card, Notice, ScrollScreen, uiStyles } from '@markaz/mobile-kit';
-import { Text } from 'react-native';
+import { AppText, Button, Card, KeyRound, Notice, ScrollScreen } from '@markaz/mobile-kit';
 
 /** Shown once, right after the authenticator is set up. The codes are not saved on the phone. */
 export function RecoveryCodesScreen({ codes, onSaved }: { codes: readonly string[]; onSaved: () => void }) {
   return (
     <ScrollScreen>
-      <Text accessibilityRole="header" style={uiStyles.title}>
+      <AppText accessibilityRole="header" variant="title">
         Save your recovery codes
-      </Text>
+      </AppText>
       <Notice text="Each code works once, if you lose your authenticator. They are shown only now: write them down and keep them away from this phone." />
-      <Card>
+      <Card title="Recovery codes" icon={KeyRound}>
         {codes.map((code) => (
-          <Text key={code} selectable style={uiStyles.title}>
+          <AppText key={code} selectable variant="heading" style={{ fontVariant: ['tabular-nums'], letterSpacing: 1 }}>
             {code}
-          </Text>
+          </AppText>
         ))}
       </Card>
       <Button title="I have saved them" onPress={onSaved} />

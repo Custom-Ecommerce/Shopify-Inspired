@@ -1,55 +1,55 @@
 import type { MobileOrderListItem } from '@markaz/contracts/mobile-data';
-import { colors, fontSize, formatDateTime, formatRupees, MIN_TAP_TARGET, radius, spacing } from '@markaz/mobile-kit';
+import { AppText, formatDateTime, formatRupees, ListRow, makeStyles, PhoneCall, RefreshCw, Icon } from '@markaz/mobile-kit';
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { statusLabel } from '../labels';
+import { OrderStatusBadge, PaymentBadge } from './badges';
 
-/** One order in a list. Memoised: it renders again only when its order changes. */
+/** One order in a list: number and amount, customer and city, date, status and payment. Memoised: it renders again only when its order changes. */
 export const OrderRow = memo(function OrderRow({ order, onOpen, waiting = false }: { order: MobileOrderListItem; onOpen: (id: string) => void; waiting?: boolean }) {
+  const styles = useStyles();
   const unconfirmed = order.confirmationStatus === 'unconfirmed' && order.status !== 'cancelled';
   return (
-    <Pressable
-      accessibilityRole="button"
+    <ListRow
       accessibilityLabel={`Order ${order.orderId}, ${statusLabel(order.status)}, ${formatRupees(order.total)}`}
       onPress={() => onOpen(order.id)}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-    >
-      <View style={styles.line}>
-        <Text style={styles.number}>{order.orderId}</Text>
-        <Text style={styles.total}>{formatRupees(order.total)}</Text>
-      </View>
-      <View style={styles.line}>
-        <Text style={styles.muted} numberOfLines={1}>
-          {[order.customerName, order.city].filter(Boolean).join(', ') || 'No name'}
-        </Text>
-        <Text style={styles.status}>{statusLabel(order.status)}</Text>
-      </View>
-      <View style={styles.line}>
-        <Text style={styles.muted}>{formatDateTime(order.createdAt)}</Text>
-        <Text style={styles.muted}>{order.paymentMethod === 'card' ? 'Card' : 'COD'}</Text>
-      </View>
-      {unconfirmed ? <Text style={styles.warning}>Waiting for your confirmation call</Text> : null}
-      {waiting ? <Text style={styles.warning}>A change is waiting to be sent</Text> : null}
-    </Pressable>
+      title={order.orderId}
+      trailing={
+        <AppText weight="semibold" style={styles.amount}>
+          {formatRupees(order.total)}
+        </AppText>
+      }
+      subtitle={[order.customerName, order.city].filter(Boolean).join(', ') || 'No name'}
+      meta={formatDateTime(order.createdAt)}
+      footer={
+        <>
+          <View style={styles.badges}>
+            <OrderStatusBadge status={order.status} />
+            <PaymentBadge method={order.paymentMethod} status={order.paymentStatus} />
+          </View>
+          {unconfirmed ? <Hint icon={PhoneCall} text="Waiting for your confirmation call" /> : null}
+          {waiting ? <Hint icon={RefreshCw} text="A change is waiting to be sent" /> : null}
+        </>
+      }
+    />
   );
 });
 
-const styles = StyleSheet.create({
-  row: {
-    minHeight: MIN_TAP_TARGET,
-    gap: spacing.xs,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  pressed: { opacity: 0.6 },
-  line: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
-  number: { fontSize: fontSize.body, fontWeight: '700', color: colors.text, flexShrink: 1 },
-  total: { fontSize: fontSize.body, fontWeight: '700', color: colors.text },
-  status: { fontSize: fontSize.caption, fontWeight: '600', color: colors.primary },
-  muted: { fontSize: fontSize.caption, color: colors.textMuted, flexShrink: 1 },
-  warning: { fontSize: fontSize.caption, color: colors.warning },
-});
+function Hint({ icon, text }: { icon: typeof PhoneCall; text: string }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.hint}>
+      <Icon icon={icon} size="xs" tone="warning" />
+      <AppText variant="caption" style={styles.hintText}>
+        {text}
+      </AppText>
+    </View>
+  );
+}
+
+const useStyles = makeStyles((t) => ({
+  amount: { fontVariant: ['tabular-nums'] },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: t.space.xs, marginTop: t.space.xxs },
+  hint: { flexDirection: 'row', alignItems: 'center', gap: t.space.xs },
+  hintText: { flexShrink: 1 },
+}));

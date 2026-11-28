@@ -7,7 +7,7 @@
 | Cold start to the dashboard, installed release build, 2 GB RAM Android | under 3 s | **not measured yet** (owner) |
 | Scrolling the orders list (200+ rows loaded) | no visible stutter; janky frames under 10 % | **not measured yet** (owner) |
 | Memory after browsing orders and products | under 300 MB (PSS) | **not measured yet** (owner) |
-| JavaScript bundle (Hermes bytecode) | watch for growth | 3.7 MB, plus about 25 KB of images (`expo export`, 2026-11-26) |
+| JavaScript bundle (Hermes bytecode) | watch for growth | 4.0 MB (seller), plus about 25 KB of images and 0.6 MB of fonts (Poppins, 4 weights) (`expo export`, 2026-11-27, S9-UI; it was 3.7 MB before the icons and the new components) |
 
 ## What the code does for speed
 

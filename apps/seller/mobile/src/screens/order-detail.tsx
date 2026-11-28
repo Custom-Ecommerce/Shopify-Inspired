@@ -2,27 +2,42 @@ import { sellerCan } from '@markaz/auth/seller-capabilities';
 import { mobileOrderDetailSchema, type MobileOrderDetail } from '@markaz/contracts/mobile-data';
 import { COURIERS, ORDER_NOTE_TEXT_MAX } from '@markaz/contracts/order';
 import {
+  AppText,
   Button,
+  CalendarDays,
   Card,
   Chip,
+  Clock,
+  ConfirmSheet,
+  Contact,
   ErrorState,
   formatDateTime,
   formatRupees,
+  History,
+  Icon,
   LoadingState,
+  makeStyles,
+  MapPin,
   NoConnection,
   Notice,
   OfflineBanner,
+  Package,
+  Phone,
   Row,
   ScrollScreen,
+  Sheet,
+  StickyNote,
   TextField,
-  uiStyles,
+  Truck,
   useIsOnline,
+  Wrap,
 } from '@markaz/mobile-kit';
 import { ApiError, errorText, recordKey } from '@markaz/mobile-kit/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { addOrderNote, changeOrderStatus, fetchOrder, type StatusChange } from '../api';
+import { OrderStatusBadge, PaymentBadge } from '../components/badges';
 import { actionLabel, paymentLabel, statusLabel } from '../labels';
 import { usePending, useSubmit, type SubmitInput } from '../offline';
 import { useServices, useStoreChoice, useStoreKey } from '../services';
@@ -37,7 +52,11 @@ function taxLine(order: MobileOrderDetail): { label: string; value: string } | n
   return { label, value: formatRupees(order.taxAmount) };
 }
 
+/** Moves that undo the sale: kept apart from the forward step, never the big button. */
+const BACKWARD = new Set(['cancelled', 'returned']);
+
 export function OrderDetailScreen({ orderId, onOpenPending }: { orderId: string; onOpenPending?: () => void }) {
+  const styles = useStyles();
   const { runtime } = useServices();
   const { store } = useStoreChoice();
   const storeId = store?.id ?? '';
@@ -49,6 +68,8 @@ export function OrderDetailScreen({ orderId, onOpenPending }: { orderId: string;
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [dispatching, setDispatching] = useState(false);
+  // The status the seller is asked to confirm (the sheet), or null.
+  const [asking, setAsking] = useState<string | null>(null);
   const [courier, setCourier] = useState('');
   const [tracking, setTracking] = useState('');
   const [note, setNote] = useState('');
@@ -128,122 +149,210 @@ export function OrderDetailScreen({ orderId, onOpenPending }: { orderId: string;
   };
 
   const tax = taxLine(order);
+  const forward = order.allowedNext.filter((next) => !BACKWARD.has(next));
+  const backward = order.allowedNext.filter((next) => BACKWARD.has(next));
+  const canMove = canWrite && !statusWaiting && order.allowedNext.length > 0;
+  const ask = (next: string) => {
+    setProblem(null);
+    if (next === 'dispatched') setDispatching(true);
+    else setAsking(next);
+  };
+
+  // The next step in the thumb zone: the forward move as the one primary button, anything that undoes the sale apart from it.
+  const footer = canMove ? (
+    <>
+      {forward.map((next, index) => (
+        <Button key={next} title={actionLabel(next)} kind={index === 0 ? 'primary' : 'outline'} icon={next === 'dispatched' ? Truck : undefined} onPress={() => ask(next)} busy={busy && index === 0} disabled={busy} />
+      ))}
+      {backward.map((next) => (
+        <Button key={next} title={actionLabel(next)} kind="ghost" onPress={() => ask(next)} disabled={busy} />
+      ))}
+    </>
+  ) : undefined;
+  const sheetOpen = asking !== null || dispatching;
+
   return (
-    <ScrollScreen refreshing={detail.isRefetching} onRefresh={() => void detail.refetch()}>
-      <OfflineBanner updatedAt={detail.dataUpdatedAt} />
-      {online && detail.error ? <Notice text={`Showing the order saved at ${formatDateTime(detail.dataUpdatedAt)}. ${errorText(detail.error)}`} /> : null}
+    <>
+      <ScrollScreen refreshing={detail.isRefetching} onRefresh={() => void detail.refetch()} footer={footer}>
+        <OfflineBanner updatedAt={detail.dataUpdatedAt} />
+        {online && detail.error ? <Notice text={`Showing the order saved at ${formatDateTime(detail.dataUpdatedAt)}. ${errorText(detail.error)}`} /> : null}
 
-      <Card>
-        <Text accessibilityRole="header" style={uiStyles.title}>
-          {order.orderId}
-        </Text>
-        <Row label="Status" value={statusLabel(order.status)} strong />
-        <Row label="Placed" value={formatDateTime(order.createdAt)} />
-        <Row label="Payment" value={paymentLabel(order.paymentMethod, order.paymentStatus)} />
-        {order.confirmationStatus === 'unconfirmed' ? <Notice text="This order still waits for your confirmation call (record it on the website)." /> : null}
-      </Card>
-
-      <Card title="Customer">
-        <Text style={uiStyles.body}>{order.customerName ?? 'No name'}</Text>
-        {order.phone ? <Text style={uiStyles.body}>{order.phone}</Text> : null}
-        {order.address || order.city ? <Text style={uiStyles.body}>{[order.address, order.city].filter(Boolean).join(', ')}</Text> : null}
-        {order.customerNote ? <Text style={uiStyles.muted}>Customer wrote: {order.customerNote}</Text> : null}
-      </Card>
-
-      <Card title="Items">
-        {order.items.map((item, index) => (
-          <View key={`${item.sku ?? item.productTitle}-${index}`}>
-            <Row label={`${item.quantity} x ${item.productTitle}`} value={formatRupees(item.lineTotal)} />
-            {item.variantTitle && item.variantTitle !== 'Default' ? <Text style={uiStyles.muted}>{item.variantTitle}</Text> : null}
+        <Card>
+          <View style={styles.title}>
+            <AppText accessibilityRole="header" variant="title" style={styles.flex}>
+              {order.orderId}
+            </AppText>
+            <OrderStatusBadge status={order.status} />
           </View>
-        ))}
-        <Row label="Subtotal" value={formatRupees(order.subtotal)} />
-        {order.discountAmount > 0 ? <Row label={order.discountCode ? `Discount (${order.discountCode})` : 'Discount'} value={`- ${formatRupees(order.discountAmount)}`} /> : null}
-        <Row label="Delivery" value={formatRupees(order.deliveryCharges)} />
-        {tax ? <Row label={tax.label} value={tax.value} /> : null}
-        <Row label="Total" value={formatRupees(order.total)} strong />
-      </Card>
-
-      {order.courier || order.trackingNumber ? (
-        <Card title="Courier">
-          {order.courier ? <Row label="Courier" value={order.courier} /> : null}
-          {order.trackingNumber ? <Row label="Tracking number" value={order.trackingNumber} /> : null}
-        </Card>
-      ) : null}
-
-      {problem ? <Notice tone="danger" text={problem} /> : null}
-      {saved ? <Notice text="Saved on this phone. It is sent when the connection is back." /> : null}
-      {waiting.length > 0 ? (
-        <Card title="Waiting to be sent">
-          {waiting.map((entry) => (
-            <Text key={entry.id} style={uiStyles.body}>
-              {describeMine(entry)}
-              {entry.state === 'pending' ? '' : ' (needs your decision, see Pending changes)'}
-            </Text>
-          ))}
-          {onOpenPending ? <Button title="Pending changes" kind="secondary" onPress={onOpenPending} /> : null}
-        </Card>
-      ) : null}
-
-      <Card title="Actions">
-        {!canWrite ? (
-          <Text style={uiStyles.muted}>Your role can view this order{canNote ? ' and add notes' : ''}, not change its status.</Text>
-        ) : statusWaiting ? (
-          <Text style={uiStyles.muted}>A status change is waiting to be sent. The next one can be made after it.</Text>
-        ) : order.allowedNext.length === 0 ? (
-          <Text style={uiStyles.muted}>No further status change.</Text>
-        ) : (
-          order.allowedNext.map((next) =>
-            next === 'dispatched' ? (
-              <View key={next}>
-                {!dispatching ? (
-                  <Button title={actionLabel(next)} onPress={() => setDispatching(true)} disabled={busy} />
-                ) : (
-                  <View>
-                    <View style={uiStyles.wrap}>
-                      {COURIERS.filter((name) => name !== 'Other').map((name) => (
-                        <Chip key={name} label={name} selected={courier === name} onPress={() => setCourier(name)} />
-                      ))}
-                    </View>
-                    <TextField label="Courier" value={courier} onChangeText={setCourier} />
-                    <TextField label="Tracking number" value={tracking} onChangeText={setTracking} autoCapitalize="characters" autoCorrect={false} />
-                    <Button title="Confirm dispatch" onPress={() => void dispatch()} busy={busy} />
-                  </View>
-                )}
-              </View>
-            ) : (
-              <Button key={next} title={actionLabel(next)} onPress={() => void move({ status: next })} busy={busy} />
-            ),
-          )
-        )}
-        {canWrite && order.canCancel ? <Text style={uiStyles.muted}>To cancel this order, use the website.</Text> : null}
-      </Card>
-
-      <Card title="Notes">
-        {order.notes.length === 0 ? <Text style={uiStyles.muted}>No notes yet.</Text> : null}
-        {order.notes.map((entry, index) => (
-          <View key={entry.id ?? index}>
-            <Text style={uiStyles.body}>{entry.text}</Text>
-            <Text style={uiStyles.muted}>{formatDateTime(entry.at)}</Text>
+          <Row icon={CalendarDays} label="Placed" value={formatDateTime(order.createdAt)} />
+          <View style={styles.payment}>
+            <AppText tone="muted" style={styles.flex}>
+              {paymentLabel(order.paymentMethod, order.paymentStatus)}
+            </AppText>
+            <PaymentBadge method={order.paymentMethod} status={order.paymentStatus} />
           </View>
-        ))}
-        {canNote ? (
-          <>
-            <TextField label="New note (only your team sees it)" value={note} onChangeText={setNote} multiline maxLength={ORDER_NOTE_TEXT_MAX} />
-            <Button title="Add note" kind="secondary" onPress={() => void saveNote()} disabled={!note.trim()} busy={busy} />
-          </>
+          {order.confirmationStatus === 'unconfirmed' ? <Notice tone="warning" text="This order still waits for your confirmation call (record it on the website)." /> : null}
+        </Card>
+
+        {problem && !sheetOpen ? <Notice tone="danger" text={problem} /> : null}
+        {saved ? <Notice tone="success" text="Saved on this phone. It is sent when the connection is back." /> : null}
+        {waiting.length > 0 ? (
+          <Card title="Waiting to be sent" icon={Clock}>
+            {waiting.map((entry) => (
+              <AppText key={entry.id}>
+                {describeMine(entry)}
+                {entry.state === 'pending' ? '' : ' (needs your decision, see Pending changes)'}
+              </AppText>
+            ))}
+            {onOpenPending ? <Button title="Pending changes" kind="outline" onPress={onOpenPending} /> : null}
+          </Card>
         ) : null}
-      </Card>
+        {!canWrite ? (
+          <Notice tone="info" text={`Your role can view this order${canNote ? ' and add notes' : ''}, not change its status.`} />
+        ) : statusWaiting ? (
+          <Notice tone="info" text="A status change is waiting to be sent. The next one can be made after it." />
+        ) : order.allowedNext.length === 0 ? (
+          <AppText variant="caption" tone="muted">
+            No further status change.
+          </AppText>
+        ) : null}
 
-      <Card title="Timeline">
-        {order.timeline.map((entry) => (
-          <View key={entry.id}>
-            <Text style={uiStyles.body}>{entry.title}</Text>
-            {entry.detail ? <Text style={uiStyles.muted}>{entry.detail}</Text> : null}
-            <Text style={uiStyles.muted}>{formatDateTime(entry.at)}</Text>
-          </View>
-        ))}
-      </Card>
-    </ScrollScreen>
+        <Card title="Customer" icon={Contact}>
+          <AppText weight="medium">{order.customerName ?? 'No name'}</AppText>
+          {order.phone ? (
+            <View style={styles.line}>
+              <Icon icon={Phone} size="sm" tone="muted" />
+              <AppText>{order.phone}</AppText>
+            </View>
+          ) : null}
+          {order.address || order.city ? (
+            <View style={styles.line}>
+              <Icon icon={MapPin} size="sm" tone="muted" />
+              <AppText style={styles.flex}>{[order.address, order.city].filter(Boolean).join(', ')}</AppText>
+            </View>
+          ) : null}
+          {order.customerNote ? (
+            <AppText variant="caption" tone="muted">
+              Customer wrote: {order.customerNote}
+            </AppText>
+          ) : null}
+        </Card>
+
+        <Card title="Items" icon={Package}>
+          {order.items.map((item, index) => (
+            <View key={`${item.sku ?? item.productTitle}-${index}`}>
+              <Row label={`${item.quantity} x ${item.productTitle}`} value={formatRupees(item.lineTotal)} />
+              {item.variantTitle && item.variantTitle !== 'Default' ? (
+                <AppText variant="caption" tone="muted">
+                  {item.variantTitle}
+                </AppText>
+              ) : null}
+            </View>
+          ))}
+          <View style={styles.rule} />
+          <Row label="Subtotal" value={formatRupees(order.subtotal)} />
+          {order.discountAmount > 0 ? <Row label={order.discountCode ? `Discount (${order.discountCode})` : 'Discount'} value={`- ${formatRupees(order.discountAmount)}`} /> : null}
+          <Row label="Delivery" value={formatRupees(order.deliveryCharges)} />
+          {tax ? <Row label={tax.label} value={tax.value} /> : null}
+          <Row label="Total" value={formatRupees(order.total)} strong />
+        </Card>
+
+        {order.courier || order.trackingNumber ? (
+          <Card title="Courier" icon={Truck}>
+            {order.courier ? <Row label="Courier" value={order.courier} /> : null}
+            {order.trackingNumber ? <Row label="Tracking number" value={order.trackingNumber} /> : null}
+          </Card>
+        ) : null}
+
+        {canWrite && order.canCancel ? (
+          <AppText variant="caption" tone="muted">
+            To cancel this order, use the website.
+          </AppText>
+        ) : null}
+
+        <Card title="Notes" icon={StickyNote}>
+          {order.notes.length === 0 ? (
+            <AppText variant="caption" tone="muted">
+              No notes yet.
+            </AppText>
+          ) : null}
+          {order.notes.map((entry, index) => (
+            <View key={entry.id ?? index}>
+              <AppText>{entry.text}</AppText>
+              <AppText variant="caption" tone="muted">
+                {formatDateTime(entry.at)}
+              </AppText>
+            </View>
+          ))}
+          {canNote ? (
+            <>
+              <TextField label="New note (only your team sees it)" value={note} onChangeText={setNote} multiline maxLength={ORDER_NOTE_TEXT_MAX} />
+              <Button title="Add note" kind="outline" icon={StickyNote} onPress={() => void saveNote()} disabled={!note.trim()} busy={busy} />
+            </>
+          ) : null}
+        </Card>
+
+        <Card title="Timeline" icon={History}>
+          {order.timeline.map((entry) => (
+            <View key={entry.id} style={styles.event}>
+              <View style={styles.eventDot} />
+              <View style={styles.flex}>
+                <AppText weight="medium">{entry.title}</AppText>
+                {entry.detail ? (
+                  <AppText variant="caption" tone="muted">
+                    {entry.detail}
+                  </AppText>
+                ) : null}
+                <AppText variant="caption" tone="muted">
+                  {formatDateTime(entry.at)}
+                </AppText>
+              </View>
+            </View>
+          ))}
+        </Card>
+      </ScrollScreen>
+
+      <ConfirmSheet
+        visible={asking !== null}
+        title={asking ? `${actionLabel(asking)}?` : ''}
+        message={
+          asking
+            ? `${order.orderId} goes from ${statusLabel(order.status)} to ${statusLabel(asking)}.${online ? '' : ' There is no connection: it is saved on this phone and sent when the network returns.'}`
+            : undefined
+        }
+        confirmLabel={asking ? `Yes, ${actionLabel(asking).toLowerCase()}` : ''}
+        destructive={asking !== null && BACKWARD.has(asking)}
+        onCancel={() => setAsking(null)}
+        onConfirm={() => {
+          const next = asking;
+          setAsking(null);
+          if (next) void move({ status: next });
+        }}
+      />
+
+      <Sheet visible={dispatching} title="Dispatch order" onClose={() => setDispatching(false)} busy={busy}>
+        <AppText tone="muted">Choose the courier and enter the tracking number.</AppText>
+        <Wrap>
+          {COURIERS.filter((name) => name !== 'Other').map((name) => (
+            <Chip key={name} label={name} selected={courier === name} onPress={() => setCourier(name)} />
+          ))}
+        </Wrap>
+        <TextField label="Courier" value={courier} onChangeText={setCourier} />
+        <TextField label="Tracking number" value={tracking} onChangeText={setTracking} autoCapitalize="characters" autoCorrect={false} />
+        {problem ? <Notice tone="danger" text={problem} /> : null}
+        <Button title="Confirm dispatch" icon={Truck} onPress={() => void dispatch()} busy={busy} />
+        <Button title="Not now" kind="ghost" onPress={() => setDispatching(false)} disabled={busy} />
+      </Sheet>
+    </>
   );
 }
+
+const useStyles = makeStyles((t) => ({
+  flex: { flex: 1 },
+  title: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm },
+  payment: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' },
+  line: { flexDirection: 'row', alignItems: 'flex-start', gap: t.space.sm },
+  rule: { height: 1, backgroundColor: t.colors.border },
+  event: { flexDirection: 'row', gap: t.space.md },
+  eventDot: { width: 10, height: 10, marginTop: 6, borderRadius: 5, backgroundColor: t.colors.link },
+}));

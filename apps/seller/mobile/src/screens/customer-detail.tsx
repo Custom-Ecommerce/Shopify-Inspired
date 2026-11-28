@@ -1,8 +1,32 @@
-import { Button, Card, ErrorState, formatDateTime, formatRupees, LoadingState, NoConnection, Notice, OfflineBanner, Row, ScrollScreen, uiStyles, useIsOnline } from '@markaz/mobile-kit';
+import {
+  AppText,
+  Card,
+  Contact,
+  ErrorState,
+  formatDateTime,
+  formatRupees,
+  History,
+  ListRow,
+  LoadingState,
+  Mail,
+  MapPin,
+  NoConnection,
+  Notice,
+  OfflineBanner,
+  Phone,
+  Row,
+  ScrollScreen,
+  SectionHeader,
+  StatusBadge,
+  StickyNote,
+  useIsOnline,
+  Wrap,
+} from '@markaz/mobile-kit';
 import { errorText } from '@markaz/mobile-kit/core';
 import { useQuery } from '@tanstack/react-query';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { fetchCustomer } from '../api';
+import { OrderStatusBadge } from '../components/badges';
 import { NotForYourRole, useCan } from '../components/can';
 import { customerName, displayPhone, statusLabel } from '../labels';
 import { useServices, useStoreChoice, useStoreKey } from '../services';
@@ -27,16 +51,13 @@ export function CustomerDetailScreen({ customerKey, onOpenOrder }: { customerKey
     <ScrollScreen refreshing={detail.isRefetching} onRefresh={() => void detail.refetch()}>
       <OfflineBanner updatedAt={detail.dataUpdatedAt} />
       {online && detail.error ? <Notice text={`Showing what was saved at ${formatDateTime(detail.dataUpdatedAt)}. ${errorText(detail.error)}`} /> : null}
-      <Card>
-        <Text accessibilityRole="header" style={uiStyles.title}>
-          {customerName(customer.name, customer.phone, customer.email)}
-        </Text>
-        {customer.phone ? <Row label="Phone" value={displayPhone(customer.phone)} /> : null}
-        {customer.whatsapp && customer.whatsapp !== customer.phone ? <Row label="WhatsApp" value={displayPhone(customer.whatsapp)} /> : null}
-        {customer.email ? <Row label="Email" value={customer.email} /> : null}
-        {customer.unsubscribed ? <Text style={uiStyles.muted}>Unsubscribed from your emails.</Text> : null}
+      <Card title={customerName(customer.name, customer.phone, customer.email)} icon={Contact}>
+        {customer.phone ? <Row icon={Phone} label="Phone" value={displayPhone(customer.phone)} /> : null}
+        {customer.whatsapp && customer.whatsapp !== customer.phone ? <Row icon={Phone} label="WhatsApp" value={displayPhone(customer.whatsapp)} /> : null}
+        {customer.email ? <Row icon={Mail} label="Email" value={customer.email} /> : null}
+        {customer.unsubscribed ? <StatusBadge label="Unsubscribed from your emails" tone="neutral" /> : null}
       </Card>
-      <Card title="History">
+      <Card title="History" icon={History}>
         <Row label="Orders" value={String(stats.orderCount)} />
         <Row label="Delivered" value={String(stats.deliveredCount)} />
         <Row label="Cancelled" value={String(stats.cancelledCount)} />
@@ -45,29 +66,41 @@ export function CustomerDetailScreen({ customerKey, onOpenOrder }: { customerKey
         <Row label="First order" value={formatDateTime(stats.firstOrderAt)} />
       </Card>
       {customer.note || customer.tags.length > 0 ? (
-        <Card title="Your note">
-          {customer.tags.length > 0 ? <Text style={uiStyles.muted}>{customer.tags.join(', ')}</Text> : null}
-          {customer.note ? <Text style={uiStyles.body}>{customer.note}</Text> : null}
+        <Card title="Your note" icon={StickyNote}>
+          {customer.tags.length > 0 ? (
+            <Wrap gap="xs">
+              {customer.tags.map((tag) => (
+                <StatusBadge key={tag} label={tag} tone="info" />
+              ))}
+            </Wrap>
+          ) : null}
+          {customer.note ? <AppText>{customer.note}</AppText> : null}
         </Card>
       ) : null}
-      <Card title="Orders">
+      <SectionHeader title="Orders" />
+      <View>
         {customer.orders.map((order) => (
-          <View key={order.id}>
-            <Button title={`${order.orderId} · ${statusLabel(order.status)} · ${formatRupees(order.total)}`} kind="secondary" onPress={() => onOpenOrder(order.id)} />
-            <Text style={uiStyles.muted}>{formatDateTime(order.createdAt)}</Text>
-          </View>
+          <ListRow
+            key={order.id}
+            accessibilityLabel={`${order.orderId} · ${statusLabel(order.status)} · ${formatRupees(order.total)}`}
+            onPress={() => onOpenOrder(order.id)}
+            title={order.orderId}
+            trailing={<AppText weight="semibold">{formatRupees(order.total)}</AppText>}
+            meta={formatDateTime(order.createdAt)}
+            footer={<OrderStatusBadge status={order.status} />}
+          />
         ))}
-      </Card>
+      </View>
       {customer.addresses.length > 0 ? (
-        <Card title="Addresses">
+        <Card title="Addresses" icon={MapPin}>
           {customer.addresses.map((entry, index) => (
-            <Text key={index} style={uiStyles.body}>
-              {[entry.address, entry.city].filter(Boolean).join(', ')}
-            </Text>
+            <AppText key={index}>{[entry.address, entry.city].filter(Boolean).join(', ')}</AppText>
           ))}
         </Card>
       ) : null}
-      <Text style={uiStyles.muted}>Notes, tags and blocking are changed on the website.</Text>
+      <AppText variant="caption" tone="muted">
+        Notes, tags and blocking are changed on the website.
+      </AppText>
     </ScrollScreen>
   );
 }

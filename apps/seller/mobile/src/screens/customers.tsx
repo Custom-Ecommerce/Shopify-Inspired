@@ -1,7 +1,6 @@
 import type { MobileCustomer } from '@markaz/contracts/mobile-data';
-import { Chip, colors, fontSize, formatDateTime, formatRupees, MIN_TAP_TARGET, radius, spacing, TextField, uiStyles, PagedList, usePagedList } from '@markaz/mobile-kit';
+import { AppText, Chip, Contact, formatDateTime, formatRupees, ListRow, PagedList, SearchField, usePagedList, Wrap } from '@markaz/mobile-kit';
 import { memo, useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fetchCustomers } from '../api';
 import { NotForYourRole, useCan } from '../components/can';
 import { customerName, displayPhone } from '../labels';
@@ -16,18 +15,14 @@ const SORTS = [
 const CustomerRow = memo(function CustomerRow({ customer, onOpen }: { customer: MobileCustomer; onOpen: (key: string) => void }) {
   const name = customerName(customer.name, customer.phone, customer.email);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Customer ${name}`} onPress={() => onOpen(customer.id)} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <View style={styles.line}>
-        <Text style={styles.name} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text style={styles.name}>{formatRupees(customer.totalSpent)}</Text>
-      </View>
-      <Text style={styles.muted}>{[displayPhone(customer.phone), customer.email].filter(Boolean).join(' · ')}</Text>
-      <Text style={styles.muted}>
-        {customer.orderCount} {customer.orderCount === 1 ? 'order' : 'orders'}, last {formatDateTime(customer.lastOrderAt)}
-      </Text>
-    </Pressable>
+    <ListRow
+      accessibilityLabel={`Customer ${name}`}
+      onPress={() => onOpen(customer.id)}
+      title={name}
+      trailing={<AppText weight="semibold">{formatRupees(customer.totalSpent)}</AppText>}
+      subtitle={[displayPhone(customer.phone), customer.email].filter(Boolean).join(' · ')}
+      meta={`${customer.orderCount} ${customer.orderCount === 1 ? 'order' : 'orders'}, last ${formatDateTime(customer.lastOrderAt)}`}
+    />
   );
 });
 
@@ -51,43 +46,26 @@ export function CustomersScreen({ onOpenCustomer }: { onOpenCustomer: (key: stri
     <PagedList
       paged={paged}
       renderItem={renderItem}
-      empty={{ title: 'No customers here', text: search ? 'Nothing matches this search.' : 'Customers appear after their first order.' }}
+      empty={{ icon: Contact, title: 'No customers here', text: search ? 'Nothing matches this search.' : 'Customers appear after their first order.' }}
       header={
         <>
-          <TextField
+          <SearchField
             label="Search name, phone or email"
             value={typed}
             onChangeText={(text) => {
               setTyped(text);
               if (!text) setSearch('');
             }}
-            onSubmitEditing={() => setSearch(typed.trim())}
-            returnKeyType="search"
+            onSubmit={() => setSearch(typed.trim())}
           />
-          <View style={uiStyles.wrap}>
+          <Wrap>
             {SORTS.map((option) => (
               <Chip key={option.value} label={option.label} selected={sort === option.value} onPress={() => setSort(option.value)} />
             ))}
-          </View>
+          </Wrap>
         </>
       }
     />
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    minHeight: MIN_TAP_TARGET,
-    gap: spacing.xs,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  pressed: { opacity: 0.6 },
-  line: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
-  name: { fontSize: fontSize.body, fontWeight: '700', color: colors.text, flexShrink: 1 },
-  muted: { fontSize: fontSize.caption, color: colors.textMuted },
-});

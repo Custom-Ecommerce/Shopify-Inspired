@@ -1,13 +1,13 @@
 import { FlashList, type ListRenderItem } from '@shopify/flash-list';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo, type ReactElement } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { formatDateTime } from '../core/dates';
 import { errorText } from '../core/errors';
 import { useIsOnline } from '../native/network';
-import { colors, spacing } from '../theme';
 import { NoConnection, OfflineBanner } from './offline';
-import { EmptyState, ErrorState, LoadingState, Notice, uiStyles } from './primitives';
+import { AppText, EmptyState, ErrorState, LoadingState, Notice, type IconComponent } from './primitives';
+import { makeStyles, useTheme } from './theme-provider';
 
 interface Page {
   docs: { id: string }[];
@@ -47,7 +47,7 @@ export interface PagedListProps<T> {
   renderItem: ListRenderItem<T>;
   /** Filters above the rows. An element, not a component: a search box keeps its focus while the list updates. */
   header: ReactElement;
-  empty: { title: string; text?: string };
+  empty: { title: string; text?: string; icon?: IconComponent };
 }
 
 const keyOf = (row: { id: string }) => row.id;
@@ -56,15 +56,17 @@ const keyOf = (row: { id: string }) => row.id;
 export function PagedList<T extends { id: string }>({ paged, renderItem, header, empty }: PagedListProps<T>) {
   const { list, rows, more } = paged;
   const online = useIsOnline();
+  const theme = useTheme();
+  const styles = useStyles();
   const nothing =
     list.data !== undefined ? (
-      <EmptyState title={empty.title} text={empty.text} />
+      <EmptyState title={empty.title} text={empty.text} icon={empty.icon} />
     ) : !online ? (
       <NoConnection onRetry={() => void list.refetch()} />
     ) : list.error ? (
       <ErrorState message={errorText(list.error)} onRetry={() => void list.refetch()} />
     ) : (
-      <LoadingState />
+      <LoadingState rows={5} kind="row" />
     );
   return (
     <View style={styles.screen}>
@@ -80,20 +82,28 @@ export function PagedList<T extends { id: string }>({ paged, renderItem, header,
           </View>
         }
         ListEmptyComponent={nothing}
-        ListFooterComponent={list.isFetchingNextPage ? <Text style={uiStyles.muted}>Loading more…</Text> : null}
+        ListFooterComponent={
+          list.isFetchingNextPage ? (
+            <AppText variant="caption" tone="muted" style={styles.more}>
+              Loading more…
+            </AppText>
+          ) : null
+        }
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         onEndReachedThreshold={0.5}
         onEndReached={more}
         refreshing={list.isRefetching && !list.isFetchingNextPage}
         onRefresh={() => void list.refetch()}
+        progressViewOffset={theme.space.sm}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.lg },
-  header: { gap: spacing.sm, paddingBottom: spacing.md },
-});
+const useStyles = makeStyles((t) => ({
+  screen: { flex: 1, backgroundColor: t.colors.background },
+  content: { padding: t.space.lg },
+  header: { gap: t.space.md, paddingBottom: t.space.md },
+  more: { textAlign: 'center', padding: t.space.md },
+}));

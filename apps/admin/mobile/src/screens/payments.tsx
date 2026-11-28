@@ -1,8 +1,18 @@
 import type { AdminPayment } from '@markaz/contracts/subscription-payments';
-import { EmptyState, ErrorState, formatDateTime, formatRupees, LoadingState, Notice, ScrollScreen, uiStyles, useIsOnline } from '@markaz/mobile-kit';
+import {
+  AppText,
+  CreditCard,
+  EmptyState,
+  ErrorState,
+  formatDateTime,
+  formatRupees,
+  LoadingState,
+  Notice,
+  ScrollScreen,
+  useIsOnline,
+} from '@markaz/mobile-kit';
 import { errorText } from '@markaz/mobile-kit/core';
 import { useQuery } from '@tanstack/react-query';
-import { Text } from 'react-native';
 import { fetchPendingPayments } from '../api';
 import { ListRow } from '../components/row';
 import { METHOD_LABELS } from '../labels';
@@ -28,8 +38,8 @@ export function PaymentsScreen({ onOpenPayment }: { onOpenPayment: (id: string) 
   return (
     <ScrollScreen refreshing={payments.isRefetching} onRefresh={() => void payments.refetch()}>
       {payments.error ? <Notice text={errorText(payments.error)} /> : null}
-      <Text style={uiStyles.muted}>{data.pendingCount} waiting for a decision</Text>
-      {data.docs.length === 0 ? <EmptyState title="Nothing is waiting" /> : null}
+      <AppText variant="caption" tone="muted">{data.pendingCount} waiting for a decision</AppText>
+      {data.docs.length === 0 ? <EmptyState icon={CreditCard} title="Nothing is waiting" /> : null}
       {data.docs.map((payment: AdminPayment) => (
         <ListRow
           key={payment.id}

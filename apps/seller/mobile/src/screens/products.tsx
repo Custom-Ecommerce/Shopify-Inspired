@@ -1,7 +1,6 @@
 import type { MobileProductListItem } from '@markaz/contracts/mobile-data';
-import { Chip, TextField, uiStyles, PagedList, usePagedList } from '@markaz/mobile-kit';
+import { AlertTriangle, AppText, Chip, Package, PagedList, SearchField, usePagedList, Wrap } from '@markaz/mobile-kit';
 import { useCallback, useState } from 'react';
-import { Text, View } from 'react-native';
 import { fetchProducts, type ProductFilters } from '../api';
 import { NotForYourRole, useCan } from '../components/can';
 import { ProductRow } from '../components/product-row';
@@ -45,26 +44,27 @@ export function ProductsScreen({ onOpenProduct, initialLowStock = false }: Produ
     <PagedList
       paged={paged}
       renderItem={renderItem}
-      empty={{ title: 'No products here', text: status || low || search ? 'Nothing matches these filters.' : 'Add your first product on the website.' }}
+      empty={{ icon: Package, title: 'No products here', text: status || low || search ? 'Nothing matches these filters.' : 'Add your first product on the website.' }}
       header={
         <>
-          <TextField
+          <SearchField
             label="Search products"
             value={typed}
             onChangeText={(text) => {
               setTyped(text);
               if (!text) setSearch('');
             }}
-            onSubmitEditing={() => setSearch(typed.trim())}
-            returnKeyType="search"
+            onSubmit={() => setSearch(typed.trim())}
           />
-          <View style={uiStyles.wrap}>
+          <Wrap>
             {STATUSES.map((option) => (
               <Chip key={option.label} label={option.label} selected={status === option.value} onPress={() => setStatus(option.value)} />
             ))}
-            <Chip label="Low stock" selected={low} onPress={() => setLow((value) => !value)} />
-          </View>
-          <Text style={uiStyles.muted}>New products and photos are added on the website.</Text>
+            <Chip label="Low stock" icon={AlertTriangle} selected={low} onPress={() => setLow((value) => !value)} />
+          </Wrap>
+          <AppText variant="caption" tone="muted">
+            New products and photos are added on the website.
+          </AppText>
         </>
       }
     />

@@ -1,13 +1,14 @@
 import { mobileDeviceListResponseSchema, mobileDeviceRevokeResponseSchema, type MobileDevice } from '@markaz/contracts/mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import type { ApiClient } from '../core/api-client';
 import { formatDateTime } from '../core/dates';
 import { errorText } from '../core/errors';
 import { useIsOnline } from '../native/network';
 import { askFirst, type Confirm } from './confirm';
-import { Button, Card, ErrorState, LoadingState, Notice, uiStyles } from './primitives';
+import { Smartphone } from './icons';
+import { AppText, Button, Card, ErrorState, LoadingState, Notice, StatusBadge } from './primitives';
 
 export interface DevicesCardProps {
   client: ApiClient;
@@ -40,7 +41,7 @@ export function DevicesCard({ client, path, userId, confirm = askFirst }: Device
   };
 
   return (
-    <Card title="My devices">
+    <Card title="My devices" icon={Smartphone}>
       {problem ? <Notice tone="danger" text={problem} /> : null}
       {!devices.data ? (
         devices.error ? (
@@ -50,15 +51,16 @@ export function DevicesCard({ client, path, userId, confirm = askFirst }: Device
         )
       ) : (
         devices.data.map((device) => (
-          <View key={device.id}>
-            <Text style={uiStyles.body}>
+          <View key={device.id} style={{ gap: 4 }}>
+            <AppText weight="medium">
               {device.name}
               {device.current ? ' (this phone)' : ''}
-            </Text>
-            <Text style={uiStyles.muted}>
+            </AppText>
+            <AppText variant="caption" tone="muted">
               Version {device.appVersion}, last used {formatDateTime(device.lastSeenAt)}
-            </Text>
-            {device.current ? null : <Button title={`Sign out ${device.name}`} kind="secondary" onPress={() => remove(device)} disabled={!online} />}
+            </AppText>
+            {device.current ? <StatusBadge label="Signed in here" tone="success" /> : null}
+            {device.current ? null : <Button title={`Sign out ${device.name}`} kind="outline" size="sm" block={false} onPress={() => remove(device)} disabled={!online} />}
           </View>
         ))
       )}

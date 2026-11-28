@@ -1,6 +1,5 @@
-import { Card, Chip, EmptyState, ErrorState, LoadingState, ScrollScreen, uiStyles } from '@markaz/mobile-kit';
+import { AppText, Card, Chip, EmptyState, ErrorState, LoadingState, ScrollScreen, Store } from '@markaz/mobile-kit';
 import { errorText } from '@markaz/mobile-kit/core';
-import { Text } from 'react-native';
 import { roleLabel } from '../labels';
 import { useStoreChoice } from '../services';
 
@@ -11,11 +10,12 @@ export function StoresScreen({ onDone }: { onDone: () => void }) {
   return (
     <ScrollScreen onRefresh={reload}>
       {error ? <ErrorState message={errorText(error)} onRetry={reload} /> : null}
-      {!error && stores.length === 0 ? <EmptyState title="No store yet" /> : null}
+      {!error && stores.length === 0 ? <EmptyState icon={Store} title="No store yet" /> : null}
       {stores.map((entry) => (
-        <Card key={entry.id}>
-          <Text style={uiStyles.title}>{entry.name}</Text>
-          <Text style={uiStyles.muted}>Your role: {roleLabel(entry.role)}</Text>
+        <Card key={entry.id} title={entry.name} icon={Store}>
+          <AppText variant="caption" tone="muted">
+            Your role: {roleLabel(entry.role)}
+          </AppText>
           <Chip
             label={entry.id === store?.id ? `Selected: ${entry.name}` : `Open ${entry.name}`}
             selected={entry.id === store?.id}

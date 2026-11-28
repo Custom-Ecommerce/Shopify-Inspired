@@ -25,10 +25,23 @@ describe('order detail', () => {
     });
     await app.show(<OrderDetailScreen orderId={ORDER} />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Confirm order' }));
+    // S9-UI: every status change is confirmed on a sheet first.
+    await fireEvent.press(screen.getByRole('button', { name: 'Yes, confirm order' }));
     expect(await screen.findByRole('button', { name: 'Start processing' })).toBeTruthy();
     const sent = app.requests('/status', 'POST')[0]!;
     expect(sent.body).toEqual({ revision: 100, status: 'confirmed' });
     expect(sent.headers['idempotency-key']).toBeTruthy();
+  });
+
+  it('asks on a sheet before a status change, and Not now sends nothing', async () => {
+    const app = await setup({ handler: reading() });
+    await app.show(<OrderDetailScreen orderId={ORDER} />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Confirm order' }));
+    expect(screen.getByText('Confirm order?')).toBeTruthy();
+    expect(screen.getByText('ORD-1001 goes from Pending to Confirmed.')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByText('Confirm order?')).toBeNull();
+    expect(app.requests('/status', 'POST')).toHaveLength(0);
   });
 
   it('asks for the courier and tracking number before a dispatch', async () => {
@@ -55,6 +68,8 @@ describe('order detail', () => {
     });
     await app.show(<OrderDetailScreen orderId={ORDER} />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Confirm order' }));
+    // S9-UI: every status change is confirmed on a sheet first.
+    await fireEvent.press(screen.getByRole('button', { name: 'Yes, confirm order' }));
     expect(await screen.findByText(/Saved on this phone/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Confirm order' })).toBeNull();
     down = false;
@@ -73,6 +88,8 @@ describe('order detail', () => {
     });
     await app.show(<OrderDetailScreen orderId={ORDER} />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Confirm order' }));
+    // S9-UI: every status change is confirmed on a sheet first.
+    await fireEvent.press(screen.getByRole('button', { name: 'Yes, confirm order' }));
     expect(await screen.findByText(/changed on the server/)).toBeTruthy();
     expect(screen.getByText('Cancelled')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Confirm order' })).toBeNull();

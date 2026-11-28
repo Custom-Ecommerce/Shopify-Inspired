@@ -1,22 +1,26 @@
 import { TICKET_STATUSES, TICKET_TEXT_MAX } from '@markaz/contracts/support';
 import {
+  AppText,
   Button,
   Card,
   Chip,
   ErrorState,
   formatDateTime,
+  LifeBuoy,
   LoadingState,
+  Mail,
+  MessageSquare,
   Notice,
   Row,
   ScrollScreen,
   TextField,
-  uiStyles,
   useIsOnline,
+  Wrap,
 } from '@markaz/mobile-kit';
 import { ApiError, errorText, NetworkError } from '@markaz/mobile-kit/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { fetchTicket, replyTicket, setTicketStatus } from '../api';
 import { can } from '../access';
 import { label } from '../labels';
@@ -68,24 +72,24 @@ export function TicketDetailScreen({ ticketId }: { ticketId: string }) {
   const mayReply = can(level, 'tickets.reply');
   return (
     <ScrollScreen refreshing={detail.isRefetching} onRefresh={() => void detail.refetch()}>
-      {!online ? <Notice text="Offline. Replying and changing the status need a connection." /> : null}
+      {!online ? <Notice tone="info" text="Offline. Replying and changing the status need a connection." /> : null}
       {online && detail.error ? <Notice text={errorText(detail.error)} /> : null}
       <Card>
-        <Text accessibilityRole="header" style={uiStyles.title}>
+        <AppText accessibilityRole="header" variant="title">
           {ticket.subject}
-        </Text>
+        </AppText>
         <Row label="Seller" value={ticket.sellerName ?? '-'} />
         {ticket.sellerEmail ? <Row label="Email" value={ticket.sellerEmail} /> : null}
         {ticket.orderRef ? <Row label="Order" value={ticket.orderRef} /> : null}
         <Row label="Status" value={label(ticket.status)} strong />
       </Card>
-      <Card title="Messages">
+      <Card title="Messages" icon={MessageSquare}>
         {ticket.messages.map((message, index) => (
           <View key={index}>
-            <Text style={uiStyles.muted}>
+            <AppText variant="caption" tone="muted">
               {message.from === 'admin' ? 'Markazify' : 'Seller'} · {formatDateTime(message.at)}
-            </Text>
-            <Text style={uiStyles.body}>{message.text}</Text>
+            </AppText>
+            <AppText>{message.text}</AppText>
           </View>
         ))}
       </Card>
@@ -93,15 +97,15 @@ export function TicketDetailScreen({ ticketId }: { ticketId: string }) {
       {mayReply ? (
         <>
           {ticket.status !== 'closed' ? (
-            <Card title="Reply">
+            <Card title="Reply" icon={Mail}>
               <TextField label="Your reply (the seller is emailed)" value={text} onChangeText={setText} multiline maxLength={TICKET_TEXT_MAX} />
               <Button title="Send reply" onPress={() => void send()} busy={busy} disabled={!online || !text.trim()} />
             </Card>
           ) : (
             <Notice text="This ticket is closed. Open it again to reply." />
           )}
-          <Card title="Status">
-            <View style={uiStyles.wrap}>
+          <Card title="Status" icon={LifeBuoy}>
+            <Wrap>
               {TICKET_STATUSES.map((status) => (
                 <Chip
                   key={status}
@@ -112,7 +116,7 @@ export function TicketDetailScreen({ ticketId }: { ticketId: string }) {
                   }}
                 />
               ))}
-            </View>
+            </Wrap>
           </Card>
         </>
       ) : null}

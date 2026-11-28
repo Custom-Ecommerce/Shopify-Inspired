@@ -1,25 +1,28 @@
 import { PAYMENT_CONFIRM_REASON_MIN, PAYMENT_REASON_MAX, PAYMENT_REASON_MIN } from '@markaz/contracts/subscription-payments';
 import {
+  AppText,
   askFirst,
   Button,
   Card,
+  CheckCircle,
+  type Confirm,
   EmptyState,
   ErrorState,
   formatDateTime,
   formatRupees,
   LoadingState,
   Notice,
+  Receipt,
   Row,
   ScrollScreen,
+  ShieldCheck,
   TextField,
-  uiStyles,
   useIsOnline,
-  type Confirm,
 } from '@markaz/mobile-kit';
 import { errorText, NetworkError } from '@markaz/mobile-kit/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Linking, Text } from 'react-native';
+import { Linking } from 'react-native';
 import { confirmPayment, rejectPayment } from '../api';
 import { can } from '../access';
 import { METHOD_LABELS } from '../labels';
@@ -87,27 +90,27 @@ export function PaymentDetailScreen({ paymentId, confirm = askFirst, openLink = 
   return (
     <ScrollScreen refreshing={payments.isRefetching} onRefresh={() => void payments.refetch()}>
       <Card>
-        <Text accessibilityRole="header" style={uiStyles.title}>
+        <AppText accessibilityRole="header" variant="title">
           {formatRupees(payment.amountRs)}
-        </Text>
+        </AppText>
         <Row label="Seller" value={payment.seller.name} />
         <Row label="Email" value={payment.seller.email} />
         <Row label="Plan" value={payment.planName} />
         <Row label="Method" value={payment.method ? METHOD_LABELS[payment.method]! : '-'} />
         <Row label="Reference" value={payment.reference ?? '-'} />
         <Row label="Claimed" value={formatDateTime(payment.claimedAt)} />
-        {proof ? <Button title="Open the payment proof" kind="secondary" onPress={() => openLink(proof)} /> : null}
+        {proof ? <Button title="Open the payment proof" kind="outline" icon={Receipt} onPress={() => openLink(proof)} /> : null}
       </Card>
       {problem ? <Notice tone="danger" text={problem} /> : null}
       {can(level, 'payments.decide') ? (
-        <Card title="Decision">
+        <Card title="Decision" icon={ShieldCheck}>
           <TextField label="Reason (kept in the audit log)" value={reason} onChangeText={setReason} multiline maxLength={PAYMENT_REASON_MAX} />
-          <Button title="Confirm payment" onPress={() => decide('confirm')} busy={busy} />
-          <Button title="Reject payment" kind="danger" onPress={() => decide('reject')} busy={busy} />
-          <Text style={uiStyles.muted}>Check that the money is in your account before confirming.</Text>
+          <Button title="Confirm payment" icon={CheckCircle} onPress={() => decide('confirm')} busy={busy} />
+          <Button title="Reject payment" kind="destructive" onPress={() => decide('reject')} busy={busy} />
+          <AppText variant="caption" tone="muted">Check that the money is in your account before confirming.</AppText>
         </Card>
       ) : (
-        <Notice text="Your level can view payments, not decide them." />
+        <Notice tone="info" text="Your level can view payments, not decide them." />
       )}
     </ScrollScreen>
   );

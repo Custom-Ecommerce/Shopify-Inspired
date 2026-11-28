@@ -1,22 +1,32 @@
 import { mobilePushSettingsSchema, mobileQuietHoursSchema, type MobilePushSettings } from '@markaz/contracts/mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { Switch, View } from 'react-native';
 import type { ApiClient } from '../core/api-client';
 import { errorText } from '../core/errors';
 import { useIsOnline } from '../native/network';
 import type { PushAvailability } from '../native/push';
-import { MIN_TAP_TARGET, spacing } from '../theme';
 import { NoConnection } from './offline';
-import { Button, Card, ErrorState, LoadingState, Notice, ScrollScreen, TextField, uiStyles } from './primitives';
+import { Bell, Clock } from './icons';
+import { AppText, Button, Card, ErrorState, LoadingState, Notice, ScrollScreen, TextField } from './primitives';
+import { makeStyles, useTheme } from './theme-provider';
 
 type Update = Partial<Pick<MobilePushSettings, 'muted' | 'mutedKinds' | 'quietHours'>>;
 
 function Toggle({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.toggle}>
-      <Text style={[uiStyles.body, styles.toggleLabel]}>{label}</Text>
-      <Switch accessibilityLabel={label} value={value} onValueChange={onChange} disabled={disabled} />
+      <AppText style={styles.toggleLabel}>{label}</AppText>
+      <Switch
+        accessibilityLabel={label}
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+        trackColor={{ false: theme.colors.input, true: theme.colors.link }}
+        thumbColor={theme.colors.card}
+      />
     </View>
   );
 }
@@ -74,9 +84,9 @@ export function NotificationSettings({ client, path, userId, availability, label
   return (
     <ScrollScreen refreshing={settings.isRefetching} onRefresh={() => void settings.refetch()}>
       {!availability.ok ? <Notice text={availability.reason} /> : null}
-      {!online ? <Notice text="Changing notification settings needs a connection." /> : null}
+      {!online ? <Notice tone="info" text="Changing notification settings needs a connection." /> : null}
       {problem ? <Notice tone="danger" text={problem} /> : null}
-      <Card title="Notifications">
+      <Card title="Notifications" icon={Bell}>
         <Toggle label="Mute all notifications" value={data.muted} onChange={(muted) => void save({ muted })} disabled={off} />
         {data.kinds.map((kind) => (
           <Toggle
@@ -90,14 +100,16 @@ export function NotificationSettings({ client, path, userId, availability, label
           />
         ))}
       </Card>
-      <Card title="Quiet hours">
-        <Text style={uiStyles.muted}>No notifications are sent between these times (Pakistan time). Everything still appears in the app.</Text>
+      <Card title="Quiet hours" icon={Clock}>
+        <AppText variant="caption" tone="muted">
+          No notifications are sent between these times (Pakistan time). Everything still appears in the app.
+        </AppText>
         <Toggle label="Use quiet hours" value={quiet !== null} disabled={off} onChange={(on) => void save({ quietHours: on ? DEFAULT_QUIET : null })} />
         {quiet ? (
           <>
             <TextField label="From (HH:MM)" value={hours.start} onChangeText={(start) => setTyped({ ...hours, start })} keyboardType="numbers-and-punctuation" maxLength={5} />
             <TextField label="To (HH:MM)" value={hours.end} onChangeText={(end) => setTyped({ ...hours, end })} keyboardType="numbers-and-punctuation" maxLength={5} />
-            <Button title="Save quiet hours" kind="secondary" onPress={saveHours} busy={saving} disabled={!online} />
+            <Button title="Save quiet hours" kind="outline" onPress={saveHours} busy={saving} disabled={!online} />
           </>
         ) : null}
       </Card>
@@ -105,7 +117,7 @@ export function NotificationSettings({ client, path, userId, availability, label
   );
 }
 
-const styles = StyleSheet.create({
-  toggle: { minHeight: MIN_TAP_TARGET, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+const useStyles = makeStyles((t) => ({
+  toggle: { minHeight: t.tap, flexDirection: 'row', alignItems: 'center', gap: t.space.md },
   toggleLabel: { flex: 1 },
-});
+}));

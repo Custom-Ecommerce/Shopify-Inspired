@@ -1,5 +1,5 @@
 import { sellerCan, type SellerCapability } from '@markaz/auth/seller-capabilities';
-import { EmptyState } from '@markaz/mobile-kit';
+import { EmptyState, ShieldCheck } from '@markaz/mobile-kit';
 import type { ReactNode } from 'react';
 import { useStoreChoice } from '../services';
 
@@ -14,4 +14,4 @@ export function Can({ capability, children, fallback = null }: { capability: Sel
 }
 
 /** A whole screen the role does not have, for example opened from a link. */
-export const NotForYourRole = () => <EmptyState title="Not available for your role" text="Ask the store owner if you need this." />;
+export const NotForYourRole = () => <EmptyState icon={ShieldCheck} title="Not available for your role" text="Ask the store owner if you need this." />;
